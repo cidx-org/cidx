@@ -436,6 +436,6 @@ tools = ["terraform-validate", "drift-detection", "compliance-check"]
 
 ## Learn More
 
-- [DevOps Integration](./devops-integration.md) - How CIDX fits in DevOps lifecycle
-- [Environment Security](./environment-security.md) - Local safety modes explained
-- [BDD Scenarios](../features/) - Living documentation of CIDX behavior
+- [DevOps Integration](./devops.md) - How CIDX fits in DevOps lifecycle
+- [Environment Security](./security.md) - Local safety modes explained
+- [BDD Scenarios](../../features/) - Living documentation of CIDX behavior

@@ -21,6 +21,7 @@ func main() {
 			infoCommand(),
 			validateCommand(),
 			initCommand(),
+			actionCommand(),
 		},
 		Flags: []cli.Flag{
 			&cli.StringFlag{

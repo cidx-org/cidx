@@ -9,63 +9,14 @@ CIDX makes running DevSecOps tools ridiculously simple:
 1. **Just name the tool** - No need to specify Docker images, volumes, commands
 2. **Built-in presets** - CIDX knows how to run 15+ common tools out of the box
 3. **5-line config** - Most projects need less than 10 lines of configuration
-4. **Zero learning curve** - If you know the tool name, you can use it
-5. **Event-driven** - Different Git events trigger different phases automatically
-6. **Safe by default** - Test release processes locally without publishing
-7. **BDD-tested** - Behavior specified in executable Gherkin scenarios
+4. **Run Everywhere** - Same config for Local, GitHub Actions, GitLab CI, Jenkins
 
-See [Philosophy Documentation](./docs/philosophy.md) for the full story.
+[📚 Read the full Philosophy](docs/core-concepts/philosophy.md)
 
 ## Why CIDX?
 
-### The DevOps Repetition Problem
-
-As DevOps engineers, **we're always doing the same things**:
-
-- Run security scans (Trivy, Gitleaks, Semgrep)
-- Check code quality (MegaLinter, ESLint, Prettier)
-- Lint commit messages (Commitlint)
-- Test infrastructure (Molecule, Terraform)
-- Build and deploy
-
-**Every project needs these tools. But the implementation is different everywhere:**
-
-- GitLab CI uses `.gitlab-ci.yml`
-- GitHub Actions uses `.github/workflows/*.yml`
-- Local development uses `Makefile`, `Taskfile`, or shell scripts
-- Jenkins uses `Jenkinsfile`
-
-**Result:** You write the same tool configurations 3-4 times for each project.
-
-### The Factorization Solution
-
-**CIDX solves this with maximum factorization:**
-
-```toml
-# cidx.toml - ONE config for ALL environments
-[security]
-tools = ["trivy", "gitleaks"]
-
-[code]
-tools = ["megalinter", "commitlint"]
-```
-
-**This config works:**
-
-- ✅ On your local machine (`cidx run security`)
-- ✅ In GitLab CI (`.gitlab-ci.yml` calls `cidx run security`)
-- ✅ In GitHub Actions (workflow calls `cidx run security`)
-- ✅ In Jenkins (Jenkinsfile calls `cidx run security`)
-
-**One config. Multiple runners. Zero duplication.**
-
-### Universal Interface: Runner ↔ CIDX ↔ Project
-
-CIDX acts as the **universal abstraction layer** between:
-
-1. **CI/CD Runners** (where code runs) - GitLab CI, GitHub Actions, Jenkins, local
-2. **DevSecOps Tools** (what you run) - Trivy, MegaLinter, Gitleaks, etc.
-3. **Your Projects** (your codebase) - Any language, any framework
+**The Problem:** You write the same tool configurations 3-4 times (Local, CI, pre-commit).
+**The Solution:** Write once in `cidx.toml`, run everywhere.
 
 ```
 CI/CD Runner (GitLab/GitHub/Jenkins/Local)
@@ -75,44 +26,6 @@ CI/CD Runner (GitLab/GitHub/Jenkins/Local)
      Your Project (any tech)
 ```
 
-### Benefits
-
-- **Write once, run everywhere** - Define tools once, works on all CI/CD platforms
-- **Change once, apply everywhere** - Update tool versions in one place
-- **Easy migration** - Switch CI platforms without changing tool configs
-- **Consistent results** - Same Docker images, same versions, everywhere
-- **Better DX** - Developers test locally with same commands as CI
-
-### Docker-First Architecture
-
-**CIDX executes all tools in Docker containers.** This is a deliberate choice that aligns with modern CI/CD practices:
-
-- **GitLab CI** uses Docker-in-Docker (dind) for containerized jobs
-- **GitHub Actions** uses container jobs
-- **Jenkins** supports Docker agents
-- **Local** development with Docker ensures parity with CI
-
-**Why Docker?**
-
-✅ **No host pollution** - Tools don't install dependencies on the host machine  
-✅ **Reproducibility** - Same container = same environment everywhere  
-✅ **Isolation** - Each tool runs in its own isolated container  
-✅ **Version control** - Docker image tags ensure exact versions  
-✅ **Security** - Containers provide sandboxing and resource limits
-
-**Example:** Running Trivy doesn't require installing Trivy on your machine. CIDX pulls `aquasec/trivy:0.57.1` and runs it in a container.
-
-```bash
-# No installation needed, just Docker
-cidx run trivy
-# → Pulls aquasec/trivy:0.57.1
-# → Mounts your project
-# → Runs scan
-# → Exits cleanly
-```
-
-Your host stays clean. Your CI stays clean. Everything is containerized.
-
 ## Quick Start
 
 ### Installation
@@ -121,472 +34,58 @@ Your host stays clean. Your CI stays clean. Everything is containerized.
 go install github.com/arcker/cidx/cmd/cidx@latest
 ```
 
-Or build from source:
+[More installation options](docs/getting-started/installation.md)
 
-```bash
-git clone https://github.com/arcker/cidx.git
-cd cidx
-go build -o bin/cidx ./cmd/cidx
-```
+### Usage
 
-### Initialize Configuration
+Initialize configuration:
 
 ```bash
 cidx init
 ```
 
-This creates a `cidx.toml` file:
-
-```toml
-[settings]
-workspace = "${PWD}"
-
-[tools]
-enabled = [
-    "megalinter",
-    "trivy",
-    "gitleaks",
-]
-
-[pipelines.ci]
-phases = ["security", "code"]
-description = "Run security and code quality checks"
-```
-
-### Run Tools
+Run tools:
 
 ```bash
-# Run a specific tool
-cidx run trivy
-
-# Run a pipeline
-cidx run ci
-
-# Dry-run to see what would execute
-cidx run megalinter --dry-run
-```
-
-## Available Tools
-
-List all built-in presets:
-
-```bash
-cidx list
-```
-
-Output:
-
-```
-Available tools:
-
-  code:
-    - ansible-lint
-    - commitlint
-    - megalinter
-
-  security:
-    - gitleaks
-    - trivy
-
-  test:
-    - molecule
-```
-
-Get detailed information about a tool:
-
-```bash
-cidx info trivy
+cidx run security   # Run all security tools
+cidx run trivy      # Run just trivy
+cidx run ci         # Run full CI pipeline
 ```
 
 ## Configuration
 
-### Minimal Configuration (90% of cases)
+Configuration is handled in `cidx.toml`. You define `pipelines` that map to CI/CD events like Pull Requests or Git tags. CIDX automatically detects the context and runs the correct pipeline.
 
-Just enable tools by name:
-
+**Example `cidx.toml`:**
 ```toml
-[tools]
-enabled = ["megalinter", "trivy", "gitleaks"]
-
-[pipelines.ci]
-phases = ["security", "code"]
-```
-
-**That's it!** CIDX knows:
-
-- ✅ Which Docker image to use
-- ✅ What volumes to mount
-- ✅ What command to run
-- ✅ What environment variables to set
-
-### With Overrides (10% of cases)
-
-Override only what you need:
-
-```toml
-[tools]
-enabled = ["megalinter", "trivy"]
-
-[tools.megalinter]
-flavor = "ansible"
-env = { LINTERS_DISABLED = "v8r" }
-
-[tools.trivy]
-severity = "HIGH,CRITICAL"
-exit_code = 1
-```
-
-### Custom Tools
-
-Define your own tools when presets don't exist:
-
-```toml
-[tools]
-enabled = ["megalinter", "my-scanner"]
-
-[tools.my-scanner]
-phase = "security"
-image = "myregistry/scanner:latest"
-command = "scan ."
-volumes = ["${WORKSPACE}:/scan"]
-```
-
-## Built-in Presets
-
-### Security Phase
-
-#### Trivy
-
-Vulnerability scanner for containers and filesystems.
-
-```toml
-[tools.trivy]
-severity = "HIGH,CRITICAL"  # Filter by severity
-exit_code = 1               # Fail on vulnerabilities
-```
-
-#### Gitleaks
-
-Detect hardcoded secrets in git repositories.
-
-```toml
-[tools.gitleaks]
-# No configuration needed - works out of the box
-```
-
-### Code Phase
-
-#### MegaLinter
-
-Code quality and security scanning with 50+ linters.
-
-```toml
-[tools.megalinter]
-flavor = "ansible"  # Use specific flavor
-env = { LINTERS_DISABLED = "v8r" }
-```
-
-#### Commitlint
-
-Enforce conventional commit messages.
-
-```toml
-[tools.commitlint]
-# Automatically uses .commitlintrc.json if present
-```
-
-#### Ansible Lint
-
-Lint Ansible playbooks and roles.
-
-```toml
-[tools.ansible-lint]
-# Automatically uses .ansible-lint config
-```
-
-### Test Phase
-
-#### Molecule
-
-Test Ansible roles with Docker.
-
-```toml
-[tools.molecule]
-scenario = "default"  # Specify scenario
-```
-
-## CLI Commands
-
-### `cidx run`
-
-Execute a tool or pipeline:
-
-```bash
-cidx run <tool|pipeline>
-cidx run trivy
-cidx run ci
-cidx run megalinter --dry-run
-```
-
-### `cidx list`
-
-List all available tools:
-
-```bash
-cidx list
-```
-
-### `cidx info`
-
-Show detailed information about a tool:
-
-```bash
-cidx info trivy
-cidx info megalinter
-```
-
-### `cidx validate`
-
-Validate your configuration:
-
-```bash
-cidx validate
-```
-
-Output:
-
-```
-Validating: cidx.toml
-
-✓ Configuration is valid
-```
-
-### `cidx init`
-
-Create a new configuration file:
-
-```bash
-cidx init
-cidx init --format yaml
-```
-
-## Pipelines
-
-Define execution sequences:
-
-```toml
-[pipelines.security]
-phases = ["security"]
-description = "Security scanning only"
-
-[pipelines.code]
-phases = ["code"]
-description = "Code quality checks only"
-
-[pipelines.ci]
+# The 'pr' pipeline runs on Pull Requests.
+[pipelines.pr]
 phases = ["security", "code", "test"]
-description = "Complete CI pipeline"
+
+# The 'release' pipeline runs when a tag is pushed.
+[pipelines.release]
+phases = ["security", "code", "test", "build", "release", "docker"]
 ```
 
-Run with:
+This allows you to manage your entire CI/CD logic in one file, with CIDX handling the "when to run what" automatically, based on convention.
 
-```bash
-cidx run security
-cidx run ci
-```
-
-## Environment Variables
-
-CIDX supports environment variable expansion:
-
-```toml
-[settings]
-workspace = "${PWD}"
-registry = "${DOCKER_REGISTRY}"
-
-[tools.commitlint]
-env = { FROM = "${CI_COMMIT_BEFORE_SHA}", TO = "${CI_COMMIT_SHA}" }
-```
-
-## Project Structure
-
-```
-cidx/
-├── cmd/
-│   └── cidx/          # CLI commands
-├── pkg/
-│   ├── config/        # Configuration parser
-│   ├── presets/       # Built-in tool presets
-│   ├── executor/      # Docker execution engine
-│   └── pipeline/      # Pipeline orchestration
-├── examples/          # Example configurations
-└── README.md
-```
-
-## Why CIDX?
-
-### vs Just
-
-- **Just**: You write Docker commands manually
-- **CIDX**: Built-in presets, zero configuration
-
-### vs Earthly
-
-- **Earthly**: Custom DSL to learn
-- **CIDX**: Simple TOML/YAML, just tool names
-
-### vs Dagger
-
-- **Dagger**: Write Go code for each tool
-- **CIDX**: Enable by name, that's all
-
-### vs Traditional CI Config
-
-- **Traditional**: 50+ files, complex YAML
-- **CIDX**: 1 file, 5-10 lines
-
-## Testing & BDD
-
-### Behavior-Driven Development
-
-CIDX behavior is **fully specified** using BDD (Behavior-Driven Development) with Gherkin scenarios. These scenarios are:
-
-1. **Living Documentation** - Human-readable specifications
-2. **Executable Tests** - Automated with [godog](https://github.com/cucumber/godog)
-3. **Scope Guardian** - If it's not in a scenario, we don't build it
-
-### Example Scenarios
-
-```gherkin
-Feature: Pull Request Validation
-  Scenario: PR triggers only validation phases
-    Given I create a pull request
-    When I run "cidx run pr"
-    Then it should execute the "security" phase
-    And it should execute the "code" phase
-    And it should execute the "test" phase
-    But it should NOT execute the "build" phase
-    And it should NOT execute the "release" phase
-```
-
-```gherkin
-Feature: Local Safety Modes
-  Scenario: Docker builds without push in local environment
-    Given I am in local environment
-    When I run "cidx run docker"
-    Then I should see "Local safety: no-push"
-    And Docker image should be built
-    But Docker image should NOT be pushed to registry
-```
-
-### Running BDD Tests
-
-```bash
-# Run all BDD scenarios
-go test ./features_test.go
-
-# Run with pretty output
-GODOG_FORMAT=pretty go test ./features_test.go
-
-# Run specific scenarios with tags
-go test ./features_test.go -tags @smoke
-```
-
-### Dogfooding: CIDX Tests CIDX
-
-CIDX uses itself to run its own BDD tests:
-
-```toml
-# cidx.toml
-[test]
-tools = ["go-test", "godog"]
-```
-
-```bash
-# Run CIDX's own BDD tests using CIDX
-cidx run test
-```
-
-### Browse Scenarios
-
-All scenarios are in `features/` directory:
-
-- **[features/events/](features/events/)** - Event-driven behavior (PR, tags, merges)
-- **[features/security/](features/security/)** - Local safety and environment detection
-- **[features/pipelines/](features/pipelines/)** - Pipeline execution behavior
-
-See [Philosophy Documentation](./docs/philosophy.md) for the full BDD approach.
-
-## Development
-
-### Build
-
-```bash
-go build -o bin/cidx ./cmd/cidx
-```
-
-### Test
-
-```bash
-go test ./...
-```
-
-### Add a New Preset
-
-Edit `pkg/presets/registry.go`:
-
-```go
-"newtool": {
-    Name:    "newtool",
-    Phase:   "security",
-    Image:   "myorg/newtool:latest",
-    Command: "newtool scan .",
-    Workdir: "/scan",
-    Volumes: []string{"${WORKSPACE}:/scan"},
-},
-```
+[📚 Full Configuration Guide](docs/getting-started/configuration.md)
 
 ## Documentation
 
-For detailed documentation, see the [docs/](docs/) directory:
+- **[Getting Started](docs/getting-started/quick-start.md)**
+- **[CI/CD Integration](docs/guides/ci-integration.md)**
+- **[Available Tools](docs/reference/tools.md)**
+- **[CLI Reference](docs/reference/cli.md)**
+- **[Developer Guide](CLAUDE.md)**
 
-- **[Container Reuse & Caching](docs/container-reuse.md)** - Performance optimization through container reuse (6x faster!)
-- **[Documentation Index](docs/README.md)** - Complete documentation overview
+## Key Features
 
-### Key Features
-
-#### Container Reuse for Performance
-
-CIDX reuses Docker containers across runs instead of creating/deleting them each time. This provides:
-
-- **6x faster** subsequent runs (e.g., security phase: 15s → 2.4s)
-- **Cache preservation** (Trivy DB, node_modules, etc.)
-- **Better developer experience** with instant feedback
-
-Containers are automatically reused with fixed names (`cidx_trivy`, `cidx_gitleaks`, etc.). See [Container Reuse documentation](docs/container-reuse.md) for details.
+- **Docker-First**: All tools run in isolated containers.
+- **Container Reuse**: 6x faster subsequent runs. [Learn more](docs/core-concepts/container-reuse.md)
+- **BDD-Tested**: Behavior specified in executable Gherkin scenarios.
+- **Event-Driven**: Automatically detects PRs, tags, and commits.
 
 ## License
 
 MIT License - see [LICENSE](LICENSE)
-
-## Contributing
-
-Contributions welcome! Please open an issue or PR.
-
-### Adding New Presets
-
-We welcome presets for popular DevSecOps tools:
-
-- Security scanners (SAST, DAST, secrets detection)
-- Code quality tools (linters, formatters)
-- Testing tools (unit, integration, e2e)
-- Compliance tools (license checking, SBOM generation)
-
-## Roadmap
-
-- [ ] 20+ presets for common tools
-- [ ] Auto-detection of project type
-- [ ] User preset extensions (~/.config/cidx/presets.toml)
-- [ ] Parallel tool execution
-- [ ] Web UI for configuration
-- [ ] GitLab/GitHub CI templates
