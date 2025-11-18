@@ -2,14 +2,14 @@ package config
 
 // Config represents the complete CIDX configuration
 type Config struct {
-	Phases    map[string]Phase                  `yaml:",inline" toml:",inline"`
-	Overrides map[string]map[string]interface{} `yaml:",inline" toml:",inline"`
+	Phases    map[string]Phase                  `toml:",inline"`
+	Overrides map[string]map[string]interface{} `toml:",inline"`
 	Workspace string                            // Auto-detected or from env
 }
 
 // Phase defines tools for a specific phase
 type Phase struct {
-	Tools []string `yaml:"tools" toml:"tools"`
+	Tools []string `toml:"tools"`
 }
 
 // ToolConfig represents a fully resolved tool configuration after merging preset + overrides

@@ -3,35 +3,22 @@ package config
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	"gopkg.in/yaml.v3"
 )
 
-// Load loads configuration from a file (auto-detects YAML or TOML)
+// Load loads configuration from a TOML file
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	// Parse into generic map first
+	// Parse TOML into generic map
 	var raw map[string]interface{}
-	ext := filepath.Ext(path)
-
-	switch ext {
-	case ".yaml", ".yml":
-		if err := yaml.Unmarshal(data, &raw); err != nil {
-			return nil, fmt.Errorf("failed to parse YAML config: %w", err)
-		}
-	case ".toml":
-		if err := toml.Unmarshal(data, &raw); err != nil {
-			return nil, fmt.Errorf("failed to parse TOML config: %w", err)
-		}
-	default:
-		return nil, fmt.Errorf("unsupported config format: %s (use .yaml, .yml, or .toml)", ext)
+	if err := toml.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("failed to parse TOML config: %w", err)
 	}
 
 	// Separate phases from overrides
@@ -74,15 +61,11 @@ func Load(path string) (*Config, error) {
 	return cfg, nil
 }
 
-// FindConfig searches for cidx config files in common locations
+// FindConfig searches for cidx TOML config files in common locations
 func FindConfig() (string, error) {
 	candidates := []string{
 		"cidx.toml",
-		"cidx.yaml",
-		"cidx.yml",
 		".cidx.toml",
-		".cidx.yaml",
-		".cidx.yml",
 	}
 
 	for _, candidate := range candidates {

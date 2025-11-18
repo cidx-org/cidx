@@ -15,16 +15,16 @@ Welcome to the CIDX (CI with Declarative eXecution) documentation.
 
 ### Features
 - [**Container Reuse & Caching**](container-reuse.md) - Performance optimization through container reuse
-- [**Presets Development**](presets-development.md) - External YAML presets for fast iteration
+- [**Presets Development**](presets-development.md) - External TOML presets for fast iteration
 
 ### Configuration
-- **TOML/YAML Support**: Flexible configuration formats
+- **TOML Configuration**: Simple, readable configuration format
 - **Phase Definitions**: Organize tools by execution phases
 - **Tool Overrides**: Customize preset behavior when needed
 
 ### Architecture
 - **Presets Registry** (`pkg/presets/`) - Built-in tool configurations
-- **Config Parser** (`pkg/config/`) - TOML/YAML parsing and validation
+- **Config Parser** (`pkg/config/`) - TOML parsing and validation
 - **Docker Executor** (`pkg/executor/`) - Container execution via Docker SDK
 - **Pipeline Runner** (`pkg/pipeline/`) - Phase-based orchestration
 - **CLI** (`cmd/cidx/`) - User-facing commands

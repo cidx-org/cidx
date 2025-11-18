@@ -17,7 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Architecture Layers
 1. **Presets Registry** (`pkg/presets/`) - Built-in tool configurations
-2. **Config Parser** (`pkg/config/`) - TOML/YAML parsing and validation
+2. **Config Parser** (`pkg/config/`) - TOML parsing and validation
 3. **Docker Executor** (`pkg/executor/`) - Container execution via Docker SDK
 4. **Pipeline Runner** (`pkg/pipeline/`) - Phase-based orchestration
 5. **CLI** (`cmd/cidx/`) - User-facing commands
@@ -70,7 +70,7 @@ pkg/
 │   └── registry.go     # GlobalRegistry with built-in presets
 ├── config/
 │   ├── types.go        # Config, Tools, Pipeline structures
-│   ├── parser.go       # TOML/YAML loading and env expansion
+│   ├── parser.go       # TOML loading and env expansion
 │   └── validator.go    # Configuration validation
 ├── executor/
 │   └── docker.go       # Docker SDK wrapper for container execution
@@ -88,7 +88,7 @@ cmd/cidx/
 
 ### Data Flow
 
-1. **Config Load**: `config.Load()` → Parse TOML/YAML → Expand env vars
+1. **Config Load**: `config.Load()` → Parse TOML → Expand env vars
 2. **Preset Merge**: For each enabled tool:
    - `presets.Get(toolName)` → Load preset from registry
    - `preset.MergeWith(overrides)` → Apply user overrides
@@ -292,7 +292,6 @@ When implementing these features, maintain core simplicity:
 
 Core dependencies and their purpose:
 - `github.com/BurntSushi/toml` - TOML parsing
-- `gopkg.in/yaml.v3` - YAML parsing
 - `github.com/docker/docker` - Docker SDK for container execution
 - `github.com/urfave/cli/v2` - CLI framework
 - `github.com/sirupsen/logrus` - Structured logging
