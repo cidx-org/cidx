@@ -1,0 +1,32 @@
+# CIDX Configuration for CIDX itself (dogfooding!)
+#
+# This configuration runs CIDX's own CI/CD pipeline
+# Workspace: Current directory (auto-detected)
+
+# Security: Scan for vulnerabilities and secrets
+[security]
+tools = ["trivy", "gitleaks"]
+
+# Code Quality: Linting and formatting for Go
+[code]
+tools = ["gofmt"]
+
+# Testing: Run Go tests
+[test]
+tools = ["go-test"]
+
+# Build: Compile the binary
+[build]
+tools = ["go-build"]
+
+# CI Pipeline: Full workflow
+[pipelines.ci]
+phases = ["security", "code", "test", "build"]
+
+# Trivy: Scan filesystem for vulnerabilities
+[tools.trivy]
+severity = "HIGH,CRITICAL"
+exit_code = 0  # Don't fail on vulnerabilities (yet)
+
+# Gitleaks: Check for secrets in git history
+# Uses default configuration

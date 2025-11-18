@@ -111,3 +111,74 @@ image = "alpine:latest"
 command = "echo 'Hot reload works!'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
+
+[presets.golangci-lint]
+name = "golangci-lint"
+phase = "code"
+image = "golangci/golangci-lint:latest"
+command = "golangci-lint run --timeout 5m"
+workdir = "/app"
+volumes = [
+    "${WORKSPACE}:/app",
+    "golangci-lint-cache:/tmp/.cache",
+]
+config_files = [".golangci.yml", ".golangci.yaml", ".golangci.toml", ".golangci.json"]
+
+[presets.golangci-lint.env]
+GOLANGCI_LINT_CACHE = "/tmp/.cache/golangci-lint"
+GOCACHE = "/tmp/.cache/go-build"
+GOMODCACHE = "/tmp/.cache/go/pkg/mod"
+
+[presets.golangci-lint.options.fix]
+type = "bool"
+default = false
+description = "Automatically fix issues where possible"
+command_flag = "--fix"
+
+[presets.gofmt]
+name = "gofmt"
+phase = "code"
+image = "golang:alpine"
+command = "gofmt -l ."
+workdir = "/app"
+volumes = ["${WORKSPACE}:/app"]
+
+[presets.go-test]
+name = "go-test"
+phase = "test"
+image = "golang:alpine"
+command = "go test -v ./..."
+workdir = "/app"
+volumes = ["${WORKSPACE}:/app"]
+
+[presets.go-test.env]
+HOME = "/tmp"
+
+[presets.go-test.options.coverage]
+type = "bool"
+default = false
+description = "Generate coverage report"
+command_flag = "-cover"
+
+[presets.go-test.options.race]
+type = "bool"
+default = false
+description = "Enable race detector"
+command_flag = "-race"
+
+[presets.go-build]
+name = "go-build"
+phase = "build"
+image = "golang:alpine"
+command = "go build -o bin/cidx ./cmd/cidx"
+workdir = "/app"
+volumes = ["${WORKSPACE}:/app"]
+
+[presets.go-build.env]
+HOME = "/tmp"
+
+[presets.go-build.options.ldflags]
+type = "string"
+default = ""
+description = "Linker flags for go build"
+command_flag = "-ldflags"
