@@ -21,9 +21,10 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse TOML config: %w", err)
 	}
 
-	// Separate phases from overrides
+	// Separate phases, pipelines, and overrides
 	cfg := &Config{
 		Phases:    make(map[string]Phase),
+		Pipelines: make(map[string]Pipeline),
 		Overrides: make(map[string]map[string]interface{}),
 		Workspace: os.Getenv("PWD"),
 	}
@@ -35,6 +36,33 @@ func Load(path string) (*Config, error) {
 	for name, value := range raw {
 		section, ok := value.(map[string]interface{})
 		if !ok {
+			continue
+		}
+
+		// Check if this is the "pipelines" section
+		if name == "pipelines" {
+			for pipelineName, pipelineValue := range section {
+				pipelineMap, ok := pipelineValue.(map[string]interface{})
+				if !ok {
+					continue
+				}
+
+				// Parse phases array
+				if phasesRaw, hasPhases := pipelineMap["phases"]; hasPhases {
+					phases := []string{}
+					switch p := phasesRaw.(type) {
+					case []interface{}:
+						for _, phase := range p {
+							if phaseStr, ok := phase.(string); ok {
+								phases = append(phases, phaseStr)
+							}
+						}
+					case []string:
+						phases = p
+					}
+					cfg.Pipelines[pipelineName] = Pipeline{Phases: phases}
+				}
+			}
 			continue
 		}
 

@@ -28,8 +28,13 @@ func NewRunner(cfg *config.Config, exec *executor.DockerExecutor) *Runner {
 	}
 }
 
-// Run executes a phase or tool
+// Run executes a phase, tool, or pipeline
 func (r *Runner) Run(ctx context.Context, target string) error {
+	// Check if target is a named pipeline
+	if pipeline, isPipeline := r.config.Pipelines[target]; isPipeline {
+		return r.RunPipeline(ctx, target, pipeline)
+	}
+
 	// Check if target is a phase
 	if phase, isPhase := r.config.Phases[target]; isPhase {
 		return r.RunPhase(ctx, target, phase)
@@ -45,7 +50,26 @@ func (r *Runner) Run(ctx context.Context, target string) error {
 		return r.RunAll(ctx)
 	}
 
-	return fmt.Errorf("unknown target: %s (not a phase or tool)", target)
+	return fmt.Errorf("unknown target: %s (not a phase, tool, or pipeline)", target)
+}
+
+// RunPipeline executes a named pipeline
+func (r *Runner) RunPipeline(ctx context.Context, name string, pipeline config.Pipeline) error {
+	r.logger.Infof("Running pipeline: %s", name)
+
+	for _, phaseName := range pipeline.Phases {
+		phase, exists := r.config.Phases[phaseName]
+		if !exists {
+			return fmt.Errorf("pipeline %s references unknown phase: %s", name, phaseName)
+		}
+
+		if err := r.RunPhase(ctx, phaseName, phase); err != nil {
+			return fmt.Errorf("pipeline %s failed at phase %s: %w", name, phaseName, err)
+		}
+	}
+
+	r.logger.Infof("✓ Pipeline %s completed successfully", name)
+	return nil
 }
 
 // RunAll executes all phases

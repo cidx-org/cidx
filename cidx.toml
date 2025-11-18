@@ -23,9 +23,15 @@ tools = ["go-test"]
 [build]
 tools = ["go-build"]
 
-# CI Pipeline: Full workflow
+# Pipelines: Named execution workflows
 [pipelines.ci]
 phases = ["security", "code", "test", "build"]
+
+[pipelines.quick]
+phases = ["code"]
+
+[pipelines.pre-push]
+phases = ["security", "code", "test"]
 
 # Trivy: Scan filesystem for vulnerabilities
 [tools.trivy]
