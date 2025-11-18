@@ -7,9 +7,13 @@
 [security]
 tools = ["trivy", "gitleaks"]
 
-# Code Quality: Linting and formatting for Go
+# Code Quality: Linting and formatting
 [code]
-tools = ["gofmt"]
+tools = ["prettier", "golangci-lint"]
+
+# Prettier: Auto-format files
+[prettier]
+write = true
 
 # Testing: Run Go tests
 [test]

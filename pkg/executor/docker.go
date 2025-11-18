@@ -106,13 +106,22 @@ func (e *DockerExecutor) pullImage(ctx context.Context, imageName string) error 
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() {
+		if closeErr := out.Close(); closeErr != nil {
+			e.logger.Warnf("Failed to close image pull output: %v", closeErr)
+		}
+	}()
 
 	// Consume output to ensure pull completes
+	var copyErr error
 	if e.verbose {
-		io.Copy(os.Stdout, out)
+		_, copyErr = io.Copy(os.Stdout, out)
 	} else {
-		io.Copy(io.Discard, out)
+		_, copyErr = io.Copy(io.Discard, out)
+	}
+
+	if copyErr != nil {
+		return fmt.Errorf("failed to copy image pull output: %w", copyErr)
 	}
 
 	return nil
@@ -151,9 +160,7 @@ func (e *DockerExecutor) getOrCreateContainer(ctx context.Context, toolConfig *c
 func (e *DockerExecutor) createContainer(ctx context.Context, toolConfig *config.ToolConfig, volumes []string, command string) (string, string, error) {
 	// Parse volumes into binds
 	binds := make([]string, len(volumes))
-	for i, vol := range volumes {
-		binds[i] = vol
-	}
+	copy(binds, volumes)
 
 	// Convert env map to slice
 	env := make([]string, 0, len(toolConfig.Env))
@@ -208,17 +215,14 @@ func (e *DockerExecutor) streamLogs(ctx context.Context, containerID string) err
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() {
+		if closeErr := out.Close(); closeErr != nil {
+			e.logger.Warnf("Failed to close container logs: %v", closeErr)
+		}
+	}()
 
 	_, err = stdcopy.StdCopy(os.Stdout, os.Stderr, out)
 	return err
-}
-
-// removeContainer removes a container
-func (e *DockerExecutor) removeContainer(ctx context.Context, containerID string) {
-	if err := e.client.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true}); err != nil {
-		e.logger.Warnf("Failed to remove container %s: %v", containerID, err)
-	}
 }
 
 // printDryRun prints what would be executed

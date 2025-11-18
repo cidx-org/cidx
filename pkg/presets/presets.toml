@@ -118,22 +118,32 @@ phase = "code"
 image = "golangci/golangci-lint:latest"
 command = "golangci-lint run --timeout 5m"
 workdir = "/app"
-volumes = [
-    "${WORKSPACE}:/app",
-    "golangci-lint-cache:/tmp/.cache",
-]
+volumes = ["${WORKSPACE}:/app"]
 config_files = [".golangci.yml", ".golangci.yaml", ".golangci.toml", ".golangci.json"]
 
 [presets.golangci-lint.env]
-GOLANGCI_LINT_CACHE = "/tmp/.cache/golangci-lint"
-GOCACHE = "/tmp/.cache/go-build"
-GOMODCACHE = "/tmp/.cache/go/pkg/mod"
+HOME = "/tmp"
+GOLANGCI_LINT_CACHE = "/tmp/.cache"
 
 [presets.golangci-lint.options.fix]
 type = "bool"
 default = false
 description = "Automatically fix issues where possible"
 command_flag = "--fix"
+
+[presets.shellcheck]
+name = "shellcheck"
+phase = "code"
+image = "koalaman/shellcheck:stable"
+command = "sh -c 'find . -type f -name \"*.sh\" | xargs -r shellcheck || true'"
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
+
+[presets.shellcheck.options.severity]
+type = "string"
+default = "style"
+description = "Minimum severity (error, warning, info, style)"
+command_flag = "--severity"
 
 [presets.gofmt]
 name = "gofmt"

@@ -84,10 +84,10 @@ func TestLoad_NonExistentFile(t *testing.T) {
 
 func TestExpandEnvVars(t *testing.T) {
 	// Set test environment variables
-	os.Setenv("TEST_WORKSPACE", "/home/user/project")
-	os.Setenv("TEST_IMAGE", "myimage:latest")
-	defer os.Unsetenv("TEST_WORKSPACE")
-	defer os.Unsetenv("TEST_IMAGE")
+	_ = os.Setenv("TEST_WORKSPACE", "/home/user/project")
+	_ = os.Setenv("TEST_IMAGE", "myimage:latest")
+	defer func() { _ = os.Unsetenv("TEST_WORKSPACE") }()
+	defer func() { _ = os.Unsetenv("TEST_IMAGE") }()
 
 	tests := []struct {
 		name  string

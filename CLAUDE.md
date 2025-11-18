@@ -11,11 +11,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Key Concepts
 
 ### Convention over Configuration
+
 - Users enable tools by name: `enabled = ["trivy", "megalinter"]`
 - CIDX provides complete presets with sensible defaults
 - Overrides are optional and minimal (10% of cases)
 
 ### Architecture Layers
+
 1. **Presets Registry** (`pkg/presets/`) - Built-in tool configurations
 2. **Config Parser** (`pkg/config/`) - TOML parsing and validation
 3. **Docker Executor** (`pkg/executor/`) - Container execution via Docker SDK
@@ -25,12 +27,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Development Commands
 
 ### Building
+
 ```bash
 go build -o bin/cidx ./cmd/cidx      # Build binary
 go build                              # Build to default output
 ```
 
 ### Testing
+
 ```bash
 go test ./...                         # Run all tests
 go test -v ./pkg/presets              # Test specific package
@@ -38,6 +42,7 @@ go test -cover ./...                  # With coverage
 ```
 
 ### Running Locally
+
 ```bash
 go run ./cmd/cidx list                # List available tools
 go run ./cmd/cidx info trivy          # Show tool information
@@ -46,6 +51,7 @@ go run ./cmd/cidx run --dry-run ci    # Dry-run a pipeline
 ```
 
 ### Code Quality
+
 ```bash
 go fmt ./...                          # Format code
 go vet ./...                          # Static analysis
@@ -53,6 +59,7 @@ golangci-lint run                     # Comprehensive linting
 ```
 
 ### Dependencies
+
 ```bash
 go mod tidy                           # Clean up dependencies
 go mod download                       # Download dependencies
@@ -101,20 +108,26 @@ cmd/cidx/
 ### Key Abstractions
 
 #### Preset
+
 Complete tool definition with defaults:
+
 - Docker image, command, workdir
 - Volume mounts, environment variables
 - Configurable options with type safety
 - Config file auto-detection
 
 #### ToolConfig
+
 Runtime-resolved configuration after merging preset + overrides:
+
 - Ready for Docker execution
 - All variables expanded
 - All overrides applied
 
 #### Pipeline
+
 Sequence of phases to execute:
+
 - `phases = ["security", "code", "test"]`
 - Tools grouped by phase
 - Sequential execution within phases
@@ -124,6 +137,7 @@ Sequence of phases to execute:
 When adding a new tool preset to `pkg/presets/registry.go`:
 
 ### Required Fields
+
 ```go
 "toolname": {
     Name:    "toolname",           // Tool identifier
@@ -136,6 +150,7 @@ When adding a new tool preset to `pkg/presets/registry.go`:
 ```
 
 ### Optional Fields
+
 ```go
 Env: map[string]string{            // Default environment variables
     "TOOL_CONFIG": "/config",
@@ -157,6 +172,7 @@ Options: map[string]Option{        // Configurable options
 ```
 
 ### Preset Guidelines
+
 1. **Use official images**: Prefer official registry images
 2. **Sensible defaults**: Config should work without overrides
 3. **Document options**: Clear descriptions for all options
@@ -166,6 +182,7 @@ Options: map[string]Option{        // Configurable options
 ## Configuration Patterns
 
 ### Minimal (Recommended)
+
 ```toml
 [tools]
 enabled = ["trivy", "megalinter", "gitleaks"]
@@ -175,6 +192,7 @@ phases = ["security", "code"]
 ```
 
 ### With Overrides
+
 ```toml
 [tools]
 enabled = ["trivy"]
@@ -185,6 +203,7 @@ exit_code = 1
 ```
 
 ### Custom Tool
+
 ```toml
 [tools.custom-scanner]
 phase = "security"
@@ -196,21 +215,25 @@ volumes = ["${WORKSPACE}:/scan"]
 ## Design Principles
 
 ### 1. Convention over Configuration
+
 - Built-in presets eliminate boilerplate
 - Overrides are exceptional, not the norm
 - Sensible defaults that work out of the box
 
 ### 2. Declarative over Imperative
+
 - User declares **what** to run, not **how**
 - CIDX handles Docker orchestration
 - No shell scripting required
 
 ### 3. Simplicity over Features
+
 - Single config file (TOML or YAML)
 - Tool names are the only required input
 - Advanced features available but hidden by default
 
 ### 4. Explicit over Magic
+
 - Clear preset definitions in code
 - Transparent merge logic
 - Dry-run mode to inspect execution
@@ -218,6 +241,7 @@ volumes = ["${WORKSPACE}:/scan"]
 ## Common Development Tasks
 
 ### Adding a Security Tool
+
 1. Research official Docker image
 2. Identify required volumes (usually workspace only)
 3. Determine default command
@@ -225,6 +249,7 @@ volumes = ["${WORKSPACE}:/scan"]
 5. Test: `cidx info newtool && cidx run newtool --dry-run`
 
 ### Adding a Code Quality Tool
+
 1. Find official image (often language-specific)
 2. Check for config file conventions
 3. Set phase to `"code"`
@@ -232,13 +257,16 @@ volumes = ["${WORKSPACE}:/scan"]
 5. Document in README preset section
 
 ### Extending Options System
+
 When a tool needs runtime configuration:
+
 1. Add `Options` map to preset
 2. Define option type, default, description
 3. Use `CommandFlag` for CLI flags or `EnvVar` for env vars
 4. Update `applyOption()` if custom logic needed
 
 ### Testing Changes
+
 ```bash
 # Unit test changes
 go test ./pkg/presets -v
@@ -253,24 +281,28 @@ cidx validate && cidx list && cidx info <tool>
 ## Code Style Guidelines
 
 ### Naming
+
 - Presets: lowercase, hyphen-separated (`"ansible-lint"`)
 - Go types: PascalCase (`Preset`, `ToolConfig`)
 - Functions: camelCase (`mergeWith`, `expandVolumes`)
 - Files: lowercase with underscores (`registry.go`, `docker.go`)
 
 ### Error Handling
+
 - Always wrap errors with context: `fmt.Errorf("context: %w", err)`
 - Return early on errors
 - Use logrus for informational logging
 - Distinguish between user errors (invalid config) and system errors (Docker failure)
 
 ### Configuration Parsing
+
 - Support both TOML and YAML formats
 - Auto-detect format from file extension
 - Expand environment variables after parsing
 - Validate before execution
 
 ### Docker Execution
+
 - Always pull images before running (unless cached)
 - Stream logs to stdout/stderr in real-time
 - Clean up containers after execution (even on error)
@@ -291,6 +323,7 @@ When implementing these features, maintain core simplicity:
 ## Dependencies
 
 Core dependencies and their purpose:
+
 - `github.com/BurntSushi/toml` - TOML parsing
 - `github.com/docker/docker` - Docker SDK for container execution
 - `github.com/urfave/cli/v2` - CLI framework
@@ -306,6 +339,7 @@ Keep dependencies minimal. Evaluate carefully before adding new ones.
 - **Example configs**: Keep examples/ in sync with features
 
 Run tests before committing:
+
 ```bash
 go test ./... && go vet ./... && golangci-lint run
 ```

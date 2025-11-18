@@ -21,6 +21,7 @@ CIDX uses a **dual-mode preset system**:
 ### Preset File Location
 
 During development, presets are defined in:
+
 ```
 pkg/presets/presets.toml
 ```
@@ -214,16 +215,19 @@ This allows seamless transition between development and production.
 ### Development Mode (File-based)
 
 ✅ **Fast Iteration**
+
 - No recompilation needed
 - Instant feedback on preset changes
 - Easy to experiment
 
 ✅ **Easy Debugging**
+
 - Readable TOML format
 - Can use comments
 - Version control friendly
 
 ✅ **Validation**
+
 - Syntax errors caught on load
 - Clear error messages
 - Can validate schema
@@ -231,16 +235,19 @@ This allows seamless transition between development and production.
 ### Production Mode (Embedded)
 
 ✅ **Single Binary**
+
 - No external dependencies
 - Easy distribution
 - Container-friendly
 
 ✅ **Performance**
+
 - No file I/O at runtime
 - Faster startup
 - Smaller container images
 
 ✅ **Reliability**
+
 - Presets always available
 - No file path issues
 - Consistent behavior
@@ -310,11 +317,11 @@ presets:
 ```yaml
 options:
   <option_name>:
-    type: string              # string|int|bool (required)
-    default: any              # Default value (required)
-    description: string       # Help text (required)
-    command_flag: string      # Maps to CLI flag (optional)
-    env_var: string           # Maps to env var (optional)
+    type: string # string|int|bool (required)
+    default: any # Default value (required)
+    description: string # Help text (required)
+    command_flag: string # Maps to CLI flag (optional)
+    env_var: string # Maps to env var (optional)
 ```
 
 ## Migration Guide
@@ -322,6 +329,7 @@ options:
 ### From Hardcoded to File-based
 
 **Before** (`pkg/presets/registry.go`):
+
 ```go
 var GlobalRegistry = map[string]Preset{
     "trivy": {
@@ -335,6 +343,7 @@ var GlobalRegistry = map[string]Preset{
 ```
 
 **After** (`pkg/presets/presets.toml`):
+
 ```toml
 [presets.trivy]
 name = "trivy"
@@ -354,17 +363,20 @@ go run ./tools/convert-registry.go
 ## Best Practices
 
 ### Development
+
 - ✅ Edit `presets.toml` for all changes
 - ✅ Test with `go run` before building
 - ✅ Use comments to document complex presets
 - ✅ Validate with `cidx list` and `cidx info`
 
 ### Production
+
 - ✅ Always build with `go build` (embeds automatically)
 - ✅ Test binary in clean environment
 - ✅ Verify preset availability with `cidx list`
 
 ### Version Control
+
 - ✅ Commit `presets.toml` to git
 - ✅ Don't commit built binaries
 - ✅ Document preset changes in commit messages
@@ -376,6 +388,7 @@ go run ./tools/convert-registry.go
 **Problem**: Tool not listed in `cidx list`
 
 **Solutions**:
+
 1. Check `presets.toml` exists in correct location
 2. Validate TOML syntax
 3. Ensure preset has required fields
@@ -386,6 +399,7 @@ go run ./tools/convert-registry.go
 **Problem**: Modifications to `presets.toml` not working
 
 **Solutions**:
+
 1. Verify using `go run` (not built binary)
 2. Check file path is correct
 3. Restart if running as daemon/service
@@ -396,6 +410,7 @@ go run ./tools/convert-registry.go
 **Problem**: Binary has old preset definitions
 
 **Solutions**:
+
 1. Rebuild binary: `go build -o bin/cidx ./cmd/cidx`
 2. Verify build timestamp: `./bin/cidx --version`
 3. Clean build cache: `go clean -cache`
@@ -403,6 +418,7 @@ go run ./tools/convert-registry.go
 ## Future Enhancements
 
 Planned improvements:
+
 - [ ] User-defined presets: `~/.config/cidx/presets.toml`
 - [ ] Preset inheritance and composition
 - [ ] Preset validation tool

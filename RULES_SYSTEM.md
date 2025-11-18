@@ -2,8 +2,8 @@
 
 ## Philosophy: KISS (Keep It Simple, Stupid)
 
-
 **CIDX approach:** 1 YAML file, embedded at build time
+
 ```
 rules/presets.yaml (200 lines, all tools)
     ↓ go:embed at build
@@ -76,24 +76,24 @@ version: "1.0"
 
 presets:
   <tool_name>:
-    name: string              # Tool identifier
-    phase: string             # Phase: security, code, test, build
-    image: string             # Docker image with version tag (use semantic versions, not :latest)
-    command: string           # Command to run in container
-    workdir: string           # Working directory in container
-    volumes: array[string]    # Volume mounts (supports ${WORKSPACE})
-    env: map[string]string    # Environment variables (optional)
-    config_files: array[string]  # Config files to look for (optional)
-    options: map[string]Option   # Configurable options (optional)
+    name: string # Tool identifier
+    phase: string # Phase: security, code, test, build
+    image: string # Docker image with version tag (use semantic versions, not :latest)
+    command: string # Command to run in container
+    workdir: string # Working directory in container
+    volumes: array[string] # Volume mounts (supports ${WORKSPACE})
+    env: map[string]string # Environment variables (optional)
+    config_files: array[string] # Config files to look for (optional)
+    options: map[string]Option # Configurable options (optional)
 
   # Options schema
   <option_name>:
-    type: string              # Type: string, int, bool, array
-    default: any              # Default value
-    description: string       # Help text
-    env_var: string           # Maps to environment variable (optional)
-    flag: string              # Maps to command flag (optional)
-    values: array[string]     # Enum values (optional)
+    type: string # Type: string, int, bool, array
+    default: any # Default value
+    description: string # Help text
+    env_var: string # Maps to environment variable (optional)
+    flag: string # Maps to command flag (optional)
+    values: array[string] # Enum values (optional)
 ```
 
 ### Complete Example
@@ -105,7 +105,7 @@ presets:
   # ============================================================================
   # SECURITY TOOLS
   # ============================================================================
-  
+
   trivy:
     name: trivy
     phase: security
@@ -128,7 +128,7 @@ presets:
     config_files:
       - trivy.yaml
       - .trivyignore
-  
+
   gitleaks:
     name: gitleaks
     phase: security
@@ -139,11 +139,11 @@ presets:
       - "${WORKSPACE}:/repo"
     config_files:
       - .gitleaks.toml
-  
+
   # ============================================================================
   # CODE QUALITY TOOLS
   # ============================================================================
-  
+
   megalinter:
     name: megalinter
     phase: code
@@ -170,7 +170,7 @@ presets:
     config_files:
       - .mega-linter.yml
       - megalinter.yml
-  
+
   prettier:
     name: prettier
     phase: code
@@ -190,7 +190,7 @@ presets:
       - .prettierrc.json
       - .prettierrc.yml
       - prettier.config.js
-  
+
   commitlint:
     name: commitlint
     phase: code
@@ -207,7 +207,7 @@ presets:
       - .commitlintrc.json
       - .commitlintrc.yml
       - commitlint.config.js
-  
+
   ansible-lint:
     name: ansible-lint
     phase: code
@@ -218,11 +218,11 @@ presets:
       - "${WORKSPACE}:/work"
     config_files:
       - .ansible-lint
-  
+
   # ============================================================================
   # TEST TOOLS
   # ============================================================================
-  
+
   molecule:
     name: molecule
     phase: test
@@ -361,7 +361,7 @@ package presets
 import (
     _ "embed"
     "fmt"
-    
+
     "gopkg.in/yaml.v3"
 )
 
@@ -372,15 +372,15 @@ var embeddedRulesYAML []byte
 // LoadEmbeddedRules loads the embedded rules and parses them
 func LoadEmbeddedRules() (map[string]Preset, error) {
     var rulesFile RulesFile
-    
+
     if err := yaml.Unmarshal(embeddedRulesYAML, &rulesFile); err != nil {
         return nil, fmt.Errorf("failed to parse embedded rules: %w", err)
     }
-    
+
     if rulesFile.Version == "" {
         return nil, fmt.Errorf("rules file missing version")
     }
-    
+
     return rulesFile.Presets, nil
 }
 ```
@@ -415,7 +415,7 @@ func Get(name string) (Preset, error) {
     if err := Init(); err != nil {
         return Preset{}, err
     }
-    
+
     preset, exists := GlobalRegistry[name]
     if !exists {
         return Preset{}, fmt.Errorf("preset not found: %s", name)
@@ -428,7 +428,7 @@ func List() map[string][]string {
     if err := Init(); err != nil {
         return nil
     }
-    
+
     phases := make(map[string][]string)
     for name, preset := range GlobalRegistry {
         phases[preset.Phase] = append(phases[preset.Phase], name)
@@ -450,7 +450,7 @@ func GetByPhase(phase string) []Preset {
     if err := Init(); err != nil {
         return nil
     }
-    
+
     var presets []Preset
     for _, preset := range GlobalRegistry {
         if preset.Phase == phase {
@@ -482,7 +482,7 @@ func Count() int {
 ```yaml
 presets:
   # ... existing tools
-  
+
   semgrep:
     name: semgrep
     phase: security
@@ -545,7 +545,7 @@ go build -o bin/cidx ./cmd/cidx
 ```yaml
 trivy:
   name: trivy
-  image: aquasec/trivy:0.58.0  # ← Changed
+  image: aquasec/trivy:0.58.0 # ← Changed
 ```
 
 2. **Rebuild:**
@@ -564,6 +564,7 @@ git push --tags
 ```
 
 Users install with:
+
 ```bash
 go install github.com/arcker/cidx/cmd/cidx@latest
 ```
@@ -582,7 +583,7 @@ package main
 import (
     "fmt"
     "os"
-    
+
     "github.com/arcker/cidx/pkg/presets"
     "gopkg.in/yaml.v3"
 )
@@ -594,23 +595,23 @@ func main() {
         fmt.Fprintf(os.Stderr, "Error reading rules file: %v\n", err)
         os.Exit(1)
     }
-    
+
     // Parse YAML
     var rulesFile presets.RulesFile
     if err := yaml.Unmarshal(data, &rulesFile); err != nil {
         fmt.Fprintf(os.Stderr, "Error parsing YAML: %v\n", err)
         os.Exit(1)
     }
-    
+
     // Validate
     errors := 0
-    
+
     // Check version
     if rulesFile.Version == "" {
         fmt.Println("❌ Missing version field")
         errors++
     }
-    
+
     // Validate each preset
     for name, preset := range rulesFile.Presets {
         if preset.Name == "" {
@@ -629,18 +630,18 @@ func main() {
             fmt.Printf("❌ Preset '%s': missing command\n", name)
             errors++
         }
-        
+
         // Warn if using :latest
         if strings.HasSuffix(preset.Image, ":latest") {
             fmt.Printf("⚠️  Preset '%s': using :latest tag (prefer semantic version)\n", name)
         }
     }
-    
+
     if errors > 0 {
         fmt.Printf("\n❌ Validation failed with %d errors\n", errors)
         os.Exit(1)
     }
-    
+
     fmt.Printf("✓ Validation passed (%d presets)\n", len(rulesFile.Presets))
 }
 ```
@@ -654,27 +655,27 @@ name: Validate Rules
 on:
   pull_request:
     paths:
-      - 'rules/presets.yaml'
+      - "rules/presets.yaml"
 
 jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
-      
+          go-version: "1.21"
+
       - name: Validate rules schema
         run: go run scripts/validate-rules.go
-      
+
       - name: Check YAML syntax
         run: yamllint rules/presets.yaml
-      
+
       - name: Test build
         run: go build -o bin/cidx ./cmd/cidx
-      
+
       - name: Test presets loading
         run: |
           ./bin/cidx list
@@ -731,7 +732,7 @@ package main
 import (
     "fmt"
     "os"
-    
+
     "github.com/arcker/cidx/pkg/presets"
     "gopkg.in/yaml.v3"
 )
@@ -739,28 +740,29 @@ import (
 func main() {
     // Get current GlobalRegistry (hardcoded in registry.go)
     rules := presets.GlobalRegistry
-    
+
     file := presets.RulesFile{
         Version: "1.0",
         Presets: rules,
     }
-    
+
     data, err := yaml.Marshal(file)
     if err != nil {
         panic(err)
     }
-    
+
     // Write to rules/presets.yaml
     os.MkdirAll("rules", 0755)
     if err := os.WriteFile("rules/presets.yaml", data, 0644); err != nil {
         panic(err)
     }
-    
+
     fmt.Printf("✓ Exported %d presets to rules/presets.yaml\n", len(rules))
 }
 ```
 
 Run:
+
 ```bash
 go run scripts/export-to-yaml.go
 ```
@@ -791,16 +793,16 @@ go build -o bin/cidx ./cmd/cidx
 
 ### Comparison Table
 
-| Aspect | Current (Go hardcoded) | New (YAML embedded) |
-|--------|------------------------|---------------------|
-| **Readability** | Go structs (verbose) | YAML (clean) |
-| **Editability** | Requires Go knowledge | Just edit YAML |
-| **Contribution** | Need PR + Go review | Just edit one file |
-| **Build** | Rebuild for any change | Rebuild for any change |
-| **Runtime** | Parse Go structs | Parse embedded YAML |
-| **Binary size** | ~15MB | ~15MB (negligible diff) |
-| **Speed** | Instant | Instant (YAML parsed once) |
-| **Deployment** | Single binary | Single binary |
+| Aspect           | Current (Go hardcoded) | New (YAML embedded)        |
+| ---------------- | ---------------------- | -------------------------- |
+| **Readability**  | Go structs (verbose)   | YAML (clean)               |
+| **Editability**  | Requires Go knowledge  | Just edit YAML             |
+| **Contribution** | Need PR + Go review    | Just edit one file         |
+| **Build**        | Rebuild for any change | Rebuild for any change     |
+| **Runtime**      | Parse Go structs       | Parse embedded YAML        |
+| **Binary size**  | ~15MB                  | ~15MB (negligible diff)    |
+| **Speed**        | Instant                | Instant (YAML parsed once) |
+| **Deployment**   | Single binary          | Single binary              |
 
 ### Key Advantages
 
@@ -808,14 +810,14 @@ go build -o bin/cidx ./cmd/cidx
 ✅ **Easier to review** - YAML diffs are clearer than Go diffs  
 ✅ **Easier to maintain** - One file vs scattered Go code  
 ✅ **Version control friendly** - Clean git diffs  
-✅ **Documentation friendly** - YAML is self-documenting  
+✅ **Documentation friendly** - YAML is self-documenting
 
 ### What Stays the Same
 
 ✅ **Zero-config** - Still works out-of-the-box  
 ✅ **Single binary** - No external files needed  
 ✅ **Fast** - YAML parsed once at startup  
-✅ **Type-safe** - Go structs validate at build time  
+✅ **Type-safe** - Go structs validate at build time
 
 ---
 
@@ -834,7 +836,7 @@ func Init() error {
         if loadError != nil {
             return
         }
-        
+
         // 2. Load local overrides (optional)
         localPath := filepath.Join(os.Getenv("HOME"), ".config/cidx/rules.yaml")
         if fileExists(localPath) {
@@ -852,6 +854,7 @@ func Init() error {
 ```
 
 **Usage:**
+
 ```yaml
 # ~/.config/cidx/rules.yaml (optional, for custom overrides)
 version: "1.0"
@@ -868,6 +871,7 @@ presets:
 ## Summary: Why This Approach is KISS
 
 ### CIDX (Simple)
+
 - 1 YAML file for all presets
 - ~200 lines for 6 tools
 - Embedded in binary at build
@@ -888,21 +892,27 @@ presets:
 ## Questions & Answers
 
 ### Q: Why not load YAML at runtime?
+
 **A:** Requires YAML file to be distributed with binary. Embedding = single binary, zero-config.
 
 ### Q: What if YAML is invalid?
+
 **A:** Build fails (YAML parsing error). Catches errors early.
 
 ### Q: Can users add their own presets?
+
 **A:** Phase 2 feature (local overrides). Keep it simple for now.
 
 ### Q: What about preset versioning?
+
 **A:** The `version` field in YAML. Can add compatibility checks later.
 
 ### Q: Performance impact?
+
 **A:** Negligible. YAML parsed once at startup (~1ms). Presets cached in memory.
 
 ### Q: Binary size impact?
+
 **A:** ~10KB for YAML file. Negligible compared to Go runtime (~10MB).
 
 ---
@@ -915,6 +925,6 @@ This rules system achieves the perfect balance:
 ✅ **Embedded** - No external files needed  
 ✅ **Standalone** - Binary works out-of-the-box  
 ✅ **Maintainable** - Easy to add/update tools  
-✅ **Contributor-friendly** - No Go knowledge required  
+✅ **Contributor-friendly** - No Go knowledge required
 
 **It's KISS at its best.**

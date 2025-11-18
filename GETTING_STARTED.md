@@ -41,6 +41,7 @@ description = "Run security and code quality checks"
 ```
 
 Output:
+
 ```
 Available tools:
 
@@ -98,6 +99,7 @@ phases = ["security", "code"]
 ```
 
 CIDX knows:
+
 - ✅ Which Docker image to use
 - ✅ What volumes to mount
 - ✅ What command to run
@@ -133,6 +135,7 @@ phases = ["security", "code", "test"]
 ```
 
 Run with:
+
 ```bash
 ./bin/cidx run security
 ./bin/cidx run code
@@ -313,6 +316,7 @@ cidx run --dry-run ci
 ### 3. Organize by Phase
 
 Group tools logically:
+
 - **security**: vulnerability scanning, secrets detection
 - **code**: linting, formatting, quality checks
 - **test**: unit tests, integration tests

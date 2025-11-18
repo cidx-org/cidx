@@ -16,6 +16,7 @@ Instead of creating a new container for each run, CIDX:
 ### Container Naming
 
 Containers use **fixed names** without timestamps:
+
 - Format: `cidx_<toolname>`
 - Examples: `cidx_trivy`, `cidx_gitleaks`, `cidx_prettier`
 
@@ -24,6 +25,7 @@ This allows consistent reuse across multiple CI runs.
 ## Performance Benefits
 
 ### Before (Create/Delete Strategy)
+
 ```
 First run:  ~15 seconds (download + execute)
 Second run: ~15 seconds (download + execute)
@@ -31,6 +33,7 @@ Third run:  ~15 seconds (download + execute)
 ```
 
 ### After (Container Reuse)
+
 ```
 First run:     ~15 seconds (download + execute)
 Second run:    ~2.4 seconds (cache reused ⚡)
@@ -43,26 +46,31 @@ Third run:     ~2.4 seconds (cache reused ⚡)
 Containers preserve their internal filesystem between runs, which means:
 
 ### Trivy
+
 - **Vulnerability DB** (~75 MB) downloaded once
 - Subsequent scans use cached DB
 - Only updates when DB is outdated
 
 ### Gitleaks
+
 - Git repository state preserved
 - Faster subsequent scans
 
 ### Prettier
+
 - Node modules cache (if applicable)
 - Formatted files cache
 
 ## Container Management
 
 ### List CIDX Containers
+
 ```bash
 docker ps -a --filter "name=cidx_"
 ```
 
 Example output:
+
 ```
 NAMES           STATUS                      CREATED
 cidx_gitleaks   Exited (0) 2 minutes ago    2025-11-18 14:07:28
@@ -71,12 +79,14 @@ cidx_prettier   Exited (1) 5 minutes ago    2025-11-18 14:02:15
 ```
 
 ### Clean All CIDX Containers
+
 ```bash
 # Remove all CIDX containers (will be recreated on next run)
 docker rm -f $(docker ps -aq --filter "name=cidx_")
 ```
 
 ### Clean Specific Container
+
 ```bash
 # Force recreate trivy container on next run
 docker rm -f cidx_trivy
@@ -91,6 +101,7 @@ cidx --verbose run security
 ```
 
 Output:
+
 ```
 time="..." level=debug msg="♻ Reusing container cidx_trivy (preserves cache)"
 time="..." level=debug msg="Starting container: cidx_trivy"
@@ -108,6 +119,7 @@ labels:
 ```
 
 Query by label:
+
 ```bash
 docker ps -a --filter "label=managed-by=cidx"
 docker ps -a --filter "label=cidx.phase=security"
@@ -126,17 +138,21 @@ Currently, containers are reused even if configuration changes. This is intentio
 ## Best Practices
 
 ### Development Workflow
+
 1. **First run**: Expect normal timing (downloads, setup)
 2. **Subsequent runs**: Enjoy fast iterations ⚡
 3. **Clean periodically**: Remove containers if caches grow too large
 
 ### CI/CD Pipelines
+
 For production CI/CD, consider:
+
 - Using `--clean` flag (future feature) to ensure fresh state
 - Implementing cache volume mounts for even better performance
 - Separating dev and CI container namespaces
 
 ### Troubleshooting
+
 If you experience issues with cached data:
 
 ```bash
@@ -153,11 +169,13 @@ cidx run security
 ## Technical Details
 
 ### Implementation
+
 - **Location**: `pkg/executor/docker.go`
 - **Function**: `getOrCreateContainer()`
 - **Strategy**: Check existence → Reuse or Create
 
 ### Container Lifecycle Code Flow
+
 ```
 1. getOrCreateContainer()
    ├─ List containers with name=cidx_<tool>
@@ -175,13 +193,16 @@ cidx run security
 ```
 
 ### Why Not Remove Containers?
+
 Removing containers would:
+
 - ❌ Delete cached data (DB, packages, build artifacts)
 - ❌ Require re-downloading on every run
 - ❌ Waste bandwidth and time
 - ❌ Slow down local development
 
 Keeping containers:
+
 - ✅ Preserves caches
 - ✅ Speeds up iterations
 - ✅ Reduces network usage
@@ -190,6 +211,7 @@ Keeping containers:
 ## Future Enhancements
 
 Planned improvements:
+
 - [ ] **Config change detection**: Recreate container if tool config changed
 - [ ] **Image update detection**: Recreate if Docker image updated
 - [ ] **`--clean` flag**: Force clean start (delete containers before run)

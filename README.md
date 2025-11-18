@@ -93,7 +93,7 @@ CI/CD Runner (GitLab/GitHub/Jenkins/Local)
 ✅ **Reproducibility** - Same container = same environment everywhere  
 ✅ **Isolation** - Each tool runs in its own isolated container  
 ✅ **Version control** - Docker image tags ensure exact versions  
-✅ **Security** - Containers provide sandboxing and resource limits  
+✅ **Security** - Containers provide sandboxing and resource limits
 
 **Example:** Running Trivy doesn't require installing Trivy on your machine. CIDX pulls `aquasec/trivy:0.57.1` and runs it in a container.
 
@@ -170,6 +170,7 @@ cidx list
 ```
 
 Output:
+
 ```
 Available tools:
 
@@ -207,6 +208,7 @@ phases = ["security", "code"]
 ```
 
 **That's it!** CIDX knows:
+
 - ✅ Which Docker image to use
 - ✅ What volumes to mount
 - ✅ What command to run
@@ -249,6 +251,7 @@ volumes = ["${WORKSPACE}:/scan"]
 ### Security Phase
 
 #### Trivy
+
 Vulnerability scanner for containers and filesystems.
 
 ```toml
@@ -258,6 +261,7 @@ exit_code = 1               # Fail on vulnerabilities
 ```
 
 #### Gitleaks
+
 Detect hardcoded secrets in git repositories.
 
 ```toml
@@ -268,6 +272,7 @@ Detect hardcoded secrets in git repositories.
 ### Code Phase
 
 #### MegaLinter
+
 Code quality and security scanning with 50+ linters.
 
 ```toml
@@ -277,6 +282,7 @@ env = { LINTERS_DISABLED = "v8r" }
 ```
 
 #### Commitlint
+
 Enforce conventional commit messages.
 
 ```toml
@@ -285,6 +291,7 @@ Enforce conventional commit messages.
 ```
 
 #### Ansible Lint
+
 Lint Ansible playbooks and roles.
 
 ```toml
@@ -295,6 +302,7 @@ Lint Ansible playbooks and roles.
 ### Test Phase
 
 #### Molecule
+
 Test Ansible roles with Docker.
 
 ```toml
@@ -341,6 +349,7 @@ cidx validate
 ```
 
 Output:
+
 ```
 Validating: cidx.toml
 
@@ -470,6 +479,7 @@ For detailed documentation, see the [docs/](docs/) directory:
 ### Key Features
 
 #### Container Reuse for Performance
+
 CIDX reuses Docker containers across runs instead of creating/deleting them each time. This provides:
 
 - **6x faster** subsequent runs (e.g., security phase: 15s → 2.4s)
@@ -489,6 +499,7 @@ Contributions welcome! Please open an issue or PR.
 ### Adding New Presets
 
 We welcome presets for popular DevSecOps tools:
+
 - Security scanners (SAST, DAST, secrets detection)
 - Code quality tools (linters, formatters)
 - Testing tools (unit, integration, e2e)

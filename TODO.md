@@ -14,6 +14,7 @@
 ## Phase 2: Expansion (Next 1-2 weeks)
 
 ### Core Features
+
 - [ ] Add 15+ more presets for popular DevSecOps tools:
   - Security: semgrep, snyk, bandit, safety, gosec, hadolint
   - Code: eslint, ruff, black, prettier, yamllint, shellcheck
@@ -28,12 +29,14 @@
 - [ ] Improve error messages and user feedback
 
 ### Testing
+
 - [ ] Unit tests for all packages
 - [ ] Integration tests with real Docker images
 - [ ] Test coverage > 80%
 - [ ] CI/CD pipeline (GitHub Actions)
 
 ### Documentation
+
 - [ ] API documentation (godoc)
 - [ ] More examples (monorepo, multi-language)
 - [ ] Video tutorial
@@ -42,6 +45,7 @@
 ## Phase 3: Advanced Features (2-4 weeks)
 
 ### User Experience
+
 - [ ] User preset extensions (`~/.config/cidx/presets.toml`)
 - [ ] Interactive mode for tool selection
 - [ ] Progress bars for long-running tools
@@ -49,12 +53,14 @@
 - [ ] JSON output mode for CI integration
 
 ### Performance
+
 - [ ] Parallel tool execution within phases
 - [ ] Caching of Docker images
 - [ ] Incremental scanning (only changed files)
 - [ ] Resource limits (CPU, memory)
 
 ### Enterprise Features
+
 - [ ] Registry override (private Docker registries)
 - [ ] Image signature verification
 - [ ] SBOM generation and tracking
@@ -63,6 +69,7 @@
 - [ ] Policy enforcement (mandatory tools)
 
 ### Integration
+
 - [ ] GitLab CI template
 - [ ] GitHub Actions workflow
 - [ ] Jenkins plugin
@@ -72,6 +79,7 @@
 ## Phase 4: Ecosystem (Long-term)
 
 ### Tools
+
 - [ ] Web UI for configuration
   - Visual pipeline designer
   - Tool marketplace
@@ -80,12 +88,14 @@
 - [ ] IDE integrations (JetBrains, Vim)
 
 ### Platform
+
 - [ ] Cloud-hosted service (cidx.io)
 - [ ] Shared preset marketplace
 - [ ] Result aggregation and trends
 - [ ] Team collaboration features
 
 ### Advanced Capabilities
+
 - [ ] Custom plugin system
 - [ ] Support for non-Docker executors (Podman, nerdctl)
 - [ ] Remote execution (SSH, Kubernetes)

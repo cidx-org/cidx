@@ -51,7 +51,11 @@ func runCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create executor: %w", err)
 			}
-			defer exec.Close()
+			defer func() {
+				if closeErr := exec.Close(); closeErr != nil {
+					_, _ = fmt.Fprintf(c.App.ErrWriter, "Warning: failed to close executor: %v\n", closeErr)
+				}
+			}()
 
 			// Create runner
 			runner := pipeline.NewRunner(cfg, exec)
