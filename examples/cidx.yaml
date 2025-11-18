@@ -1,0 +1,7 @@
+# CIDX Configuration - YAML format
+
+security:
+  tools: [trivy, gitleaks]
+
+code:
+  tools: [prettier]

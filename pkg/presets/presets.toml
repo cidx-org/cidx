@@ -1,0 +1,113 @@
+# CIDX Tool Presets
+# This file defines all built-in tool configurations
+# Edit this file during development - changes are picked up immediately with 'go run'
+# During build, this file is embedded into the binary
+
+[presets.prettier]
+name = "prettier"
+phase = "code"
+image = "tmknom/prettier:latest"
+command = "prettier --check ."
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
+config_files = [
+    ".prettierrc",
+    ".prettierrc.json",
+    ".prettierrc.yml",
+    "prettier.config.js",
+]
+
+[presets.prettier.options.write]
+type = "bool"
+default = false
+description = "Write formatted files (instead of check)"
+command_flag = "--write"
+
+[presets.trivy]
+name = "trivy"
+phase = "security"
+image = "aquasec/trivy:latest"
+command = "fs /scan"
+workdir = "/scan"
+volumes = ["${WORKSPACE}:/scan"]
+
+[presets.trivy.env]
+TRIVY_CACHE_DIR = "/tmp/trivy-cache"
+
+[presets.trivy.options.severity]
+type = "string"
+default = "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
+description = "Severities to report (comma-separated)"
+command_flag = "--severity"
+
+[presets.trivy.options.exit_code]
+type = "int"
+default = 0
+description = "Exit code when vulnerabilities are found"
+command_flag = "--exit-code"
+
+[presets.gitleaks]
+name = "gitleaks"
+phase = "security"
+image = "zricethezav/gitleaks:latest"
+command = "git ."
+workdir = "/repo"
+volumes = ["${WORKSPACE}:/repo"]
+config_files = [".gitleaks.toml"]
+
+[presets.commitlint]
+name = "commitlint"
+phase = "code"
+image = "node:20-alpine"
+command = "sh -c 'npm install -g @commitlint/cli @commitlint/config-conventional && commitlint --from ${FROM} --to ${TO}'"
+workdir = "/app"
+volumes = [
+    "${WORKSPACE}:/app",
+    "${WORKSPACE}/.git:/app/.git",
+]
+config_files = [
+    ".commitlintrc.json",
+    ".commitlintrc.yml",
+    "commitlint.config.js",
+]
+
+[presets.commitlint.env]
+FROM = "origin/main"
+TO = "HEAD"
+
+[presets.ansible-lint]
+name = "ansible-lint"
+phase = "code"
+image = "quay.io/ansible/creator-ee:latest"
+command = "ansible-lint"
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
+config_files = [".ansible-lint"]
+
+[presets.molecule]
+name = "molecule"
+phase = "test"
+image = "quay.io/ansible/molecule:latest"
+command = "molecule test -s ${SCENARIO}"
+workdir = "/work"
+volumes = [
+    "${WORKSPACE}:/work",
+    "/var/run/docker.sock:/var/run/docker.sock",
+]
+
+[presets.molecule.env]
+SCENARIO = "default"
+
+[presets.molecule.options.scenario]
+type = "string"
+default = "default"
+description = "Molecule scenario to run"
+env_var = "SCENARIO"
+
+[presets.test-hot-reload]
+name = "test-hot-reload"
+phase = "test"
+image = "alpine:latest"
+command = "echo 'Hot reload works!'"
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]

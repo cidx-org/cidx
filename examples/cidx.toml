@@ -1,0 +1,10 @@
+# CIDX Configuration - Simple
+#
+# Workspace: By default, CIDX uses the current directory as the workspace.
+# All tools will be executed in the directory where you run the command.
+
+[security]
+tools = ["trivy", "gitleaks"]
+
+[code]
+tools = ["prettier"]

@@ -1,0 +1,17 @@
+# CIDX Configuration - Advanced
+#
+# Workspace: By default, CIDX uses the current directory as the workspace.
+# All tools will be executed in the directory where you run the command.
+
+[security]
+tools = ["trivy", "gitleaks"]
+
+[code]
+tools = ["prettier", "commitlint"]
+
+[trivy]
+severity = "HIGH,CRITICAL"
+exit_code = 1
+
+[prettier]
+write = true
