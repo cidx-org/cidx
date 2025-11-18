@@ -18,15 +18,17 @@ type PresetsFile struct {
 
 // PresetTOML represents a preset in TOML format
 type PresetTOML struct {
-	Name        string                     `toml:"name"`
-	Phase       string                     `toml:"phase"`
-	Image       string                     `toml:"image"`
-	Command     string                     `toml:"command"`
-	Workdir     string                     `toml:"workdir"`
-	Volumes     []string                   `toml:"volumes"`
-	Env         map[string]string          `toml:"env"`
-	ConfigFiles []string                   `toml:"config_files"`
-	Options     map[string]OptionTOML      `toml:"options"`
+	Name          string                `toml:"name"`
+	Phase         string                `toml:"phase"`
+	Image         string                `toml:"image"`
+	Command       string                `toml:"command"`
+	Workdir       string                `toml:"workdir"`
+	Volumes       []string              `toml:"volumes"`
+	Env           map[string]string     `toml:"env"`
+	ConfigFiles   []string              `toml:"config_files"`
+	Options       map[string]OptionTOML `toml:"options"`
+	RequireCI     bool                  `toml:"require_ci"`
+	LocalBehavior string                `toml:"local_behavior"`
 }
 
 // OptionTOML represents an option in TOML format
@@ -73,15 +75,17 @@ func loadPresets() (map[string]Preset, error) {
 	registry := make(map[string]Preset)
 	for name, tomlPreset := range presetsFile.Presets {
 		preset := Preset{
-			Name:        tomlPreset.Name,
-			Phase:       tomlPreset.Phase,
-			Image:       tomlPreset.Image,
-			Command:     tomlPreset.Command,
-			Workdir:     tomlPreset.Workdir,
-			Volumes:     tomlPreset.Volumes,
-			Env:         tomlPreset.Env,
-			ConfigFiles: tomlPreset.ConfigFiles,
-			Options:     make(map[string]Option),
+			Name:          tomlPreset.Name,
+			Phase:         tomlPreset.Phase,
+			Image:         tomlPreset.Image,
+			Command:       tomlPreset.Command,
+			Workdir:       tomlPreset.Workdir,
+			Volumes:       tomlPreset.Volumes,
+			Env:           tomlPreset.Env,
+			ConfigFiles:   tomlPreset.ConfigFiles,
+			Options:       make(map[string]Option),
+			RequireCI:     tomlPreset.RequireCI,
+			LocalBehavior: tomlPreset.LocalBehavior,
 		}
 
 		// Convert options

@@ -2,15 +2,17 @@ package presets
 
 // Preset defines a complete tool configuration with sensible defaults
 type Preset struct {
-	Name        string            `yaml:"name" toml:"name"`
-	Phase       string            `yaml:"phase" toml:"phase"`
-	Image       string            `yaml:"image" toml:"image"`
-	Command     string            `yaml:"command" toml:"command"`
-	Workdir     string            `yaml:"workdir" toml:"workdir"`
-	Volumes     []string          `yaml:"volumes" toml:"volumes"`
-	Env         map[string]string `yaml:"env" toml:"env"`
-	ConfigFiles []string          `yaml:"config_files" toml:"config_files"`
-	Options     map[string]Option `yaml:"options" toml:"options"`
+	Name          string            `yaml:"name" toml:"name"`
+	Phase         string            `yaml:"phase" toml:"phase"`
+	Image         string            `yaml:"image" toml:"image"`
+	Command       string            `yaml:"command" toml:"command"`
+	Workdir       string            `yaml:"workdir" toml:"workdir"`
+	Volumes       []string          `yaml:"volumes" toml:"volumes"`
+	Env           map[string]string `yaml:"env" toml:"env"`
+	ConfigFiles   []string          `yaml:"config_files" toml:"config_files"`
+	Options       map[string]Option `yaml:"options" toml:"options"`
+	RequireCI     bool              `yaml:"require_ci" toml:"require_ci"`         // Requires CI environment
+	LocalBehavior string            `yaml:"local_behavior" toml:"local_behavior"` // draft, no-push, dry-run, disabled
 }
 
 // Option defines a configurable parameter for a preset

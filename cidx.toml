@@ -32,20 +32,40 @@ tools = ["docker-buildx"]
 tools = ["gh-release"]
 
 # Pipelines: Named execution workflows
+# CI: Continuous Integration (every commit)
 [pipelines.ci]
 phases = ["security", "code", "test", "build"]
+description = "Full CI pipeline for all commits"
 
+# PR: Pull Request validation
+[pipelines.pr]
+phases = ["security", "code", "test"]
+description = "Pull request validation (no build artifacts)"
+
+# Main: Main branch pipeline
+[pipelines.main]
+phases = ["security", "code", "test", "build"]
+description = "Main branch pipeline (builds artifacts)"
+
+# Release: Full release pipeline (tags only)
+[pipelines.release]
+phases = ["security", "code", "test", "build", "docker", "release"]
+description = "Complete release pipeline (CI only)"
+
+# CD: Continuous Deployment
 [pipelines.cd]
 phases = ["docker", "release"]
+description = "Deployment pipeline (requires artifacts)"
 
-[pipelines.full]
-phases = ["security", "code", "test", "build", "docker", "release"]
-
+# Quick: Fast validation
 [pipelines.quick]
 phases = ["code"]
+description = "Quick code quality check"
 
+# Pre-push: Local pre-push validation
 [pipelines.pre-push]
 phases = ["security", "code", "test"]
+description = "Local validation before pushing"
 
 # Trivy: Scan filesystem for vulnerabilities
 [tools.trivy]

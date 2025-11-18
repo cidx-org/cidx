@@ -204,6 +204,8 @@ image = "gcr.io/kaniko-project/executor:latest"
 command = "/kaniko/executor --context=/workspace --dockerfile=Dockerfile --destination=${IMAGE_NAME}:${IMAGE_TAG} --cache=true"
 workdir = "/workspace"
 volumes = ["${WORKSPACE}:/workspace"]
+require_ci = false
+local_behavior = "no-push"
 
 [presets.kaniko.env]
 IMAGE_NAME = "ghcr.io/${GITHUB_REPOSITORY}"
@@ -237,6 +239,8 @@ volumes = [
     "${WORKSPACE}:/workspace",
     "/var/run/docker.sock:/var/run/docker.sock",
 ]
+require_ci = false
+local_behavior = "no-push"
 
 [presets.docker-buildx.env]
 IMAGE_NAME = "ghcr.io/${GITHUB_REPOSITORY}"
@@ -253,6 +257,8 @@ image = "ghcr.io/cli/cli:latest"
 command = "gh release create ${TAG} ${ARTIFACTS} --generate-notes"
 workdir = "/workspace"
 volumes = ["${WORKSPACE}:/workspace"]
+require_ci = false
+local_behavior = "draft"
 
 [presets.gh-release.env]
 TAG = "${GIT_TAG}"
@@ -281,6 +287,8 @@ volumes = [
     "${WORKSPACE}:/workspace",
     "/var/run/docker.sock:/var/run/docker.sock",
 ]
+require_ci = false
+local_behavior = "draft"
 
 [presets.goreleaser.env]
 GITHUB_TOKEN = "${GITHUB_TOKEN}"
