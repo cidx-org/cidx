@@ -122,7 +122,7 @@ jobs:
           path: bin/cidx
           retention-days: 7
 
-  # Docker: Build and push container to GHCR (private)
+  # Docker: Build and push container (managed by CIDX)
   docker:
     name: Docker Image
     runs-on: ubuntu-latest
@@ -135,8 +135,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Download CIDX
+        uses: actions/download-artifact@v4
+        with:
+          name: cidx
+          path: bin/
+
+      - name: Make CIDX executable
+        run: chmod +x bin/cidx
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -145,28 +151,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=sha
-
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        run: ./bin/cidx run docker
+        env:
+          IMAGE_NAME: ghcr.io/${{ github.repository }}
+          IMAGE_TAG: ${{ github.ref_name }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Release: Create GitHub Release (private)
+  # Release: Create GitHub Release (managed by CIDX)
   release:
     name: GitHub Release
     runs-on: ubuntu-latest
@@ -178,18 +170,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download binary
+      - name: Download CIDX
+        uses: actions/download-artifact@v4
+        with:
+          name: cidx
+          path: bin/
+
+      - name: Download final binary
         uses: actions/download-artifact@v4
         with:
           name: cidx-binary
           path: bin/
 
+      - name: Make CIDX executable
+        run: chmod +x bin/cidx
+
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: bin/cidx
-          draft: false
-          prerelease: false
-          generate_release_notes: true
+        run: ./bin/cidx run release
         env:
+          GIT_TAG: ${{ github.ref_name }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}

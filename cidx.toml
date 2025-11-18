@@ -23,9 +23,23 @@ tools = ["go-test"]
 [build]
 tools = ["go-build"]
 
+# Docker: Build and push container images
+[docker]
+tools = ["docker-buildx"]
+
+# Release: Create GitHub releases
+[release]
+tools = ["gh-release"]
+
 # Pipelines: Named execution workflows
 [pipelines.ci]
 phases = ["security", "code", "test", "build"]
+
+[pipelines.cd]
+phases = ["docker", "release"]
+
+[pipelines.full]
+phases = ["security", "code", "test", "build", "docker", "release"]
 
 [pipelines.quick]
 phases = ["code"]

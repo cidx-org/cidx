@@ -192,3 +192,107 @@ type = "string"
 default = ""
 description = "Linker flags for go build"
 command_flag = "-ldflags"
+
+# ============================================================================
+# Docker Phase - Build and push container images
+# ============================================================================
+
+[presets.kaniko]
+name = "kaniko"
+phase = "docker"
+image = "gcr.io/kaniko-project/executor:latest"
+command = "/kaniko/executor --context=/workspace --dockerfile=Dockerfile --destination=${IMAGE_NAME}:${IMAGE_TAG} --cache=true"
+workdir = "/workspace"
+volumes = ["${WORKSPACE}:/workspace"]
+
+[presets.kaniko.env]
+IMAGE_NAME = "ghcr.io/${GITHUB_REPOSITORY}"
+IMAGE_TAG = "latest"
+
+[presets.kaniko.options.destination]
+type = "string"
+default = ""
+description = "Full image destination (registry/image:tag)"
+command_flag = "--destination"
+
+[presets.kaniko.options.dockerfile]
+type = "string"
+default = "Dockerfile"
+description = "Path to Dockerfile"
+command_flag = "--dockerfile"
+
+[presets.kaniko.options.cache]
+type = "bool"
+default = true
+description = "Enable layer caching"
+command_flag = "--cache"
+
+[presets.docker-buildx]
+name = "docker-buildx"
+phase = "docker"
+image = "docker:latest"
+command = "sh -c 'docker buildx build --platform linux/amd64,linux/arm64 -t ${IMAGE_NAME}:${IMAGE_TAG} --push .'"
+workdir = "/workspace"
+volumes = [
+    "${WORKSPACE}:/workspace",
+    "/var/run/docker.sock:/var/run/docker.sock",
+]
+
+[presets.docker-buildx.env]
+IMAGE_NAME = "ghcr.io/${GITHUB_REPOSITORY}"
+IMAGE_TAG = "latest"
+
+# ============================================================================
+# Release Phase - Create GitHub releases and publish artifacts
+# ============================================================================
+
+[presets.gh-release]
+name = "gh-release"
+phase = "release"
+image = "ghcr.io/cli/cli:latest"
+command = "gh release create ${TAG} ${ARTIFACTS} --generate-notes"
+workdir = "/workspace"
+volumes = ["${WORKSPACE}:/workspace"]
+
+[presets.gh-release.env]
+TAG = "${GIT_TAG}"
+ARTIFACTS = "bin/cidx"
+GH_TOKEN = "${GITHUB_TOKEN}"
+
+[presets.gh-release.options.draft]
+type = "bool"
+default = false
+description = "Create release as draft"
+command_flag = "--draft"
+
+[presets.gh-release.options.prerelease]
+type = "bool"
+default = false
+description = "Mark as prerelease"
+command_flag = "--prerelease"
+
+[presets.goreleaser]
+name = "goreleaser"
+phase = "release"
+image = "goreleaser/goreleaser:latest"
+command = "goreleaser release --clean"
+workdir = "/workspace"
+volumes = [
+    "${WORKSPACE}:/workspace",
+    "/var/run/docker.sock:/var/run/docker.sock",
+]
+
+[presets.goreleaser.env]
+GITHUB_TOKEN = "${GITHUB_TOKEN}"
+
+[presets.goreleaser.options.snapshot]
+type = "bool"
+default = false
+description = "Build snapshot (without publishing)"
+command_flag = "--snapshot"
+
+[presets.goreleaser.options.skip_publish]
+type = "bool"
+default = false
+description = "Skip publishing"
+command_flag = "--skip=publish"
