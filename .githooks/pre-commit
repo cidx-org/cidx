@@ -1,0 +1,49 @@
+#!/bin/sh
+# CIDX Pre-commit Hook
+# Runs security and code quality checks before allowing commit
+#
+# To enable: git config core.hooksPath .githooks
+# To bypass: git commit --no-verify
+
+set -e
+
+echo "🔍 Running CIDX pre-commit checks..."
+echo ""
+
+# Check if cidx is available
+if ! command -v cidx >/dev/null 2>&1; then
+    # Try to run via go run if cidx binary not found
+    if [ -f "cmd/cidx/main.go" ]; then
+        CIDX_CMD="go run ./cmd/cidx"
+    else
+        echo "❌ Error: cidx not found in PATH and not in development mode"
+        echo "   Install cidx or run from the cidx project directory"
+        exit 1
+    fi
+else
+    CIDX_CMD="cidx"
+fi
+
+# Run security checks (secrets, vulnerabilities)
+echo "🛡️  Security checks..."
+if ! $CIDX_CMD run security; then
+    echo ""
+    echo "❌ Security checks failed!"
+    echo "   Fix the issues above or use --no-verify to bypass (not recommended)"
+    exit 1
+fi
+
+echo ""
+
+# Run code quality checks (formatting, linting)
+echo "🎨 Code quality checks..."
+if ! $CIDX_CMD run code; then
+    echo ""
+    echo "❌ Code quality checks failed!"
+    echo "   Fix the issues above or use --no-verify to bypass"
+    exit 1
+fi
+
+echo ""
+echo "✅ All pre-commit checks passed!"
+exit 0
