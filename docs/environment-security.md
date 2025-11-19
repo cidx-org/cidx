@@ -9,6 +9,7 @@ CIDX automatically detects its execution environment and adapts tool behavior to
 ## Environment Detection
 
 CIDX automatically detects:
+
 - **Local**: Developer workstation
 - **GitHub Actions**: `GITHUB_ACTIONS=true`
 - **GitLab CI**: `GITLAB_CI=true`
@@ -16,6 +17,7 @@ CIDX automatically detects:
 - **CircleCI**: `CIRCLECI=true`
 
 Detection also identifies:
+
 - Pull/Merge Requests
 - Tag-based builds
 - Branch names
@@ -25,29 +27,39 @@ Detection also identifies:
 Presets can define how they behave in local environments:
 
 ### `local_behavior = "production"`
+
 Full execution (use with caution!)
+
 - No restrictions
 - Same behavior as CI
 
 ### `local_behavior = "draft"` ✅ Recommended for releases
+
 Creates drafts only (GitHub releases)
+
 - Automatically adds `--draft` flag
 - Safe for testing release process locally
 - **Example**: `gh-release`, `goreleaser`
 
 ### `local_behavior = "no-push"` ✅ Recommended for Docker
+
 Build without push
+
 - Docker builds locally but doesn't push to registry
 - Validates Dockerfile and build process
 - **Example**: `docker-buildx`, `kaniko`
 
 ### `local_behavior = "dry-run"`
+
 Simulation only
+
 - Shows what would execute
 - No actual execution
 
 ### `local_behavior = "disabled"`
+
 Completely disabled locally
+
 - Refuses to run outside CI
 - For extremely sensitive operations
 

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/arcker/cidx/pkg/config"
+	"github.com/arcker/cidx/pkg/environment"
 	"github.com/arcker/cidx/pkg/executor"
 	"github.com/arcker/cidx/pkg/presets"
 	"github.com/sirupsen/logrus"
@@ -16,15 +17,26 @@ type Runner struct {
 	config   *config.Config
 	executor *executor.DockerExecutor
 	logger   *logrus.Logger
+	env      *environment.Environment
 }
 
 // NewRunner creates a new pipeline runner
 func NewRunner(cfg *config.Config, exec *executor.DockerExecutor) *Runner {
 	logger := logrus.New()
+	env := environment.Detect()
+
+	// Log environment detection
+	if env.IsCI {
+		logger.Infof("🔍 Environment: %s (CI mode)", env.Provider)
+	} else {
+		logger.Infof("🔍 Environment: Local (safe mode)")
+	}
+
 	return &Runner{
 		config:   cfg,
 		executor: exec,
 		logger:   logger,
+		env:      env,
 	}
 }
 
@@ -136,6 +148,20 @@ func (r *Runner) RunTool(ctx context.Context, toolName string) error {
 	if err != nil {
 		return err
 	}
+
+	// Validate preset against environment and get execution mode
+	execMode, err := environment.ValidatePreset(preset, r.env)
+	if err != nil {
+		return fmt.Errorf("security validation failed: %w", err)
+	}
+
+	// Display execution mode info
+	if !r.env.IsCI && execMode.Mode != environment.BehaviorProduction {
+		r.logger.Infof("  🛡️  Local safety: %s - %s", execMode.Mode, execMode.Reason)
+	}
+
+	// Apply execution mode modifications to preset
+	preset = environment.ApplyExecutionMode(preset, execMode)
 
 	// Merge with user overrides
 	var overrides map[string]interface{}

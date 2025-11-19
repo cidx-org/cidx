@@ -7,9 +7,14 @@
 CIDX makes running DevSecOps tools ridiculously simple:
 
 1. **Just name the tool** - No need to specify Docker images, volumes, commands
-2. **Built-in presets** - CIDX knows how to run 6+ common tools out of the box
+2. **Built-in presets** - CIDX knows how to run 15+ common tools out of the box
 3. **5-line config** - Most projects need less than 10 lines of configuration
 4. **Zero learning curve** - If you know the tool name, you can use it
+5. **Event-driven** - Different Git events trigger different phases automatically
+6. **Safe by default** - Test release processes locally without publishing
+7. **BDD-tested** - Behavior specified in executable Gherkin scenarios
+
+See [Philosophy Documentation](./docs/philosophy.md) for the full story.
 
 ## Why CIDX?
 
@@ -439,6 +444,78 @@ cidx/
 
 - **Traditional**: 50+ files, complex YAML
 - **CIDX**: 1 file, 5-10 lines
+
+## Testing & BDD
+
+### Behavior-Driven Development
+
+CIDX behavior is **fully specified** using BDD (Behavior-Driven Development) with Gherkin scenarios. These scenarios are:
+
+1. **Living Documentation** - Human-readable specifications
+2. **Executable Tests** - Automated with [godog](https://github.com/cucumber/godog)
+3. **Scope Guardian** - If it's not in a scenario, we don't build it
+
+### Example Scenarios
+
+```gherkin
+Feature: Pull Request Validation
+  Scenario: PR triggers only validation phases
+    Given I create a pull request
+    When I run "cidx run pr"
+    Then it should execute the "security" phase
+    And it should execute the "code" phase
+    And it should execute the "test" phase
+    But it should NOT execute the "build" phase
+    And it should NOT execute the "release" phase
+```
+
+```gherkin
+Feature: Local Safety Modes
+  Scenario: Docker builds without push in local environment
+    Given I am in local environment
+    When I run "cidx run docker"
+    Then I should see "Local safety: no-push"
+    And Docker image should be built
+    But Docker image should NOT be pushed to registry
+```
+
+### Running BDD Tests
+
+```bash
+# Run all BDD scenarios
+go test ./features_test.go
+
+# Run with pretty output
+GODOG_FORMAT=pretty go test ./features_test.go
+
+# Run specific scenarios with tags
+go test ./features_test.go -tags @smoke
+```
+
+### Dogfooding: CIDX Tests CIDX
+
+CIDX uses itself to run its own BDD tests:
+
+```toml
+# cidx.toml
+[test]
+tools = ["go-test", "godog"]
+```
+
+```bash
+# Run CIDX's own BDD tests using CIDX
+cidx run test
+```
+
+### Browse Scenarios
+
+All scenarios are in `features/` directory:
+
+- **[features/events/](features/events/)** - Event-driven behavior (PR, tags, merges)
+- **[features/security/](features/security/)** - Local safety and environment detection
+- **[features/pipelines/](features/pipelines/)** - Pipeline execution behavior
+
+See [Philosophy Documentation](./docs/philosophy.md) for the full BDD approach.
 
 ## Development
 

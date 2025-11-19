@@ -15,9 +15,9 @@ tools = ["prettier", "golangci-lint"]
 [prettier]
 write = true
 
-# Testing: Run Go tests
+# Testing: Run Go tests and BDD scenarios
 [test]
-tools = ["go-test"]
+tools = ["go-test", "godog"]
 
 # Build: Compile the binary
 [build]
@@ -49,12 +49,12 @@ description = "Main branch pipeline (builds artifacts)"
 
 # Release: Full release pipeline (tags only)
 [pipelines.release]
-phases = ["security", "code", "test", "build", "docker", "release"]
+phases = ["security", "code", "test", "build", "release", "docker"]
 description = "Complete release pipeline (CI only)"
 
 # CD: Continuous Deployment
 [pipelines.cd]
-phases = ["docker", "release"]
+phases = ["release", "docker"]
 description = "Deployment pipeline (requires artifacts)"
 
 # Quick: Fast validation

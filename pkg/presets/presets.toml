@@ -176,6 +176,30 @@ default = false
 description = "Enable race detector"
 command_flag = "-race"
 
+[presets.godog]
+name = "godog"
+phase = "test"
+image = "golang:1.21-alpine"
+command = "go test -v ./features_test.go"
+workdir = "/app"
+volumes = ["${WORKSPACE}:/app"]
+
+[presets.godog.env]
+HOME = "/tmp"
+CGO_ENABLED = "0"
+
+[presets.godog.options.format]
+type = "string"
+default = "pretty"
+description = "Output format (pretty, progress, junit, cucumber)"
+env_var = "GODOG_FORMAT"
+
+[presets.godog.options.tags]
+type = "string"
+default = ""
+description = "Tags to filter scenarios (@wip, @smoke, etc.)"
+command_flag = "-tags"
+
 [presets.go-build]
 name = "go-build"
 phase = "build"
