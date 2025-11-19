@@ -260,7 +260,10 @@ phase = "docker"
 image = "gcr.io/kaniko-project/executor:latest"
 command = "/kaniko/executor --context=/workspace --dockerfile=Dockerfile --destination=${IMAGE_NAME}:${IMAGE_TAG} --cache=true"
 workdir = "/workspace"
-volumes = ["${WORKSPACE}:/workspace"]
+volumes = [
+    "${WORKSPACE}:/workspace",
+    "${HOME}/.docker:/kaniko/.docker:ro",
+]
 require_ci = false
 local_behavior = "no-push"
 

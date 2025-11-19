@@ -28,7 +28,7 @@ tools = ["go-build"]
 
 # Docker: Build and push container images
 [docker]
-tools = ["docker-buildx"]
+tools = ["kaniko"]
 
 # Release: Create GitHub releases
 [release]
