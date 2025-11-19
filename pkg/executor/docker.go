@@ -169,7 +169,7 @@ func (e *DockerExecutor) createContainer(ctx context.Context, toolConfig *config
 	}
 
 	// Parse command
-	cmdParts := strings.Fields(command)
+	cmdParts := parseCommand(command)
 	if len(cmdParts) == 0 {
 		return "", "", fmt.Errorf("empty command")
 	}
@@ -248,6 +248,32 @@ func (e *DockerExecutor) printDryRun(toolConfig *config.ToolConfig, volumes []st
 	fmt.Println()
 }
 
+// parseCommand parses a command string into parts, handling shell commands specially
+func parseCommand(command string) []string {
+	// Trim whitespace
+	command = strings.TrimSpace(command)
+
+	// Check if it's a shell command (sh -c 'script')
+	if strings.HasPrefix(command, "sh -c ") {
+		// Extract the script part after "sh -c "
+		script := strings.TrimPrefix(command, "sh -c ")
+		script = strings.TrimSpace(script)
+
+		// Remove surrounding quotes if present
+		if len(script) >= 2 {
+			if (script[0] == '\'' && script[len(script)-1] == '\'') ||
+				(script[0] == '"' && script[len(script)-1] == '"') {
+				script = script[1 : len(script)-1]
+			}
+		}
+
+		return []string{"sh", "-c", script}
+	}
+
+	// For non-shell commands, use standard field splitting
+	return strings.Fields(command)
+}
+
 // expandVolumes expands environment variables in volume mounts
 func expandVolumes(volumes []string) []string {
 	expanded := make([]string, len(volumes))
@@ -264,6 +290,13 @@ func expandCommand(command string, env map[string]string) string {
 		placeholder := fmt.Sprintf("${%s}", k)
 		expanded = strings.ReplaceAll(expanded, placeholder, v)
 	}
+
+	// For shell commands (sh -c ...), don't expand environment variables
+	// because they should be expanded inside the container shell
+	if strings.HasPrefix(strings.TrimSpace(command), "sh -c") {
+		return expanded
+	}
+
 	return os.ExpandEnv(expanded)
 }
 

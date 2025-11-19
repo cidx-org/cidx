@@ -9,7 +9,7 @@ tools = ["trivy", "gitleaks"]
 
 # Code Quality: Linting and formatting
 [code]
-tools = ["prettier", "golangci-lint"]
+tools = ["prettier", "golangci-lint", "commitizen"]
 
 # Prettier: Auto-format files
 [prettier]
@@ -17,9 +17,12 @@ write = true
 
 # Testing: Run Go tests and BDD scenarios
 [test]
-tools = ["go-test", "godog"]
+tools = ["go-test"]
+# TODO: Re-enable godog when all BDD scenarios are implemented
+# tools = ["go-test", "godog"]
 
 # Build: Compile the binary
+# Version is automatically injected from VERSION file
 [build]
 tools = ["go-build"]
 
@@ -53,9 +56,9 @@ phases = ["security", "code", "test", "build", "release", "docker"]
 description = "Complete release pipeline (CI only)"
 
 # CD: Continuous Deployment
-[pipelines.cd]
+[pipelines.publish]
 phases = ["release", "docker"]
-description = "Deployment pipeline (requires artifacts)"
+description = "Publish artifacts to registries (GitHub Releases + GHCR)"
 
 # Quick: Fast validation
 [pipelines.quick]

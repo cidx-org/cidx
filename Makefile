@@ -1,117 +1,47 @@
-.PHONY: all build clean test fmt vet install run-example help
+# CIDX Bootstrap Makefile
+#
+# This minimal Makefile is ONLY for the initial bootstrap build of CIDX.
+# After building CIDX once, use CIDX itself for all other operations:
+#   - bin/cidx run test      (instead of make test)
+#   - bin/cidx run build     (instead of make build)
+#   - bin/cidx run ci        (instead of make all)
+#   - bin/cidx run pre-push  (instead of make dev)
 
-# Variables
-BINARY_NAME=cidx
-BUILD_DIR=bin
-GO_FILES=$(shell find . -name '*.go' -type f)
+.PHONY: build clean help
 
-# Default target
-all: fmt vet test build
+VERSION=$(shell cat VERSION)
+LDFLAGS=-ldflags "-X main.Version=$(VERSION)"
 
-# Build the binary
+# Bootstrap build - compile CIDX for the first time
 build:
-	@echo "Building ${BINARY_NAME}..."
-	@mkdir -p ${BUILD_DIR}
-	@go build -o ${BUILD_DIR}/${BINARY_NAME} ./cmd/cidx
-	@echo "Build complete: ${BUILD_DIR}/${BINARY_NAME}"
+	@echo "🔨 Bootstrapping CIDX v$(VERSION)..."
+	@mkdir -p bin
+	@go build $(LDFLAGS) -o bin/cidx ./cmd/cidx
+	@echo "✅ Bootstrap complete: bin/cidx"
+	@echo ""
+	@echo "Now use CIDX to build CIDX:"
+	@echo "  bin/cidx run test       # Run tests"
+	@echo "  bin/cidx run build      # Build with version injection"
+	@echo "  bin/cidx run ci         # Full CI pipeline"
+	@echo "  bin/cidx run pre-push   # Quick validation"
 
 # Clean build artifacts
 clean:
-	@echo "Cleaning..."
-	@rm -rf ${BUILD_DIR}
+	@echo "🧹 Cleaning..."
+	@rm -rf bin/
 	@go clean
-	@echo "Clean complete"
-
-# Run tests
-test:
-	@echo "Running tests..."
-	@go test -v ./...
-
-# Run tests with coverage
-test-coverage:
-	@echo "Running tests with coverage..."
-	@go test -cover ./...
-	@go test -coverprofile=coverage.out ./...
-	@go tool cover -html=coverage.out -o coverage.html
-	@echo "Coverage report: coverage.html"
-
-# Format code
-fmt:
-	@echo "Formatting code..."
-	@go fmt ./...
-
-# Run go vet
-vet:
-	@echo "Running go vet..."
-	@go vet ./...
-
-# Install dependencies
-deps:
-	@echo "Installing dependencies..."
-	@go mod download
-	@go mod tidy
-
-# Install binary to GOPATH/bin
-install: build
-	@echo "Installing ${BINARY_NAME}..."
-	@go install ./cmd/cidx
-	@echo "Installed to $(shell go env GOPATH)/bin/${BINARY_NAME}"
-
-# Run example
-run-example:
-	@echo "Running example..."
-	@${BUILD_DIR}/${BINARY_NAME} list
-
-# Initialize a test config
-init-config:
-	@echo "Initializing test config..."
-	@${BUILD_DIR}/${BINARY_NAME} init
-
-# Validate example config
-validate-example:
-	@echo "Validating example config..."
-	@${BUILD_DIR}/${BINARY_NAME} validate -c examples/cidx.toml
-
-# Show info for a tool
-info-trivy:
-	@${BUILD_DIR}/${BINARY_NAME} info trivy
-
-# Dry-run example
-dry-run:
-	@echo "Dry-run example pipeline..."
-	@${BUILD_DIR}/${BINARY_NAME} run -c examples/cidx.toml --dry-run ci
-
-# Build for multiple platforms
-build-all:
-	@echo "Building for multiple platforms..."
-	@mkdir -p ${BUILD_DIR}
-	@GOOS=linux GOARCH=amd64 go build -o ${BUILD_DIR}/${BINARY_NAME}-linux-amd64 ./cmd/cidx
-	@GOOS=darwin GOARCH=amd64 go build -o ${BUILD_DIR}/${BINARY_NAME}-darwin-amd64 ./cmd/cidx
-	@GOOS=darwin GOARCH=arm64 go build -o ${BUILD_DIR}/${BINARY_NAME}-darwin-arm64 ./cmd/cidx
-	@GOOS=windows GOARCH=amd64 go build -o ${BUILD_DIR}/${BINARY_NAME}-windows-amd64.exe ./cmd/cidx
-	@echo "Multi-platform build complete"
-
-# Development workflow
-dev: fmt vet build
-	@echo "Development build complete"
 
 # Help
 help:
-	@echo "CIDX Makefile targets:"
-	@echo "  all            - Format, vet, test, and build"
-	@echo "  build          - Build the binary"
-	@echo "  clean          - Remove build artifacts"
-	@echo "  test           - Run tests"
-	@echo "  test-coverage  - Run tests with coverage report"
-	@echo "  fmt            - Format Go code"
-	@echo "  vet            - Run go vet"
-	@echo "  deps           - Install/update dependencies"
-	@echo "  install        - Install binary to GOPATH/bin"
-	@echo "  run-example    - Run cidx list command"
-	@echo "  init-config    - Initialize a test config"
-	@echo "  validate-example - Validate example config"
-	@echo "  info-trivy     - Show info for trivy preset"
-	@echo "  dry-run        - Dry-run example pipeline"
-	@echo "  build-all      - Build for multiple platforms"
-	@echo "  dev            - Quick development build (fmt + vet + build)"
-	@echo "  help           - Show this help"
+	@echo "CIDX Bootstrap Makefile"
+	@echo ""
+	@echo "Targets:"
+	@echo "  build   - Bootstrap build of CIDX (first time only)"
+	@echo "  clean   - Remove build artifacts"
+	@echo "  help    - Show this help"
+	@echo ""
+	@echo "After bootstrap, use CIDX itself:"
+	@echo "  bin/cidx run test       # Tests"
+	@echo "  bin/cidx run build      # Build with version"
+	@echo "  bin/cidx run ci         # Full CI"
+	@echo "  bin/cidx run pre-push   # Quick check"

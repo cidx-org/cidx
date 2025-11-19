@@ -186,6 +186,12 @@ func (r *Runner) RunTool(ctx context.Context, toolName string) error {
 		ConfigFiles: mergedPreset.ConfigFiles,
 	}
 
+	// If execution mode forces dry-run (local safety), show what would be done
+	if execMode.IsDryRun {
+		r.printLocalSafetyDryRun(toolConfig)
+		return nil
+	}
+
 	// Execute
 	return r.executor.Run(ctx, toolConfig)
 }
@@ -201,4 +207,28 @@ func (r *Runner) expandWorkspace(volumes []string) []string {
 	}
 
 	return expanded
+}
+
+// printLocalSafetyDryRun shows what would be executed in local safety mode
+func (r *Runner) printLocalSafetyDryRun(toolConfig *config.ToolConfig) {
+	r.logger.Infof("  ⚠️  Would execute (local safety - not running):")
+	r.logger.Infof("     Image: %s", toolConfig.Image)
+	r.logger.Infof("     Command: %s", toolConfig.Command)
+	r.logger.Infof("     Workdir: %s", toolConfig.Workdir)
+
+	if len(toolConfig.Volumes) > 0 {
+		r.logger.Infof("     Volumes:")
+		for _, vol := range toolConfig.Volumes {
+			r.logger.Infof("       - %s", vol)
+		}
+	}
+
+	if len(toolConfig.Env) > 0 {
+		r.logger.Infof("     Environment:")
+		for k, v := range toolConfig.Env {
+			r.logger.Infof("       %s=%s", k, v)
+		}
+	}
+
+	r.logger.Infof("  ✓ %s (dry-run - local safety)", toolConfig.Name)
 }

@@ -67,12 +67,14 @@ func ValidatePreset(preset presets.Preset, env *Environment) (*ExecutionMode, er
 
 	case BehaviorDraft:
 		mode.Mode = BehaviorDraft
+		mode.IsDryRun = true // Force dry-run in local mode
 		mode.Reason = "Local mode: draft creation only"
 		// For GitHub releases, force draft mode
 		mode.EnvChanges["DRAFT"] = "true"
 
 	case BehaviorNoPush:
 		mode.Mode = BehaviorNoPush
+		mode.IsDryRun = true // Force dry-run in local mode
 		mode.Reason = "Local mode: build without push"
 		// For Docker, remove push flags
 		mode.EnvChanges["DOCKER_PUSH"] = "false"

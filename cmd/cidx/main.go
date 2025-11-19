@@ -7,11 +7,14 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+// Version is set via ldflags during build
+var Version = "dev"
+
 func main() {
 	app := &cli.App{
 		Name:    "cidx",
 		Usage:   "CI with Declarative eXecution - Ultra-declarative DevSecOps pipeline runner",
-		Version: "0.1.0",
+		Version: Version,
 		Commands: []*cli.Command{
 			runCommand(),
 			listCommand(),

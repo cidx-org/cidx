@@ -75,6 +75,38 @@ config_files = [
 FROM = "origin/main"
 TO = "HEAD"
 
+[presets.commitizen]
+name = "commitizen"
+phase = "code"
+image = "commitizen/commitizen:latest"
+command = "check --rev-range ${FROM}..${TO}"
+workdir = "/app"
+volumes = [
+    "${WORKSPACE}:/app",
+    "${WORKSPACE}/.git:/app/.git",
+]
+config_files = [
+    ".cz.toml",
+    ".cz.json",
+    "pyproject.toml",
+]
+
+[presets.commitizen.env]
+FROM = "HEAD~10"
+TO = "HEAD"
+
+[presets.commitizen.options.from]
+type = "string"
+default = "HEAD~10"
+description = "Start commit range"
+env_var = "FROM"
+
+[presets.commitizen.options.to]
+type = "string"
+default = "HEAD"
+description = "End commit range"
+env_var = "TO"
+
 [presets.ansible-lint]
 name = "ansible-lint"
 phase = "code"
@@ -157,7 +189,7 @@ volumes = ["${WORKSPACE}:/app"]
 name = "go-test"
 phase = "test"
 image = "golang:alpine"
-command = "go test -v ./..."
+command = "go test -v ./pkg/... ./cmd/..."
 workdir = "/app"
 volumes = ["${WORKSPACE}:/app"]
 
@@ -204,18 +236,19 @@ command_flag = "-tags"
 name = "go-build"
 phase = "build"
 image = "golang:alpine"
-command = "go build -o bin/cidx ./cmd/cidx"
+command = "sh -c 'VERSION=$(cat VERSION 2>/dev/null || echo dev); go build -ldflags \"-X main.Version=${VERSION} ${LDFLAGS}\" -o bin/cidx ./cmd/cidx'"
 workdir = "/app"
 volumes = ["${WORKSPACE}:/app"]
 
 [presets.go-build.env]
 HOME = "/tmp"
+LDFLAGS = ""
 
 [presets.go-build.options.ldflags]
 type = "string"
 default = ""
-description = "Linker flags for go build"
-command_flag = "-ldflags"
+description = "Additional linker flags for go build"
+env_var = "LDFLAGS"
 
 # ============================================================================
 # Docker Phase - Build and push container images
