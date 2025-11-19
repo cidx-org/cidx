@@ -40,7 +40,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Full history for gitleaks
+          fetch-depth: 0 # Full history for gitleaks
 
       - name: Download CIDX
         uses: actions/download-artifact@v4
@@ -63,7 +63,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Full history for commitizen
+          fetch-depth: 0 # Full history for commitizen
 
       - name: Download CIDX
         uses: actions/download-artifact@v4
@@ -173,6 +173,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for gitleaks and commitizen
 
       - name: Download CIDX
         uses: actions/download-artifact@v4

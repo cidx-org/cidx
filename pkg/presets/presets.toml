@@ -300,6 +300,7 @@ require_ci = false
 local_behavior = "no-push"
 
 [presets.docker-buildx.env]
+HOME = "/tmp"
 IMAGE_NAME = "ghcr.io/${GITHUB_REPOSITORY}"
 IMAGE_TAG = "latest"
 
