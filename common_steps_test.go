@@ -78,8 +78,13 @@ func (tc *TestContext) createGitRepo() error {
 	}
 
 	// Set git user for commits
-	exec.Command("git", "config", "user.email", "test@cidx.dev").Run()
-	exec.Command("git", "config", "user.name", "CIDX Test").Run()
+	cmd = exec.Command("git", "config", "user.email", "test@cidx.dev")
+	cmd.Dir = tmpDir
+	_ = cmd.Run() // Ignore error in test setup
+
+	cmd = exec.Command("git", "config", "user.name", "CIDX Test")
+	cmd.Dir = tmpDir
+	_ = cmd.Run() // Ignore error in test setup
 
 	return nil
 }
@@ -89,7 +94,7 @@ func (tc *TestContext) setEnvironment(env string) error {
 	tc.Environment = env
 	if env == "CI" {
 		tc.CI = true
-		os.Setenv("CI", "true")
+		_ = os.Setenv("CI", "true") // Test environment setup
 	} else {
 		tc.CI = false
 	}
@@ -98,18 +103,18 @@ func (tc *TestContext) setEnvironment(env string) error {
 
 // setEnvironmentWithProvider sets environment with specific provider
 func (tc *TestContext) setEnvironmentWithProvider(env, provider string) error {
-	tc.setEnvironment(env)
+	_ = tc.setEnvironment(env) // Test setup
 	tc.Provider = provider
 
 	switch provider {
 	case "GitHub Actions":
-		os.Setenv("GITHUB_ACTIONS", "true")
+		_ = os.Setenv("GITHUB_ACTIONS", "true")
 	case "GitLab CI":
-		os.Setenv("GITLAB_CI", "true")
+		_ = os.Setenv("GITLAB_CI", "true")
 	case "Jenkins":
-		os.Setenv("JENKINS_URL", "http://jenkins.local")
+		_ = os.Setenv("JENKINS_URL", "http://jenkins.local")
 	case "CircleCI":
-		os.Setenv("CIRCLECI", "true")
+		_ = os.Setenv("CIRCLECI", "true")
 	}
 
 	return nil
@@ -122,7 +127,7 @@ func (tc *TestContext) clearCIEnvVars() error {
 		"CIRCLECI", "JENKINS_HOME", "GITHUB_TOKEN",
 	}
 	for _, v := range ciVars {
-		os.Unsetenv(v)
+		_ = os.Unsetenv(v) // Test cleanup
 	}
 	return nil
 }

@@ -104,13 +104,13 @@ func (tc *TestContext) Reset() {
 func (tc *TestContext) Cleanup() {
 	// Clean up test git repos, temp files, etc.
 	if tc.GitRepo != "" {
-		os.RemoveAll(tc.GitRepo)
+		_ = os.RemoveAll(tc.GitRepo) // Test cleanup
 	}
 
 	// Reset environment variables
-	os.Unsetenv("GITHUB_ACTIONS")
-	os.Unsetenv("GITLAB_CI")
-	os.Unsetenv("JENKINS_URL")
-	os.Unsetenv("CIRCLECI")
-	os.Unsetenv("GITHUB_TOKEN")
+	_ = os.Unsetenv("GITHUB_ACTIONS")
+	_ = os.Unsetenv("GITLAB_CI")
+	_ = os.Unsetenv("JENKINS_URL")
+	_ = os.Unsetenv("CIRCLECI")
+	_ = os.Unsetenv("GITHUB_TOKEN")
 }

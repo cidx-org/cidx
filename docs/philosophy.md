@@ -59,6 +59,7 @@ Tag pushed (v1.0.0)
 ### The GitLab/GitHub Problem
 
 **GitLab CI / GitHub Actions approach**:
+
 ```yaml
 # 200 lines of YAML defining when each job runs
 test-unit:
@@ -75,12 +76,14 @@ deploy:
 ```
 
 **Problems**:
+
 - Verbose configuration
 - Error-prone conditions
 - Hard to understand
 - Repeated logic
 
 **CIDX approach**:
+
 ```toml
 # 20 lines defining phases and pipelines
 [pipelines.pr]
@@ -94,6 +97,7 @@ phases = ["security", "code", "test", "build", "release", "docker"]
 ```
 
 **CIDX knows**:
+
 - PR → run `pr` pipeline
 - Main branch → run `main` pipeline
 - Tag → run `release` pipeline
@@ -104,6 +108,7 @@ phases = ["security", "code", "test", "build", "release", "docker"]
 ### What CIDX IS
 
 ✅ **Convention-based CI/CD orchestrator**
+
 - Event-driven pipelines
 - Context-aware phase execution
 - Platform-agnostic (GitHub, GitLab, Jenkins, CircleCI)
@@ -127,12 +132,12 @@ phases = ["security", "code", "test", "build", "release", "docker"]
 
 CIDX phases are organized to align with the DevOps loop stages:
 
-| DevOps Stage | CIDX Phases | Purpose | Tools Example |
-|--------------|-------------|---------|---------------|
-| **CODE** | `security`, `code` | Validation & quality | trivy, gitleaks, golangci-lint, prettier |
-| **BUILD** | `test`, `build` | Create artifacts | go-test, godog, go-build |
-| **RELEASE** | `release`, `docker` | **Publish artifacts** | gh-release, goreleaser, docker-buildx |
-| **DEPLOY** | *(future)* | Run in production | kubectl, docker-compose, cloud-run |
+| DevOps Stage | CIDX Phases         | Purpose               | Tools Example                            |
+| ------------ | ------------------- | --------------------- | ---------------------------------------- |
+| **CODE**     | `security`, `code`  | Validation & quality  | trivy, gitleaks, golangci-lint, prettier |
+| **BUILD**    | `test`, `build`     | Create artifacts      | go-test, godog, go-build                 |
+| **RELEASE**  | `release`, `docker` | **Publish artifacts** | gh-release, goreleaser, docker-buildx    |
+| **DEPLOY**   | _(future)_          | Run in production     | kubectl, docker-compose, cloud-run       |
 
 ### The RELEASE Philosophy: Why Docker = RELEASE
 
@@ -143,18 +148,21 @@ CIDX phases are organized to align with the DevOps loop stages:
 The RELEASE stage **publishes artifacts to public stores**, making them available for download:
 
 **`release` phase** → Publish binaries to GitHub Releases
+
 ```bash
 gh release create v1.0.0 bin/cidx --generate-notes
 # Artifact available at: https://github.com/org/repo/releases/v1.0.0
 ```
 
 **`docker` phase** → Publish images to Container Registry
+
 ```bash
 docker buildx build -t ghcr.io/org/repo:v1.0.0 --push .
 # Artifact available at: ghcr.io/org/repo:v1.0.0
 ```
 
 Both operations:
+
 - ✅ Make artifacts **available** for download
 - ✅ Publish to **artifact stores** (GitHub Releases, GHCR, Docker Hub)
 - ❌ Do **NOT** run the application
@@ -181,6 +189,7 @@ docker-compose up -d
 ```
 
 DEPLOY operations:
+
 - ✅ **Run** the application
 - ✅ Serve traffic to users
 - ✅ Use infrastructure (k8s, cloud, servers)
@@ -207,6 +216,7 @@ Tag v1.0.0 pushed:
 This separation enables powerful workflows:
 
 **Scenario 1: Test before deploy**
+
 ```bash
 # 1. Build and publish (RELEASE)
 cidx run release  # → binaries + images on GitHub/GHCR
@@ -222,6 +232,7 @@ kubectl apply -f production.yaml
 ```
 
 **Scenario 2: Different deployment targets**
+
 ```bash
 # Same release, multiple deployments
 cidx run release  # → image at ghcr.io/org/app:v1.0.0
@@ -233,6 +244,7 @@ kubectl apply -f k8s/prod.yaml     # → production cluster
 ```
 
 **Scenario 3: Separate teams**
+
 ```bash
 # Dev team: build and release
 cidx run release
@@ -261,6 +273,7 @@ Feature: Pull Request Validation
 ```
 
 **Benefits**:
+
 1. **Living documentation**: Scenarios ARE the specification
 2. **Testable**: Scenarios are executed as tests with godog
 3. **Clear scope**: If it's not in a scenario, we don't build it
@@ -270,6 +283,7 @@ Feature: Pull Request Validation
 ### BDD Prevents Scope Creep
 
 Before adding any feature, we ask:
+
 1. **Can we write a Gherkin scenario for it?**
 2. **Does it fit the DevOps lifecycle context?**
 3. **Is it event-driven or scheduled?**
@@ -405,6 +419,7 @@ tools = ["terraform-validate", "drift-detection", "compliance-check"]
 ```
 
 **Important**: Scheduled tasks will be:
+
 - **Separate from CI/CD loop** (different trigger type)
 - **Opt-in and experimental** (phase 2)
 - **Complementary, not core** (CI/CD remains primary focus)

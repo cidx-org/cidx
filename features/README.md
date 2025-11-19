@@ -38,6 +38,7 @@ Specifies how CIDX behaves when a pull request is created:
 - **Fail Fast**: Stops on first failure
 
 **Key Scenarios**:
+
 - PR triggers validation phases only
 - PR fails fast on security issues
 - PR works in local and CI environments
@@ -52,6 +53,7 @@ Specifies how CIDX behaves when a version tag is pushed:
 - **Safety**: Local = draft/no-push, CI = publish/push
 
 **Key Scenarios**:
+
 - Tag triggers full pipeline in CI
 - Docker pushes in CI, builds without push locally
 - Release publishes in CI, creates draft locally
@@ -66,6 +68,7 @@ Specifies how CIDX behaves when code is merged to main branch:
 - **Output**: Artifacts ready for release
 
 **Key Scenarios**:
+
 - Main builds artifacts but doesn't deploy
 - Main ensures production-ready state
 - Artifacts can be released immediately with a tag
@@ -77,14 +80,17 @@ Specifies how CIDX behaves when code is merged to main branch:
 Specifies how dangerous operations are protected in local environment:
 
 **Docker Operations**:
+
 - `local_behavior = "no-push"` → Builds without pushing
 - CI environment → Builds and pushes normally
 
 **Release Operations**:
+
 - `local_behavior = "draft"` → Creates draft releases
 - CI environment → Publishes releases normally
 
 **Key Scenarios**:
+
 - docker-buildx safe in local, pushes in CI
 - gh-release creates draft locally, publishes in CI
 - Preset can require CI environment
@@ -94,12 +100,14 @@ Specifies how dangerous operations are protected in local environment:
 Specifies how CIDX detects where it's running:
 
 **CI Providers Detected**:
+
 - GitHub Actions (`GITHUB_ACTIONS=true`)
 - GitLab CI (`GITLAB_CI=true`)
 - Jenkins (`JENKINS_URL` set)
 - CircleCI (`CIRCLECI=true`)
 
 **Git Context Detected**:
+
 - Pull requests (`IsPR`)
 - Tag pushes (`IsTag`, `TagName`)
 - Branch names (`BranchName`)
@@ -111,11 +119,13 @@ Specifies how CIDX detects where it's running:
 Specifies how named pipelines execute their phases:
 
 **Pipeline Types**:
+
 - `pr` → security, code, test
 - `main` → security, code, test, build
 - `release` → security, code, test, build, release, docker
 
 **Key Behaviors**:
+
 - Phases execute in defined order
 - Pipeline stops on first failure
 - Named pipelines provide clear intent
@@ -184,6 +194,7 @@ Feature: Feature Name
 ### Step Patterns
 
 **Common Steps** (available everywhere):
+
 - `Given I am in (local|CI) environment`
 - `Given the environment variable "X" is set to "Y"`
 - `When I run "cidx run pr"`
@@ -191,12 +202,14 @@ Feature: Feature Name
 - `Then the exit code should be 0`
 
 **Event Steps** (for event scenarios):
+
 - `Given I create a pull request`
 - `Given I push a tag "v1.0.0"`
 - `Then it should execute the "security" phase`
 - `Then it should NOT execute the "release" phase`
 
 **Security Steps** (for safety scenarios):
+
 - `Given the "docker-buildx" preset has local_behavior = "no-push"`
 - `Then Docker image should NOT be pushed to registry`
 
