@@ -13,6 +13,7 @@ type Preset struct {
 	Options       map[string]Option `yaml:"options" toml:"options"`
 	RequireCI     bool              `yaml:"require_ci" toml:"require_ci"`         // Requires CI environment
 	LocalBehavior string            `yaml:"local_behavior" toml:"local_behavior"` // draft, no-push, dry-run, disabled
+	Privileged    bool              `yaml:"privileged" toml:"privileged"`         // Requires root privileges (skip user mapping)
 }
 
 // Option defines a configurable parameter for a preset

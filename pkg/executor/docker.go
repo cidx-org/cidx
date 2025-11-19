@@ -182,12 +182,16 @@ func (e *DockerExecutor) createContainer(ctx context.Context, toolConfig *config
 		Cmd:        cmdParts,
 		WorkingDir: toolConfig.Workdir,
 		Env:        env,
-		User:       fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()),
 		Labels: map[string]string{
 			"managed-by": "cidx",
 			"cidx.tool":  toolConfig.Name,
 			"cidx.phase": toolConfig.Phase,
 		},
+	}
+
+	// Only set user for non-privileged tools
+	if !toolConfig.Privileged {
+		containerConfig.User = fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid())
 	}
 
 	hostConfig := &container.HostConfig{

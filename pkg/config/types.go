@@ -28,4 +28,5 @@ type ToolConfig struct {
 	Volumes     []string
 	Env         map[string]string
 	ConfigFiles []string
+	Privileged  bool // Requires root privileges
 }
