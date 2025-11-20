@@ -1,7 +1,7 @@
 # Multi-stage build for CIDX Docker image
 
 # Stage 1: Build the binary
-FROM golang:1.23-alpine AS builder
+FROM golang:alpine AS builder
 
 WORKDIR /build
 
