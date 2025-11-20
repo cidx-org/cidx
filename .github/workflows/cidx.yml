@@ -149,7 +149,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: cidx-binary
-          path: .
+          path: bin/
 
       - name: Make CIDX tool executable
         run: chmod +x tool/cidx
@@ -192,7 +192,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: cidx-binary
-          path: .
+          path: bin/
 
       - name: Make CIDX executable
         run: chmod +x bin/cidx
