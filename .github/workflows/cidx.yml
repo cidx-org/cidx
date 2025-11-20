@@ -139,14 +139,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download CIDX
+      - name: Download CIDX tool
         uses: actions/download-artifact@v4
         with:
           name: cidx
+          path: tool/
+
+      - name: Download final binary for Docker
+        uses: actions/download-artifact@v4
+        with:
+          name: cidx-binary
           path: bin/
 
-      - name: Make CIDX executable
-        run: chmod +x bin/cidx
+      - name: Make CIDX tool executable
+        run: chmod +x tool/cidx
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -156,7 +162,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
-        run: ./bin/cidx run docker
+        run: ./tool/cidx run docker
         env:
           IMAGE_NAME: ghcr.io/${{ github.repository }}
           IMAGE_TAG: ${{ github.ref_name }}
