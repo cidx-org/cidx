@@ -321,6 +321,7 @@ workdir = "/workspace"
 volumes = ["${WORKSPACE}:/workspace"]
 require_ci = false
 local_behavior = "draft"
+privileged = true
 
 [presets.gh-release.env]
 TAG = "${GIT_TAG}"
