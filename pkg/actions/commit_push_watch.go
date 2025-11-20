@@ -109,11 +109,12 @@ func (a *CommitPushWatchAction) displayWorkflow(w *remote.Workflow) {
 		var icon string
 		switch job.Status {
 		case "completed":
-			if job.Conclusion == "success" {
+			switch job.Conclusion {
+			case "success":
 				icon = "✓"
-			} else if job.Conclusion == "skipped" {
+			case "skipped":
 				icon = "○"
-			} else {
+			default:
 				icon = "✗"
 			}
 		case "in_progress":
