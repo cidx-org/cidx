@@ -326,7 +326,7 @@ privileged = true
 [presets.gh-release.env]
 TAG = "${GIT_TAG}"
 ARTIFACTS = "bin/cidx"
-GITHUB_TOKEN = "${GITHUB_TOKEN}"
+GH_TOKEN = "${GITHUB_TOKEN}"
 
 [presets.gh-release.options.draft]
 type = "bool"
