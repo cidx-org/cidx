@@ -2,10 +2,10 @@ package vcs
 
 import (
 	"fmt"
+	"os/exec"
 	"regexp"
 
 	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
 // Repository represents a Git repository
@@ -23,39 +23,47 @@ func OpenRepository(path string) (*Repository, error) {
 	return &Repository{repo: r}, nil
 }
 
-// Commit creates a commit with all changes
+// Commit creates a commit with all changes using git binary
+// This ensures pre-commit hooks are executed
 func (r *Repository) Commit(message string) error {
 	w, err := r.repo.Worktree()
 	if err != nil {
 		return fmt.Errorf("failed to get worktree: %w", err)
 	}
 
-	// Add all changes
-	err = w.AddGlob(".")
-	if err != nil {
-		return fmt.Errorf("failed to add changes: %w", err)
+	workDir := w.Filesystem.Root()
+
+	// Add all changes using git binary
+	addCmd := exec.Command("git", "add", ".")
+	addCmd.Dir = workDir
+	if output, err := addCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to add changes: %w\n%s", err, output)
 	}
 
-	// Create commit
-	_, err = w.Commit(message, &git.CommitOptions{
-		All: true,
-		Author: &object.Signature{
-			Name:  "CIDX",
-			Email: "cidx@localhost",
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to commit: %w", err)
+	// Commit using git binary (ensures pre-commit hooks run)
+	commitCmd := exec.Command("git", "commit", "-m", message)
+	commitCmd.Dir = workDir
+	if output, err := commitCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to commit: %w\n%s", err, output)
 	}
 
 	return nil
 }
 
-// Push pushes commits to remote
+// Push pushes commits to remote using git binary
 func (r *Repository) Push() error {
-	err := r.repo.Push(&git.PushOptions{})
-	if err != nil && err != git.NoErrAlreadyUpToDate {
-		return fmt.Errorf("failed to push: %w", err)
+	w, err := r.repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	workDir := w.Filesystem.Root()
+
+	// Push using git binary
+	pushCmd := exec.Command("git", "push")
+	pushCmd.Dir = workDir
+	if output, err := pushCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to push: %w\n%s", err, output)
 	}
 
 	return nil

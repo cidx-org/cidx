@@ -19,6 +19,7 @@ The `cidx.toml` file's main purpose is to define **Pipelines**. These are sequen
 A pipeline is a sequence of phases, defined in a `[pipelines.<pipeline_name>]` section. The name of the pipeline should correspond to a CI/CD event (e.g., `pr`, `main`, `release`).
 
 **Example: Event-Driven Pipelines**
+
 ```toml
 # This pipeline will be automatically selected for Pull Requests.
 [pipelines.pr]

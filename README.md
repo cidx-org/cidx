@@ -57,6 +57,7 @@ cidx run ci         # Run full CI pipeline
 Configuration is handled in `cidx.toml`. You define `pipelines` that map to CI/CD events like Pull Requests or Git tags. CIDX automatically detects the context and runs the correct pipeline.
 
 **Example `cidx.toml`:**
+
 ```toml
 # The 'pr' pipeline runs on Pull Requests.
 [pipelines.pr]
