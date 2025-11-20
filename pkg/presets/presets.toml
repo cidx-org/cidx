@@ -315,7 +315,7 @@ IMAGE_TAG = "latest"
 [presets.gh-release]
 name = "gh-release"
 phase = "release"
-image = "alpine/gh:latest"
+image = "ghcr.io/cli/cli:latest"
 command = "gh release create ${TAG} ${ARTIFACTS} --generate-notes"
 workdir = "/workspace"
 volumes = ["${WORKSPACE}:/workspace"]
