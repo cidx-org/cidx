@@ -315,8 +315,8 @@ IMAGE_TAG = "latest"
 [presets.gh-release]
 name = "gh-release"
 phase = "release"
-image = "ubuntu:latest"
-command = "sh -c 'apt-get update -qq && apt-get install -y -qq git curl && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg && echo \"deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main\" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null && apt-get update -qq && apt-get install -y -qq gh && git config --global --add safe.directory /workspace && gh release create ${TAG} ${ARTIFACTS} --generate-notes'"
+image = "maniator/gh:latest"
+command = "sh -c 'git config --global --add safe.directory /workspace && gh release create ${TAG} ${ARTIFACTS} --generate-notes'"
 workdir = "/workspace"
 volumes = ["${WORKSPACE}:/workspace"]
 require_ci = false
