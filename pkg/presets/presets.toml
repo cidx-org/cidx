@@ -315,13 +315,13 @@ IMAGE_TAG = "latest"
 [presets.gh-release]
 name = "gh-release"
 phase = "release"
-image = "alpine:latest"
-command = "sh -c 'apk add --no-cache git github-cli && git config --global --add safe.directory /workspace && gh release create ${TAG} ${ARTIFACTS} --generate-notes'"
+image = "ghcr.io/cli/gh:latest"
+command = "sh -c 'git config --global --add safe.directory /workspace && gh release create ${TAG} ${ARTIFACTS} --generate-notes'"
 workdir = "/workspace"
 volumes = ["${WORKSPACE}:/workspace"]
 require_ci = false
 local_behavior = "draft"
-privileged = true
+privileged = false
 
 [presets.gh-release.env]
 TAG = "${GIT_TAG}"
