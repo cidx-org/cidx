@@ -29,6 +29,7 @@ type PresetTOML struct {
 	Options       map[string]OptionTOML `toml:"options"`
 	RequireCI     bool                  `toml:"require_ci"`
 	LocalBehavior string                `toml:"local_behavior"`
+	Privileged    bool                  `toml:"privileged"`
 }
 
 // OptionTOML represents an option in TOML format
@@ -86,6 +87,7 @@ func loadPresets() (map[string]Preset, error) {
 			Options:       make(map[string]Option),
 			RequireCI:     tomlPreset.RequireCI,
 			LocalBehavior: tomlPreset.LocalBehavior,
+			Privileged:    tomlPreset.Privileged,
 		}
 
 		// Convert options
