@@ -123,3 +123,13 @@ func (r *Repository) HasChanges() (bool, error) {
 
 	return !status.IsClean(), nil
 }
+
+// GetWorkDir returns the working directory path of the repository
+func (r *Repository) GetWorkDir() (string, error) {
+	w, err := r.repo.Worktree()
+	if err != nil {
+		return "", fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	return w.Filesystem.Root(), nil
+}

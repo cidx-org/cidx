@@ -30,9 +30,38 @@ tools = ["go-build"]
 [docker]
 tools = ["kaniko"]
 
+# Version: Bump version with commitizen
+[version]
+tools = ["version-bump"]
+
 # Release: Create GitHub releases
 [release]
 tools = ["gh-release"]
+
+# Tool override for version bumping
+[tools.version-bump]
+phase = "version"
+image = "commitizen/commitizen:latest"
+command = "cz bump --yes"
+workdir = "/app"
+volumes = [
+    "${WORKSPACE}:/app",
+    "${WORKSPACE}/.git:/app/.git",
+]
+
+# Actions: Automated workflows
+[actions.release-create]
+description = "Create new release with version bump"
+image = "commitizen/commitizen:latest"
+command = "cz bump --yes"
+workdir = "/app"
+volumes = [
+    "${WORKSPACE}:/app",
+    "${WORKSPACE}/.git:/app/.git",
+]
+auto_push = true
+push_tags = true
+watch_workflow = true
 
 # Pipelines: Named execution workflows
 # CI: Continuous Integration (every commit)

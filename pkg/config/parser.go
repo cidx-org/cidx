@@ -21,10 +21,11 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse TOML config: %w", err)
 	}
 
-	// Separate phases, pipelines, and overrides
+	// Separate phases, pipelines, actions, and overrides
 	cfg := &Config{
 		Phases:    make(map[string]Phase),
 		Pipelines: make(map[string]Pipeline),
+		Actions:   make(map[string]Action),
 		Overrides: make(map[string]map[string]interface{}),
 		Workspace: os.Getenv("PWD"),
 	}
@@ -62,6 +63,69 @@ func Load(path string) (*Config, error) {
 					}
 					cfg.Pipelines[pipelineName] = Pipeline{Phases: phases}
 				}
+			}
+			continue
+		}
+
+		// Check if this is the "actions" section
+		if name == "actions" {
+			for actionName, actionValue := range section {
+				actionMap, ok := actionValue.(map[string]interface{})
+				if !ok {
+					continue
+				}
+
+				action := Action{}
+
+				if desc, ok := actionMap["description"].(string); ok {
+					action.Description = desc
+				}
+				if img, ok := actionMap["image"].(string); ok {
+					action.Image = img
+				}
+				if cmd, ok := actionMap["command"].(string); ok {
+					action.Command = cmd
+				}
+				if wd, ok := actionMap["workdir"].(string); ok {
+					action.Workdir = wd
+				}
+				if autoPush, ok := actionMap["auto_push"].(bool); ok {
+					action.AutoPush = autoPush
+				}
+				if pushTags, ok := actionMap["push_tags"].(bool); ok {
+					action.PushTags = pushTags
+				}
+				if watchWf, ok := actionMap["watch_workflow"].(bool); ok {
+					action.WatchWorkflow = watchWf
+				}
+
+				// Parse volumes array
+				if volsRaw, hasVols := actionMap["volumes"]; hasVols {
+					switch v := volsRaw.(type) {
+					case []interface{}:
+						for _, vol := range v {
+							if volStr, ok := vol.(string); ok {
+								action.Volumes = append(action.Volumes, volStr)
+							}
+						}
+					case []string:
+						action.Volumes = v
+					}
+				}
+
+				// Parse env map
+				if envRaw, hasEnv := actionMap["env"]; hasEnv {
+					if envMap, ok := envRaw.(map[string]interface{}); ok {
+						action.Env = make(map[string]string)
+						for k, v := range envMap {
+							if vStr, ok := v.(string); ok {
+								action.Env[k] = vStr
+							}
+						}
+					}
+				}
+
+				cfg.Actions[actionName] = action
 			}
 			continue
 		}

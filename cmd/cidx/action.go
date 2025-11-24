@@ -46,6 +46,23 @@ func actionCommand() *cli.Command {
 				},
 				Action: commitPushWatchAction,
 			},
+			{
+				Name:  "release",
+				Usage: "Release management commands",
+				Subcommands: []*cli.Command{
+					{
+						Name:  "create",
+						Usage: "Create a new release with commitizen (bump version, tag, push, watch workflow)",
+						Flags: []cli.Flag{
+							&cli.BoolFlag{
+								Name:  "dry-run",
+								Usage: "Show what would be done without making changes",
+							},
+						},
+						Action: releaseCreateAction,
+					},
+				},
+			},
 		},
 	}
 }
@@ -77,6 +94,40 @@ func commitPushWatchAction(c *cli.Context) error {
 		repo,
 		provider,
 		c.String("message"),
+	)
+
+	ctx := context.Background()
+	return action.Execute(ctx)
+}
+
+func releaseCreateAction(c *cli.Context) error {
+	// Open repository
+	repo, err := vcs.OpenRepository(".")
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	// Get remote info (owner/repo)
+	owner, repoName, err := repo.GetRemoteInfo()
+	if err != nil {
+		return fmt.Errorf("failed to get remote info: %w", err)
+	}
+
+	// Get GitHub token (from env var or gh CLI auth)
+	token, err := getGitHubToken()
+	if err != nil {
+		return err
+	}
+
+	// Create GitHub provider
+	provider := github.NewClient(token, owner, repoName)
+
+	// Create and execute release action
+	action := actions.NewRelease(
+		repo,
+		provider,
+		"release-create", // Action name from cidx.toml
+		c.Bool("dry-run"),
 	)
 
 	ctx := context.Background()

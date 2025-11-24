@@ -4,6 +4,7 @@ package config
 type Config struct {
 	Phases    map[string]Phase                  `toml:",inline"`
 	Pipelines map[string]Pipeline               `toml:"pipelines"`
+	Actions   map[string]Action                 `toml:"actions"`
 	Overrides map[string]map[string]interface{} `toml:",inline"`
 	Workspace string                            // Auto-detected or from env
 }
@@ -29,4 +30,17 @@ type ToolConfig struct {
 	Env         map[string]string
 	ConfigFiles []string
 	Privileged  bool // Requires root privileges
+}
+
+// Action represents an automated workflow configuration
+type Action struct {
+	Description   string            `toml:"description"`
+	Image         string            `toml:"image"`
+	Command       string            `toml:"command"`
+	Workdir       string            `toml:"workdir"`
+	Volumes       []string          `toml:"volumes"`
+	Env           map[string]string `toml:"env"`
+	AutoPush      bool              `toml:"auto_push"`
+	PushTags      bool              `toml:"push_tags"`
+	WatchWorkflow bool              `toml:"watch_workflow"`
 }
