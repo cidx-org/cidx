@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.3.1 (2025-11-24)
+
+### Fix
+
+- expand environment variables in tool config
+
 ## v0.3.0 (2025-11-24)
 
 ### Feat
