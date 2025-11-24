@@ -101,13 +101,19 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 	}
 
 	// Convert Action to ToolConfig for executor
+	// Expand ${WORKSPACE} in volumes
+	volumes := make([]string, len(action.Volumes))
+	for i, vol := range action.Volumes {
+		volumes[i] = strings.Replace(vol, "${WORKSPACE}", workDir, -1)
+	}
+
 	toolConfig := &config.ToolConfig{
 		Name:    a.actionName,
 		Phase:   "action",
 		Image:   action.Image,
 		Command: action.Command,
 		Workdir: action.Workdir,
-		Volumes: action.Volumes,
+		Volumes: volumes,
 		Env:     action.Env,
 	}
 
