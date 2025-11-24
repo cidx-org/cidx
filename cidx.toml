@@ -53,7 +53,7 @@ volumes = [
 [actions.release-create]
 description = "Create new release with version bump"
 image = "commitizen/commitizen:latest"
-command = "bump --yes --no-verify --files-only"
+command = "bump --yes --no-verify"
 workdir = "/app"
 volumes = [
     "${WORKSPACE}:/app",
