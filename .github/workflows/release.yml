@@ -197,4 +197,4 @@ jobs:
         run: ./tool/cidx run gh-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
+          GIT_TAG: ${{ github.ref_name }}
