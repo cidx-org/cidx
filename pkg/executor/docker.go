@@ -162,10 +162,12 @@ func (e *DockerExecutor) createContainer(ctx context.Context, toolConfig *config
 	binds := make([]string, len(volumes))
 	copy(binds, volumes)
 
-	// Convert env map to slice
+	// Convert env map to slice and expand environment variables
 	env := make([]string, 0, len(toolConfig.Env))
 	for k, v := range toolConfig.Env {
-		env = append(env, fmt.Sprintf("%s=%s", k, v))
+		// Expand ${VAR} in values
+		expandedValue := os.ExpandEnv(v)
+		env = append(env, fmt.Sprintf("%s=%s", k, expandedValue))
 	}
 
 	// Parse command
