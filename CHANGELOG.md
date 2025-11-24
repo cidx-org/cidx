@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.3.0 (2025-11-24)
+
+### Feat
+
+- split CI and Release workflows
+
 ## v0.2.0 (2025-11-24)
 
 ### Feat
