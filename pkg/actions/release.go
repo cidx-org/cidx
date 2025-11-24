@@ -104,7 +104,7 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 	// Expand ${WORKSPACE} in volumes
 	volumes := make([]string, len(action.Volumes))
 	for i, vol := range action.Volumes {
-		volumes[i] = strings.Replace(vol, "${WORKSPACE}", workDir, -1)
+		volumes[i] = strings.ReplaceAll(vol, "${WORKSPACE}", workDir)
 	}
 
 	toolConfig := &config.ToolConfig{
