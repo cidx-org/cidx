@@ -109,7 +109,7 @@ func (r *Repository) GetCurrentBranch() (string, error) {
 	return branchName, nil
 }
 
-// HasChanges checks if there are uncommitted changes
+// HasChanges checks if there are uncommitted changes (modified or staged files only, ignoring untracked)
 func (r *Repository) HasChanges() (bool, error) {
 	w, err := r.repo.Worktree()
 	if err != nil {
@@ -121,7 +121,17 @@ func (r *Repository) HasChanges() (bool, error) {
 		return false, fmt.Errorf("failed to get status: %w", err)
 	}
 
-	return !status.IsClean(), nil
+	// Check only for modified or staged files, ignore untracked files
+	for _, fileStatus := range status {
+		if fileStatus.Worktree != git.Untracked && fileStatus.Worktree != git.Unmodified {
+			return true, nil
+		}
+		if fileStatus.Staging != git.Untracked && fileStatus.Staging != git.Unmodified {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 // GetWorkDir returns the working directory path of the repository
