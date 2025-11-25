@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"strconv"
 	"time"
 
@@ -158,14 +159,16 @@ func (c *Client) CreatePullRequest(ctx context.Context, title, body, head, base 
 
 // MarkPullRequestReady marks a draft PR as ready for review
 func (c *Client) MarkPullRequestReady(ctx context.Context, prNumber int) error {
-	// GitHub API: mark PR as ready by setting draft=false
-	pr := &github.PullRequest{
-		Draft: github.Ptr(false),
-	}
+	// GitHub's REST API doesn't support converting draft to ready directly
+	// We need to use GraphQL API, which is best accessed via gh CLI
+	// This is consistent with our hybrid approach: native tools for complex operations
 
-	_, _, err := c.client.PullRequests.Edit(ctx, c.owner, c.repo, prNumber, pr)
+	// Use gh CLI to mark PR as ready (uses GraphQL API internally)
+	cmd := exec.Command("gh", "pr", "ready", strconv.Itoa(prNumber), "--repo", fmt.Sprintf("%s/%s", c.owner, c.repo))
+
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to mark PR as ready: %w", err)
+		return fmt.Errorf("failed to mark PR as ready: %w\n%s", err, output)
 	}
 
 	return nil
