@@ -69,6 +69,44 @@ func (r *Repository) Push() error {
 	return nil
 }
 
+// Pull pulls latest changes from remote using git binary
+func (r *Repository) Pull() error {
+	w, err := r.repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	workDir := w.Filesystem.Root()
+
+	// Pull using git binary
+	pullCmd := exec.Command("git", "pull")
+	pullCmd.Dir = workDir
+	if output, err := pullCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to pull: %w\n%s", err, output)
+	}
+
+	return nil
+}
+
+// Checkout switches to a different branch using git binary
+func (r *Repository) Checkout(branch string) error {
+	w, err := r.repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	workDir := w.Filesystem.Root()
+
+	// Checkout using git binary
+	checkoutCmd := exec.Command("git", "checkout", branch)
+	checkoutCmd.Dir = workDir
+	if output, err := checkoutCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to checkout branch '%s': %w\n%s", branch, err, output)
+	}
+
+	return nil
+}
+
 // GetRemoteInfo extracts owner and repo name from remote origin URL
 func (r *Repository) GetRemoteInfo() (owner, repo string, err error) {
 	remote, err := r.repo.Remote("origin")
