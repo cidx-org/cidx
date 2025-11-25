@@ -133,7 +133,16 @@ func (a *PRAction) createPR(ctx context.Context) error {
 
 	log.Infof("✅ Branch '%s' created and checked out", branchName)
 
-	// 6. Push branch to remote (needed for PR creation)
+	// 6. Create initial empty commit to allow PR creation
+	log.Info("📝 Creating initial commit...")
+	commitMsg := fmt.Sprintf("chore: initialize PR branch for %s", a.title)
+	commitCmd := exec.Command("git", "commit", "--allow-empty", "-m", commitMsg)
+	commitCmd.Dir = workDir
+	if output, err := commitCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to create initial commit: %w\n%s", err, output)
+	}
+
+	// 7. Push branch to remote with initial commit
 	log.Info("📤 Pushing branch to remote...")
 	pushCmd := exec.Command("git", "push", "-u", "origin", branchName)
 	pushCmd.Dir = workDir
@@ -141,7 +150,7 @@ func (a *PRAction) createPR(ctx context.Context) error {
 		return fmt.Errorf("failed to push branch: %w\n%s", err, output)
 	}
 
-	// 7. Create draft PR using GitHub API
+	// 8. Create draft PR using GitHub API
 	log.Info("📝 Creating draft pull request...")
 
 	prNumber, prURL, err := a.provider.CreatePullRequest(
@@ -164,7 +173,7 @@ func (a *PRAction) createPR(ctx context.Context) error {
 	log.Info("📌 Next steps:")
 	log.Info("   1. Make your changes")
 	log.Info("   2. git add . && git commit -m 'feat: your changes'")
-	log.Info("   3. git push")
+	log.Info("   3. git push (your commits will be added to the PR)")
 	log.Info("   4. When ready: cidx action pr ready")
 
 	return nil
