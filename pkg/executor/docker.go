@@ -171,7 +171,16 @@ func (e *DockerExecutor) createContainer(ctx context.Context, toolConfig *config
 	}
 
 	// Parse command
-	cmdParts := parseCommand(command)
+	// If custom entrypoint is set, keep command as single element
+	var cmdParts []string
+	if len(toolConfig.Entrypoint) > 0 {
+		// With custom entrypoint, command should be a single element
+		cmdParts = []string{command}
+	} else {
+		// Without entrypoint, parse normally
+		cmdParts = parseCommand(command)
+	}
+
 	if len(cmdParts) == 0 {
 		return "", "", fmt.Errorf("empty command")
 	}
