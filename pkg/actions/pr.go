@@ -22,6 +22,7 @@ type PRAction struct {
 	mergeMode   bool
 	mergeMethod string
 	watchFlow   bool
+	skipChecks  bool
 }
 
 // NewPR creates a new PR action
@@ -37,7 +38,7 @@ func NewPR(repo *vcs.Repository, provider remote.Provider, title, issueNum strin
 }
 
 // NewPRMerge creates a new PR merge action
-func NewPRMerge(repo *vcs.Repository, provider remote.Provider, mergeMethod string, watchFlow, dryRun bool) *PRAction {
+func NewPRMerge(repo *vcs.Repository, provider remote.Provider, mergeMethod string, watchFlow, skipChecks, dryRun bool) *PRAction {
 	return &PRAction{
 		repo:        repo,
 		provider:    provider,
@@ -45,6 +46,7 @@ func NewPRMerge(repo *vcs.Repository, provider remote.Provider, mergeMethod stri
 		mergeMode:   true,
 		mergeMethod: mergeMethod,
 		watchFlow:   watchFlow,
+		skipChecks:  skipChecks,
 	}
 }
 
@@ -228,6 +230,57 @@ func (a *PRAction) mergePR(ctx context.Context) error {
 		return fmt.Errorf("failed to find PR: %w", err)
 	}
 
+	// Pre-merge checks validation (unless skipped)
+	if !a.skipChecks && !a.dryRun {
+		log.Info("🔍 Checking PR status and workflows...")
+		checks, err := a.provider.GetPullRequestChecks(ctx, prNumber)
+		if err != nil {
+			return fmt.Errorf("failed to get PR checks: %w", err)
+		}
+
+		// Display current status
+		displayChecksStatus(checks)
+
+		// If checks are pending, watch them
+		if checks.Status == "pending" {
+			log.Info("⏳ Waiting for checks to complete...")
+			updates, err := a.provider.WatchPullRequestChecks(ctx, prNumber)
+			if err != nil {
+				return fmt.Errorf("failed to watch PR checks: %w", err)
+			}
+
+			// Watch until complete
+			for update := range updates {
+				if update.Error != nil {
+					return update.Error
+				}
+
+				displayChecksStatus(update.Checks)
+
+				// All checks complete
+				if update.Checks.Pending == 0 {
+					break
+				}
+			}
+
+			// Get final status
+			checks, err = a.provider.GetPullRequestChecks(ctx, prNumber)
+			if err != nil {
+				return fmt.Errorf("failed to get final PR checks: %w", err)
+			}
+		}
+
+		// Check if merge is safe
+		if checks.Status == "failure" {
+			log.Error("❌ Cannot merge: some checks have failed")
+			log.Info("💡 Use --skip-checks to bypass (not recommended)")
+			return fmt.Errorf("PR checks failed: %d/%d checks failed", checks.Failure, checks.TotalCount)
+		}
+
+		log.Info("✅ All checks passed! Ready to merge")
+		fmt.Println() // Separator
+	}
+
 	if a.dryRun {
 		log.Info("🏁 Dry-run mode:")
 		log.Infof("   Would merge PR #%d using method '%s'", prNumber, a.mergeMethod)
@@ -328,6 +381,50 @@ func displayWorkflowProgress(workflow *remote.Workflow) {
 			}
 		}
 		fmt.Printf(" | %s %s", jobStatus, job.Name)
+	}
+}
+
+// displayChecksStatus displays PR checks status
+func displayChecksStatus(checks *remote.PRChecks) {
+	statusIcon := "⏳"
+	switch checks.Status {
+	case "pending":
+		statusIcon = "⏳"
+	case "success":
+		statusIcon = "✅"
+	case "failure":
+		statusIcon = "❌"
+	}
+
+	log.Infof("%s PR Checks: %d total | ✅ %d success | ⏳ %d pending | ❌ %d failed",
+		statusIcon, checks.TotalCount, checks.Success, checks.Pending, checks.Failure)
+
+	// Show individual check details
+	if len(checks.Checks) > 0 {
+		for _, check := range checks.Checks {
+			checkIcon := "⏳"
+			if check.Status == "completed" {
+				if check.Conclusion == "success" {
+					checkIcon = "✅"
+				} else {
+					checkIcon = "❌"
+				}
+			}
+			log.Infof("  %s %s", checkIcon, check.Name)
+		}
+	}
+
+	if len(checks.StatusChecks) > 0 {
+		for _, status := range checks.StatusChecks {
+			statusCheckIcon := "⏳"
+			switch status.State {
+			case "success":
+				statusCheckIcon = "✅"
+			case "failure", "error":
+				statusCheckIcon = "❌"
+			}
+			log.Infof("  %s %s", statusCheckIcon, status.Context)
+		}
 	}
 }
 

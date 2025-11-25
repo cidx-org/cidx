@@ -212,3 +212,123 @@ func (c *Client) MergePullRequest(ctx context.Context, prNumber int, method stri
 
 	return nil
 }
+
+// GetPullRequestChecks returns the status of all checks/workflows for a PR
+func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remote.PRChecks, error) {
+	// Get PR details to get the head SHA
+	pr, _, err := c.client.PullRequests.Get(ctx, c.owner, c.repo, prNumber)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pull request: %w", err)
+	}
+
+	headSHA := pr.GetHead().GetSHA()
+
+	checks := &remote.PRChecks{
+		Checks:       []remote.CheckRun{},
+		StatusChecks: []remote.StatusCheck{},
+	}
+
+	// Get check runs (GitHub Actions)
+	checkRuns, _, err := c.client.Checks.ListCheckRunsForRef(ctx, c.owner, c.repo, headSHA, &github.ListCheckRunsOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list check runs: %w", err)
+	}
+
+	for _, run := range checkRuns.CheckRuns {
+		check := remote.CheckRun{
+			Name:       run.GetName(),
+			Status:     run.GetStatus(),
+			Conclusion: run.GetConclusion(),
+			URL:        run.GetHTMLURL(),
+		}
+		checks.Checks = append(checks.Checks, check)
+
+		// Count by status
+		checks.TotalCount++
+		if run.GetStatus() != "completed" {
+			checks.Pending++
+		} else if run.GetConclusion() == "success" {
+			checks.Success++
+		} else {
+			checks.Failure++
+		}
+	}
+
+	// Get commit status checks (legacy status API)
+	statuses, _, err := c.client.Repositories.GetCombinedStatus(ctx, c.owner, c.repo, headSHA, &github.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get combined status: %w", err)
+	}
+
+	for _, status := range statuses.Statuses {
+		statusCheck := remote.StatusCheck{
+			Context: status.GetContext(),
+			State:   status.GetState(),
+			URL:     status.GetTargetURL(),
+		}
+		checks.StatusChecks = append(checks.StatusChecks, statusCheck)
+
+		// Count by status
+		checks.TotalCount++
+		if status.GetState() == "pending" {
+			checks.Pending++
+		} else if status.GetState() == "success" {
+			checks.Success++
+		} else {
+			checks.Failure++
+		}
+	}
+
+	// Determine overall status
+	if checks.Failure > 0 {
+		checks.Status = "failure"
+	} else if checks.Pending > 0 {
+		checks.Status = "pending"
+	} else {
+		checks.Status = "success"
+	}
+
+	return checks, nil
+}
+
+// WatchPullRequestChecks streams updates for PR checks until all complete
+func (c *Client) WatchPullRequestChecks(ctx context.Context, prNumber int) (<-chan remote.PRChecksUpdate, error) {
+	updates := make(chan remote.PRChecksUpdate, 1)
+
+	go func() {
+		defer close(updates)
+
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+
+		var lastStatus string
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+
+			case <-ticker.C:
+				checks, err := c.GetPullRequestChecks(ctx, prNumber)
+				if err != nil {
+					updates <- remote.PRChecksUpdate{Error: err}
+					return
+				}
+
+				// Send update only if status changed
+				currentStatus := fmt.Sprintf("%s:%d:%d:%d", checks.Status, checks.Pending, checks.Success, checks.Failure)
+				if currentStatus != lastStatus {
+					updates <- remote.PRChecksUpdate{Checks: checks}
+					lastStatus = currentStatus
+				}
+
+				// Stop when all checks complete
+				if checks.Pending == 0 {
+					return
+				}
+			}
+		}
+	}()
+
+	return updates, nil
+}

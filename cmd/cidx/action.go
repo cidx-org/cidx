@@ -94,6 +94,10 @@ func actionCommand() *cli.Command {
 								Usage:   "Watch post-merge workflow",
 							},
 							&cli.BoolFlag{
+								Name:  "skip-checks",
+								Usage: "Skip pre-merge checks validation (not recommended)",
+							},
+							&cli.BoolFlag{
 								Name:  "dry-run",
 								Usage: "Show what would be done without making changes",
 							},
@@ -296,6 +300,7 @@ func prMergeAction(c *cli.Context) error {
 		provider,
 		c.String("method"),
 		c.Bool("watch"),
+		c.Bool("skip-checks"),
 		c.Bool("dry-run"),
 	)
 
