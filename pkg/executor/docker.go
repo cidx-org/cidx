@@ -191,6 +191,11 @@ func (e *DockerExecutor) createContainer(ctx context.Context, toolConfig *config
 		},
 	}
 
+	// Override entrypoint if specified
+	if len(toolConfig.Entrypoint) > 0 {
+		containerConfig.Entrypoint = toolConfig.Entrypoint
+	}
+
 	// Only set user for non-privileged tools
 	if !toolConfig.Privileged {
 		containerConfig.User = fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid())

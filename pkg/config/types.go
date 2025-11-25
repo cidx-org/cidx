@@ -25,6 +25,7 @@ type ToolConfig struct {
 	Phase       string
 	Image       string
 	Command     string
+	Entrypoint  []string          // Override container entrypoint
 	Workdir     string
 	Volumes     []string
 	Env         map[string]string
@@ -37,6 +38,7 @@ type Action struct {
 	Description   string            `toml:"description"`
 	Image         string            `toml:"image"`
 	Command       string            `toml:"command"`
+	Entrypoint    []string          `toml:"entrypoint"` // Override container entrypoint
 	Workdir       string            `toml:"workdir"`
 	Volumes       []string          `toml:"volumes"`
 	Env           map[string]string `toml:"env"`

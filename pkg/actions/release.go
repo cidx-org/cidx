@@ -108,13 +108,14 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 	}
 
 	toolConfig := &config.ToolConfig{
-		Name:    a.actionName,
-		Phase:   "action",
-		Image:   action.Image,
-		Command: action.Command,
-		Workdir: action.Workdir,
-		Volumes: volumes,
-		Env:     action.Env,
+		Name:       a.actionName,
+		Phase:      "action",
+		Image:      action.Image,
+		Command:    action.Command,
+		Entrypoint: action.Entrypoint,
+		Workdir:    action.Workdir,
+		Volumes:    volumes,
+		Env:        action.Env,
 	}
 
 	// Execute using Docker executor
