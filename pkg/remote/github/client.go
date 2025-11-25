@@ -187,3 +187,28 @@ func (c *Client) GetPullRequestByBranch(ctx context.Context, branch string) (int
 
 	return prs[0].GetNumber(), prs[0].GetHTMLURL(), nil
 }
+
+// MergePullRequest merges a pull request
+func (c *Client) MergePullRequest(ctx context.Context, prNumber int, method string) error {
+	// Validate merge method
+	validMethods := map[string]bool{
+		"merge":  true,
+		"squash": true,
+		"rebase": true,
+	}
+	if !validMethods[method] {
+		return fmt.Errorf("invalid merge method: %s (valid: merge, squash, rebase)", method)
+	}
+
+	// Merge the PR
+	options := &github.PullRequestOptions{
+		MergeMethod: method,
+	}
+
+	_, _, err := c.client.PullRequests.Merge(ctx, c.owner, c.repo, prNumber, "", options)
+	if err != nil {
+		return fmt.Errorf("failed to merge pull request: %w", err)
+	}
+
+	return nil
+}

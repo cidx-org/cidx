@@ -13,12 +13,15 @@ import (
 
 // PRAction manages pull request workflow
 type PRAction struct {
-	repo       *vcs.Repository
-	provider   remote.Provider
-	title      string
-	issueNum   string
-	dryRun     bool
-	readyMode  bool
+	repo        *vcs.Repository
+	provider    remote.Provider
+	title       string
+	issueNum    string
+	dryRun      bool
+	readyMode   bool
+	mergeMode   bool
+	mergeMethod string
+	watchFlow   bool
 }
 
 // NewPR creates a new PR action
@@ -33,9 +36,25 @@ func NewPR(repo *vcs.Repository, provider remote.Provider, title, issueNum strin
 	}
 }
 
+// NewPRMerge creates a new PR merge action
+func NewPRMerge(repo *vcs.Repository, provider remote.Provider, mergeMethod string, watchFlow, dryRun bool) *PRAction {
+	return &PRAction{
+		repo:        repo,
+		provider:    provider,
+		dryRun:      dryRun,
+		mergeMode:   true,
+		mergeMethod: mergeMethod,
+		watchFlow:   watchFlow,
+	}
+}
+
 // Execute runs the PR workflow
 func (a *PRAction) Execute(ctx context.Context) error {
-	// Check if we're marking PR as ready
+	// Check mode
+	if a.mergeMode {
+		return a.mergePR(ctx)
+	}
+
 	if a.readyMode {
 		return a.markReady(ctx)
 	}
@@ -186,6 +205,130 @@ func (a *PRAction) markReady(ctx context.Context) error {
 	log.Infof("🔗 %s", prURL)
 
 	return nil
+}
+
+// mergePR merges a pull request and watches the workflow
+func (a *PRAction) mergePR(ctx context.Context) error {
+	log.Info("🔀 Merging pull request...")
+
+	// Get current branch
+	currentBranch, err := a.repo.GetCurrentBranch()
+	if err != nil {
+		return fmt.Errorf("failed to get current branch: %w", err)
+	}
+
+	if currentBranch == "main" {
+		return fmt.Errorf("you are on 'main' branch. Switch to your feature branch first")
+	}
+
+	// Find PR for this branch
+	log.Infof("🔍 Finding PR for branch '%s'...", currentBranch)
+	prNumber, prURL, err := a.provider.GetPullRequestByBranch(ctx, currentBranch)
+	if err != nil {
+		return fmt.Errorf("failed to find PR: %w", err)
+	}
+
+	if a.dryRun {
+		log.Info("🏁 Dry-run mode:")
+		log.Infof("   Would merge PR #%d using method '%s'", prNumber, a.mergeMethod)
+		log.Infof("   URL: %s", prURL)
+		if a.watchFlow {
+			log.Info("   Would watch post-merge workflow")
+		}
+		return nil
+	}
+
+	// Merge the PR
+	log.Infof("🔀 Merging PR #%d with method '%s'...", prNumber, a.mergeMethod)
+	if err := a.provider.MergePullRequest(ctx, prNumber, a.mergeMethod); err != nil {
+		return fmt.Errorf("failed to merge PR: %w", err)
+	}
+
+	log.Info("✅ PR merged successfully!")
+	log.Infof("🔗 %s", prURL)
+
+	// Watch workflow if requested
+	if !a.watchFlow {
+		log.Info("💡 Tip: Use --watch to monitor post-merge workflows")
+		return nil
+	}
+
+	log.Info("⏳ Waiting for post-merge workflow to start...")
+
+	// Get latest workflow for main branch
+	workflow, err := a.provider.GetLatestWorkflow(ctx, "main")
+	if err != nil {
+		log.Warnf("⚠️  Could not get workflow for main branch: %v", err)
+		return nil
+	}
+
+	log.Infof("👀 Watching post-merge workflow %s...", workflow.ID)
+	log.Infof("🔗 %s", workflow.URL)
+
+	// Watch workflow
+	updates, err := a.provider.WatchWorkflow(ctx, workflow.ID)
+	if err != nil {
+		log.Warnf("⚠️  Could not watch workflow: %v", err)
+		log.Infof("🔗 Check workflow status at: %s", workflow.URL)
+		return nil
+	}
+
+	// Display updates
+	for update := range updates {
+		if update.Error != nil {
+			return update.Error
+		}
+
+		displayWorkflowProgress(update.Workflow)
+
+		if update.Workflow.Status == "completed" {
+			fmt.Println() // New line after progress
+			if update.Workflow.Conclusion == "success" {
+				log.Info("🎉 Post-merge workflow completed successfully!")
+			} else {
+				log.Errorf("❌ Post-merge workflow failed: %s", update.Workflow.Conclusion)
+				return fmt.Errorf("post-merge workflow failed with conclusion: %s", update.Workflow.Conclusion)
+			}
+			break
+		}
+	}
+
+	return nil
+}
+
+// displayWorkflowProgress displays workflow progress
+func displayWorkflowProgress(workflow *remote.Workflow) {
+	status := "⏳"
+	switch workflow.Status {
+	case "queued":
+		status = "⏳"
+	case "in_progress":
+		status = "🔄"
+	case "completed":
+		if workflow.Conclusion == "success" {
+			status = "✅"
+		} else {
+			status = "❌"
+		}
+	}
+
+	fmt.Printf("\r%s Workflow: %s", status, workflow.Status)
+	for _, job := range workflow.Jobs {
+		jobStatus := "⏳"
+		switch job.Status {
+		case "queued":
+			jobStatus = "⏳"
+		case "in_progress":
+			jobStatus = "🔄"
+		case "completed":
+			if job.Conclusion == "success" {
+				jobStatus = "✅"
+			} else {
+				jobStatus = "❌"
+			}
+		}
+		fmt.Printf(" | %s %s", jobStatus, job.Name)
+	}
 }
 
 // titleToBranchName converts a PR title to a branch name

@@ -18,6 +18,9 @@ type Provider interface {
 
 	// GetPullRequestByBranch finds a PR for the given head branch
 	GetPullRequestByBranch(ctx context.Context, branch string) (number int, url string, err error)
+
+	// MergePullRequest merges a pull request
+	MergePullRequest(ctx context.Context, prNumber int, method string) error
 }
 
 // Workflow represents a CI/CD workflow run

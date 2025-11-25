@@ -78,6 +78,28 @@ func actionCommand() *cli.Command {
 						},
 						Action: prReadyAction,
 					},
+					{
+						Name:  "merge",
+						Usage: "Merge the current PR and optionally watch post-merge workflow",
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name:    "method",
+								Aliases: []string{"m"},
+								Usage:   "Merge method: merge, squash, or rebase",
+								Value:   "squash",
+							},
+							&cli.BoolFlag{
+								Name:    "watch",
+								Aliases: []string{"w"},
+								Usage:   "Watch post-merge workflow",
+							},
+							&cli.BoolFlag{
+								Name:  "dry-run",
+								Usage: "Show what would be done without making changes",
+							},
+						},
+						Action: prMergeAction,
+					},
 				},
 			},
 			{
@@ -240,6 +262,41 @@ func prReadyAction(c *cli.Context) error {
 		"",    // no issue needed for ready
 		c.Bool("dry-run"),
 		true, // ready mode
+	)
+
+	ctx := context.Background()
+	return action.Execute(ctx)
+}
+
+func prMergeAction(c *cli.Context) error {
+	// Open repository
+	repo, err := vcs.OpenRepository(".")
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	// Get remote info
+	owner, repoName, err := repo.GetRemoteInfo()
+	if err != nil {
+		return fmt.Errorf("failed to get remote info: %w", err)
+	}
+
+	// Get GitHub token
+	token, err := getGitHubToken()
+	if err != nil {
+		return err
+	}
+
+	// Create GitHub provider
+	provider := github.NewClient(token, owner, repoName)
+
+	// Create and execute PR merge action
+	action := actions.NewPRMerge(
+		repo,
+		provider,
+		c.String("method"),
+		c.Bool("watch"),
+		c.Bool("dry-run"),
 	)
 
 	ctx := context.Background()
