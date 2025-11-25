@@ -125,6 +125,29 @@ Located in `pkg/remote/github/`:
 - Managing issues
 - Repository metadata
 
+### Special Case: Draft PR Conversion
+
+During PR workflow implementation, we discovered that GitHub's REST API has a critical limitation:
+
+**Problem**: The REST API cannot convert draft pull requests to ready status. Attempting to use `PullRequests.Edit` with `Draft: false` results in a 405 error.
+
+**Solution**: Use `gh` CLI (which uses GraphQL API internally) for this specific operation:
+
+```go
+func (c *Client) MarkPullRequestReady(ctx context.Context, prNumber int) error {
+    // Use gh CLI to mark PR as ready (uses GraphQL API internally)
+    cmd := exec.Command("gh", "pr", "ready", strconv.Itoa(prNumber),
+                        "--repo", fmt.Sprintf("%s/%s", c.owner, c.repo))
+    output, err := cmd.CombinedOutput()
+    if err != nil {
+        return fmt.Errorf("failed to mark PR as ready: %w\n%s", err, output)
+    }
+    return nil
+}
+```
+
+This follows our hybrid approach: use native CLI tools when the REST API has limitations, while continuing to use Go libraries for other operations.
+
 ## When to Revisit This Decision
 
 This approach should be reconsidered if:
