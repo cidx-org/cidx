@@ -137,3 +137,53 @@ func (c *Client) convertWorkflow(ctx context.Context, run *github.WorkflowRun) (
 
 	return workflow, nil
 }
+
+// CreatePullRequest creates a new pull request
+func (c *Client) CreatePullRequest(ctx context.Context, title, body, head, base string, draft bool) (int, string, error) {
+	pr := &github.NewPullRequest{
+		Title: github.Ptr(title),
+		Body:  github.Ptr(body),
+		Head:  github.Ptr(head),
+		Base:  github.Ptr(base),
+		Draft: github.Ptr(draft),
+	}
+
+	createdPR, _, err := c.client.PullRequests.Create(ctx, c.owner, c.repo, pr)
+	if err != nil {
+		return 0, "", fmt.Errorf("failed to create pull request: %w", err)
+	}
+
+	return createdPR.GetNumber(), createdPR.GetHTMLURL(), nil
+}
+
+// MarkPullRequestReady marks a draft PR as ready for review
+func (c *Client) MarkPullRequestReady(ctx context.Context, prNumber int) error {
+	// GitHub API: mark PR as ready by setting draft=false
+	pr := &github.PullRequest{
+		Draft: github.Ptr(false),
+	}
+
+	_, _, err := c.client.PullRequests.Edit(ctx, c.owner, c.repo, prNumber, pr)
+	if err != nil {
+		return fmt.Errorf("failed to mark PR as ready: %w", err)
+	}
+
+	return nil
+}
+
+// GetPullRequestByBranch finds a PR for the given head branch
+func (c *Client) GetPullRequestByBranch(ctx context.Context, branch string) (int, string, error) {
+	prs, _, err := c.client.PullRequests.List(ctx, c.owner, c.repo, &github.PullRequestListOptions{
+		Head:  fmt.Sprintf("%s:%s", c.owner, branch),
+		State: "open",
+	})
+	if err != nil {
+		return 0, "", fmt.Errorf("failed to list pull requests: %w", err)
+	}
+
+	if len(prs) == 0 {
+		return 0, "", fmt.Errorf("no open pull request found for branch %s", branch)
+	}
+
+	return prs[0].GetNumber(), prs[0].GetHTMLURL(), nil
+}

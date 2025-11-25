@@ -47,6 +47,40 @@ func actionCommand() *cli.Command {
 				Action: commitPushWatchAction,
 			},
 			{
+				Name:  "pr",
+				Usage: "Pull request workflow commands",
+				Subcommands: []*cli.Command{
+					{
+						Name:      "create",
+						Usage:     "Create a new draft PR with feature branch (like GitLab workflow)",
+						ArgsUsage: "[title]",
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name:    "issue",
+								Aliases: []string{"i"},
+								Usage:   "Link to existing issue number",
+							},
+							&cli.BoolFlag{
+								Name:  "dry-run",
+								Usage: "Show what would be done without making changes",
+							},
+						},
+						Action: prCreateAction,
+					},
+					{
+						Name:   "ready",
+						Usage:  "Mark the current draft PR as ready for review",
+						Flags: []cli.Flag{
+							&cli.BoolFlag{
+								Name:  "dry-run",
+								Usage: "Show what would be done without making changes",
+							},
+						},
+						Action: prReadyAction,
+					},
+				},
+			},
+			{
 				Name:  "release",
 				Usage: "Release management commands",
 				Subcommands: []*cli.Command{
@@ -128,6 +162,84 @@ func releaseCreateAction(c *cli.Context) error {
 		provider,
 		"release-create", // Action name from cidx.toml
 		c.Bool("dry-run"),
+	)
+
+	ctx := context.Background()
+	return action.Execute(ctx)
+}
+
+func prCreateAction(c *cli.Context) error {
+	// Get PR title from args or prompt
+	title := c.Args().First()
+	if title == "" {
+		return fmt.Errorf("PR title is required: cidx action pr create \"Your PR title\"")
+	}
+
+	// Open repository
+	repo, err := vcs.OpenRepository(".")
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	// Get remote info
+	owner, repoName, err := repo.GetRemoteInfo()
+	if err != nil {
+		return fmt.Errorf("failed to get remote info: %w", err)
+	}
+
+	// Get GitHub token
+	token, err := getGitHubToken()
+	if err != nil {
+		return err
+	}
+
+	// Create GitHub provider
+	provider := github.NewClient(token, owner, repoName)
+
+	// Create and execute PR action
+	action := actions.NewPR(
+		repo,
+		provider,
+		title,
+		c.String("issue"),
+		c.Bool("dry-run"),
+		false, // not ready mode
+	)
+
+	ctx := context.Background()
+	return action.Execute(ctx)
+}
+
+func prReadyAction(c *cli.Context) error {
+	// Open repository
+	repo, err := vcs.OpenRepository(".")
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	// Get remote info
+	owner, repoName, err := repo.GetRemoteInfo()
+	if err != nil {
+		return fmt.Errorf("failed to get remote info: %w", err)
+	}
+
+	// Get GitHub token
+	token, err := getGitHubToken()
+	if err != nil {
+		return err
+	}
+
+	// Create GitHub provider
+	provider := github.NewClient(token, owner, repoName)
+
+	// Create and execute PR ready action
+	action := actions.NewPR(
+		repo,
+		provider,
+		"",    // no title needed for ready
+		"",    // no issue needed for ready
+		c.Bool("dry-run"),
+		true, // ready mode
 	)
 
 	ctx := context.Background()

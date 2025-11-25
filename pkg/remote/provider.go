@@ -9,6 +9,15 @@ type Provider interface {
 
 	// WatchWorkflow streams updates for a running workflow
 	WatchWorkflow(ctx context.Context, workflowID string) (<-chan WorkflowUpdate, error)
+
+	// CreatePullRequest creates a new pull request
+	CreatePullRequest(ctx context.Context, title, body, head, base string, draft bool) (number int, url string, err error)
+
+	// MarkPullRequestReady marks a draft PR as ready for review
+	MarkPullRequestReady(ctx context.Context, prNumber int) error
+
+	// GetPullRequestByBranch finds a PR for the given head branch
+	GetPullRequestByBranch(ctx context.Context, branch string) (number int, url string, err error)
 }
 
 // Workflow represents a CI/CD workflow run
