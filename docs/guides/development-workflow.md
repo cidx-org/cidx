@@ -41,6 +41,7 @@ git checkout -b feat/new-scanner
 ```
 
 **Branch naming conventions**:
+
 - `feat/description` - New features
 - `fix/description` - Bug fixes
 - `docs/description` - Documentation updates
@@ -67,6 +68,7 @@ Your commits automatically appear in the draft PR.
 ### CI Validation
 
 Every push triggers CI checks on your branch:
+
 - Security scanning (Trivy, Gitleaks)
 - Code quality (golangci-lint, prettier)
 - Tests (go test)
@@ -87,6 +89,7 @@ cidx action pr create "feat: your feature title"
 ```
 
 This command:
+
 - Creates feature branch from main
 - Creates initial empty commit (allows PR creation)
 - Pushes branch to remote
@@ -94,6 +97,7 @@ This command:
 - Links to issue if provided with `--issue` flag
 
 **Options**:
+
 ```bash
 cidx action pr create "feat: new feature" --issue 42  # Link to issue #42
 cidx action pr create "fix: bug" --dry-run            # Preview without creating
@@ -124,6 +128,7 @@ cidx action pr ready
 ```
 
 This command:
+
 - Finds PR for current branch
 - Marks PR as **ready for review** (no longer draft)
 - Notifies team for review
@@ -139,6 +144,7 @@ cidx action pr merge --watch
 ```
 
 This command:
+
 - Validates all CI checks passed (security, code quality, tests)
 - Waits for pending checks to complete (if any)
 - Merges PR to main (default: squash merge)
@@ -146,6 +152,7 @@ This command:
 - Reports workflow status
 
 **Options**:
+
 ```bash
 cidx action pr merge --method squash    # Squash merge (default)
 cidx action pr merge --method merge     # Standard merge
@@ -156,11 +163,13 @@ cidx action pr merge --dry-run          # Preview without merging
 ```
 
 **Pre-merge validation**:
+
 - All CI checks must pass (unless `--skip-checks`)
 - Displays check status with visual indicators
 - Fails merge if checks fail
 
 **Post-merge**:
+
 - PR merged to main
 - CI workflow runs on main
 - **No tag created** (tags are only for releases)
@@ -175,6 +184,7 @@ CIDX follows **grouped releases**: multiple PRs are merged to main, then release
 ### When to Release
 
 Create a release when:
+
 - You have 3-5 merged features/fixes ready to publish
 - A critical bug fix needs to go out
 - You reach a planned milestone
@@ -189,6 +199,7 @@ cidx action release create
 ```
 
 This command:
+
 1. Analyzes conventional commits since last release
 2. Calculates version bump (MAJOR.MINOR.PATCH)
 3. Updates VERSION file and .cz.toml
@@ -197,12 +208,14 @@ This command:
 6. Triggers GitHub Release workflow automatically
 
 **The release workflow** (`.github/workflows/release.yml`):
+
 - Runs full CI checks (security, code quality, tests, build)
 - Builds Docker image → pushes to `ghcr.io/arcker/cidx:VERSION`
 - Creates GitHub Release with changelog and binaries
 - Publishes release artifacts
 
 **Options**:
+
 ```bash
 cidx action release create --dry-run    # Preview without creating
 ```
@@ -253,6 +266,7 @@ git show v1.2.0
 ```
 
 **Tag naming convention**:
+
 - `v1.2.3` - Stable releases (semantic versioning)
 - `v2.0.0-beta.1` - Pre-releases
 - `v1.2.3-rc.1` - Release candidates
@@ -264,6 +278,7 @@ git show v1.2.0
 **Location**: GitHub web interface + API
 
 **A GitHub Release includes**:
+
 - Git tag reference (e.g., `v1.2.0`)
 - Release notes (changelog)
 - Binary artifacts (cidx binary, checksums)
@@ -307,6 +322,7 @@ Users can download cidx v1.2.0
 ```
 
 **Key Points**:
+
 - ✅ Tags are created **only during releases**
 - ✅ No tags between releases (this is normal and correct)
 - ✅ Main branch can be ahead of latest release
@@ -330,17 +346,17 @@ CIDX uses conventional commits for automated version bumping:
 
 ### Types
 
-| Type | Description | Version Bump |
-|------|-------------|--------------|
-| `feat:` | New feature | MINOR (1.1.0 → 1.2.0) |
-| `fix:` | Bug fix | PATCH (1.1.0 → 1.1.1) |
-| `docs:` | Documentation only | PATCH |
-| `style:` | Code style (formatting) | PATCH |
-| `refactor:` | Code refactoring | PATCH |
-| `perf:` | Performance improvement | PATCH |
-| `test:` | Adding/updating tests | PATCH |
-| `chore:` | Maintenance tasks | PATCH |
-| `ci:` | CI/CD changes | PATCH |
+| Type        | Description             | Version Bump          |
+| ----------- | ----------------------- | --------------------- |
+| `feat:`     | New feature             | MINOR (1.1.0 → 1.2.0) |
+| `fix:`      | Bug fix                 | PATCH (1.1.0 → 1.1.1) |
+| `docs:`     | Documentation only      | PATCH                 |
+| `style:`    | Code style (formatting) | PATCH                 |
+| `refactor:` | Code refactoring        | PATCH                 |
+| `perf:`     | Performance improvement | PATCH                 |
+| `test:`     | Adding/updating tests   | PATCH                 |
+| `chore:`    | Maintenance tasks       | PATCH                 |
+| `ci:`       | CI/CD changes           | PATCH                 |
 
 ### Breaking Changes
 
@@ -543,6 +559,7 @@ cidx action release create
 
 **Error**: "Tag v1.2.0 already exists"
 **Solution**: Delete tag locally and remotely if it was created incorrectly:
+
 ```bash
 git tag -d v1.2.0
 git push origin :refs/tags/v1.2.0
