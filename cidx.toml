@@ -63,6 +63,12 @@ auto_push = true
 push_tags = true
 watch_workflow = true
 
+[actions.release-create.env]
+GIT_CONFIG_GLOBAL = "/tmp/.gitconfig"
+GIT_CONFIG_COUNT = "1"
+GIT_CONFIG_KEY_0 = "safe.directory"
+GIT_CONFIG_VALUE_0 = "/app"
+
 # Pipelines: Named execution workflows
 # CI: Continuous Integration (every commit)
 [pipelines.ci]
