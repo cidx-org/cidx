@@ -106,14 +106,14 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 		return nil
 	}
 
-	// Convert Action to ToolConfig for executor
+	// Convert Action to ContainerConfig for executor
 	// Expand ${WORKSPACE} in volumes
 	volumes := make([]string, len(action.Volumes))
 	for i, vol := range action.Volumes {
 		volumes[i] = strings.ReplaceAll(vol, "${WORKSPACE}", workDir)
 	}
 
-	toolConfig := &config.ToolConfig{
+	containerConfig := &config.ContainerConfig{
 		Name:       a.actionName,
 		Phase:      "action",
 		Image:      action.Image,
@@ -130,7 +130,7 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 		return fmt.Errorf("failed to create executor: %w", err)
 	}
 
-	if err := dockerExec.Run(ctx, toolConfig); err != nil {
+	if err := dockerExec.Run(ctx, containerConfig); err != nil {
 		return fmt.Errorf("action execution failed: %w", err)
 	}
 

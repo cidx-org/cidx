@@ -1,17 +1,17 @@
 # CIDX Configuration - Advanced
 #
 # Workspace: By default, CIDX uses the current directory as the workspace.
-# All tools will be executed in the directory where you run the command.
+# All containers will be executed in the directory where you run the command.
 
 [security]
-tools = ["trivy", "gitleaks"]
+containers = ["trivy", "gitleaks"]
 
 [code]
-tools = ["prettier", "commitlint"]
+containers = ["prettier", "commitlint"]
 
-[trivy]
+[containers.trivy]
 severity = "HIGH,CRITICAL"
 exit_code = 1
 
-[prettier]
+[containers.prettier]
 write = true

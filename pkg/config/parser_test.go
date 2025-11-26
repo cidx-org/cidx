@@ -13,10 +13,10 @@ func TestLoad_TOML(t *testing.T) {
 
 	configContent := `
 [security]
-tools = ["trivy", "gitleaks"]
+containers = ["trivy", "gitleaks"]
 
 [code]
-tools = ["prettier"]
+containers = ["prettier"]
 
 [trivy]
 severity = "HIGH,CRITICAL"
@@ -33,34 +33,34 @@ exit_code = 1
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	// Verify security phase tools
+	// Verify security phase containers
 	securityPhase, ok := cfg.Phases["security"]
 	if !ok {
 		t.Fatal("Phases[\"security\"] not found")
 	}
-	if len(securityPhase.Tools) != 2 {
-		t.Errorf("security.Tools length = %d, want 2", len(securityPhase.Tools))
+	if len(securityPhase.Containers) != 2 {
+		t.Errorf("security.Containers length = %d, want 2", len(securityPhase.Containers))
 	}
-	if securityPhase.Tools[0] != "trivy" {
-		t.Errorf("security.Tools[0] = %q, want %q", securityPhase.Tools[0], "trivy")
+	if securityPhase.Containers[0] != "trivy" {
+		t.Errorf("security.Containers[0] = %q, want %q", securityPhase.Containers[0], "trivy")
 	}
-	if securityPhase.Tools[1] != "gitleaks" {
-		t.Errorf("security.Tools[1] = %q, want %q", securityPhase.Tools[1], "gitleaks")
+	if securityPhase.Containers[1] != "gitleaks" {
+		t.Errorf("security.Containers[1] = %q, want %q", securityPhase.Containers[1], "gitleaks")
 	}
 
-	// Verify code phase tools
+	// Verify code phase containers
 	codePhase, ok := cfg.Phases["code"]
 	if !ok {
 		t.Fatal("Phases[\"code\"] not found")
 	}
-	if len(codePhase.Tools) != 1 {
-		t.Errorf("code.Tools length = %d, want 1", len(codePhase.Tools))
+	if len(codePhase.Containers) != 1 {
+		t.Errorf("code.Containers length = %d, want 1", len(codePhase.Containers))
 	}
-	if codePhase.Tools[0] != "prettier" {
-		t.Errorf("code.Tools[0] = %q, want %q", codePhase.Tools[0], "prettier")
+	if codePhase.Containers[0] != "prettier" {
+		t.Errorf("code.Containers[0] = %q, want %q", codePhase.Containers[0], "prettier")
 	}
 
-	// Verify tool overrides
+	// Verify container overrides
 	trivyConfig, ok := cfg.Overrides["trivy"]
 	if !ok {
 		t.Fatal("Overrides[\"trivy\"] not found")

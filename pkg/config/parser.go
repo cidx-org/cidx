@@ -130,22 +130,22 @@ func Load(path string) (*Config, error) {
 			continue
 		}
 
-		// Check if this section has a "tools" key → it's a phase
-		if toolsRaw, hasTools := section["tools"]; hasTools {
-			tools := []string{}
-			switch t := toolsRaw.(type) {
+		// Check if this section has a "containers" key → it's a phase
+		if containersRaw, hasContainers := section["containers"]; hasContainers {
+			containers := []string{}
+			switch t := containersRaw.(type) {
 			case []interface{}:
-				for _, tool := range t {
-					if toolStr, ok := tool.(string); ok {
-						tools = append(tools, toolStr)
+				for _, container := range t {
+					if containerStr, ok := container.(string); ok {
+						containers = append(containers, containerStr)
 					}
 				}
 			case []string:
-				tools = t
+				containers = t
 			}
-			cfg.Phases[name] = Phase{Tools: tools}
+			cfg.Phases[name] = Phase{Containers: containers}
 		} else {
-			// It's a tool override
+			// It's a container override
 			cfg.Overrides[name] = section
 		}
 	}
