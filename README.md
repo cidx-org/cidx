@@ -57,6 +57,7 @@ cidx run ci         # Run full CI pipeline
 CIDX itself uses **trunk-based development** with **manual releases**:
 
 ### Daily Development (PRs)
+
 ```bash
 # 1. Create feature branch with draft PR
 cidx action pr create "feat: add new feature"
@@ -73,6 +74,7 @@ cidx action pr merge
 ```
 
 ### Creating Releases
+
 After merging 3-5 PRs to main, create a release:
 
 ```bash
@@ -80,6 +82,7 @@ cidx action release create
 ```
 
 This will:
+
 - Analyze commits since last tag
 - Bump version automatically (PATCH/MINOR/MAJOR)
 - Create and push git tag (e.g., v1.1.1)
@@ -93,6 +96,7 @@ This will:
 ## Contributing
 
 We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for:
+
 - How to submit PRs
 - Commit message conventions
 - Development setup

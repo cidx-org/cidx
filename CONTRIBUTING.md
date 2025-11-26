@@ -32,6 +32,7 @@ cidx action release create
 ```
 
 This automatically:
+
 - Analyzes commits since last tag
 - Bumps version (PATCH/MINOR/MAJOR based on conventional commits)
 - Creates version bump commit
@@ -52,6 +53,7 @@ We use [Conventional Commits](https://www.conventionalcommits.org/):
 ```
 
 **Types:**
+
 - `feat:` - New feature (MINOR version bump)
 - `fix:` - Bug fix (PATCH version bump)
 - `docs:` - Documentation only
