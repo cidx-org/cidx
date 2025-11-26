@@ -47,8 +47,36 @@
 #
 # Tools are organized by phase (security, code, test, build, docker, release).
 # Each phase can contain multiple tools that run sequentially within that phase.
-# CIDX provides built-in presets with sensible defaults - you only need to name
-# the tool and optionally override specific options.
+#
+# 🔑 KEY CONCEPT: Configuration vs Presets
+# ─────────────────────────────────────────────────────────────────────────────
+# When you write: tools = ["gitleaks"]
+#
+# 1. CIDX looks up "gitleaks" in its BUILT-IN PRESETS (embedded in the binary)
+#    - Preset defines: Docker image, command, volumes, env vars, options
+#    - Presets are in: pkg/presets/registry.go (compiled into cidx binary)
+#    - Example preset for gitleaks:
+#      {
+#        Name: "gitleaks",
+#        Image: "ghcr.io/gitleaks/gitleaks:latest",
+#        Command: "detect --source /scan --verbose --no-git",
+#        Volumes: ["${WORKSPACE}:/scan"],
+#        Phase: "security"
+#      }
+#
+# 2. CIDX merges preset with YOUR OVERRIDES (if any)
+#    - You only override what you need (e.g., severity, exit_code)
+#    - Everything else comes from the preset
+#
+# 3. CIDX executes the tool using Docker
+#    - Pulls image (if needed)
+#    - Creates container with preset + override config
+#    - Runs command and streams output
+#
+# Result: You write 1 line, CIDX handles all the Docker complexity.
+#
+# To see available presets:  cidx list
+# To see preset details:     cidx info gitleaks
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Security Phase: Vulnerability scanning and secret detection
@@ -63,7 +91,9 @@ severity = "HIGH,CRITICAL"  # Filter by severity (UNKNOWN,LOW,MEDIUM,HIGH,CRITIC
 exit_code = 0               # Exit code on findings (0 = don't fail build yet, 1 = fail)
 
 # Gitleaks: Scan git history for secrets and credentials
-# Uses CIDX default configuration (no overrides needed)
+# Uses CIDX built-in preset (no overrides needed)
+# Preset provides: image, command, volumes automatically
+# You just enabled it by adding "gitleaks" to the tools list above
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Code Quality Phase: Linting, formatting, and commit validation
@@ -138,6 +168,27 @@ tools = ["gh-release"]  # Create GitHub release with artifacts
 # GitHub Release: Create release from git tag with binaries and changelog
 # Requires GH_TOKEN environment variable
 # Uploads artifacts from build phase to GitHub Releases
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Custom Tools (without preset): Define your own tools
+# ──────────────────────────────────────────────────────────────────────────────
+# If you need a tool that doesn't have a built-in preset, define it manually:
+#
+# [tools.my-custom-scanner]
+# phase = "security"                    # Which phase to run in
+# image = "mycompany/scanner:latest"    # Docker image to use
+# command = "scan --path /workspace"    # Command to execute in container
+# workdir = "/workspace"                # Working directory in container
+# volumes = ["${WORKSPACE}:/workspace"] # Volume mounts
+# env = { API_KEY = "${SCANNER_KEY}" }  # Environment variables
+#
+# Then enable it in a phase:
+# [security]
+# tools = ["trivy", "gitleaks", "my-custom-scanner"]
+#
+# Difference:
+# - Built-in preset (gitleaks):  Just name it, CIDX knows everything else
+# - Custom tool:                 You define image, command, volumes, env yourself
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 🚀 PIPELINES
