@@ -45,6 +45,9 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 		return fmt.Errorf("action '%s' not found in configuration", a.actionName)
 	}
 
+	// DEBUG: Log loaded action config
+	log.Infof("DEBUG: Loaded action - Entrypoint: %v, Command: %s", action.Entrypoint, action.Command)
+
 	log.Infof("🚀 Running action: %s", a.actionName)
 	if action.Description != "" {
 		log.Infof("   %s", action.Description)

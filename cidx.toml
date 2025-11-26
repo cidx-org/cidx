@@ -53,8 +53,7 @@ volumes = [
 [actions.release-create]
 description = "Create new release with version bump"
 image = "commitizen/commitizen:latest"
-entrypoint = ["sh", "-c"]
-command = "git config --global --add safe.directory /app && cz bump --yes --no-verify"
+command = "cz bump --yes --no-verify"
 workdir = "/app"
 volumes = [
     "${WORKSPACE}:/app",
