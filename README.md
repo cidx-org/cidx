@@ -52,6 +52,44 @@ cidx run trivy      # Run just trivy
 cidx run ci         # Run full CI pipeline
 ```
 
+## Development Workflow
+
+CIDX itself uses **trunk-based development** with **manual releases**:
+
+### Daily Development (PRs)
+```bash
+# 1. Create feature branch with draft PR
+cidx action pr create "feat: add new feature"
+
+# 2. Implement and commit
+git commit -m "feat: implement feature"
+git push
+
+# 3. Mark ready for review
+cidx action pr ready
+
+# 4. Merge to main (no tag created)
+cidx action pr merge
+```
+
+### Creating Releases
+After merging 3-5 PRs to main, create a release:
+
+```bash
+cidx action release create
+```
+
+This will:
+- Analyze commits since last tag
+- Bump version automatically (PATCH/MINOR/MAJOR)
+- Create and push git tag (e.g., v1.1.1)
+- Trigger GitHub Release workflow
+- Publish release with binary + Docker image
+
+**Key principle:** Tags = Releases (1:1). PRs don't create tags, releases are manual and group multiple features.
+
+[📚 Full Development Workflow Guide](docs/guides/development-workflow.md)
+
 ## Configuration
 
 Configuration is handled in `cidx.toml`. You define `pipelines` that map to CI/CD events like Pull Requests or Git tags. CIDX automatically detects the context and runs the correct pipeline.

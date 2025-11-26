@@ -1,6 +1,44 @@
-# CIDX Configuration for CIDX itself (dogfooding!)
+# ╔═══════════════════════════════════════════════════════════════════════════╗
+# ║                     CIDX Configuration (Dogfooding!)                      ║
+# ╚═══════════════════════════════════════════════════════════════════════════╝
 #
-# This configuration runs CIDX's own CI/CD pipeline
+# Project Workflow: Trunk-Based Development with Manual Releases
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#
+# 📝 Daily Development (Pull Requests)
+# ────────────────────────────────────────
+#   1. Create feature branch & draft PR:  cidx action pr create "feat: title"
+#   2. Implement feature & commit:        git commit -m "feat: ..." && git push
+#   3. Mark PR ready for review:          cidx action pr ready
+#   4. Merge to main:                     cidx action pr merge
+#   ➡️  Result: Code merged to main, NO TAG created
+#
+# 🚀 Release Workflow (Manual, Grouped PRs)
+# ────────────────────────────────────────
+#   After 3-5 PRs merged to main, create a release:
+#
+#   cidx action release create
+#
+#   ➡️  Result:
+#      - Analyzes commits since last tag
+#      - Bumps version (PATCH/MINOR/MAJOR based on conventional commits)
+#      - Creates version bump commit
+#      - Creates and pushes git tag (e.g., v1.1.1)
+#      - Triggers GitHub Release workflow
+#      - Publishes release with binary + Docker image
+#
+# 📊 Pipeline Strategy
+# ────────────────────────────────────────
+#   • PR pipeline:      security + code + test (no build)
+#   • Main pipeline:    security + code + test + build
+#   • Release pipeline: full pipeline + docker + github release
+#
+# 🎯 Key Principle: Tags = Releases (1:1 mapping)
+# ────────────────────────────────────────
+#   • PRs do NOT create tags
+#   • Releases are triggered MANUALLY via action
+#   • One tag = One release = Grouped set of features/fixes
+#
 # Workspace: Current directory (auto-detected)
 
 # Security: Scan for vulnerabilities and secrets
