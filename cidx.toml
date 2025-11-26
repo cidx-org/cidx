@@ -44,116 +44,245 @@
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 📦 TOOLS CONFIGURATION
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#
+# Tools are organized by phase (security, code, test, build, docker, release).
+# Each phase can contain multiple tools that run sequentially within that phase.
+# CIDX provides built-in presets with sensible defaults - you only need to name
+# the tool and optionally override specific options.
 
-# Security Phase: Scan for vulnerabilities and secrets
+# ──────────────────────────────────────────────────────────────────────────────
+# Security Phase: Vulnerability scanning and secret detection
+# ──────────────────────────────────────────────────────────────────────────────
 [security]
-tools = ["trivy", "gitleaks"]
+tools = ["trivy", "gitleaks"]  # List of security tools to run in this phase
 
+# Trivy: Container and filesystem vulnerability scanner
+# Override: Only report HIGH and CRITICAL vulnerabilities
 [tools.trivy]
-severity = "HIGH,CRITICAL"
-exit_code = 0  # Don't fail on vulnerabilities (yet)
+severity = "HIGH,CRITICAL"  # Filter by severity (UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL)
+exit_code = 0               # Exit code on findings (0 = don't fail build yet, 1 = fail)
 
-# Gitleaks uses default configuration
+# Gitleaks: Scan git history for secrets and credentials
+# Uses CIDX default configuration (no overrides needed)
 
-# Code Quality Phase: Linting and formatting
+# ──────────────────────────────────────────────────────────────────────────────
+# Code Quality Phase: Linting, formatting, and commit validation
+# ──────────────────────────────────────────────────────────────────────────────
 [code]
-tools = ["prettier", "golangci-lint", "commitizen"]
+tools = ["prettier", "golangci-lint", "commitizen"]  # Code quality tools
 
+# Prettier: Auto-format code (Markdown, YAML, JSON, etc.)
 [tools.prettier]
-write = true
+write = true  # Auto-fix formatting issues (true = write changes, false = check only)
 
-# Testing Phase: Run Go tests
+# GolangCI-Lint: Go linter aggregator
+# Uses CIDX default configuration (.golangci.yml in project root)
+
+# Commitizen: Validate commit messages follow conventional commits
+# Configuration in .cz.toml (version management, changelog)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Testing Phase: Unit tests, integration tests, BDD scenarios
+# ──────────────────────────────────────────────────────────────────────────────
 [test]
-tools = ["go-test"]
+tools = ["go-test"]  # Run Go unit tests with coverage
 # TODO: Re-enable godog when all BDD scenarios are implemented
-# tools = ["go-test", "godog"]
+# tools = ["go-test", "godog"]  # Add BDD testing with Godog
 
-# Build Phase: Compile the binary
-# Version is automatically injected from VERSION file
+# Go Test: Run tests with race detection and coverage
+# Uses CIDX default configuration (./... with -race -cover flags)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Build Phase: Compile binaries and package artifacts
+# ──────────────────────────────────────────────────────────────────────────────
 [build]
-tools = ["go-build"]
+tools = ["go-build"]  # Compile Go binary
 
-# Docker Phase: Build and push container images
+# Go Build: Compile binary with version injection
+# Automatically injects version from VERSION file via -ldflags
+# Output: bin/cidx
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Docker Phase: Container image build and push
+# ──────────────────────────────────────────────────────────────────────────────
 [docker]
-tools = ["kaniko"]
+tools = ["kaniko"]  # Build and push Docker images without Docker daemon
 
-# Version Phase: Bump version with commitizen (unused, use action instead)
+# Kaniko: Build container images in CI/CD without privileged mode
+# Reads Dockerfile, builds image, pushes to registry (GHCR)
+# Configuration: Uses default Dockerfile in project root
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Version Phase: Semantic versioning and changelog (deprecated)
+# ──────────────────────────────────────────────────────────────────────────────
+# NOTE: This phase is unused. Use action 'release-create' instead for version bumping.
 [version]
 tools = ["version-bump"]
 
 [tools.version-bump]
-phase = "version"
-image = "commitizen/commitizen:latest"
-command = "cz bump --yes"
-workdir = "/app"
-volumes = [
-    "${WORKSPACE}:/app",
-    "${WORKSPACE}/.git:/app/.git",
+phase = "version"                           # Custom phase for version management
+image = "commitizen/commitizen:latest"      # Docker image for commitizen tool
+command = "cz bump --yes"                   # Command to run (auto-approve version bump)
+workdir = "/app"                            # Working directory inside container
+volumes = [                                 # Mount workspace and git history
+    "${WORKSPACE}:/app",                    # Project files
+    "${WORKSPACE}/.git:/app/.git",          # Git repository (needed for version bump)
 ]
 
-# Release Phase: Create GitHub releases
+# ──────────────────────────────────────────────────────────────────────────────
+# Release Phase: GitHub release creation
+# ──────────────────────────────────────────────────────────────────────────────
 [release]
-tools = ["gh-release"]
+tools = ["gh-release"]  # Create GitHub release with artifacts
+
+# GitHub Release: Create release from git tag with binaries and changelog
+# Requires GH_TOKEN environment variable
+# Uploads artifacts from build phase to GitHub Releases
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 🚀 PIPELINES
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#
+# Pipelines define sequences of phases to execute, mirroring your CI/CD workflows
+# (GitHub Actions, GitLab CI, Jenkins, etc.). Each pipeline maps to a specific
+# CI/CD event or local workflow.
+#
+# Purpose: Run the SAME checks locally that will run in your CI/CD platform.
+# This ensures "what works locally, works in CI" and catches issues early.
+#
+# Usage:
+#   cidx run <pipeline-name>      # Run locally to simulate CI/CD
+#   cidx run ci                   # Simulate GitHub Actions CI workflow
+#   cidx run --dry-run release    # Preview what would run in release pipeline
+#
+# In CI/CD platforms, these pipelines are triggered automatically:
+#   - GitHub Actions: .github/workflows/ci.yml calls "cidx run ci"
+#   - GitLab CI: .gitlab-ci.yml stages map to pipelines
+#   - Jenkins: Jenkinsfile stages execute cidx pipelines
 
-# CI: Continuous Integration (every commit)
+# ──────────────────────────────────────────────────────────────────────────────
+# CI Pipeline: Continuous Integration (runs on every commit)
+# ──────────────────────────────────────────────────────────────────────────────
+# Maps to: .github/workflows/ci.yml
+# Trigger: Every push to any branch
+# Purpose: Validate code quality and functionality before merge
 [pipelines.ci]
-phases = ["security", "code", "test", "build"]
+phases = ["security", "code", "test", "build"]  # Full validation + build binary
 description = "Full CI pipeline for all commits"
 
-# PR: Pull Request validation
+# ──────────────────────────────────────────────────────────────────────────────
+# PR Pipeline: Pull Request validation (lighter than CI)
+# ──────────────────────────────────────────────────────────────────────────────
+# Maps to: .github/workflows/pr.yml (or ci.yml with conditional steps)
+# Trigger: Pull request opened/updated
+# Purpose: Fast feedback on PRs without building artifacts
 [pipelines.pr]
-phases = ["security", "code", "test"]
+phases = ["security", "code", "test"]  # Validation only, no build (faster)
 description = "Pull request validation (no build artifacts)"
 
-# Main: Main branch pipeline
+# ──────────────────────────────────────────────────────────────────────────────
+# Main Pipeline: Main branch post-merge checks
+# ──────────────────────────────────────────────────────────────────────────────
+# Maps to: .github/workflows/ci.yml (when merged to main)
+# Trigger: Push to main branch after PR merge
+# Purpose: Final validation and build artifacts for main branch
 [pipelines.main]
-phases = ["security", "code", "test", "build"]
+phases = ["security", "code", "test", "build"]  # Same as CI (builds artifacts)
 description = "Main branch pipeline (builds artifacts)"
 
-# Release: Full release pipeline (tags only)
+# ──────────────────────────────────────────────────────────────────────────────
+# Release Pipeline: Full release workflow (triggered by git tags)
+# ──────────────────────────────────────────────────────────────────────────────
+# Maps to: .github/workflows/release.yml
+# Trigger: Git tag pushed (e.g., v1.2.3)
+# Purpose: Full validation + build + publish release artifacts
 [pipelines.release]
-phases = ["security", "code", "test", "build", "release", "docker"]
+phases = ["security", "code", "test", "build", "release", "docker"]  # Complete workflow
 description = "Complete release pipeline (CI only)"
 
-# Publish: Continuous Deployment
+# ──────────────────────────────────────────────────────────────────────────────
+# Publish Pipeline: Artifact publishing only (part of release workflow)
+# ──────────────────────────────────────────────────────────────────────────────
+# Maps to: Final steps in .github/workflows/release.yml
+# Trigger: After successful release pipeline
+# Purpose: Publish binaries and Docker images to registries
 [pipelines.publish]
-phases = ["release", "docker"]
+phases = ["release", "docker"]  # Just publishing steps
 description = "Publish artifacts to registries (GitHub Releases + GHCR)"
 
-# Quick: Fast validation
+# ──────────────────────────────────────────────────────────────────────────────
+# Quick Pipeline: Fast local validation (development)
+# ──────────────────────────────────────────────────────────────────────────────
+# Maps to: Local development workflow (no CI/CD equivalent)
+# Trigger: Manual, during development (cidx run quick)
+# Purpose: Fast feedback while coding (skip slow security/test phases)
 [pipelines.quick]
-phases = ["code"]
+phases = ["code"]  # Just linting and formatting
 description = "Quick code quality check"
 
-# Pre-push: Local pre-push validation
+# ──────────────────────────────────────────────────────────────────────────────
+# Pre-push Pipeline: Local pre-push git hook
+# ──────────────────────────────────────────────────────────────────────────────
+# Maps to: .git/hooks/pre-push (local git hook)
+# Trigger: Before git push (via git hook)
+# Purpose: Prevent pushing broken code (runs locally before push)
 [pipelines.pre-push]
-phases = ["security", "code", "test"]
+phases = ["security", "code", "test"]  # Everything except build
 description = "Local validation before pushing"
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # ⚡ ACTIONS
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#
+# Actions are automated workflows that go beyond simple tool execution.
+# They orchestrate complex multi-step processes (version bumping, PR management, etc.).
+#
+# Unlike pipelines (which run tools), actions interact with external systems:
+#   - Git operations (commit, tag, push)
+#   - GitHub API (create PRs, releases)
+#   - Workflow orchestration (trigger CI/CD pipelines)
+#
+# Usage:
+#   cidx action <action-name>         # Execute an action
+#   cidx action pr create "feat: ..."  # Create PR with draft
+#   cidx action release create        # Bump version and create release
 
-# Release Create: Automated version bump and release
+# ──────────────────────────────────────────────────────────────────────────────
+# Release Create Action: Automated semantic versioning and release
+# ──────────────────────────────────────────────────────────────────────────────
+# Purpose: Analyze commits, bump version, create tag, trigger release workflow
+# Workflow:
+#   1. Analyze commits since last tag (using conventional commits)
+#   2. Determine version bump (PATCH/MINOR/MAJOR)
+#   3. Update VERSION and .cz.toml files
+#   4. Create version bump commit
+#   5. Create and push git tag (e.g., v1.2.3)
+#   6. Trigger GitHub Release workflow
+#   7. Watch workflow execution
+#
+# Usage: cidx action release create
 [actions.release-create]
-description = "Create new release with version bump"
-image = "commitizen/commitizen:latest"
-command = "bump --yes --no-verify"
-workdir = "/app"
-volumes = [
-    "${WORKSPACE}:/app",
-    "${WORKSPACE}/.git:/app/.git",
-]
-auto_push = true
-push_tags = true
-watch_workflow = true
+description = "Create new release with version bump"  # Action description
 
+# Container configuration for commitizen
+image = "commitizen/commitizen:latest"  # Docker image with commitizen tool
+command = "bump --yes --no-verify"      # Auto-approve bump, skip git hooks
+workdir = "/app"                        # Working directory in container
+
+# Volume mounts: Share workspace and git history with container
+volumes = [
+    "${WORKSPACE}:/app",           # Project files (for VERSION, .cz.toml updates)
+    "${WORKSPACE}/.git:/app/.git", # Git repository (for commit, tag creation)
+]
+
+# Automation flags: What to do after version bump
+auto_push = true       # Automatically push version bump commit to remote
+push_tags = true       # Automatically push git tag to remote (triggers release workflow)
+watch_workflow = true  # Watch GitHub Actions workflow execution after push
+
+# Git configuration: Allow container to access git repository
 [actions.release-create.env]
-GIT_CONFIG_GLOBAL = "/tmp/.gitconfig"
-GIT_CONFIG_COUNT = "1"
-GIT_CONFIG_KEY_0 = "safe.directory"
-GIT_CONFIG_VALUE_0 = "/app"
+GIT_CONFIG_GLOBAL = "/tmp/.gitconfig"  # Custom git config location
+GIT_CONFIG_COUNT = "1"                 # Number of git config entries
+GIT_CONFIG_KEY_0 = "safe.directory"    # Config key: mark directory as safe
+GIT_CONFIG_VALUE_0 = "/app"            # Config value: allow access to /app
