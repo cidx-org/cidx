@@ -90,6 +90,14 @@ This will:
 
 [📚 Full Development Workflow Guide](docs/guides/development-workflow.md)
 
+## Contributing
+
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for:
+- How to submit PRs
+- Commit message conventions
+- Development setup
+- Testing guidelines
+
 ## Configuration
 
 Configuration is handled in `cidx.toml`. You define `pipelines` that map to CI/CD events like Pull Requests or Git tags. CIDX automatically detects the context and runs the correct pipeline.
