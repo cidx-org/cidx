@@ -1,8 +1,41 @@
-# CIDX Tool Presets
-# This file defines all built-in tool configurations
-# Edit this file during development - changes are picked up immediately with 'go run'
-# During build, this file is embedded into the binary
+# ╔═══════════════════════════════════════════════════════════════════════════╗
+# ║                        CIDX Built-in Tool Presets                         ║
+# ╚═══════════════════════════════════════════════════════════════════════════╝
+#
+# This file defines all built-in tool configurations embedded into cidx binary.
+#
+# 🐳 PHILOSOPHY: Container-First Approach
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# CIDX maximizes use of dedicated Docker containers for each tool.
+#
+# Why containers?
+# - ✅ Consistent execution (same behavior locally and in CI/CD)
+# - ✅ No local installation required (just Docker)
+# - ✅ Version pinning (specify exact tool version via image tags)
+# - ✅ Isolation (no conflicts between tool dependencies)
+# - ✅ Reproducibility (same results everywhere, every time)
+#
+# Preset Philosophy:
+# - Prefer official Docker images (e.g., commitlint/commitlint)
+# - Use vendor-maintained images when official isn't available
+# - Avoid multi-step installations (npm install, apt-get, etc.)
+# - Container should be ready-to-run with minimal setup
+#
+# Development:
+# - Edit this file → Changes picked up with 'go run ./cmd/cidx'
+# - Build → This file embedded into binary via go:embed
+#
+# Structure:
+# - [presets.tool-name]       : Main configuration
+# - [presets.tool-name.env]   : Environment variables
+# - [presets.tool-name.options.X] : Configurable options
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# CODE QUALITY PHASE - Linting, formatting, and style enforcement
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Prettier: Auto-format code (JS, TS, JSON, YAML, Markdown, etc.)
+# Official image: tmknom/prettier (community-maintained, widely used)
 [presets.prettier]
 name = "prettier"
 phase = "code"
@@ -23,6 +56,13 @@ default = false
 description = "Write formatted files (instead of check)"
 command_flag = "--write"
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# SECURITY PHASE - Vulnerability scanning and secret detection
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Trivy: Container and filesystem vulnerability scanner
+# Official image: aquasec/trivy (maintained by Aqua Security)
+# Scans: dependencies, OS packages, misconfigurations, secrets
 [presets.trivy]
 name = "trivy"
 phase = "security"
@@ -46,6 +86,9 @@ default = 0
 description = "Exit code when vulnerabilities are found"
 command_flag = "--exit-code"
 
+# Gitleaks: Scan git history for secrets and credentials
+# Official image: zricethezav/gitleaks (maintained by Gitleaks author)
+# Detects: API keys, passwords, tokens in git history
 [presets.gitleaks]
 name = "gitleaks"
 phase = "security"
@@ -55,11 +98,15 @@ workdir = "/repo"
 volumes = ["${WORKSPACE}:/repo"]
 config_files = [".gitleaks.toml"]
 
+# Commitlint: Validate commit messages follow conventional commits
+# Official image: commitlint/commitlint (official Docker image)
+# ✅ Container-first: No npm install needed, image is ready-to-run
+# Validates: commit message format (feat:, fix:, docs:, etc.)
 [presets.commitlint]
 name = "commitlint"
 phase = "code"
-image = "node:20-alpine"
-command = "sh -c 'npm install -g @commitlint/cli @commitlint/config-conventional && commitlint --from ${FROM} --to ${TO}'"
+image = "commitlint/commitlint:latest"
+command = "commitlint --from ${FROM} --to ${TO}"
 workdir = "/app"
 volumes = [
     "${WORKSPACE}:/app",
@@ -68,13 +115,19 @@ volumes = [
 config_files = [
     ".commitlintrc.json",
     ".commitlintrc.yml",
+    ".commitlintrc.yaml",
     "commitlint.config.js",
+    "commitlint.config.cjs",
 ]
 
 [presets.commitlint.env]
 FROM = "origin/main"
 TO = "HEAD"
 
+# Commitizen: Validate commit messages and manage version bumping
+# Official image: commitizen/commitizen (official Docker image)
+# ✅ Container-first: Ready-to-run, no pip install needed
+# Features: Validates commits, bumps versions, generates changelog
 [presets.commitizen]
 name = "commitizen"
 phase = "code"
@@ -144,6 +197,14 @@ command = "echo 'Hot reload works!'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# GO TOOLS - Linting, testing, and building Go projects
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# GolangCI-Lint: Fast Go linters aggregator
+# Official image: golangci/golangci-lint (maintained by golangci-lint team)
+# ✅ Container-first: Pre-configured with 50+ linters
+# Runs: staticcheck, govet, errcheck, gosec, and many more
 [presets.golangci-lint]
 name = "golangci-lint"
 phase = "code"
@@ -185,6 +246,10 @@ command = "gofmt -l ."
 workdir = "/app"
 volumes = ["${WORKSPACE}:/app"]
 
+# Go Test: Run Go unit and integration tests
+# Official image: golang:alpine (official Go Docker image)
+# ✅ Container-first: Full Go toolchain included
+# Features: Run tests with coverage, race detection, benchmarks
 [presets.go-test]
 name = "go-test"
 phase = "test"
@@ -232,6 +297,10 @@ default = ""
 description = "Tags to filter scenarios (@wip, @smoke, etc.)"
 command_flag = "-tags"
 
+# Go Build: Compile Go binary with version injection
+# Official image: golang:alpine (official Go Docker image)
+# ✅ Container-first: Full Go compiler toolchain
+# Features: Version injection from VERSION file, custom ldflags
 [presets.go-build]
 name = "go-build"
 phase = "build"
