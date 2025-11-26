@@ -82,6 +82,9 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 	if a.dryRun {
 		log.Info("🏁 Dry-run mode: would execute action container")
 		log.Infof("   Image: %s", action.Image)
+		if len(action.Entrypoint) > 0 {
+			log.Infof("   Entrypoint: %v", action.Entrypoint)
+		}
 		log.Infof("   Command: %s", action.Command)
 		log.Info("   This would:")
 		log.Info("   - Analyze conventional commits since last tag")
