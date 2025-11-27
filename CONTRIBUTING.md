@@ -46,7 +46,7 @@ This automatically:
 
 We use [Conventional Commits](https://www.conventionalcommits.org/):
 
-```
+```text
 <type>: <description>
 
 [optional body]
@@ -106,7 +106,7 @@ go test ./...
 
 ## 🎯 Project Structure
 
-```
+```text
 cidx/
 ├── cmd/cidx/          # CLI commands
 ├── pkg/
