@@ -52,6 +52,14 @@ cidx run trivy      # Run just trivy
 cidx run ci         # Run full CI pipeline
 ```
 
+Validate workflow consistency:
+
+```bash
+cidx check workflow  # Ensure pipelines match GitHub Actions
+```
+
+This validates that your local `cidx.toml` pipelines are in sync with your GitHub Actions workflows, preventing configuration drift between local and CI environments.
+
 ## Development Workflow
 
 CIDX itself uses **trunk-based development** with **manual releases**:

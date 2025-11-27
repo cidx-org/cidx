@@ -22,6 +22,7 @@ func main() {
 			validateCommand(),
 			initCommand(),
 			actionCommand(),
+			checkCommand,
 		},
 		Flags: []cli.Flag{
 			&cli.StringFlag{
