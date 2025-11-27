@@ -20,13 +20,13 @@ Welcome to the CIDX (CI with Declarative eXecution) documentation.
 ### 📖 Guides
 
 - [Development Workflow](guides/development-workflow.md) - Trunk-based development with PRs and releases
-- [Creating Presets](guides/creating-presets.md) - How to add new tools to CIDX
+- [Creating Presets](guides/creating-presets.md) - How to add new containers to CIDX
 - [CI/CD Integration](guides/ci-integration.md) - Setting up GitHub Actions, GitLab CI, etc.
 
 ### 🔧 Reference
 
 - [CLI Reference](reference/cli.md) - Command line interface documentation
-- [Tools Registry](reference/tools.md) - List of all available tool presets
+- [Containers Registry](reference/tools.md) - List of all available container presets
 
 ## 🤝 Contributing
 

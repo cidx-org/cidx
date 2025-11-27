@@ -13,7 +13,7 @@ cidx init --format yaml  # Not yet implemented, defaults to toml
 
 ### `cidx run`
 
-Execute a tool, pipeline, or phase.
+Execute a container, pipeline, or phase.
 
 ```bash
 cidx run <name> [flags]
@@ -21,7 +21,7 @@ cidx run <name> [flags]
 
 **Arguments:**
 
-- `<name>`: Name of a tool (e.g., `trivy`), pipeline (e.g., `ci`), or phase (e.g., `security`).
+- `<name>`: Name of a container (e.g., `trivy`), pipeline (e.g., `ci`), or phase (e.g., `security`).
 
 **Flags:**
 
@@ -29,7 +29,7 @@ cidx run <name> [flags]
 
 ### `cidx list`
 
-List all available tools and pipelines.
+List all available containers and pipelines.
 
 ```bash
 cidx list
@@ -37,10 +37,10 @@ cidx list
 
 ### `cidx info`
 
-Show detailed information about a specific tool.
+Show detailed information about a specific container.
 
 ```bash
-cidx info <tool>
+cidx info <container>
 ```
 
 ### `cidx validate`

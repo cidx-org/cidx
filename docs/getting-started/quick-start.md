@@ -77,7 +77,7 @@ See what would be executed without actually running containers.
 ### 6. Run Tools
 
 ```bash
-# Run a single tool
+# Run a single container
 ./bin/cidx run trivy
 
 # Run a pipeline
@@ -170,9 +170,9 @@ List all available presets:
 cidx list
 ```
 
-#### `cidx info <tool>`
+#### `cidx info <container>`
 
-Show detailed information about a tool:
+Show detailed information about a container:
 
 ```bash
 cidx info trivy
@@ -190,10 +190,10 @@ cidx -c path/to/cidx.toml validate
 
 #### `cidx run <target>`
 
-Run a tool or pipeline:
+Run a container or pipeline:
 
 ```bash
-cidx run trivy           # Run single tool
+cidx run trivy           # Run single container
 cidx run ci              # Run pipeline
 cidx run --dry-run ci    # Dry-run (don't execute)
 ```
@@ -358,7 +358,7 @@ Solution: Run `cidx init` or specify config path with `-c`.
 
 ### "preset not found"
 
-Check tool name with `cidx list`. Names are lowercase with hyphens (e.g., `ansible-lint`).
+Check container name with `cidx list`. Names are lowercase with hyphens (e.g., `ansible-lint`).
 
 ### "Docker daemon not running"
 
@@ -370,10 +370,10 @@ docker ps
 
 ### Tool fails to execute
 
-1. Check tool is in enabled list
+1. Check container is in enabled list
 2. Validate config: `cidx validate`
-3. Dry-run to see command: `cidx run --dry-run <tool>`
-4. Run with verbose: `cidx --verbose run <tool>`
+3. Dry-run to see command: `cidx run --dry-run <container>`
+4. Run with verbose: `cidx --verbose run <container>`
 
 ## Next Steps
 
@@ -385,7 +385,7 @@ docker ps
 
 ## Getting Help
 
-- View tool details: `cidx info <tool>`
+- View container details: `cidx info <container>`
 - Check command help: `cidx help <command>`
 - Validate config: `cidx validate`
 - Dry-run first: `cidx run --dry-run <target>`

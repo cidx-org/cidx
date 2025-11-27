@@ -6,7 +6,7 @@ This document explains how CIDX integrates into standard DevOps workflows and pr
 
 The **DevOps loop** is a **logical representation** of the software lifecycle, not a strict linear process. It helps conceptualize the continuous flow from planning to monitoring and back to planning.
 
-**CIDX scope**: CIDX is a **CI/CD automation tool** that covers the technical pipeline from code to deployment. It does **NOT** cover:
+**CIDX scope**: CIDX is a **CI/CD automation platform** that covers the technical pipeline from code to deployment. It does **NOT** cover:
 
 - **PLAN** → Product management tools (Jira, Linear, roadmaps)
 - **OPERATE** → Production operations (Kubernetes, orchestration)

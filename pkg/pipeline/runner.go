@@ -119,20 +119,20 @@ func (r *Runner) RunAll(ctx context.Context) error {
 	return nil
 }
 
-// RunPhase executes all tools in a phase
+// RunPhase executes all containers in a phase
 func (r *Runner) RunPhase(ctx context.Context, phaseName string, phase config.Phase) error {
 	r.logger.Infof("========================================")
 	r.logger.Infof("▶ PHASE: %s", strings.ToUpper(phaseName))
 	r.logger.Infof("========================================")
 
-	if len(phase.Tools) == 0 {
-		r.logger.Warnf("No tools in phase: %s", phaseName)
+	if len(phase.Containers) == 0 {
+		r.logger.Warnf("No containers in phase: %s", phaseName)
 		return nil
 	}
 
-	for _, toolName := range phase.Tools {
-		if err := r.RunTool(ctx, toolName); err != nil {
-			return fmt.Errorf("tool %s failed: %w", toolName, err)
+	for _, containerName := range phase.Containers {
+		if err := r.RunTool(ctx, containerName); err != nil {
+			return fmt.Errorf("container %s failed: %w", containerName, err)
 		}
 	}
 
@@ -174,8 +174,8 @@ func (r *Runner) RunTool(ctx context.Context, toolName string) error {
 	// Expand ${WORKSPACE} in volumes
 	volumes := r.expandWorkspace(mergedPreset.Volumes)
 
-	// Convert to ToolConfig
-	toolConfig := &config.ToolConfig{
+	// Convert to ContainerConfig
+	containerConfig := &config.ContainerConfig{
 		Name:        mergedPreset.Name,
 		Phase:       mergedPreset.Phase,
 		Image:       mergedPreset.Image,
@@ -189,12 +189,12 @@ func (r *Runner) RunTool(ctx context.Context, toolName string) error {
 
 	// If execution mode forces dry-run (local safety), show what would be done
 	if execMode.IsDryRun {
-		r.printLocalSafetyDryRun(toolConfig)
+		r.printLocalSafetyDryRun(containerConfig)
 		return nil
 	}
 
 	// Execute
-	return r.executor.Run(ctx, toolConfig)
+	return r.executor.Run(ctx, containerConfig)
 }
 
 // expandWorkspace replaces ${WORKSPACE} with the actual workspace path
@@ -211,25 +211,25 @@ func (r *Runner) expandWorkspace(volumes []string) []string {
 }
 
 // printLocalSafetyDryRun shows what would be executed in local safety mode
-func (r *Runner) printLocalSafetyDryRun(toolConfig *config.ToolConfig) {
+func (r *Runner) printLocalSafetyDryRun(containerConfig *config.ContainerConfig) {
 	r.logger.Infof("  ⚠️  Would execute (local safety - not running):")
-	r.logger.Infof("     Image: %s", toolConfig.Image)
-	r.logger.Infof("     Command: %s", toolConfig.Command)
-	r.logger.Infof("     Workdir: %s", toolConfig.Workdir)
+	r.logger.Infof("     Image: %s", containerConfig.Image)
+	r.logger.Infof("     Command: %s", containerConfig.Command)
+	r.logger.Infof("     Workdir: %s", containerConfig.Workdir)
 
-	if len(toolConfig.Volumes) > 0 {
+	if len(containerConfig.Volumes) > 0 {
 		r.logger.Infof("     Volumes:")
-		for _, vol := range toolConfig.Volumes {
+		for _, vol := range containerConfig.Volumes {
 			r.logger.Infof("       - %s", vol)
 		}
 	}
 
-	if len(toolConfig.Env) > 0 {
+	if len(containerConfig.Env) > 0 {
 		r.logger.Infof("     Environment:")
-		for k, v := range toolConfig.Env {
+		for k, v := range containerConfig.Env {
 			r.logger.Infof("       %s=%s", k, v)
 		}
 	}
 
-	r.logger.Infof("  ✓ %s (dry-run - local safety)", toolConfig.Name)
+	r.logger.Infof("  ✓ %s (dry-run - local safety)", containerConfig.Name)
 }

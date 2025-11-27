@@ -6,19 +6,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **CIDX** (CI with Declarative eXecution) is a Go-based CLI tool for running DevSecOps pipelines with ultra-declarative configuration following **Convention over Configuration** principles.
 
-**Core Philosophy**: Users declare tool names only. CIDX has built-in presets that automatically know Docker images, volumes, commands, environment variables, and configuration files for each tool.
+**Core Philosophy**: Users declare container names only. CIDX has built-in presets that automatically know Docker images, volumes, commands, environment variables, and configuration files for each container.
 
 ## Key Concepts
 
 ### Convention over Configuration
 
-- Users enable tools by name: `enabled = ["trivy", "megalinter"]`
+- Users enable containers by name: `containers = ["trivy", "megalinter"]`
 - CIDX provides complete presets with sensible defaults
 - Overrides are optional and minimal (10% of cases)
 
 ### Architecture Layers
 
-1. **Presets Registry** (`pkg/presets/`) - Built-in tool configurations
+1. **Presets Registry** (`pkg/presets/`) - Built-in container configurations
 2. **Config Parser** (`pkg/config/`) - TOML parsing and validation
 3. **Docker Executor** (`pkg/executor/`) - Container execution via Docker SDK
 4. **Pipeline Runner** (`pkg/pipeline/`) - Phase-based orchestration
@@ -44,8 +44,8 @@ go test -cover ./...                  # With coverage
 ### Running Locally
 
 ```bash
-go run ./cmd/cidx list                # List available tools
-go run ./cmd/cidx info trivy          # Show tool information
+go run ./cmd/cidx list                # List available containers
+go run ./cmd/cidx info trivy          # Show container information
 go run ./cmd/cidx validate            # Validate config
 go run ./cmd/cidx run --dry-run ci    # Dry-run a pipeline
 ```
@@ -76,7 +76,7 @@ pkg/
 │   ├── types.go        # Preset and Option structures
 │   └── registry.go     # GlobalRegistry with built-in presets
 ├── config/
-│   ├── types.go        # Config, Tools, Pipeline structures
+│   ├── types.go        # Config, Containers, Pipeline structures
 │   ├── parser.go       # TOML loading and env expansion
 │   └── validator.go    # Configuration validation
 ├── executor/
@@ -86,7 +86,7 @@ pkg/
 
 cmd/cidx/
 ├── main.go             # CLI app entry point
-├── run.go              # Run tool or pipeline
+├── run.go              # Run container or pipeline
 ├── list.go             # List available presets
 ├── info.go             # Show preset details
 ├── validate.go         # Validate configuration
@@ -96,27 +96,27 @@ cmd/cidx/
 ### Data Flow
 
 1. **Config Load**: `config.Load()` → Parse TOML → Expand env vars
-2. **Preset Merge**: For each enabled tool:
-   - `presets.Get(toolName)` → Load preset from registry
+2. **Preset Merge**: For each enabled container:
+   - `presets.Get(containerName)` → Load preset from registry
    - `preset.MergeWith(overrides)` → Apply user overrides
-   - Convert to `config.ToolConfig`
+   - Convert to `config.ContainerConfig`
 3. **Execution**:
    - `executor.Run()` → Pull image → Create container → Stream logs
-   - `pipeline.RunPhase()` → Execute all tools in phase
+   - `pipeline.RunPhase()` → Execute all containers in phase
    - `pipeline.RunPipeline()` → Execute phases in sequence
 
 ### Key Abstractions
 
 #### Preset
 
-Complete tool definition with defaults:
+Complete container definition with defaults:
 
 - Docker image, command, workdir
 - Volume mounts, environment variables
 - Configurable options with type safety
 - Config file auto-detection
 
-#### ToolConfig
+#### ContainerConfig
 
 Runtime-resolved configuration after merging preset + overrides:
 
@@ -129,18 +129,18 @@ Runtime-resolved configuration after merging preset + overrides:
 Sequence of phases to execute:
 
 - `phases = ["security", "code", "test"]`
-- Tools grouped by phase
+- Containers grouped by phase
 - Sequential execution within phases
 
 ## Adding New Presets
 
-When adding a new tool preset to `pkg/presets/registry.go`:
+When adding a new container preset to `pkg/presets/registry.go`:
 
 ### Required Fields
 
 ```go
-"toolname": {
-    Name:    "toolname",           // Tool identifier
+"containername": {
+    Name:    "containername",      // Container identifier
     Phase:   "security",           // security, code, test, build
     Image:   "org/image:tag",      // Official Docker image
     Command: "tool scan .",        // Default command
@@ -176,7 +176,7 @@ Options: map[string]Option{        // Configurable options
 1. **Use official images**: Prefer official registry images
 2. **Sensible defaults**: Config should work without overrides
 3. **Document options**: Clear descriptions for all options
-4. **Test locally**: Verify with `cidx run <tool> --dry-run`
+4. **Test locally**: Verify with `cidx run <container> --dry-run`
 5. **Config detection**: List common config file names
 
 ## Configuration Patterns
@@ -184,8 +184,8 @@ Options: map[string]Option{        // Configurable options
 ### Minimal (Recommended)
 
 ```toml
-[tools]
-enabled = ["trivy", "megalinter", "gitleaks"]
+[security]
+containers = ["trivy", "megalinter", "gitleaks"]
 
 [pipelines.ci]
 phases = ["security", "code"]
@@ -194,18 +194,18 @@ phases = ["security", "code"]
 ### With Overrides
 
 ```toml
-[tools]
-enabled = ["trivy"]
+[security]
+containers = ["trivy"]
 
-[tools.trivy]
+[containers.trivy]
 severity = "HIGH,CRITICAL"
 exit_code = 1
 ```
 
-### Custom Tool
+### Custom Container
 
 ```toml
-[tools.custom-scanner]
+[containers.custom-scanner]
 phase = "security"
 image = "myorg/scanner:latest"
 command = "scan ."
@@ -229,7 +229,7 @@ volumes = ["${WORKSPACE}:/scan"]
 ### 3. Simplicity over Features
 
 - Single config file (TOML or YAML)
-- Tool names are the only required input
+- Container names are the only required input
 - Advanced features available but hidden by default
 
 ### 4. Explicit over Magic
@@ -240,25 +240,25 @@ volumes = ["${WORKSPACE}:/scan"]
 
 ## Common Development Tasks
 
-### Adding a Security Tool
+### Adding a Security Container
 
 1. Research official Docker image
 2. Identify required volumes (usually workspace only)
 3. Determine default command
 4. Add to `pkg/presets/registry.go` under `Phase: "security"`
-5. Test: `cidx info newtool && cidx run newtool --dry-run`
+5. Test: `cidx info newcontainer && cidx run newcontainer --dry-run`
 
-### Adding a Code Quality Tool
+### Adding a Code Quality Container
 
 1. Find official image (often language-specific)
 2. Check for config file conventions
 3. Set phase to `"code"`
-4. Add `ConfigFiles` slice if tool uses config files
+4. Add `ConfigFiles` slice if container uses config files
 5. Document in README preset section
 
 ### Extending Options System
 
-When a tool needs runtime configuration:
+When a container needs runtime configuration:
 
 1. Add `Options` map to preset
 2. Define option type, default, description
@@ -272,10 +272,10 @@ When a tool needs runtime configuration:
 go test ./pkg/presets -v
 
 # Integration test with dry-run
-cidx run <tool> --dry-run
+cidx run <container> --dry-run
 
 # Full validation
-cidx validate && cidx list && cidx info <tool>
+cidx validate && cidx list && cidx info <container>
 ```
 
 ## Code Style Guidelines
@@ -283,7 +283,7 @@ cidx validate && cidx list && cidx info <tool>
 ### Naming
 
 - Presets: lowercase, hyphen-separated (`"ansible-lint"`)
-- Go types: PascalCase (`Preset`, `ToolConfig`)
+- Go types: PascalCase (`Preset`, `ContainerConfig`)
 - Functions: camelCase (`mergeWith`, `expandVolumes`)
 - Files: lowercase with underscores (`registry.go`, `docker.go`)
 
@@ -312,12 +312,12 @@ cidx validate && cidx list && cidx info <tool>
 
 When implementing these features, maintain core simplicity:
 
-1. **Auto-detection**: Detect project type, suggest tools
+1. **Auto-detection**: Detect project type, suggest containers
 2. **User presets**: Load from `~/.config/cidx/presets.toml`
-3. **Parallel execution**: Run independent tools concurrently
+3. **Parallel execution**: Run independent containers concurrently
 4. **Registry override**: Support private registries globally
 5. **Validation hooks**: Pre/post execution scripts
-6. **SBOM generation**: Track tool versions and results
+6. **SBOM generation**: Track container versions and results
 7. **Web UI**: Visual configuration builder
 
 ## Dependencies
@@ -334,7 +334,7 @@ Keep dependencies minimal. Evaluate carefully before adding new ones.
 ## Testing Philosophy
 
 - **Unit tests**: Test preset logic, config parsing, validation
-- **Integration tests**: Test Docker execution with common tools
+- **Integration tests**: Test Docker execution with common containers
 - **Dry-run tests**: Verify correct Docker command generation
 - **Example configs**: Keep examples/ in sync with features
 

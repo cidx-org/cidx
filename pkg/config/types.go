@@ -9,9 +9,9 @@ type Config struct {
 	Workspace string                            // Auto-detected or from env
 }
 
-// Phase defines tools for a specific phase
+// Phase defines containers for a specific phase
 type Phase struct {
-	Tools []string `toml:"tools"`
+	Containers []string `toml:"containers"`
 }
 
 // Pipeline defines a sequence of phases to execute
@@ -19,8 +19,8 @@ type Pipeline struct {
 	Phases []string `toml:"phases"`
 }
 
-// ToolConfig represents a fully resolved tool configuration after merging preset + overrides
-type ToolConfig struct {
+// ContainerConfig represents a fully resolved container configuration after merging preset + overrides
+type ContainerConfig struct {
 	Name        string
 	Phase       string
 	Image       string

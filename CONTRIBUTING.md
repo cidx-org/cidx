@@ -46,7 +46,7 @@ This automatically:
 
 We use [Conventional Commits](https://www.conventionalcommits.org/):
 
-```
+```text
 <type>: <description>
 
 [optional body]
@@ -77,7 +77,7 @@ BREAKING CHANGE: API endpoints now require authentication
 ### Prerequisites
 
 - Go 1.21+
-- Docker (for running tools)
+- Docker (for running containers)
 - Git
 
 ### Build
@@ -106,11 +106,11 @@ go test ./...
 
 ## 🎯 Project Structure
 
-```
+```text
 cidx/
 ├── cmd/cidx/          # CLI commands
 ├── pkg/
-│   ├── presets/       # Built-in tool presets
+│   ├── presets/       # Built-in container presets
 │   ├── config/        # Configuration parsing
 │   ├── executor/      # Docker execution
 │   └── pipeline/      # Pipeline orchestration
@@ -126,9 +126,9 @@ Before submitting a PR:
 2. Run linting: `./bin/cidx run code`
 3. Run full CI: `./bin/cidx run ci`
 
-## 💡 Adding New Tools
+## 💡 Adding New Containers
 
-See [Creating Presets Guide](docs/guides/creating-presets.md) for adding new tool presets.
+See [Creating Presets Guide](docs/guides/creating-presets.md) for adding new container presets.
 
 ## ❓ Questions?
 

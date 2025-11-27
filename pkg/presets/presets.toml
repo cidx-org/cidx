@@ -1,18 +1,18 @@
 # ╔═══════════════════════════════════════════════════════════════════════════╗
-# ║                        CIDX Built-in Tool Presets                         ║
+# ║                      CIDX Built-in Container Presets                      ║
 # ╚═══════════════════════════════════════════════════════════════════════════╝
 #
-# This file defines all built-in tool configurations embedded into cidx binary.
+# This file defines all built-in container configurations embedded into cidx binary.
 #
 # 🐳 PHILOSOPHY: Container-First Approach
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# CIDX maximizes use of dedicated Docker containers for each tool.
+# CIDX maximizes use of dedicated Docker containers for each operation.
 #
 # Why containers?
 # - ✅ Consistent execution (same behavior locally and in CI/CD)
 # - ✅ No local installation required (just Docker)
-# - ✅ Version pinning (specify exact tool version via image tags)
-# - ✅ Isolation (no conflicts between tool dependencies)
+# - ✅ Version pinning (specify exact container version via image tags)
+# - ✅ Isolation (no conflicts between container dependencies)
 # - ✅ Reproducibility (same results everywhere, every time)
 #
 # Preset Philosophy:
@@ -26,9 +26,9 @@
 # - Build → This file embedded into binary via go:embed
 #
 # Structure:
-# - [presets.tool-name]       : Main configuration
-# - [presets.tool-name.env]   : Environment variables
-# - [presets.tool-name.options.X] : Configurable options
+# - [presets.container-name]       : Main configuration
+# - [presets.container-name.env]   : Environment variables
+# - [presets.container-name.options.X] : Configurable options
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # CODE QUALITY PHASE - Linting, formatting, and style enforcement

@@ -42,15 +42,15 @@
 # Workspace: Current directory (auto-detected)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 📦 TOOLS CONFIGURATION
+# 📦 CONTAINERS CONFIGURATION
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #
-# Tools are organized by phase (security, code, test, build, docker, release).
-# Each phase can contain multiple tools that run sequentially within that phase.
+# Containers are organized by phase (security, code, test, build, docker, release).
+# Each phase can contain multiple containers that run sequentially within that phase.
 #
 # 🔑 KEY CONCEPT: Configuration vs Presets
 # ─────────────────────────────────────────────────────────────────────────────
-# When you write: tools = ["gitleaks"]
+# When you write: containers = ["gitleaks"]
 #
 # 1. CIDX looks up "gitleaks" in its BUILT-IN PRESETS (embedded in the binary)
 #    - Preset defines: Docker image, command, volumes, env vars, options
@@ -68,7 +68,7 @@
 #    - You only override what you need (e.g., severity, exit_code)
 #    - Everything else comes from the preset
 #
-# 3. CIDX executes the tool using Docker
+# 3. CIDX executes the container using Docker
 #    - Pulls image (if needed)
 #    - Creates container with preset + override config
 #    - Runs command and streams output
@@ -82,27 +82,27 @@
 # Security Phase: Vulnerability scanning and secret detection
 # ──────────────────────────────────────────────────────────────────────────────
 [security]
-tools = ["trivy", "gitleaks"]  # List of security tools to run in this phase
+containers = ["trivy", "gitleaks"]  # List of security containers to run in this phase
 
 # Trivy: Container and filesystem vulnerability scanner
 # Override: Only report HIGH and CRITICAL vulnerabilities
-[tools.trivy]
+[containers.trivy]
 severity = "HIGH,CRITICAL"  # Filter by severity (UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL)
 exit_code = 0               # Exit code on findings (0 = don't fail build yet, 1 = fail)
 
 # Gitleaks: Scan git history for secrets and credentials
 # Uses CIDX built-in preset (no overrides needed)
 # Preset provides: image, command, volumes automatically
-# You just enabled it by adding "gitleaks" to the tools list above
+# You just enabled it by adding "gitleaks" to the containers list above
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Code Quality Phase: Linting, formatting, and commit validation
 # ──────────────────────────────────────────────────────────────────────────────
 [code]
-tools = ["prettier", "golangci-lint", "commitizen"]  # Code quality tools
+containers = ["prettier", "golangci-lint", "commitizen"]  # Code quality containers
 
 # Prettier: Auto-format code (Markdown, YAML, JSON, etc.)
-[tools.prettier]
+[containers.prettier]
 write = true  # Auto-fix formatting issues (true = write changes, false = check only)
 
 # GolangCI-Lint: Go linter aggregator
@@ -115,9 +115,9 @@ write = true  # Auto-fix formatting issues (true = write changes, false = check 
 # Testing Phase: Unit tests, integration tests, BDD scenarios
 # ──────────────────────────────────────────────────────────────────────────────
 [test]
-tools = ["go-test"]  # Run Go unit tests with coverage
+containers = ["go-test"]  # Run Go unit tests with coverage
 # TODO: Re-enable godog when all BDD scenarios are implemented
-# tools = ["go-test", "godog"]  # Add BDD testing with Godog
+# containers = ["go-test", "godog"]  # Add BDD testing with Godog
 
 # Go Test: Run tests with race detection and coverage
 # Uses CIDX default configuration (./... with -race -cover flags)
@@ -126,7 +126,7 @@ tools = ["go-test"]  # Run Go unit tests with coverage
 # Build Phase: Compile binaries and package artifacts
 # ──────────────────────────────────────────────────────────────────────────────
 [build]
-tools = ["go-build"]  # Compile Go binary
+containers = ["go-build"]  # Compile Go binary
 
 # Go Build: Compile binary with version injection
 # Automatically injects version from VERSION file via -ldflags
@@ -136,7 +136,7 @@ tools = ["go-build"]  # Compile Go binary
 # Docker Phase: Container image build and push
 # ──────────────────────────────────────────────────────────────────────────────
 [docker]
-tools = ["kaniko"]  # Build and push Docker images without Docker daemon
+containers = ["kaniko"]  # Build and push Docker images without Docker daemon
 
 # Kaniko: Build container images in CI/CD without privileged mode
 # Reads Dockerfile, builds image, pushes to registry (GHCR)
@@ -147,9 +147,9 @@ tools = ["kaniko"]  # Build and push Docker images without Docker daemon
 # ──────────────────────────────────────────────────────────────────────────────
 # NOTE: This phase is unused. Use action 'release-create' instead for version bumping.
 [version]
-tools = ["version-bump"]
+containers = ["version-bump"]
 
-[tools.version-bump]
+[containers.version-bump]
 phase = "version"                           # Custom phase for version management
 image = "commitizen/commitizen:latest"      # Docker image for commitizen tool
 command = "cz bump --yes"                   # Command to run (auto-approve version bump)
@@ -163,18 +163,18 @@ volumes = [                                 # Mount workspace and git history
 # Release Phase: GitHub release creation
 # ──────────────────────────────────────────────────────────────────────────────
 [release]
-tools = ["gh-release"]  # Create GitHub release with artifacts
+containers = ["gh-release"]  # Create GitHub release with artifacts
 
 # GitHub Release: Create release from git tag with binaries and changelog
 # Requires GH_TOKEN environment variable
 # Uploads artifacts from build phase to GitHub Releases
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Custom Tools (without preset): Define your own tools
+# Custom Containers (without preset): Define your own containers
 # ──────────────────────────────────────────────────────────────────────────────
-# If you need a tool that doesn't have a built-in preset, define it manually:
+# If you need a container that doesn't have a built-in preset, define it manually:
 #
-# [tools.my-custom-scanner]
+# [containers.my-custom-scanner]
 # phase = "security"                    # Which phase to run in
 # image = "mycompany/scanner:latest"    # Docker image to use
 # command = "scan --path /workspace"    # Command to execute in container
@@ -184,11 +184,11 @@ tools = ["gh-release"]  # Create GitHub release with artifacts
 #
 # Then enable it in a phase:
 # [security]
-# tools = ["trivy", "gitleaks", "my-custom-scanner"]
+# containers = ["trivy", "gitleaks", "my-custom-scanner"]
 #
 # Difference:
 # - Built-in preset (gitleaks):  Just name it, CIDX knows everything else
-# - Custom tool:                 You define image, command, volumes, env yourself
+# - Custom container:            You define image, command, volumes, env yourself
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 🚀 PIPELINES

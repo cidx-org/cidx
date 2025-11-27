@@ -132,7 +132,7 @@ phases = ["security", "code", "test", "build", "release", "docker"]
 
 CIDX phases are organized to align with the DevOps loop stages:
 
-| DevOps Stage | CIDX Phases         | Purpose               | Tools Example                            |
+| DevOps Stage | CIDX Phases         | Purpose               | Containers Example                       |
 | ------------ | ------------------- | --------------------- | ---------------------------------------- |
 | **CODE**     | `security`, `code`  | Validation & quality  | trivy, gitleaks, golangci-lint, prettier |
 | **BUILD**    | `test`, `build`     | Create artifacts      | go-test, godog, go-build                 |
@@ -415,7 +415,7 @@ schedule = "0 */6 * * *"  # Every 6 hours
 phases = ["operate"]
 
 [operate]
-tools = ["terraform-validate", "drift-detection", "compliance-check"]
+containers = ["terraform-validate", "drift-detection", "compliance-check"]
 ```
 
 **Important**: Scheduled tasks will be:

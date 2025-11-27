@@ -114,7 +114,7 @@ All CIDX containers are tagged with labels for easy filtering:
 ```yaml
 labels:
   managed-by: "cidx"
-  cidx.tool: "trivy"
+  cidx.container: "trivy"
   cidx.phase: "security"
 ```
 
@@ -156,7 +156,7 @@ For production CI/CD, consider:
 If you experience issues with cached data:
 
 ```bash
-# Clean specific tool container
+# Clean specific container container
 docker rm -f cidx_trivy
 
 # Clean all CIDX containers
@@ -178,7 +178,7 @@ cidx run security
 
 ```
 1. getOrCreateContainer()
-   ├─ List containers with name=cidx_<tool>
+   ├─ List containers with name=cidx_<container>
    ├─ If found → Return existing container ID
    └─ If not found → createContainer()
 
@@ -212,9 +212,9 @@ Keeping containers:
 
 Planned improvements:
 
-- [ ] **Config change detection**: Recreate container if tool config changed
+- [ ] **Config change detection**: Recreate container if container config changed
 - [ ] **Image update detection**: Recreate if Docker image updated
 - [ ] **`--clean` flag**: Force clean start (delete containers before run)
 - [ ] **`--no-cache` flag**: Skip cache, force fresh operations
 - [ ] **Named volumes**: Use Docker volumes for even better cache management
-- [ ] **Cache size reporting**: Show cache usage per tool
+- [ ] **Cache size reporting**: Show cache usage per container

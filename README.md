@@ -6,8 +6,8 @@
 
 CIDX makes running DevSecOps tools ridiculously simple:
 
-1. **Just name the tool** - No need to specify Docker images, volumes, commands
-2. **Built-in presets** - CIDX knows how to run 15+ common tools out of the box
+1. **Just name the container** - No need to specify Docker images, volumes, commands
+2. **Built-in presets** - CIDX knows how to run 15+ common containers out of the box
 3. **5-line config** - Most projects need less than 10 lines of configuration
 4. **Run Everywhere** - Same config for Local, GitHub Actions, GitLab CI, Jenkins
 
@@ -44,10 +44,10 @@ Initialize configuration:
 cidx init
 ```
 
-Run tools:
+Run containers:
 
 ```bash
-cidx run security   # Run all security tools
+cidx run security   # Run all security containers
 cidx run trivy      # Run just trivy
 cidx run ci         # Run full CI pipeline
 ```
@@ -126,13 +126,13 @@ This allows you to manage your entire CI/CD logic in one file, with CIDX handlin
 
 - **[Getting Started](docs/getting-started/quick-start.md)**
 - **[CI/CD Integration](docs/guides/ci-integration.md)**
-- **[Available Tools](docs/reference/tools.md)**
+- **[Available Containers](docs/reference/tools.md)**
 - **[CLI Reference](docs/reference/cli.md)**
 - **[Developer Guide](CLAUDE.md)**
 
 ## Key Features
 
-- **Docker-First**: All tools run in isolated containers.
+- **Docker-First**: All operations run in isolated containers.
 - **Container Reuse**: 6x faster subsequent runs. [Learn more](docs/core-concepts/container-reuse.md)
 - **BDD-Tested**: Behavior specified in executable Gherkin scenarios.
 - **Event-Driven**: Automatically detects PRs, tags, and commits.

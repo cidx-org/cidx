@@ -47,25 +47,25 @@ func NewDockerExecutor(dryRun, verbose bool) (*DockerExecutor, error) {
 }
 
 // Run executes a tool configuration
-func (e *DockerExecutor) Run(ctx context.Context, toolConfig *config.ToolConfig) error {
-	e.logger.Infof("  ▸ Running [%s] %s", toolConfig.Phase, toolConfig.Name)
+func (e *DockerExecutor) Run(ctx context.Context, containerConfig *config.ContainerConfig) error {
+	e.logger.Infof("  ▸ Running [%s] %s", containerConfig.Phase, containerConfig.Name)
 
 	// Expand environment variables in volumes and command
-	volumes := expandVolumes(toolConfig.Volumes)
-	command := expandCommand(toolConfig.Command, toolConfig.Env)
+	volumes := expandVolumes(containerConfig.Volumes)
+	command := expandCommand(containerConfig.Command, containerConfig.Env)
 
 	if e.dryRun {
-		e.printDryRun(toolConfig, volumes, command)
+		e.printDryRun(containerConfig, volumes, command)
 		return nil
 	}
 
 	// Pull image if needed
-	if err := e.pullImage(ctx, toolConfig.Image); err != nil {
+	if err := e.pullImage(ctx, containerConfig.Image); err != nil {
 		return fmt.Errorf("failed to pull image: %w", err)
 	}
 
 	// Get or create container
-	containerID, containerName, err := e.getOrCreateContainer(ctx, toolConfig, volumes, command)
+	containerID, containerName, err := e.getOrCreateContainer(ctx, containerConfig, volumes, command)
 	if err != nil {
 		return fmt.Errorf("failed to get or create container: %w", err)
 	}
@@ -94,7 +94,7 @@ func (e *DockerExecutor) Run(ctx context.Context, toolConfig *config.ToolConfig)
 		}
 	}
 
-	e.logger.Infof("  ✓ %s completed", toolConfig.Name)
+	e.logger.Infof("  ✓ %s completed", containerConfig.Name)
 	return nil
 }
 
@@ -128,8 +128,8 @@ func (e *DockerExecutor) pullImage(ctx context.Context, imageName string) error 
 }
 
 // getOrCreateContainer gets an existing container or creates a new one
-func (e *DockerExecutor) getOrCreateContainer(ctx context.Context, toolConfig *config.ToolConfig, volumes []string, command string) (string, string, error) {
-	containerName := fmt.Sprintf("cidx_%s", toolConfig.Name)
+func (e *DockerExecutor) getOrCreateContainer(ctx context.Context, containerConfig *config.ContainerConfig, volumes []string, command string) (string, string, error) {
+	containerName := fmt.Sprintf("cidx_%s", containerConfig.Name)
 
 	// Try to find existing container
 	filterArgs := filters.NewArgs()
@@ -153,18 +153,18 @@ func (e *DockerExecutor) getOrCreateContainer(ctx context.Context, toolConfig *c
 
 	// Container doesn't exist, create new one
 	e.logger.Debugf("Creating new container: %s", containerName)
-	return e.createContainer(ctx, toolConfig, volumes, command)
+	return e.createContainer(ctx, containerConfig, volumes, command)
 }
 
 // createContainer creates a Docker container and returns containerID and containerName
-func (e *DockerExecutor) createContainer(ctx context.Context, toolConfig *config.ToolConfig, volumes []string, command string) (string, string, error) {
+func (e *DockerExecutor) createContainer(ctx context.Context, containerConfig *config.ContainerConfig, volumes []string, command string) (string, string, error) {
 	// Parse volumes into binds
 	binds := make([]string, len(volumes))
 	copy(binds, volumes)
 
 	// Convert env map to slice and expand environment variables
-	env := make([]string, 0, len(toolConfig.Env))
-	for k, v := range toolConfig.Env {
+	env := make([]string, 0, len(containerConfig.Env))
+	for k, v := range containerConfig.Env {
 		// Expand ${VAR} in values
 		expandedValue := os.ExpandEnv(v)
 		env = append(env, fmt.Sprintf("%s=%s", k, expandedValue))
@@ -173,7 +173,7 @@ func (e *DockerExecutor) createContainer(ctx context.Context, toolConfig *config
 	// Parse command
 	// If custom entrypoint is set, keep command as single element
 	var cmdParts []string
-	if len(toolConfig.Entrypoint) > 0 {
+	if len(containerConfig.Entrypoint) > 0 {
 		// With custom entrypoint, command should be a single element
 		cmdParts = []string{command}
 	} else {
@@ -186,28 +186,28 @@ func (e *DockerExecutor) createContainer(ctx context.Context, toolConfig *config
 	}
 
 	// Generate container name with cidx_ prefix (fixed name for reuse)
-	containerName := fmt.Sprintf("cidx_%s", toolConfig.Name)
+	containerName := fmt.Sprintf("cidx_%s", containerConfig.Name)
 
-	containerConfig := &container.Config{
-		Image:      toolConfig.Image,
+	dockerConfig := &container.Config{
+		Image:      containerConfig.Image,
 		Cmd:        cmdParts,
-		WorkingDir: toolConfig.Workdir,
+		WorkingDir: containerConfig.Workdir,
 		Env:        env,
 		Labels: map[string]string{
 			"managed-by": "cidx",
-			"cidx.tool":  toolConfig.Name,
-			"cidx.phase": toolConfig.Phase,
+			"cidx.tool":  containerConfig.Name,
+			"cidx.phase": containerConfig.Phase,
 		},
 	}
 
 	// Override entrypoint if specified
-	if len(toolConfig.Entrypoint) > 0 {
-		containerConfig.Entrypoint = toolConfig.Entrypoint
+	if len(containerConfig.Entrypoint) > 0 {
+		dockerConfig.Entrypoint = containerConfig.Entrypoint
 	}
 
-	// Only set user for non-privileged tools
-	if !toolConfig.Privileged {
-		containerConfig.User = fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid())
+	// Only set user for non-privileged containers
+	if !containerConfig.Privileged {
+		dockerConfig.User = fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid())
 	}
 
 	hostConfig := &container.HostConfig{
@@ -215,7 +215,7 @@ func (e *DockerExecutor) createContainer(ctx context.Context, toolConfig *config
 		AutoRemove: false, // We'll remove manually
 	}
 
-	resp, err := e.client.ContainerCreate(ctx, containerConfig, hostConfig, nil, nil, containerName)
+	resp, err := e.client.ContainerCreate(ctx, dockerConfig, hostConfig, nil, nil, containerName)
 	if err != nil {
 		return "", "", err
 	}
@@ -246,22 +246,22 @@ func (e *DockerExecutor) streamLogs(ctx context.Context, containerID string) err
 }
 
 // printDryRun prints what would be executed
-func (e *DockerExecutor) printDryRun(toolConfig *config.ToolConfig, volumes []string, command string) {
-	containerName := fmt.Sprintf("cidx_%s", toolConfig.Name)
+func (e *DockerExecutor) printDryRun(containerConfig *config.ContainerConfig, volumes []string, command string) {
+	containerName := fmt.Sprintf("cidx_%s", containerConfig.Name)
 
 	fmt.Printf("Would execute:\n")
 	fmt.Printf("  Container: %s\n", containerName)
-	fmt.Printf("  Tool: %s\n", toolConfig.Name)
-	fmt.Printf("  Image: %s\n", toolConfig.Image)
+	fmt.Printf("  Tool: %s\n", containerConfig.Name)
+	fmt.Printf("  Image: %s\n", containerConfig.Image)
 	fmt.Printf("  Command: %s\n", command)
-	fmt.Printf("  Workdir: %s\n", toolConfig.Workdir)
+	fmt.Printf("  Workdir: %s\n", containerConfig.Workdir)
 	fmt.Printf("  Volumes:\n")
 	for _, vol := range volumes {
 		fmt.Printf("    - %s\n", vol)
 	}
-	if len(toolConfig.Env) > 0 {
+	if len(containerConfig.Env) > 0 {
 		fmt.Printf("  Environment:\n")
-		for k, v := range toolConfig.Env {
+		for k, v := range containerConfig.Env {
 			fmt.Printf("    %s=%s\n", k, v)
 		}
 	}
