@@ -1,6 +1,6 @@
 # Presets Development
 
-This document explains how CIDX manages tool presets during development vs production builds.
+This document explains how CIDX manages container presets during development vs production builds.
 
 ## Architecture Overview
 
@@ -8,7 +8,7 @@ CIDX uses a **dual-mode preset system**:
 
 1. **Development Mode**: Presets loaded from external file (`presets.toml`)
    - Fast iteration without recompilation
-   - Easy to test new tools
+   - Easy to test new containers
    - Validation on every run
 
 2. **Production Mode**: Presets embedded in binary
@@ -421,6 +421,6 @@ Planned improvements:
 
 - [ ] User-defined presets: `~/.config/cidx/presets.toml`
 - [ ] Preset inheritance and composition
-- [ ] Preset validation tool
+- [ ] Preset validation container
 - [ ] Auto-generated documentation from presets
 - [ ] Preset marketplace/registry

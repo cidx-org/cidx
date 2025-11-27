@@ -37,36 +37,36 @@ phases = ["security", "code", "test", "build", "release", "docker"]
 description = "Publishes all artifacts for a new release."
 ```
 
-### 2. Defining Phases and Tools
+### 2. Defining Phases and Containers
 
-A `phase` is a logical group of tools. You define a phase by creating a top-level section with its name.
+A `phase` is a logical group of containers. You define a phase by creating a top-level section with its name.
 
 ```toml
-# Defines the 'security' phase and the tools it includes.
+# Defines the 'security' phase and the containers it includes.
 [security]
-tools = ["trivy", "gitleaks"]
+containers = ["trivy", "gitleaks"]
 
 # Defines the 'build' phase.
 [build]
-tools = ["go-build"]
+containers = ["go-build"]
 ```
 
-#### Overriding Tool Settings
+#### Overriding Container Settings
 
-You can override any preset configuration for a tool by creating a `[tools.<tool_name>]` section. This override will apply wherever the tool is used.
+You can override any preset configuration for a container by creating a `[containers.<container_name>]` section. This override will apply wherever the container is used.
 
 ```toml
-[tools.trivy]
+[containers.trivy]
 severity = "HIGH,CRITICAL"
 exit_code = 1
 ```
 
-#### Defining Custom Tools
+#### Defining Custom Containers
 
-You can also define your own tools that don't have built-in presets. You must assign them to a default `phase` so CIDX knows when to run them.
+You can also define your own containers that don't have built-in presets. You must assign them to a default `phase` so CIDX knows when to run them.
 
 ```toml
-[tools.my-scanner]
+[containers.my-scanner]
 phase = "security"
 image = "myregistry/scanner:latest"
 command = "scan ."
@@ -74,9 +74,9 @@ command = "scan ."
 
 ### Environment Variables
 
-CIDX supports environment variable expansion in the configuration using `${VAR}` syntax. This is useful for passing dynamic information from a CI environment to your tools.
+CIDX supports environment variable expansion in the configuration using `${VAR}` syntax. This is useful for passing dynamic information from a CI environment to your containers.
 
 ```toml
-[tools.commitlint]
+[containers.commitlint]
 env = { FROM = "${CI_COMMIT_BEFORE_SHA}", TO = "${CI_COMMIT_SHA}" }
 ```

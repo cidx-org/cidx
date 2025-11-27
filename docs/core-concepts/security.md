@@ -1,6 +1,6 @@
 # Environment Detection & Security
 
-CIDX automatically detects its execution environment and adapts tool behavior to ensure safe testing locally while enabling full automation in CI/CD.
+CIDX automatically detects its execution environment and adapts container behavior to ensure safe testing locally while enabling full automation in CI/CD.
 
 ## Core Philosophy
 
