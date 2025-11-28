@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/arcker/cidx/pkg/actions"
-	"github.com/arcker/cidx/pkg/remote/github"
-	"github.com/arcker/cidx/pkg/vcs"
+	"github.com/cidx-org/cidx/pkg/actions"
+	"github.com/cidx-org/cidx/pkg/remote/github"
+	"github.com/cidx-org/cidx/pkg/vcs"
 	"github.com/cli/go-gh/v2/pkg/auth"
 	"github.com/urfave/cli/v2"
 )

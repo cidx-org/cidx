@@ -3,7 +3,7 @@ package environment
 import (
 	"fmt"
 
-	"github.com/arcker/cidx/pkg/presets"
+	"github.com/cidx-org/cidx/pkg/presets"
 )
 
 // LocalBehavior defines how a preset behaves in local environment

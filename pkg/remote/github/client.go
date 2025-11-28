@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/arcker/cidx/pkg/remote"
+	"github.com/cidx-org/cidx/pkg/remote"
 	"github.com/google/go-github/v76/github"
 )
 

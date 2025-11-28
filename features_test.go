@@ -9,6 +9,13 @@ import (
 	"github.com/cucumber/godog/colors"
 )
 
+// Test repository configuration
+const (
+	TestRepoOwner = "cidx-org"
+	TestRepoName  = "cidx-test-playground"
+	TestRepo      = TestRepoOwner + "/" + TestRepoName
+)
+
 // TestFeatures runs all BDD scenarios
 func TestFeatures(t *testing.T) {
 	suite := godog.TestSuite{
@@ -74,19 +81,37 @@ type TestContext struct {
 	ExitCode        int
 	GitRepo         string
 	Config          map[string]interface{}
+
+	// GitHub test artifacts (will be cleaned up after test)
+	GitHubToken     string
+	CreatedPRs      []int    // PR numbers to clean up
+	CreatedIssues   []int    // Issue numbers to clean up
+	CreatedTags     []string // Git tags to clean up
+	CreatedReleases []string // Release IDs to clean up
+	CurrentBranch   string
+	CurrentPR       int
 }
 
 // NewTestContext creates a new test context
 func NewTestContext() *TestContext {
 	return &TestContext{
-		ExecutedPhases: []string{},
-		FailedPhases:   []string{},
-		Config:         make(map[string]interface{}),
+		ExecutedPhases:  []string{},
+		FailedPhases:    []string{},
+		Config:          make(map[string]interface{}),
+		CreatedPRs:      []int{},
+		CreatedIssues:   []int{},
+		CreatedTags:     []string{},
+		CreatedReleases: []string{},
+		GitHubToken:     os.Getenv("GITHUB_TOKEN"),
 	}
 }
 
 // Reset resets the test context between scenarios
 func (tc *TestContext) Reset() {
+	// Clean up previous scenario artifacts
+	tc.Cleanup()
+
+	// Reset state
 	tc.Environment = ""
 	tc.CI = false
 	tc.Provider = ""
@@ -98,6 +123,13 @@ func (tc *TestContext) Reset() {
 	tc.ExitCode = 0
 	tc.GitRepo = ""
 	tc.Config = make(map[string]interface{})
+	tc.CreatedPRs = []int{}
+	tc.CreatedIssues = []int{}
+	tc.CreatedTags = []string{}
+	tc.CreatedReleases = []string{}
+	tc.CurrentBranch = ""
+	tc.CurrentPR = 0
+	tc.GitHubToken = os.Getenv("GITHUB_TOKEN")
 }
 
 // Cleanup performs cleanup after scenario
@@ -107,10 +139,26 @@ func (tc *TestContext) Cleanup() {
 		_ = os.RemoveAll(tc.GitRepo) // Test cleanup
 	}
 
+	// Clean up GitHub artifacts if we have a token
+	if tc.GitHubToken != "" {
+		tc.cleanupGitHubArtifacts()
+	}
+
 	// Reset environment variables
 	_ = os.Unsetenv("GITHUB_ACTIONS")
 	_ = os.Unsetenv("GITLAB_CI")
 	_ = os.Unsetenv("JENKINS_URL")
 	_ = os.Unsetenv("CIRCLECI")
 	_ = os.Unsetenv("GITHUB_TOKEN")
+}
+
+// cleanupGitHubArtifacts removes test artifacts from playground repo
+func (tc *TestContext) cleanupGitHubArtifacts() {
+	// TODO: Implement GitHub API cleanup
+	// For now, we'll leave artifacts in playground (they're test data)
+	// Future: Use gh CLI or GitHub API to:
+	// - Close created PRs
+	// - Close created issues
+	// - Delete created tags
+	// - Delete created releases
 }

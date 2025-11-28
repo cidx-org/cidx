@@ -566,7 +566,7 @@ git push --tags
 Users install with:
 
 ```bash
-go install github.com/arcker/cidx/cmd/cidx@latest
+go install github.com/cidx-org/cidx/cmd/cidx@latest
 ```
 
 ---
@@ -584,7 +584,7 @@ import (
     "fmt"
     "os"
 
-    "github.com/arcker/cidx/pkg/presets"
+    "github.com/cidx-org/cidx/pkg/presets"
     "gopkg.in/yaml.v3"
 )
 
@@ -733,7 +733,7 @@ import (
     "fmt"
     "os"
 
-    "github.com/arcker/cidx/pkg/presets"
+    "github.com/cidx-org/cidx/pkg/presets"
     "gopkg.in/yaml.v3"
 )
 

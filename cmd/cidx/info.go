@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/arcker/cidx/pkg/presets"
+	"github.com/cidx-org/cidx/pkg/presets"
 	"github.com/urfave/cli/v2"
 )
 
