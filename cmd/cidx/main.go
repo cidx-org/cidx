@@ -24,6 +24,7 @@ func main() {
 			actionCommand(),
 			checkCommand,
 			branchCommand(),
+			demoCommand(),
 		},
 		Flags: []cli.Flag{
 			&cli.StringFlag{
