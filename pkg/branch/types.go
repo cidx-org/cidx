@@ -83,6 +83,7 @@ type ListResult struct {
 	TotalCount     int
 	Summary        Summary
 	HasGitHubToken bool
+	CurrentBranch  string
 }
 
 // Summary contains branch statistics
@@ -95,4 +96,67 @@ type Summary struct {
 	Orphan    int
 	Local     int
 	Remote    int
+}
+
+// PRInfo contains detailed PR information for a branch
+type PRInfo struct {
+	Number      int
+	Title       string
+	Status      PRStatus
+	URL         string
+	Draft       bool
+	Checks      *PRChecksInfo
+	Reviews     *PRReviewsInfo
+	Mergeable   bool
+	BranchName  string
+	BaseBranch  string
+	AuthorLogin string
+}
+
+// PRChecksInfo contains check/CI status
+type PRChecksInfo struct {
+	Total   int
+	Pending int
+	Success int
+	Failure int
+	Status  string // "success", "failure", "pending"
+}
+
+// PRReviewsInfo contains review status
+type PRReviewsInfo struct {
+	Approved         int
+	ChangesRequested int
+	Pending          int
+}
+
+// CleanupOptions configures the cleanup operation
+type CleanupOptions struct {
+	DryRun       bool   // Show what would be deleted without actually deleting
+	IncludeStale bool   // Also delete stale branches
+	IncludeOrphan bool  // Also delete orphan branches
+	Force        bool   // Force delete even if not fully merged
+}
+
+// CleanupResult contains the result of a cleanup operation
+type CleanupResult struct {
+	Deleted       []DeletedBranch
+	Skipped       []SkippedBranch
+	TotalDeleted  int
+	LocalDeleted  int
+	RemoteDeleted int
+}
+
+// DeletedBranch represents a successfully deleted branch
+type DeletedBranch struct {
+	Name          string
+	Location      Location
+	Status        Status
+	LocalDeleted  bool
+	RemoteDeleted bool
+}
+
+// SkippedBranch represents a branch that was skipped during cleanup
+type SkippedBranch struct {
+	Name   string
+	Reason string
 }

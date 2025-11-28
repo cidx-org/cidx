@@ -239,3 +239,27 @@ func BuildRemoteBranchMap(remoteBranches []GitBranch) map[string]GitBranch {
 	}
 	return result
 }
+
+// DeleteLocalBranch deletes a local branch
+func DeleteLocalBranch(name string, force bool) error {
+	flag := "-d"
+	if force {
+		flag = "-D"
+	}
+	cmd := exec.Command("git", "branch", flag, name)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to delete local branch %s: %s", name, string(output))
+	}
+	return nil
+}
+
+// DeleteRemoteBranch deletes a remote branch
+func DeleteRemoteBranch(name string) error {
+	cmd := exec.Command("git", "push", "origin", "--delete", name)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to delete remote branch %s: %s", name, string(output))
+	}
+	return nil
+}

@@ -23,16 +23,10 @@ const (
 	colorWhite  = "\033[37m"
 )
 
-// Location markers (ASCII for alignment)
-const (
-	markerLocal  = "[L]"
-	markerRemote = "[R]"
-	markerBoth   = "[B]"
-)
 
 // Column configuration
 type columnWidths struct {
-	marker  int // Fixed: 3
+	marker  int // Fixed: 4
 	branch  int // Flexible
 	status  int // Fixed: 9
 	pr      int // Fixed: 6
@@ -44,7 +38,7 @@ type columnWidths struct {
 
 // Fixed column widths
 const (
-	fixedMarker = 3
+	fixedMarker = 4 // " [B]" or "*[B]"
 	fixedStatus = 9
 	fixedPR     = 6
 	fixedLocal  = 20
@@ -189,7 +183,8 @@ func formatTable(result *ListResult) string {
 
 	// Branches
 	for _, b := range result.Branches {
-		sb.WriteString(formatBranchLine(b, widths))
+		isCurrent := b.Name == result.CurrentBranch
+		sb.WriteString(formatBranchLine(b, widths, isCurrent))
 	}
 
 	// Footer
@@ -219,12 +214,15 @@ func formatTable(result *ListResult) string {
 }
 
 // formatBranchLine formats a single branch line
-func formatBranchLine(b Info, widths columnWidths) string {
-	// Location marker
-	marker := getLocationMarker(b.Location)
+func formatBranchLine(b Info, widths columnWidths, isCurrent bool) string {
+	// Location marker (with * for current branch)
+	marker := getLocationMarker(b.Location, isCurrent)
 
-	// Branch name (truncate if needed)
+	// Branch name (truncate if needed, highlight if current)
 	name := truncate(b.Name, widths.branch)
+	if isCurrent {
+		name = fmt.Sprintf("%s%s%s", colorCyan, name, colorReset)
+	}
 
 	// Status with color
 	status := formatStatus(b.Status)
@@ -289,17 +287,23 @@ func formatCommitInfo(t time.Time, hash string) string {
 }
 
 // getLocationMarker returns the marker for branch location
-func getLocationMarker(loc Location) string {
+func getLocationMarker(loc Location, isCurrent bool) string {
+	var locChar string
 	switch loc {
 	case LocationLocal:
-		return markerLocal
+		locChar = "L"
 	case LocationRemote:
-		return markerRemote
+		locChar = "R"
 	case LocationBoth:
-		return markerBoth
+		locChar = "B"
 	default:
-		return "   "
+		locChar = " "
 	}
+
+	if isCurrent {
+		return fmt.Sprintf("%s*%s[%s]", colorCyan, colorReset, locChar)
+	}
+	return fmt.Sprintf(" [%s]", locChar)
 }
 
 // formatStatus formats the branch status with color (fixed width: 9 chars)
@@ -372,7 +376,7 @@ func formatSummary(s Summary) string {
 func formatLegend() string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("%sLocation:%s [L]=local  [R]=remote  [B]=both    ", colorDim, colorReset))
+	sb.WriteString(fmt.Sprintf("%sLocation:%s [L]=local [R]=remote [B]=both  %s*%s=current    ", colorDim, colorReset, colorCyan, colorReset))
 	sb.WriteString(fmt.Sprintf("%sStatus:%s %sactive%s %sstale%s %smerged%s %sprotected%s %sorphan%s\n",
 		colorDim, colorReset,
 		colorGreen, colorReset,
@@ -397,4 +401,202 @@ func truncate(s string, maxLen int) string {
 		return s[:maxLen]
 	}
 	return s[:maxLen-3] + "..."
+}
+
+// FormatCleanup formats the cleanup result for terminal output
+func FormatCleanup(result *CleanupResult, dryRun bool) string {
+	var sb strings.Builder
+
+	if dryRun {
+		sb.WriteString(fmt.Sprintf("\n%s=== DRY RUN ===%s\n", colorYellow, colorReset))
+		sb.WriteString("The following branches would be deleted:\n\n")
+	} else {
+		sb.WriteString("\n")
+	}
+
+	if len(result.Deleted) == 0 && len(result.Skipped) == 0 {
+		sb.WriteString("No branches to clean up.\n")
+		return sb.String()
+	}
+
+	// Show deleted branches
+	if len(result.Deleted) > 0 {
+		if dryRun {
+			sb.WriteString(fmt.Sprintf("%sBranches to delete:%s\n", colorBold, colorReset))
+		} else {
+			sb.WriteString(fmt.Sprintf("%sDeleted branches:%s\n", colorBold, colorReset))
+		}
+
+		for _, d := range result.Deleted {
+			statusColor := getStatusColor(d.Status)
+			locationStr := formatDeleteLocation(d)
+			sb.WriteString(fmt.Sprintf("  %s✓%s %s %s[%s]%s %s\n",
+				colorGreen, colorReset,
+				d.Name,
+				statusColor, d.Status, colorReset,
+				locationStr,
+			))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Show skipped branches
+	if len(result.Skipped) > 0 {
+		sb.WriteString(fmt.Sprintf("%sSkipped branches:%s\n", colorBold, colorReset))
+		for _, s := range result.Skipped {
+			sb.WriteString(fmt.Sprintf("  %s⊘%s %s %s(%s)%s\n",
+				colorDim, colorReset,
+				s.Name,
+				colorDim, s.Reason, colorReset,
+			))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Summary
+	sb.WriteString(strings.Repeat("─", 40) + "\n")
+	if dryRun {
+		sb.WriteString(fmt.Sprintf("Would delete: %s%d branch(es)%s",
+			colorBold, result.TotalDeleted, colorReset))
+	} else {
+		sb.WriteString(fmt.Sprintf("Deleted: %s%d branch(es)%s",
+			colorGreen, result.TotalDeleted, colorReset))
+	}
+
+	if result.LocalDeleted > 0 || result.RemoteDeleted > 0 {
+		sb.WriteString(fmt.Sprintf(" (%d local, %d remote)", result.LocalDeleted, result.RemoteDeleted))
+	}
+	sb.WriteString("\n")
+
+	if len(result.Skipped) > 0 {
+		sb.WriteString(fmt.Sprintf("Skipped: %s%d branch(es)%s\n",
+			colorYellow, len(result.Skipped), colorReset))
+	}
+
+	// Show hint to execute when in dry-run mode
+	if dryRun && result.TotalDeleted > 0 {
+		sb.WriteString(fmt.Sprintf("\n%sRun with --execute (-x) to actually delete these branches%s\n",
+			colorDim, colorReset))
+	}
+
+	return sb.String()
+}
+
+// FormatPRInfo formats PR information for terminal output
+func FormatPRInfo(info *PRInfo) string {
+	var sb strings.Builder
+
+	// Header
+	sb.WriteString(fmt.Sprintf("\n%s#%d%s %s\n", colorBold, info.Number, colorReset, info.Title))
+	sb.WriteString(fmt.Sprintf("%s%s%s\n\n", colorDim, info.URL, colorReset))
+
+	// Status line
+	statusColor := colorGreen
+	statusIcon := "●"
+	statusText := "Open"
+	if info.Draft {
+		statusColor = colorDim
+		statusText = "Draft"
+	}
+	switch info.Status {
+	case PRStatusMerged:
+		statusColor = colorCyan
+		statusIcon = "✓"
+		statusText = "Merged"
+	case PRStatusClosed:
+		statusColor = colorRed
+		statusIcon = "✗"
+		statusText = "Closed"
+	}
+	sb.WriteString(fmt.Sprintf("  %sStatus:%s     %s%s %s%s\n", colorDim, colorReset, statusColor, statusIcon, statusText, colorReset))
+
+	// Branch info
+	sb.WriteString(fmt.Sprintf("  %sBranch:%s     %s → %s\n", colorDim, colorReset, info.BranchName, info.BaseBranch))
+	sb.WriteString(fmt.Sprintf("  %sAuthor:%s     %s\n", colorDim, colorReset, info.AuthorLogin))
+
+	// Checks
+	if info.Checks != nil && info.Checks.Total > 0 {
+		checksColor := colorGreen
+		checksIcon := "✓"
+		if info.Checks.Status == "failure" {
+			checksColor = colorRed
+			checksIcon = "✗"
+		} else if info.Checks.Status == "pending" {
+			checksColor = colorYellow
+			checksIcon = "●"
+		}
+		sb.WriteString(fmt.Sprintf("  %sChecks:%s     %s%s %d/%d passed%s",
+			colorDim, colorReset,
+			checksColor, checksIcon, info.Checks.Success, info.Checks.Total, colorReset))
+		if info.Checks.Pending > 0 {
+			sb.WriteString(fmt.Sprintf(" (%d pending)", info.Checks.Pending))
+		}
+		if info.Checks.Failure > 0 {
+			sb.WriteString(fmt.Sprintf(" (%d failed)", info.Checks.Failure))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Reviews
+	if info.Reviews != nil {
+		reviewParts := []string{}
+		if info.Reviews.Approved > 0 {
+			reviewParts = append(reviewParts, fmt.Sprintf("%s%d approved%s", colorGreen, info.Reviews.Approved, colorReset))
+		}
+		if info.Reviews.ChangesRequested > 0 {
+			reviewParts = append(reviewParts, fmt.Sprintf("%s%d changes requested%s", colorRed, info.Reviews.ChangesRequested, colorReset))
+		}
+		if info.Reviews.Pending > 0 {
+			reviewParts = append(reviewParts, fmt.Sprintf("%d pending", info.Reviews.Pending))
+		}
+		if len(reviewParts) > 0 {
+			sb.WriteString(fmt.Sprintf("  %sReviews:%s    %s\n", colorDim, colorReset, strings.Join(reviewParts, ", ")))
+		} else {
+			sb.WriteString(fmt.Sprintf("  %sReviews:%s    No reviews yet\n", colorDim, colorReset))
+		}
+	}
+
+	// Mergeable
+	if info.Status == PRStatusOpen {
+		mergeIcon := "✓"
+		mergeColor := colorGreen
+		mergeText := "Ready to merge"
+		if !info.Mergeable {
+			mergeIcon = "✗"
+			mergeColor = colorRed
+			mergeText = "Has conflicts"
+		}
+		sb.WriteString(fmt.Sprintf("  %sMergeable:%s  %s%s %s%s\n", colorDim, colorReset, mergeColor, mergeIcon, mergeText, colorReset))
+	}
+
+	sb.WriteString("\n")
+	return sb.String()
+}
+
+// getStatusColor returns the color for a status
+func getStatusColor(s Status) string {
+	switch s {
+	case StatusMerged:
+		return colorCyan
+	case StatusStale:
+		return colorYellow
+	case StatusOrphan:
+		return colorRed
+	default:
+		return ""
+	}
+}
+
+// formatDeleteLocation formats where the branch was deleted from
+func formatDeleteLocation(d DeletedBranch) string {
+	if d.LocalDeleted && d.RemoteDeleted {
+		return "local + remote"
+	}
+	if d.LocalDeleted {
+		return "local"
+	}
+	if d.RemoteDeleted {
+		return "remote"
+	}
+	return ""
 }

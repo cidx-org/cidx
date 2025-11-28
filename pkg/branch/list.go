@@ -56,6 +56,9 @@ func (m *Manager) List(opts ListOptions) (*ListResult, error) {
 	// Fetch latest from remote first
 	_ = FetchPrune()
 
+	// Get current branch
+	currentBranch, _ := GetCurrentBranch()
+
 	// Get local branches
 	localBranches, err := ListLocalBranches()
 	if err != nil {
@@ -134,6 +137,7 @@ func (m *Manager) List(opts ListOptions) (*ListResult, error) {
 		TotalCount:     len(branches),
 		Summary:        summary,
 		HasGitHubToken: m.ghClient != nil,
+		CurrentBranch:  currentBranch,
 	}, nil
 }
 
@@ -243,6 +247,10 @@ func (m *Manager) enrichWithPRInfo(branchMap map[string]*Info) {
 			case "closed":
 				if pr.MergedAt != nil {
 					info.PRStatus = PRStatusMerged
+					// Also mark branch as merged (handles squash/rebase merges)
+					if info.Status != StatusProtected {
+						info.Status = StatusMerged
+					}
 				} else {
 					info.PRStatus = PRStatusClosed
 					// If PR was closed without merge, it's an orphan
@@ -319,4 +327,202 @@ func (m *Manager) buildSummary(branches []Info) Summary {
 	}
 
 	return summary
+}
+
+// GetPRInfo returns detailed PR information for a branch
+func (m *Manager) GetPRInfo(branchName string) (*PRInfo, error) {
+	if m.ghClient == nil {
+		return nil, fmt.Errorf("no GitHub token available")
+	}
+
+	ctx := context.Background()
+
+	// Get PR for this branch
+	prNumber, prURL, err := m.ghClient.GetPullRequestByBranch(ctx, branchName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get detailed PR info
+	pr, err := m.ghClient.GetPullRequest(ctx, prNumber)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get PR details: %w", err)
+	}
+
+	info := &PRInfo{
+		Number:      prNumber,
+		Title:       pr.GetTitle(),
+		URL:         prURL,
+		Draft:       pr.GetDraft(),
+		Mergeable:   pr.GetMergeable(),
+		BranchName:  branchName,
+		BaseBranch:  pr.GetBase().GetRef(),
+		AuthorLogin: pr.GetUser().GetLogin(),
+	}
+
+	// Determine status
+	switch pr.GetState() {
+	case "open":
+		info.Status = PRStatusOpen
+	case "closed":
+		if pr.MergedAt != nil {
+			info.Status = PRStatusMerged
+		} else {
+			info.Status = PRStatusClosed
+		}
+	}
+
+	// Get checks status
+	checks, err := m.ghClient.GetPullRequestChecks(ctx, prNumber)
+	if err == nil {
+		info.Checks = &PRChecksInfo{
+			Total:   checks.TotalCount,
+			Pending: checks.Pending,
+			Success: checks.Success,
+			Failure: checks.Failure,
+			Status:  checks.Status,
+		}
+	}
+
+	// Get reviews
+	reviews, err := m.ghClient.GetPullRequestReviews(ctx, prNumber)
+	if err == nil {
+		info.Reviews = &PRReviewsInfo{}
+		for _, review := range reviews {
+			switch review.GetState() {
+			case "APPROVED":
+				info.Reviews.Approved++
+			case "CHANGES_REQUESTED":
+				info.Reviews.ChangesRequested++
+			case "PENDING":
+				info.Reviews.Pending++
+			}
+		}
+	}
+
+	return info, nil
+}
+
+// Cleanup removes branches that are merged (and optionally stale/orphan)
+func (m *Manager) Cleanup(opts CleanupOptions) (*CleanupResult, error) {
+	// Get current branch to avoid deleting it
+	currentBranch, err := GetCurrentBranch()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get current branch: %w", err)
+	}
+
+	// List all branches
+	listOpts := ListOptions{All: true}
+	listResult, err := m.List(listOpts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list branches: %w", err)
+	}
+
+	result := &CleanupResult{
+		Deleted: []DeletedBranch{},
+		Skipped: []SkippedBranch{},
+	}
+
+	for _, branch := range listResult.Branches {
+		// Determine if this branch should be cleaned up
+		shouldCleanup := false
+		switch branch.Status {
+		case StatusMerged:
+			shouldCleanup = true
+		case StatusStale:
+			shouldCleanup = opts.IncludeStale
+		case StatusOrphan:
+			shouldCleanup = opts.IncludeOrphan
+		}
+
+		if !shouldCleanup {
+			continue
+		}
+
+		// Skip protected branches
+		if branch.IsProtected {
+			result.Skipped = append(result.Skipped, SkippedBranch{
+				Name:   branch.Name,
+				Reason: "protected branch",
+			})
+			continue
+		}
+
+		// Skip current branch
+		if branch.Name == currentBranch {
+			result.Skipped = append(result.Skipped, SkippedBranch{
+				Name:   branch.Name,
+				Reason: "current branch",
+			})
+			continue
+		}
+
+		// If dry-run, just record what would be deleted
+		if opts.DryRun {
+			deleted := DeletedBranch{
+				Name:     branch.Name,
+				Location: branch.Location,
+				Status:   branch.Status,
+			}
+			if branch.Location == LocationLocal || branch.Location == LocationBoth {
+				deleted.LocalDeleted = true
+				result.LocalDeleted++
+			}
+			if branch.Location == LocationRemote || branch.Location == LocationBoth {
+				deleted.RemoteDeleted = true
+				result.RemoteDeleted++
+			}
+			result.Deleted = append(result.Deleted, deleted)
+			result.TotalDeleted++
+			continue
+		}
+
+		// Actually delete the branch
+		deleted := DeletedBranch{
+			Name:     branch.Name,
+			Location: branch.Location,
+			Status:   branch.Status,
+		}
+
+		// Delete local branch
+		if branch.Location == LocationLocal || branch.Location == LocationBoth {
+			// Force delete if --force flag OR if branch is merged (confirmed by GitHub)
+			// This handles local-only branches where git can't verify merge status
+			forceDelete := opts.Force || branch.Status == StatusMerged
+			err := DeleteLocalBranch(branch.Name, forceDelete)
+			if err != nil {
+				result.Skipped = append(result.Skipped, SkippedBranch{
+					Name:   branch.Name,
+					Reason: fmt.Sprintf("failed to delete local: %v", err),
+				})
+				continue
+			}
+			deleted.LocalDeleted = true
+			result.LocalDeleted++
+		}
+
+		// Delete remote branch
+		if branch.Location == LocationRemote || branch.Location == LocationBoth {
+			err := DeleteRemoteBranch(branch.Name)
+			if err != nil {
+				// If local was deleted but remote failed, still record partial success
+				if deleted.LocalDeleted {
+					result.Deleted = append(result.Deleted, deleted)
+					result.TotalDeleted++
+				}
+				result.Skipped = append(result.Skipped, SkippedBranch{
+					Name:   branch.Name,
+					Reason: fmt.Sprintf("failed to delete remote: %v", err),
+				})
+				continue
+			}
+			deleted.RemoteDeleted = true
+			result.RemoteDeleted++
+		}
+
+		result.Deleted = append(result.Deleted, deleted)
+		result.TotalDeleted++
+	}
+
+	return result, nil
 }

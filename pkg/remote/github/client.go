@@ -398,6 +398,24 @@ func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remot
 	return checks, nil
 }
 
+// GetPullRequest returns a single pull request by number
+func (c *Client) GetPullRequest(ctx context.Context, prNumber int) (*github.PullRequest, error) {
+	pr, _, err := c.client.PullRequests.Get(ctx, c.owner, c.repo, prNumber)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pull request: %w", err)
+	}
+	return pr, nil
+}
+
+// GetPullRequestReviews returns reviews for a pull request
+func (c *Client) GetPullRequestReviews(ctx context.Context, prNumber int) ([]*github.PullRequestReview, error) {
+	reviews, _, err := c.client.PullRequests.ListReviews(ctx, c.owner, c.repo, prNumber, &github.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pull request reviews: %w", err)
+	}
+	return reviews, nil
+}
+
 // ListPullRequests lists pull requests with the given state (open, closed, all)
 func (c *Client) ListPullRequests(ctx context.Context, state string) ([]*github.PullRequest, error) {
 	opts := &github.PullRequestListOptions{
