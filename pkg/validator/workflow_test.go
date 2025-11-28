@@ -28,7 +28,7 @@ jobs:
         run: ./bin/cidx run security
   code:
     name: Code Quality
-    needs: [setup]
+    needs: [security]
     steps:
       - name: Run code checks
         run: ./bin/cidx run code
