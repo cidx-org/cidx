@@ -34,16 +34,30 @@ const (
 
 // Info contains all information about a branch
 type Info struct {
-	Name         string
-	Location     Location
-	Status       Status
-	LastCommit   time.Time
-	LastAuthor   string
-	CommitHash   string
-	AheadBehind  string // e.g., "2 ahead, 3 behind"
-	PRNumber     int
-	PRStatus     PRStatus
-	PRTitle      string
+	Name     string
+	Location Location
+	Status   Status
+
+	// Local branch info
+	LocalCommitDate time.Time
+	LocalCommitHash string
+	LocalAuthor     string
+
+	// Remote branch info
+	RemoteCommitDate time.Time
+	RemoteCommitHash string
+	RemoteAuthor     string
+
+	// Computed/derived fields
+	LastCommit  time.Time // Most recent of local/remote
+	AheadBehind string    // e.g., "2 ahead, 3 behind"
+
+	// PR info
+	PRNumber int
+	PRStatus PRStatus
+	PRTitle  string
+
+	// Branch metadata
 	IsProtected  bool
 	TracksBranch string // Remote tracking branch
 }

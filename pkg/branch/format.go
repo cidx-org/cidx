@@ -61,16 +61,17 @@ func formatTable(result *ListResult) string {
 	var sb strings.Builder
 
 	// Header
-	sb.WriteString(fmt.Sprintf("\n%s%-45s %-12s %-8s %-6s %-20s%s\n",
+	sb.WriteString(fmt.Sprintf("\n%s%-40s %-12s %-8s %-14s %-14s %-18s%s\n",
 		colorBold,
 		"BRANCH",
 		"STATUS",
 		"PR",
-		"AGE",
-		"LAST COMMIT",
+		"LOCAL",
+		"REMOTE",
+		"AUTHOR",
 		colorReset,
 	))
-	sb.WriteString(strings.Repeat("─", 95) + "\n")
+	sb.WriteString(strings.Repeat("─", 110) + "\n")
 
 	// Branches
 	for _, b := range result.Branches {
@@ -78,7 +79,7 @@ func formatTable(result *ListResult) string {
 	}
 
 	// Footer
-	sb.WriteString(strings.Repeat("─", 95) + "\n")
+	sb.WriteString(strings.Repeat("─", 110) + "\n")
 	sb.WriteString(formatSummary(result.Summary))
 
 	// Suggestions
@@ -98,7 +99,7 @@ func formatTable(result *ListResult) string {
 func formatBranchLine(b Info) string {
 	// Branch name with location icon
 	locationIcon := getLocationIcon(b.Location)
-	name := truncate(b.Name, 42)
+	name := truncate(b.Name, 37)
 
 	// Status with icon and color
 	status := formatStatus(b.Status)
@@ -106,14 +107,36 @@ func formatBranchLine(b Info) string {
 	// PR info
 	pr := formatPR(b.PRNumber, b.PRStatus)
 
-	// Age
-	age := formatAge(b.LastCommit)
+	// Local info (age + hash)
+	localInfo := formatCommitInfo(b.LocalCommitDate, b.LocalCommitHash)
 
-	// Last commit (author)
-	author := truncate(b.LastAuthor, 18)
+	// Remote info (age + hash)
+	remoteInfo := formatCommitInfo(b.RemoteCommitDate, b.RemoteCommitHash)
 
-	return fmt.Sprintf("%s %-42s %-12s %-8s %-6s %-18s\n",
-		locationIcon, name, status, pr, age, author)
+	// Author (prefer local, fallback to remote)
+	author := b.LocalAuthor
+	if author == "" {
+		author = b.RemoteAuthor
+	}
+	author = truncate(author, 16)
+
+	return fmt.Sprintf("%s %-37s %-12s %-8s %-14s %-14s %-16s\n",
+		locationIcon, name, status, pr, localInfo, remoteInfo, author)
+}
+
+// formatCommitInfo formats commit date and hash
+func formatCommitInfo(t time.Time, hash string) string {
+	if t.IsZero() {
+		return fmt.Sprintf("%s-%s", colorDim, colorReset)
+	}
+
+	age := formatAge(t)
+	shortHash := hash
+	if len(shortHash) > 7 {
+		shortHash = shortHash[:7]
+	}
+
+	return fmt.Sprintf("%s %s%s%s", age, colorDim, shortHash, colorReset)
 }
 
 // getLocationIcon returns the icon for branch location

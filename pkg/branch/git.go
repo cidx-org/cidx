@@ -207,3 +207,35 @@ func FetchPrune() error {
 	cmd := exec.Command("git", "fetch", "--prune")
 	return cmd.Run()
 }
+
+// GetRemoteBranchInfo returns info for a specific remote branch
+func GetRemoteBranchInfo(branchName string) (*GitBranch, error) {
+	ref := fmt.Sprintf("refs/remotes/origin/%s", branchName)
+	format := "%(refname:short)|%(objectname:short)|%(committerdate:unix)|%(authoremail)|%(subject)"
+	cmd := exec.Command("git", "for-each-ref", "--format="+format, ref)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get remote branch info: %w", err)
+	}
+
+	output := strings.TrimSpace(string(out))
+	if output == "" {
+		return nil, nil // Branch doesn't exist on remote
+	}
+
+	branches, err := parseBranchOutput(output, true)
+	if err != nil || len(branches) == 0 {
+		return nil, err
+	}
+
+	return &branches[0], nil
+}
+
+// BuildRemoteBranchMap creates a map of branch name -> GitBranch for remote branches
+func BuildRemoteBranchMap(remoteBranches []GitBranch) map[string]GitBranch {
+	result := make(map[string]GitBranch)
+	for _, rb := range remoteBranches {
+		result[rb.Name] = rb
+	}
+	return result
+}

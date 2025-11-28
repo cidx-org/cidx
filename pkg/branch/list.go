@@ -68,6 +68,9 @@ func (m *Manager) List(opts ListOptions) (*ListResult, error) {
 		return nil, fmt.Errorf("failed to list remote branches: %w", err)
 	}
 
+	// Build remote branch map for quick lookup
+	remoteBranchMap := BuildRemoteBranchMap(remoteBranches)
+
 	// Get current user for "mine" filter
 	currentUser := ""
 	if opts.Mine {
@@ -80,15 +83,26 @@ func (m *Manager) List(opts ListOptions) (*ListResult, error) {
 	// Process local branches
 	for _, lb := range localBranches {
 		info := m.buildBranchInfo(lb, LocationLocal)
+
+		// Check if remote version exists
+		if rb, ok := remoteBranchMap[lb.Name]; ok {
+			info.Location = LocationBoth
+			info.RemoteCommitDate = rb.CommitDate
+			info.RemoteCommitHash = rb.CommitHash
+			info.RemoteAuthor = rb.Author
+
+			// LastCommit is the most recent of local or remote
+			if rb.CommitDate.After(info.LocalCommitDate) {
+				info.LastCommit = rb.CommitDate
+			}
+		}
+
 		branchMap[lb.Name] = info
 	}
 
-	// Process remote branches
+	// Process remote-only branches
 	for _, rb := range remoteBranches {
-		if existing, ok := branchMap[rb.Name]; ok {
-			// Branch exists both locally and remotely
-			existing.Location = LocationBoth
-		} else if opts.All {
+		if _, ok := branchMap[rb.Name]; !ok && opts.All {
 			// Remote-only branch
 			info := m.buildBranchInfo(rb, LocationRemote)
 			branchMap[rb.Name] = info
@@ -127,9 +141,20 @@ func (m *Manager) buildBranchInfo(gb GitBranch, location Location) *Info {
 		Name:        gb.Name,
 		Location:    location,
 		LastCommit:  gb.CommitDate,
-		LastAuthor:  gb.Author,
-		CommitHash:  gb.CommitHash,
 		IsProtected: m.isProtected(gb.Name),
+	}
+
+	// Set local or remote info based on location
+	if location == LocationLocal || location == LocationBoth {
+		info.LocalCommitDate = gb.CommitDate
+		info.LocalCommitHash = gb.CommitHash
+		info.LocalAuthor = gb.Author
+	}
+
+	if location == LocationRemote {
+		info.RemoteCommitDate = gb.CommitDate
+		info.RemoteCommitHash = gb.CommitHash
+		info.RemoteAuthor = gb.Author
 	}
 
 	// Determine status
@@ -228,13 +253,19 @@ func (m *Manager) enrichWithPRInfo(branchMap map[string]*Info) {
 
 // matchesFilters checks if a branch matches the given filter options
 func (m *Manager) matchesFilters(info *Info, opts ListOptions, currentUser string) bool {
+	// Get author (prefer local, fallback to remote)
+	author := info.LocalAuthor
+	if author == "" {
+		author = info.RemoteAuthor
+	}
+
 	// Author filter
-	if opts.Author != "" && !strings.Contains(strings.ToLower(info.LastAuthor), strings.ToLower(opts.Author)) {
+	if opts.Author != "" && !strings.Contains(strings.ToLower(author), strings.ToLower(opts.Author)) {
 		return false
 	}
 
 	// Mine filter
-	if opts.Mine && currentUser != "" && !strings.Contains(strings.ToLower(info.LastAuthor), strings.ToLower(currentUser)) {
+	if opts.Mine && currentUser != "" && !strings.Contains(strings.ToLower(author), strings.ToLower(currentUser)) {
 		return false
 	}
 
