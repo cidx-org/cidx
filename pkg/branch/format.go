@@ -196,9 +196,12 @@ func formatTable(result *ListResult) string {
 	sb.WriteString(strings.Repeat("─", tableWidth) + "\n")
 	sb.WriteString(formatSummary(result.Summary))
 
+	// Legend
+	sb.WriteString(formatLegend())
+
 	// Warning if no GitHub token
 	if !result.HasGitHubToken {
-		sb.WriteString(fmt.Sprintf("%s⚠ No GitHub token: PR info unavailable (set GITHUB_TOKEN or run 'gh auth login')%s\n",
+		sb.WriteString(fmt.Sprintf("\n%s⚠ No GitHub token: PR info unavailable (set GITHUB_TOKEN or run 'gh auth login')%s\n",
 			colorYellow, colorReset))
 	}
 
@@ -363,6 +366,23 @@ func formatSummary(s Summary) string {
 	return fmt.Sprintf("%s%d branches%s (%s)\n",
 		colorBold, s.Total, colorReset,
 		strings.Join(parts, ", "))
+}
+
+// formatLegend formats the legend explaining markers and colors
+func formatLegend() string {
+	var sb strings.Builder
+
+	sb.WriteString(fmt.Sprintf("%sLocation:%s [L]=local  [R]=remote  [B]=both    ", colorDim, colorReset))
+	sb.WriteString(fmt.Sprintf("%sStatus:%s %sactive%s %sstale%s %smerged%s %sprotected%s %sorphan%s\n",
+		colorDim, colorReset,
+		colorGreen, colorReset,
+		colorYellow, colorReset,
+		colorCyan, colorReset,
+		colorBlue, colorReset,
+		colorRed, colorReset,
+	))
+
+	return sb.String()
 }
 
 // truncate truncates a string to max length with ellipsis
