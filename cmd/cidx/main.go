@@ -23,6 +23,7 @@ func main() {
 			initCommand(),
 			actionCommand(),
 			checkCommand,
+			branchCommand(),
 		},
 		Flags: []cli.Flag{
 			&cli.StringFlag{

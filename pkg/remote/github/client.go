@@ -29,6 +29,110 @@ func NewClient(token, owner, repo string) *Client {
 	}
 }
 
+// NewClientFromEnv creates a GitHub client using environment variables and git remote
+func NewClientFromEnv() (*Client, error) {
+	// Get token from environment
+	token := getEnvToken()
+	if token == "" {
+		return nil, fmt.Errorf("GITHUB_TOKEN not set")
+	}
+
+	// Get owner/repo from git remote
+	owner, repo, err := getRepoFromRemote()
+	if err != nil {
+		return nil, fmt.Errorf("failed to detect repository: %w", err)
+	}
+
+	return NewClient(token, owner, repo), nil
+}
+
+// getEnvToken returns GitHub token from environment
+func getEnvToken() string {
+	// Check various token env vars
+	for _, key := range []string{"GITHUB_TOKEN", "GH_TOKEN"} {
+		if token := getenv(key); token != "" {
+			return token
+		}
+	}
+	return ""
+}
+
+// getenv is a helper to get environment variable
+func getenv(key string) string {
+	cmd := exec.Command("printenv", key)
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return string(out[:len(out)-1]) // Remove trailing newline
+}
+
+// getRepoFromRemote extracts owner/repo from git remote URL
+func getRepoFromRemote() (owner, repo string, err error) {
+	cmd := exec.Command("git", "remote", "get-url", "origin")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get remote URL: %w", err)
+	}
+
+	url := string(out[:len(out)-1]) // Remove trailing newline
+	return parseGitHubURL(url)
+}
+
+// parseGitHubURL extracts owner/repo from various GitHub URL formats
+func parseGitHubURL(url string) (owner, repo string, err error) {
+	// Handle SSH format: git@github.com:owner/repo.git
+	if len(url) > 15 && url[:15] == "git@github.com:" {
+		path := url[15:]
+		path = trimSuffix(path, ".git")
+		parts := splitN(path, "/", 2)
+		if len(parts) == 2 {
+			return parts[0], parts[1], nil
+		}
+	}
+
+	// Handle HTTPS format: https://github.com/owner/repo.git
+	if len(url) > 19 && url[:19] == "https://github.com/" {
+		path := url[19:]
+		path = trimSuffix(path, ".git")
+		parts := splitN(path, "/", 2)
+		if len(parts) == 2 {
+			return parts[0], parts[1], nil
+		}
+	}
+
+	return "", "", fmt.Errorf("unsupported URL format: %s", url)
+}
+
+// trimSuffix removes suffix from string
+func trimSuffix(s, suffix string) string {
+	if len(s) >= len(suffix) && s[len(s)-len(suffix):] == suffix {
+		return s[:len(s)-len(suffix)]
+	}
+	return s
+}
+
+// splitN splits string into at most n parts
+func splitN(s, sep string, n int) []string {
+	var parts []string
+	for i := 0; i < n-1; i++ {
+		idx := -1
+		for j := 0; j < len(s)-len(sep)+1; j++ {
+			if s[j:j+len(sep)] == sep {
+				idx = j
+				break
+			}
+		}
+		if idx == -1 {
+			break
+		}
+		parts = append(parts, s[:idx])
+		s = s[idx+len(sep):]
+	}
+	parts = append(parts, s)
+	return parts
+}
+
 // GetLatestWorkflow returns the most recent workflow run for a branch
 func (c *Client) GetLatestWorkflow(ctx context.Context, branch string) (*remote.Workflow, error) {
 	runs, _, err := c.client.Actions.ListWorkflowRunsByFileName(
@@ -292,6 +396,21 @@ func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remot
 	}
 
 	return checks, nil
+}
+
+// ListPullRequests lists pull requests with the given state (open, closed, all)
+func (c *Client) ListPullRequests(ctx context.Context, state string) ([]*github.PullRequest, error) {
+	opts := &github.PullRequestListOptions{
+		State:       state,
+		ListOptions: github.ListOptions{PerPage: 100},
+	}
+
+	prs, _, err := c.client.PullRequests.List(ctx, c.owner, c.repo, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list pull requests: %w", err)
+	}
+
+	return prs, nil
 }
 
 // WatchPullRequestChecks streams updates for PR checks until all complete
