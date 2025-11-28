@@ -268,9 +268,11 @@ func formatBranchLine(b Info, widths columnWidths) string {
 }
 
 // formatCommitInfo formats commit date and hash
+// Returns a string of exactly 20 visible characters (date + space + hash)
 func formatCommitInfo(t time.Time, hash string) string {
 	if t.IsZero() {
-		return fmt.Sprintf("%s--%s", colorDim, colorReset)
+		// Pad to 20 chars to match "Nov 28 12:30 1234567" format
+		return fmt.Sprintf("%s%-20s%s", colorDim, "--", colorReset)
 	}
 
 	// Format as local date/time: "Nov 28 12:30"
@@ -319,7 +321,8 @@ func formatStatus(s Status) string {
 // formatPR formats the PR number and status
 func formatPR(number int, status PRStatus) string {
 	if number == 0 {
-		return fmt.Sprintf("%s--%s", colorDim, colorReset)
+		// Pad to match typical PR width
+		return fmt.Sprintf("%s%-6s%s", colorDim, "--", colorReset)
 	}
 
 	var color string
@@ -334,7 +337,7 @@ func formatPR(number int, status PRStatus) string {
 		color = ""
 	}
 
-	return fmt.Sprintf("%s#%d%s", color, number, colorReset)
+	return fmt.Sprintf("%s#%-5d%s", color, number, colorReset)
 }
 
 // formatSummary formats the summary statistics
