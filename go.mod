@@ -11,6 +11,7 @@ require (
 	github.com/google/go-github/v76 v76.0.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/urfave/cli/v2 v2.27.7
+	golang.org/x/term v0.34.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 

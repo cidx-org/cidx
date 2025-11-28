@@ -3,8 +3,11 @@ package branch
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
+
+	"golang.org/x/term"
 )
 
 // ANSI color codes
@@ -26,6 +29,112 @@ const (
 	markerRemote = "[R]"
 	markerBoth   = "[B]"
 )
+
+// Column configuration
+type columnWidths struct {
+	marker  int // Fixed: 3
+	branch  int // Flexible
+	status  int // Fixed: 9
+	pr      int // Fixed: 6
+	local   int // Fixed: 20
+	remote  int // Fixed: 20
+	author  int // Flexible
+	subject int // Flexible (lowest priority)
+}
+
+// Fixed column widths
+const (
+	fixedMarker = 3
+	fixedStatus = 9
+	fixedPR     = 6
+	fixedLocal  = 20
+	fixedRemote = 20
+	minBranch   = 15
+	minAuthor   = 10
+	minSubject  = 0 // Can be hidden entirely
+)
+
+// getTerminalWidth returns the terminal width or a default value
+func getTerminalWidth() int {
+	width, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil || width <= 0 {
+		return 160 // Default for non-terminal or error
+	}
+	return width
+}
+
+// calculateColumnWidths determines optimal column widths based on content and terminal width
+func calculateColumnWidths(branches []Info, termWidth int) columnWidths {
+	// Find max content lengths
+	maxBranch := len("BRANCH")
+	maxAuthor := len("LAST AUTHOR")
+	maxSubject := len("SUBJECT")
+
+	for _, b := range branches {
+		if len(b.Name) > maxBranch {
+			maxBranch = len(b.Name)
+		}
+
+		author := b.LocalAuthor
+		if author == "" {
+			author = b.RemoteAuthor
+		}
+		if len(author) > maxAuthor {
+			maxAuthor = len(author)
+		}
+
+		subject := b.LocalCommitSubject
+		if subject == "" {
+			subject = b.RemoteCommitSubject
+		}
+		if len(subject) > maxSubject {
+			maxSubject = len(subject)
+		}
+	}
+
+	// Calculate fixed space needed (including separators)
+	// marker(3) + space + branch + space + status(9) + space + pr(6) + space + local(20) + space + remote(20) + space + author + space + subject
+	fixedSpace := fixedMarker + fixedStatus + fixedPR + fixedLocal + fixedRemote + 7 // 7 spaces between columns
+
+	// Available space for flexible columns
+	availableForFlex := termWidth - fixedSpace
+
+	// Ideal widths for flexible columns
+	idealBranch := maxBranch
+	idealAuthor := maxAuthor
+	idealSubject := maxSubject
+	totalIdeal := idealBranch + idealAuthor + idealSubject
+
+	var widths columnWidths
+	widths.marker = fixedMarker
+	widths.status = fixedStatus
+	widths.pr = fixedPR
+	widths.local = fixedLocal
+	widths.remote = fixedRemote
+
+	if totalIdeal <= availableForFlex {
+		// Everything fits - use ideal widths
+		widths.branch = idealBranch
+		widths.author = idealAuthor
+		widths.subject = idealSubject
+	} else {
+		// Need to truncate - prioritize: branch > author > subject
+		remaining := availableForFlex
+
+		// Allocate branch (up to ideal, min minBranch)
+		widths.branch = min(idealBranch, max(minBranch, remaining/3))
+		remaining -= widths.branch
+
+		// Allocate author (up to ideal, min minAuthor)
+		widths.author = min(idealAuthor, max(minAuthor, remaining/2))
+		remaining -= widths.author
+
+		// Subject gets the rest (can be 0)
+		widths.subject = max(0, remaining)
+	}
+
+	return widths
+}
 
 // FormatList formats the branch list for terminal output
 func FormatList(result *ListResult, asJSON bool) string {
@@ -50,30 +159,41 @@ func formatTable(result *ListResult) string {
 		return "No branches found matching the criteria."
 	}
 
+	termWidth := getTerminalWidth()
+	widths := calculateColumnWidths(result.Branches, termWidth)
+
 	var sb strings.Builder
 
+	// Calculate total table width
+	tableWidth := widths.marker + 1 + widths.branch + 1 + widths.status + 1 + widths.pr + 1 + widths.local + 1 + widths.remote + 1 + widths.author
+	if widths.subject > 0 {
+		tableWidth += 1 + widths.subject
+	}
+
 	// Header
-	sb.WriteString(fmt.Sprintf("\n%s%-3s %-30s %-9s %-6s %-20s %-20s %-16s %s%s\n",
+	sb.WriteString(fmt.Sprintf("\n%s%-*s %-*s %-*s %-*s %-*s %-*s %-*s",
 		colorBold,
-		"",
-		"BRANCH",
-		"STATUS",
-		"PR",
-		"LOCAL",
-		"REMOTE",
-		"LAST AUTHOR",
-		"SUBJECT",
-		colorReset,
+		widths.marker, "",
+		widths.branch, "BRANCH",
+		widths.status, "STATUS",
+		widths.pr, "PR",
+		widths.local, "LOCAL",
+		widths.remote, "REMOTE",
+		widths.author, "LAST AUTHOR",
 	))
-	sb.WriteString(strings.Repeat("─", 145) + "\n")
+	if widths.subject > 0 {
+		sb.WriteString(fmt.Sprintf(" %-*s", widths.subject, "SUBJECT"))
+	}
+	sb.WriteString(fmt.Sprintf("%s\n", colorReset))
+	sb.WriteString(strings.Repeat("─", tableWidth) + "\n")
 
 	// Branches
 	for _, b := range result.Branches {
-		sb.WriteString(formatBranchLine(b))
+		sb.WriteString(formatBranchLine(b, widths))
 	}
 
 	// Footer
-	sb.WriteString(strings.Repeat("─", 145) + "\n")
+	sb.WriteString(strings.Repeat("─", tableWidth) + "\n")
 	sb.WriteString(formatSummary(result.Summary))
 
 	// Warning if no GitHub token
@@ -96,12 +216,12 @@ func formatTable(result *ListResult) string {
 }
 
 // formatBranchLine formats a single branch line
-func formatBranchLine(b Info) string {
+func formatBranchLine(b Info, widths columnWidths) string {
 	// Location marker
 	marker := getLocationMarker(b.Location)
 
-	// Branch name
-	name := truncate(b.Name, 30)
+	// Branch name (truncate if needed)
+	name := truncate(b.Name, widths.branch)
 
 	// Status with color
 	status := formatStatus(b.Status)
@@ -109,10 +229,10 @@ func formatBranchLine(b Info) string {
 	// PR info
 	pr := formatPR(b.PRNumber, b.PRStatus)
 
-	// Local info (age + hash)
+	// Local info (date + hash)
 	localInfo := formatCommitInfo(b.LocalCommitDate, b.LocalCommitHash)
 
-	// Remote info (age + hash)
+	// Remote info (date + hash)
 	remoteInfo := formatCommitInfo(b.RemoteCommitDate, b.RemoteCommitHash)
 
 	// Author (prefer local, fallback to remote)
@@ -120,17 +240,31 @@ func formatBranchLine(b Info) string {
 	if author == "" {
 		author = b.RemoteAuthor
 	}
-	author = truncate(author, 16)
+	author = truncate(author, widths.author)
 
 	// Subject (prefer local, fallback to remote)
 	subject := b.LocalCommitSubject
 	if subject == "" {
 		subject = b.RemoteCommitSubject
 	}
-	subject = truncate(subject, 28)
 
-	return fmt.Sprintf("%s %-30s %s %-6s %-20s %-20s %-16s %s\n",
-		marker, name, status, pr, localInfo, remoteInfo, author, subject)
+	// Build the line
+	line := fmt.Sprintf("%s %-*s %s %-*s %-*s %-*s %-*s",
+		marker,
+		widths.branch, name,
+		status,
+		widths.pr, pr,
+		widths.local, localInfo,
+		widths.remote, remoteInfo,
+		widths.author, author,
+	)
+
+	if widths.subject > 0 {
+		subject = truncate(subject, widths.subject)
+		line += fmt.Sprintf(" %s", subject)
+	}
+
+	return line + "\n"
 }
 
 // formatCommitInfo formats commit date and hash
@@ -229,12 +363,15 @@ func formatSummary(s Summary) string {
 }
 
 // truncate truncates a string to max length with ellipsis
-func truncate(s string, max int) string {
-	if len(s) <= max {
+func truncate(s string, maxLen int) string {
+	if maxLen <= 0 {
+		return ""
+	}
+	if len(s) <= maxLen {
 		return s
 	}
-	if max <= 3 {
-		return s[:max]
+	if maxLen <= 3 {
+		return s[:maxLen]
 	}
-	return s[:max-3] + "..."
+	return s[:maxLen-3] + "..."
 }
