@@ -5,8 +5,17 @@ type Config struct {
 	Phases    map[string]Phase                  `toml:",inline"`
 	Pipelines map[string]Pipeline               `toml:"pipelines"`
 	Actions   map[string]Action                 `toml:"actions"`
+	Branch    BranchConfig                      `toml:"branch"`
 	Overrides map[string]map[string]interface{} `toml:",inline"`
 	Workspace string                            // Auto-detected or from env
+}
+
+// BranchConfig defines branch management settings
+type BranchConfig struct {
+	StaleDays     int      `toml:"stale_days"`      // Days before a branch is considered stale (default: 30)
+	NamingPattern string   `toml:"naming_pattern"`  // Regex pattern for valid branch names
+	AutoCleanup   bool     `toml:"auto_cleanup"`    // Cleanup merged branches after PR merge
+	Protected     []string `toml:"protected"`       // Branches that should never be deleted
 }
 
 // Phase defines containers for a specific phase
