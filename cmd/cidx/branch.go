@@ -261,8 +261,8 @@ func branchPRCommand() *cli.Command {
 func watchPRChecks(manager *branch.Manager, branchName string, initialInfo *branch.PRInfo) error {
 	// ANSI codes for terminal control
 	const (
-		clearLine = "\033[2K"
-		moveUp    = "\033[1A"
+		clearLine  = "\033[2K"
+		moveUp     = "\033[1A"
 		hideCursor = "\033[?25l"
 		showCursor = "\033[?25h"
 	)
@@ -276,57 +276,95 @@ func watchPRChecks(manager *branch.Manager, branchName string, initialInfo *bran
 	fmt.Printf("\033[2m%s\033[0m\n\n", initialInfo.URL)
 	fmt.Printf("Watching checks for \033[36m%s\033[0m... (Ctrl+C to stop)\n\n", branchName)
 
-	lastStatus := ""
 	spinnerFrames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
-	frame := 0
+
+	// Current state (updated by API polling)
+	currentInfo := initialInfo
+	done := make(chan struct{})
+	firstPrint := true
+
+	// Spinner animation goroutine (runs every 100ms)
+	go func() {
+		frame := 0
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				info := currentInfo
+				if info == nil || info.Checks == nil {
+					continue
+				}
+
+				// Don't animate if checks are complete
+				if info.Checks.Status != "pending" {
+					continue
+				}
+
+				// Build and display spinner line
+				checksColor := "\033[33m" // yellow for pending
+				checksIcon := spinnerFrames[frame%len(spinnerFrames)]
+
+				statusLine := fmt.Sprintf("%s%s %d/%d checks passed\033[0m",
+					checksColor, checksIcon, info.Checks.Success, info.Checks.Total)
+
+				if info.Checks.Pending > 0 {
+					statusLine += fmt.Sprintf(" (%d pending)", info.Checks.Pending)
+				}
+				if info.Checks.Failure > 0 {
+					statusLine += fmt.Sprintf(" (\033[31m%d failed\033[0m)", info.Checks.Failure)
+				}
+
+				// Update display
+				if !firstPrint {
+					fmt.Printf("%s%s", moveUp, clearLine)
+				}
+				fmt.Printf("  %s\n", statusLine)
+				firstPrint = false
+				frame++
+			}
+		}
+	}()
+
+	// API polling loop (every 3 seconds)
+	pollTicker := time.NewTicker(3 * time.Second)
+	defer pollTicker.Stop()
 
 	for {
 		info, err := manager.GetPRInfo(branchName)
 		if err != nil {
+			close(done)
 			return fmt.Errorf("failed to get PR info: %w", err)
 		}
+		currentInfo = info
 
-		// Build status line
-		var statusLine string
-		if info.Checks != nil {
-			checksColor := "\033[33m" // yellow for pending
-			checksIcon := spinnerFrames[frame%len(spinnerFrames)]
+		// Check if we're done
+		if info.Checks != nil && info.Checks.Pending == 0 {
+			close(done)
+			time.Sleep(150 * time.Millisecond) // Let spinner goroutine exit
 
-			switch info.Checks.Status {
-			case "success":
-				checksColor = "\033[32m" // green
-				checksIcon = "✓"
-			case "failure":
+			// Final status display
+			checksColor := "\033[32m" // green for success
+			checksIcon := "✓"
+			if info.Checks.Status == "failure" {
 				checksColor = "\033[31m" // red
 				checksIcon = "✗"
 			}
 
-			statusLine = fmt.Sprintf("%s%s %d/%d checks passed\033[0m",
+			statusLine := fmt.Sprintf("%s%s %d/%d checks passed\033[0m",
 				checksColor, checksIcon, info.Checks.Success, info.Checks.Total)
-
-			if info.Checks.Pending > 0 {
-				statusLine += fmt.Sprintf(" (%d pending)", info.Checks.Pending)
-			}
 			if info.Checks.Failure > 0 {
 				statusLine += fmt.Sprintf(" (\033[31m%d failed\033[0m)", info.Checks.Failure)
 			}
-		} else {
-			statusLine = "No checks configured"
-		}
 
-		// Only update display if status changed
-		currentStatus := fmt.Sprintf("%v", info.Checks)
-		if currentStatus != lastStatus || info.Checks.Status == "pending" {
-			// Move up and clear previous line, then print new status
-			if lastStatus != "" {
+			if !firstPrint {
 				fmt.Printf("%s%s", moveUp, clearLine)
 			}
 			fmt.Printf("  %s\n", statusLine)
-			lastStatus = currentStatus
-		}
 
-		// Check if we're done
-		if info.Checks != nil && info.Checks.Pending == 0 {
 			fmt.Println()
 			switch info.Checks.Status {
 			case "success":
@@ -341,8 +379,7 @@ func watchPRChecks(manager *branch.Manager, branchName string, initialInfo *bran
 			return nil
 		}
 
-		frame++
-		time.Sleep(2 * time.Second)
+		<-pollTicker.C
 	}
 }
 
