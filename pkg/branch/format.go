@@ -53,7 +53,7 @@ func formatTable(result *ListResult) string {
 	var sb strings.Builder
 
 	// Header
-	sb.WriteString(fmt.Sprintf("\n%s%-3s %-30s %-9s %-6s %-12s %-12s %-16s %s%s\n",
+	sb.WriteString(fmt.Sprintf("\n%s%-3s %-30s %-9s %-6s %-20s %-20s %-16s %s%s\n",
 		colorBold,
 		"",
 		"BRANCH",
@@ -65,7 +65,7 @@ func formatTable(result *ListResult) string {
 		"SUBJECT",
 		colorReset,
 	))
-	sb.WriteString(strings.Repeat("─", 130) + "\n")
+	sb.WriteString(strings.Repeat("─", 145) + "\n")
 
 	// Branches
 	for _, b := range result.Branches {
@@ -73,8 +73,14 @@ func formatTable(result *ListResult) string {
 	}
 
 	// Footer
-	sb.WriteString(strings.Repeat("─", 130) + "\n")
+	sb.WriteString(strings.Repeat("─", 145) + "\n")
 	sb.WriteString(formatSummary(result.Summary))
+
+	// Warning if no GitHub token
+	if !result.HasGitHubToken {
+		sb.WriteString(fmt.Sprintf("%s⚠ No GitHub token: PR info unavailable (set GITHUB_TOKEN or run 'gh auth login')%s\n",
+			colorYellow, colorReset))
+	}
 
 	// Suggestions
 	if result.Summary.Merged > 0 {
@@ -123,7 +129,7 @@ func formatBranchLine(b Info) string {
 	}
 	subject = truncate(subject, 28)
 
-	return fmt.Sprintf("%s %-30s %s %-6s %-12s %-12s %-16s %s\n",
+	return fmt.Sprintf("%s %-30s %s %-6s %-20s %-20s %-16s %s\n",
 		marker, name, status, pr, localInfo, remoteInfo, author, subject)
 }
 
@@ -133,13 +139,14 @@ func formatCommitInfo(t time.Time, hash string) string {
 		return fmt.Sprintf("%s--%s", colorDim, colorReset)
 	}
 
-	age := formatAge(t)
+	// Format as local date/time: "Nov 28 12:30"
+	dateStr := t.Local().Format("Jan 02 15:04")
 	shortHash := hash
 	if len(shortHash) > 7 {
 		shortHash = shortHash[:7]
 	}
 
-	return fmt.Sprintf("%-4s %s", age, shortHash)
+	return fmt.Sprintf("%s %s", dateStr, shortHash)
 }
 
 // getLocationMarker returns the marker for branch location
@@ -194,30 +201,6 @@ func formatPR(number int, status PRStatus) string {
 	}
 
 	return fmt.Sprintf("%s#%d%s", color, number, colorReset)
-}
-
-// formatAge formats the time since last commit
-func formatAge(t time.Time) string {
-	duration := time.Since(t)
-
-	days := int(duration.Hours() / 24)
-	if days == 0 {
-		hours := int(duration.Hours())
-		if hours == 0 {
-			return "now"
-		}
-		return fmt.Sprintf("%dh", hours)
-	}
-	if days < 7 {
-		return fmt.Sprintf("%dd", days)
-	}
-	if days < 30 {
-		return fmt.Sprintf("%dw", days/7)
-	}
-	if days < 365 {
-		return fmt.Sprintf("%dm", days/30)
-	}
-	return fmt.Sprintf("%dy", days/365)
 }
 
 // formatSummary formats the summary statistics

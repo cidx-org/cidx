@@ -3,8 +3,10 @@ package github
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cidx-org/cidx/pkg/remote"
@@ -46,25 +48,23 @@ func NewClientFromEnv() (*Client, error) {
 	return NewClient(token, owner, repo), nil
 }
 
-// getEnvToken returns GitHub token from environment
+// getEnvToken returns GitHub token from environment or gh CLI
 func getEnvToken() string {
-	// Check various token env vars
+	// 1. Check environment variables first
 	for _, key := range []string{"GITHUB_TOKEN", "GH_TOKEN"} {
-		if token := getenv(key); token != "" {
+		if token := os.Getenv(key); token != "" {
 			return token
 		}
 	}
-	return ""
-}
 
-// getenv is a helper to get environment variable
-func getenv(key string) string {
-	cmd := exec.Command("printenv", key)
+	// 2. Fallback to gh CLI auth
+	cmd := exec.Command("gh", "auth", "token")
 	out, err := cmd.Output()
-	if err != nil {
-		return ""
+	if err == nil && len(out) > 0 {
+		return strings.TrimSpace(string(out))
 	}
-	return string(out[:len(out)-1]) // Remove trailing newline
+
+	return ""
 }
 
 // getRepoFromRemote extracts owner/repo from git remote URL

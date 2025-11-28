@@ -79,9 +79,10 @@ type ListOptions struct {
 
 // ListResult contains the result of a branch list operation
 type ListResult struct {
-	Branches   []Info
-	TotalCount int
-	Summary    Summary
+	Branches       []Info
+	TotalCount     int
+	Summary        Summary
+	HasGitHubToken bool
 }
 
 // Summary contains branch statistics

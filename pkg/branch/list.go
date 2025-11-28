@@ -130,9 +130,10 @@ func (m *Manager) List(opts ListOptions) (*ListResult, error) {
 	summary := m.buildSummary(branches)
 
 	return &ListResult{
-		Branches:   branches,
-		TotalCount: len(branches),
-		Summary:    summary,
+		Branches:       branches,
+		TotalCount:     len(branches),
+		Summary:        summary,
+		HasGitHubToken: m.ghClient != nil,
 	}, nil
 }
 
