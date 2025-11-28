@@ -50,3 +50,37 @@ Validate the syntax and structure of the configuration file.
 ```bash
 cidx validate
 ```
+
+### `cidx check workflow`
+
+Validate that cidx.toml pipelines match GitHub Actions workflows.
+
+```bash
+cidx check workflow              # Validate all workflows
+cidx check workflow ci           # Validate specific workflow
+cidx check workflow --verbose    # Show detailed validation info
+```
+
+**Options:**
+
+- `--workflow-dir`: Directory containing workflow files (default: `.github/workflows`)
+- `--verbose, -v`: Show detailed validation information
+
+**What it checks:**
+
+- Phase presence: Ensures all phases in pipelines exist in workflows
+- Phase order: Verifies phases execute in the correct order
+- Consistency: Detects mismatches between local and CI/CD configurations
+
+**Example output:**
+
+```text
+✅ Workflow ci.yml matches pipeline 'ci'
+   Phases: [security, code, test, build]
+
+⚠️  Workflow release.yml has differences with pipeline 'release'
+   Missing in GitHub:  [docker]
+   Order mismatch:
+     Local:  [security, code, test, build, docker, release]
+     GitHub: [security, code, test, build, release]
+```

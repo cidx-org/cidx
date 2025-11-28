@@ -248,7 +248,7 @@ description = "Main branch pipeline (builds artifacts)"
 # Trigger: Git tag pushed (e.g., v1.2.3)
 # Purpose: Full validation + build + publish release artifacts
 [pipelines.release]
-phases = ["security", "code", "test", "build", "release", "docker"]  # Complete workflow
+phases = ["security", "code", "test", "build", "docker", "release"]  # Complete workflow
 description = "Complete release pipeline (CI only)"
 
 # ──────────────────────────────────────────────────────────────────────────────
