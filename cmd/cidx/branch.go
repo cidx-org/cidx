@@ -292,10 +292,11 @@ func watchPRChecks(manager *branch.Manager, branchName string, initialInfo *bran
 			checksColor := "\033[33m" // yellow for pending
 			checksIcon := spinnerFrames[frame%len(spinnerFrames)]
 
-			if info.Checks.Status == "success" {
+			switch info.Checks.Status {
+			case "success":
 				checksColor = "\033[32m" // green
 				checksIcon = "✓"
-			} else if info.Checks.Status == "failure" {
+			case "failure":
 				checksColor = "\033[31m" // red
 				checksIcon = "✗"
 			}
@@ -327,12 +328,13 @@ func watchPRChecks(manager *branch.Manager, branchName string, initialInfo *bran
 		// Check if we're done
 		if info.Checks != nil && info.Checks.Pending == 0 {
 			fmt.Println()
-			if info.Checks.Status == "success" {
+			switch info.Checks.Status {
+			case "success":
 				fmt.Printf("\033[32m✓ All checks passed!\033[0m\n")
 				if info.Mergeable {
 					fmt.Printf("\033[2mReady to merge: cidx pr merge\033[0m\n")
 				}
-			} else if info.Checks.Status == "failure" {
+			case "failure":
 				fmt.Printf("\033[31m✗ Some checks failed\033[0m\n")
 			}
 			fmt.Println()

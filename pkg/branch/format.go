@@ -518,10 +518,11 @@ func FormatPRInfo(info *PRInfo) string {
 	if info.Checks != nil && info.Checks.Total > 0 {
 		checksColor := colorGreen
 		checksIcon := "✓"
-		if info.Checks.Status == "failure" {
+		switch info.Checks.Status {
+		case "failure":
 			checksColor = colorRed
 			checksIcon = "✗"
-		} else if info.Checks.Status == "pending" {
+		case "pending":
 			checksColor = colorYellow
 			checksIcon = "●"
 		}
