@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/arcker/cidx/pkg/config"
-	"github.com/arcker/cidx/pkg/environment"
-	"github.com/arcker/cidx/pkg/executor"
-	"github.com/arcker/cidx/pkg/presets"
+	"github.com/cidx-org/cidx/pkg/config"
+	"github.com/cidx-org/cidx/pkg/environment"
+	"github.com/cidx-org/cidx/pkg/executor"
+	"github.com/cidx-org/cidx/pkg/presets"
 	"github.com/sirupsen/logrus"
 )
 

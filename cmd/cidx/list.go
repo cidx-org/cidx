@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/arcker/cidx/pkg/presets"
+	"github.com/cidx-org/cidx/pkg/presets"
 	"github.com/urfave/cli/v2"
 )
 

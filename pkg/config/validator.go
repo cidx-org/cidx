@@ -3,7 +3,7 @@ package config
 import (
 	"fmt"
 
-	"github.com/arcker/cidx/pkg/presets"
+	"github.com/cidx-org/cidx/pkg/presets"
 )
 
 // ValidationResult contains validation results

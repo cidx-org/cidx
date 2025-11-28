@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install CIDX
-        run: go install github.com/arcker/cidx/cmd/cidx@latest
+        run: go install github.com/cidx-org/cidx/cmd/cidx@latest
 
       - name: Run CI Pipeline
         run: cidx run ci
@@ -40,7 +40,7 @@ release:
     - uses: actions/checkout@v4
 
     - name: Install CIDX
-      run: go install github.com/arcker/cidx/cmd/cidx@latest
+      run: go install github.com/cidx-org/cidx/cmd/cidx@latest
 
     - name: Create Release
       run: cidx run gh-release
@@ -59,7 +59,7 @@ cidx:
   stage: ci
   image: golang:latest
   script:
-    - go install github.com/arcker/cidx/cmd/cidx@latest
+    - go install github.com/cidx-org/cidx/cmd/cidx@latest
     - cidx run ci
   services:
     - docker:dind
@@ -75,7 +75,7 @@ pipeline {
     stages {
         stage('CI') {
             steps {
-                sh 'go install github.com/arcker/cidx/cmd/cidx@latest'
+                sh 'go install github.com/cidx-org/cidx/cmd/cidx@latest'
                 sh 'cidx run ci'
             }
         }

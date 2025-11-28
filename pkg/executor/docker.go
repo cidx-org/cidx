@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/arcker/cidx/pkg/config"
+	"github.com/cidx-org/cidx/pkg/config"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"

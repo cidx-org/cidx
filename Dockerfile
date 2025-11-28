@@ -13,6 +13,6 @@ ENTRYPOINT ["cidx"]
 CMD ["--help"]
 
 # Labels for GHCR
-LABEL org.opencontainers.image.source="https://github.com/arcker/cidx"
+LABEL org.opencontainers.image.source="https://github.com/cidx-org/cidx"
 LABEL org.opencontainers.image.description="CIDX - CI with Declarative eXecution"
 LABEL org.opencontainers.image.licenses="MIT"

@@ -6,8 +6,8 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/arcker/cidx/pkg/remote"
-	"github.com/arcker/cidx/pkg/vcs"
+	"github.com/cidx-org/cidx/pkg/remote"
+	"github.com/cidx-org/cidx/pkg/vcs"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -478,7 +478,7 @@ func (a *PRAction) generatePRBody() string {
 	body += "- [ ] Tests added/updated\n"
 	body += "- [ ] Manual testing performed\n\n"
 	body += "---\n"
-	body += "🤖 Created with [CIDX](https://github.com/arcker/cidx)"
+	body += "🤖 Created with [CIDX](https://github.com/cidx-org/cidx)"
 
 	return body
 }

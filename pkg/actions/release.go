@@ -7,10 +7,10 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/arcker/cidx/pkg/config"
-	"github.com/arcker/cidx/pkg/executor"
-	"github.com/arcker/cidx/pkg/remote"
-	"github.com/arcker/cidx/pkg/vcs"
+	"github.com/cidx-org/cidx/pkg/config"
+	"github.com/cidx-org/cidx/pkg/executor"
+	"github.com/cidx-org/cidx/pkg/remote"
+	"github.com/cidx-org/cidx/pkg/vcs"
 	log "github.com/sirupsen/logrus"
 )
 

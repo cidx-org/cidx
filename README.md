@@ -31,7 +31,7 @@ CI/CD Runner (GitLab/GitHub/Jenkins/Local)
 ### Installation
 
 ```bash
-go install github.com/arcker/cidx/cmd/cidx@latest
+go install github.com/cidx-org/cidx/cmd/cidx@latest
 ```
 
 [More installation options](docs/getting-started/installation.md)

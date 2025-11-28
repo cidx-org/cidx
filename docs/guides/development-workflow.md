@@ -210,7 +210,7 @@ This command:
 **The release workflow** (`.github/workflows/release.yml`):
 
 - Runs full CI checks (security, code quality, tests, build)
-- Builds Docker image → pushes to `ghcr.io/arcker/cidx:VERSION`
+- Builds Docker image → pushes to `ghcr.io/cidx-org/cidx:VERSION`
 - Creates GitHub Release with changelog and binaries
 - Publishes release artifacts
 
@@ -282,7 +282,7 @@ git show v1.2.0
 - Git tag reference (e.g., `v1.2.0`)
 - Release notes (changelog)
 - Binary artifacts (cidx binary, checksums)
-- Docker image reference (`ghcr.io/arcker/cidx:1.2.0`)
+- Docker image reference (`ghcr.io/cidx-org/cidx:1.2.0`)
 - Release metadata (date, author)
 
 ### Relationship
@@ -296,7 +296,7 @@ GitHub Release (v1.2.0)
     ├── Release Notes
     ├── Binary: cidx_linux_amd64
     ├── Binary: cidx_darwin_amd64
-    └── Docker: ghcr.io/arcker/cidx:1.2.0
+    └── Docker: ghcr.io/cidx-org/cidx:1.2.0
 ```
 
 ### Timeline Example

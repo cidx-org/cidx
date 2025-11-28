@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/arcker/cidx/pkg/config"
-	"github.com/arcker/cidx/pkg/executor"
-	"github.com/arcker/cidx/pkg/pipeline"
+	"github.com/cidx-org/cidx/pkg/config"
+	"github.com/cidx-org/cidx/pkg/executor"
+	"github.com/cidx-org/cidx/pkg/pipeline"
 	"github.com/urfave/cli/v2"
 )
 

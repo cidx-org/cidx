@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/arcker/cidx/pkg/config"
-	"github.com/arcker/cidx/pkg/validator"
+	"github.com/cidx-org/cidx/pkg/config"
+	"github.com/cidx-org/cidx/pkg/validator"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 )

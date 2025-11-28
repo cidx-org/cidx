@@ -133,8 +133,8 @@ See [Creating Presets Guide](docs/guides/creating-presets.md) for adding new con
 ## ❓ Questions?
 
 - Check [documentation](docs/)
-- Read [existing issues](https://github.com/arcker/cidx/issues)
-- Open a [new discussion](https://github.com/arcker/cidx/discussions)
+- Read [existing issues](https://github.com/cidx-org/cidx/issues)
+- Open a [new discussion](https://github.com/cidx-org/cidx/discussions)
 
 ## 📜 License
 

@@ -1,4 +1,4 @@
-module github.com/arcker/cidx
+module github.com/cidx-org/cidx
 
 go 1.25.4
 
