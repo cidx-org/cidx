@@ -53,7 +53,7 @@ func formatTable(result *ListResult) string {
 	var sb strings.Builder
 
 	// Header
-	sb.WriteString(fmt.Sprintf("\n%s%-3s %-32s %-10s %-6s %-12s %-12s %-18s %-30s%s\n",
+	sb.WriteString(fmt.Sprintf("\n%s%-3s %-30s %-9s %-6s %-12s %-12s %-16s %s%s\n",
 		colorBold,
 		"",
 		"BRANCH",
@@ -123,7 +123,7 @@ func formatBranchLine(b Info) string {
 	}
 	subject = truncate(subject, 28)
 
-	return fmt.Sprintf("%s %-30s %-10s %-6s %-12s %-12s %-16s %s\n",
+	return fmt.Sprintf("%s %-30s %s %-6s %-12s %-12s %-16s %s\n",
 		marker, name, status, pr, localInfo, remoteInfo, author, subject)
 }
 
@@ -156,21 +156,22 @@ func getLocationMarker(loc Location) string {
 	}
 }
 
-// formatStatus formats the branch status with color
+// formatStatus formats the branch status with color (fixed width: 9 chars)
 func formatStatus(s Status) string {
+	// All status strings are padded to 9 chars (length of "protected")
 	switch s {
 	case StatusActive:
-		return fmt.Sprintf("%sactive%s", colorGreen, colorReset)
+		return fmt.Sprintf("%s%-9s%s", colorGreen, "active", colorReset)
 	case StatusStale:
-		return fmt.Sprintf("%sstale%s", colorYellow, colorReset)
+		return fmt.Sprintf("%s%-9s%s", colorYellow, "stale", colorReset)
 	case StatusMerged:
-		return fmt.Sprintf("%smerged%s", colorCyan, colorReset)
+		return fmt.Sprintf("%s%-9s%s", colorCyan, "merged", colorReset)
 	case StatusProtected:
-		return fmt.Sprintf("%sprotected%s", colorBlue, colorReset)
+		return fmt.Sprintf("%s%-9s%s", colorBlue, "protected", colorReset)
 	case StatusOrphan:
-		return fmt.Sprintf("%sorphan%s", colorRed, colorReset)
+		return fmt.Sprintf("%s%-9s%s", colorRed, "orphan", colorReset)
 	default:
-		return string(s)
+		return fmt.Sprintf("%-9s", string(s))
 	}
 }
 
