@@ -39,14 +39,16 @@ type Info struct {
 	Status   Status
 
 	// Local branch info
-	LocalCommitDate time.Time
-	LocalCommitHash string
-	LocalAuthor     string
+	LocalCommitDate    time.Time
+	LocalCommitHash    string
+	LocalAuthor        string
+	LocalCommitSubject string
 
 	// Remote branch info
-	RemoteCommitDate time.Time
-	RemoteCommitHash string
-	RemoteAuthor     string
+	RemoteCommitDate    time.Time
+	RemoteCommitHash    string
+	RemoteAuthor        string
+	RemoteCommitSubject string
 
 	// Computed/derived fields
 	LastCommit  time.Time // Most recent of local/remote

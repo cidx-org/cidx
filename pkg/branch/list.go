@@ -90,6 +90,7 @@ func (m *Manager) List(opts ListOptions) (*ListResult, error) {
 			info.RemoteCommitDate = rb.CommitDate
 			info.RemoteCommitHash = rb.CommitHash
 			info.RemoteAuthor = rb.Author
+			info.RemoteCommitSubject = rb.Subject
 
 			// LastCommit is the most recent of local or remote
 			if rb.CommitDate.After(info.LocalCommitDate) {
@@ -149,12 +150,14 @@ func (m *Manager) buildBranchInfo(gb GitBranch, location Location) *Info {
 		info.LocalCommitDate = gb.CommitDate
 		info.LocalCommitHash = gb.CommitHash
 		info.LocalAuthor = gb.Author
+		info.LocalCommitSubject = gb.Subject
 	}
 
 	if location == LocationRemote {
 		info.RemoteCommitDate = gb.CommitDate
 		info.RemoteCommitHash = gb.CommitHash
 		info.RemoteAuthor = gb.Author
+		info.RemoteCommitSubject = gb.Subject
 	}
 
 	// Determine status

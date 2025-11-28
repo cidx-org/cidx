@@ -20,19 +20,11 @@ const (
 	colorWhite  = "\033[37m"
 )
 
-// Status icons
+// Location markers (ASCII for alignment)
 const (
-	iconActive    = "🔄"
-	iconStale     = "💤"
-	iconMerged    = "✅"
-	iconProtected = "🔒"
-	iconOrphan    = "👻"
-	iconLocal     = "📍"
-	iconRemote    = "☁️"
-	iconBoth      = "🔄"
-	iconPROpen    = "🟢"
-	iconPRMerged  = "🟣"
-	iconPRClosed  = "🔴"
+	markerLocal  = "[L]"
+	markerRemote = "[R]"
+	markerBoth   = "[B]"
 )
 
 // FormatList formats the branch list for terminal output
@@ -61,17 +53,19 @@ func formatTable(result *ListResult) string {
 	var sb strings.Builder
 
 	// Header
-	sb.WriteString(fmt.Sprintf("\n%s%-40s %-12s %-8s %-14s %-14s %-18s%s\n",
+	sb.WriteString(fmt.Sprintf("\n%s%-3s %-32s %-10s %-6s %-12s %-12s %-18s %-30s%s\n",
 		colorBold,
+		"",
 		"BRANCH",
 		"STATUS",
 		"PR",
 		"LOCAL",
 		"REMOTE",
-		"AUTHOR",
+		"LAST AUTHOR",
+		"SUBJECT",
 		colorReset,
 	))
-	sb.WriteString(strings.Repeat("─", 110) + "\n")
+	sb.WriteString(strings.Repeat("─", 130) + "\n")
 
 	// Branches
 	for _, b := range result.Branches {
@@ -79,16 +73,16 @@ func formatTable(result *ListResult) string {
 	}
 
 	// Footer
-	sb.WriteString(strings.Repeat("─", 110) + "\n")
+	sb.WriteString(strings.Repeat("─", 130) + "\n")
 	sb.WriteString(formatSummary(result.Summary))
 
 	// Suggestions
 	if result.Summary.Merged > 0 {
-		sb.WriteString(fmt.Sprintf("\n%s💡 Run 'cidx branch cleanup' to remove %d merged branch(es)%s\n",
+		sb.WriteString(fmt.Sprintf("\n%sTip: Run 'cidx branch cleanup' to remove %d merged branch(es)%s\n",
 			colorDim, result.Summary.Merged, colorReset))
 	}
 	if result.Summary.Stale > 0 {
-		sb.WriteString(fmt.Sprintf("%s💡 Run 'cidx branch stale' to see %d stale branch(es)%s\n",
+		sb.WriteString(fmt.Sprintf("%sTip: Run 'cidx branch stale' to see %d stale branch(es)%s\n",
 			colorDim, result.Summary.Stale, colorReset))
 	}
 
@@ -97,11 +91,13 @@ func formatTable(result *ListResult) string {
 
 // formatBranchLine formats a single branch line
 func formatBranchLine(b Info) string {
-	// Branch name with location icon
-	locationIcon := getLocationIcon(b.Location)
-	name := truncate(b.Name, 37)
+	// Location marker
+	marker := getLocationMarker(b.Location)
 
-	// Status with icon and color
+	// Branch name
+	name := truncate(b.Name, 30)
+
+	// Status with color
 	status := formatStatus(b.Status)
 
 	// PR info
@@ -120,14 +116,21 @@ func formatBranchLine(b Info) string {
 	}
 	author = truncate(author, 16)
 
-	return fmt.Sprintf("%s %-37s %-12s %-8s %-14s %-14s %-16s\n",
-		locationIcon, name, status, pr, localInfo, remoteInfo, author)
+	// Subject (prefer local, fallback to remote)
+	subject := b.LocalCommitSubject
+	if subject == "" {
+		subject = b.RemoteCommitSubject
+	}
+	subject = truncate(subject, 28)
+
+	return fmt.Sprintf("%s %-30s %-10s %-6s %-12s %-12s %-16s %s\n",
+		marker, name, status, pr, localInfo, remoteInfo, author, subject)
 }
 
 // formatCommitInfo formats commit date and hash
 func formatCommitInfo(t time.Time, hash string) string {
 	if t.IsZero() {
-		return fmt.Sprintf("%s-%s", colorDim, colorReset)
+		return fmt.Sprintf("%s--%s", colorDim, colorReset)
 	}
 
 	age := formatAge(t)
@@ -136,36 +139,36 @@ func formatCommitInfo(t time.Time, hash string) string {
 		shortHash = shortHash[:7]
 	}
 
-	return fmt.Sprintf("%s %s%s%s", age, colorDim, shortHash, colorReset)
+	return fmt.Sprintf("%-4s %s", age, shortHash)
 }
 
-// getLocationIcon returns the icon for branch location
-func getLocationIcon(loc Location) string {
+// getLocationMarker returns the marker for branch location
+func getLocationMarker(loc Location) string {
 	switch loc {
 	case LocationLocal:
-		return iconLocal
+		return markerLocal
 	case LocationRemote:
-		return iconRemote
+		return markerRemote
 	case LocationBoth:
-		return iconBoth
+		return markerBoth
 	default:
-		return " "
+		return "   "
 	}
 }
 
-// formatStatus formats the branch status with icon and color
+// formatStatus formats the branch status with color
 func formatStatus(s Status) string {
 	switch s {
 	case StatusActive:
-		return fmt.Sprintf("%s%s active%s", colorGreen, iconActive, colorReset)
+		return fmt.Sprintf("%sactive%s", colorGreen, colorReset)
 	case StatusStale:
-		return fmt.Sprintf("%s%s stale%s", colorYellow, iconStale, colorReset)
+		return fmt.Sprintf("%sstale%s", colorYellow, colorReset)
 	case StatusMerged:
-		return fmt.Sprintf("%s%s merged%s", colorCyan, iconMerged, colorReset)
+		return fmt.Sprintf("%smerged%s", colorCyan, colorReset)
 	case StatusProtected:
-		return fmt.Sprintf("%s%s protect%s", colorBlue, iconProtected, colorReset)
+		return fmt.Sprintf("%sprotected%s", colorBlue, colorReset)
 	case StatusOrphan:
-		return fmt.Sprintf("%s%s orphan%s", colorRed, iconOrphan, colorReset)
+		return fmt.Sprintf("%sorphan%s", colorRed, colorReset)
 	default:
 		return string(s)
 	}
@@ -174,20 +177,22 @@ func formatStatus(s Status) string {
 // formatPR formats the PR number and status
 func formatPR(number int, status PRStatus) string {
 	if number == 0 {
-		return fmt.Sprintf("%s-%s", colorDim, colorReset)
+		return fmt.Sprintf("%s--%s", colorDim, colorReset)
 	}
 
-	var icon string
+	var color string
 	switch status {
 	case PRStatusOpen:
-		icon = iconPROpen
+		color = colorGreen
 	case PRStatusMerged:
-		icon = iconPRMerged
+		color = colorCyan
 	case PRStatusClosed:
-		icon = iconPRClosed
+		color = colorRed
+	default:
+		color = ""
 	}
 
-	return fmt.Sprintf("%s#%d", icon, number)
+	return fmt.Sprintf("%s#%d%s", color, number, colorReset)
 }
 
 // formatAge formats the time since last commit
