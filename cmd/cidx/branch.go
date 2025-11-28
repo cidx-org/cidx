@@ -276,7 +276,13 @@ func watchPRChecks(manager *branch.Manager, branchName string, initialInfo *bran
 	fmt.Printf("\033[2m%s\033[0m\n\n", initialInfo.URL)
 	fmt.Printf("Watching checks for \033[36m%s\033[0m... (Ctrl+C to stop)\n\n", branchName)
 
-	spinnerFrames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	// K2000/Knight Rider style chenillard spinner
+	spinnerFrames := []string{
+		"●○○○○○○○", "○●○○○○○○", "○○●○○○○○", "○○○●○○○○",
+		"○○○○●○○○", "○○○○○●○○", "○○○○○○●○", "○○○○○○○●",
+		"○○○○○○●○", "○○○○○●○○", "○○○○●○○○", "○○○●○○○○",
+		"○○●○○○○○", "○●○○○○○○",
+	}
 
 	// Current state (updated by API polling)
 	currentInfo := initialInfo
