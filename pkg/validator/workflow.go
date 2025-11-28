@@ -295,23 +295,33 @@ func FormatResult(result *ValidationResult) string {
 	var sb strings.Builder
 
 	if result.Success {
-		sb.WriteString(fmt.Sprintf("✅ Workflow %s matches pipeline '%s'\n", filepath.Base(result.WorkflowFile), result.Pipeline))
-		sb.WriteString(fmt.Sprintf("   Phases: [%s]\n", strings.Join(result.LocalOrder, ", ")))
+		sb.WriteString(fmt.Sprintf("✅ Pipeline '%s' ↔ Workflow %s\n", result.Pipeline, filepath.Base(result.WorkflowFile)))
+		sb.WriteString(fmt.Sprintf("   Both execute phases: [%s]\n", strings.Join(result.LocalOrder, ", ")))
+		sb.WriteString("   Status: In sync ✓\n")
 	} else {
-		sb.WriteString(fmt.Sprintf("⚠️  Workflow %s has differences with pipeline '%s'\n", filepath.Base(result.WorkflowFile), result.Pipeline))
+		sb.WriteString(fmt.Sprintf("⚠️  Pipeline '%s' ↔ Workflow %s\n", result.Pipeline, filepath.Base(result.WorkflowFile)))
+		sb.WriteString("   Status: Out of sync ✗\n\n")
+
+		// Show what's in each
+		sb.WriteString(fmt.Sprintf("   📄 cidx.toml [pipelines.%s]:\n", result.Pipeline))
+		sb.WriteString(fmt.Sprintf("      phases = [%s]\n\n", strings.Join(result.LocalOrder, ", ")))
+
+		sb.WriteString(fmt.Sprintf("   🔧 GitHub Actions [%s]:\n", filepath.Base(result.WorkflowFile)))
+		sb.WriteString(fmt.Sprintf("      executes = [%s]\n\n", strings.Join(result.GitHubOrder, ", ")))
+
+		// Show differences
+		sb.WriteString("   Differences:\n")
 
 		if len(result.MissingInGH) > 0 {
-			sb.WriteString(fmt.Sprintf("   Missing in GitHub:  [%s]\n", strings.Join(result.MissingInGH, ", ")))
+			sb.WriteString(fmt.Sprintf("      • Missing in GitHub workflow: %s\n", strings.Join(result.MissingInGH, ", ")))
 		}
 
 		if len(result.MissingInLocal) > 0 {
-			sb.WriteString(fmt.Sprintf("   Missing in local:   [%s]\n", strings.Join(result.MissingInLocal, ", ")))
+			sb.WriteString(fmt.Sprintf("      • Missing in cidx.toml pipeline: %s\n", strings.Join(result.MissingInLocal, ", ")))
 		}
 
 		if result.OrderMismatch {
-			sb.WriteString("   Order mismatch:\n")
-			sb.WriteString(fmt.Sprintf("     Local:  [%s]\n", strings.Join(result.LocalOrder, ", ")))
-			sb.WriteString(fmt.Sprintf("     GitHub: [%s]\n", strings.Join(result.GitHubOrder, ", ")))
+			sb.WriteString("      • Phase execution order differs\n")
 		}
 	}
 
