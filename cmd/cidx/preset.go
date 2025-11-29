@@ -539,8 +539,9 @@ func getDockerHubLatestTag(repo string) (string, error) {
 		return "", err
 	}
 
-	// Find the latest semver tag (not latest, not sha, not nightly)
-	semverRegex := regexp.MustCompile(`^v?[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-zA-Z0-9]+)?$`)
+	// Find the latest semver tag (pure semver only, no platform suffixes)
+	// Only accept: X.Y.Z, vX.Y.Z, X.Y, vX.Y (no -alpine, -slim, -windowsservercore, etc.)
+	semverRegex := regexp.MustCompile(`^v?[0-9]+\.[0-9]+(\.[0-9]+)?$`)
 	for _, tag := range result.Results {
 		if tag.Name != "latest" && !strings.Contains(tag.Name, "sha") &&
 			!strings.Contains(tag.Name, "nightly") && semverRegex.MatchString(tag.Name) {
@@ -548,14 +549,8 @@ func getDockerHubLatestTag(repo string) (string, error) {
 		}
 	}
 
-	// Fallback: return first non-latest tag
-	for _, tag := range result.Results {
-		if tag.Name != "latest" {
-			return tag.Name, nil
-		}
-	}
-
-	return "", fmt.Errorf("no tags found")
+	// No pure semver tag found
+	return "", fmt.Errorf("no semver tags found")
 }
 
 // getQuayLatestTag gets the latest tag from Quay.io
