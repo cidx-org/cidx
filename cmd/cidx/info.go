@@ -10,12 +10,16 @@ import (
 func infoCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "info",
-		Usage:     "Show detailed information about a tool",
+		Usage:     "Show detailed information about a tool (deprecated: use 'preset info')",
 		ArgsUsage: "<tool>",
+		Hidden:    true, // Hide from help, but still works
 		Action: func(c *cli.Context) error {
 			if c.NArg() != 1 {
 				return fmt.Errorf("requires exactly one argument: tool name")
 			}
+
+			fmt.Println("\033[33mNote: 'cidx info' is deprecated. Use 'cidx preset info' instead.\033[0m")
+			fmt.Println()
 
 			toolName := c.Args().First()
 			preset, err := presets.Get(toolName)

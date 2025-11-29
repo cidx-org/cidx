@@ -17,8 +17,9 @@ func main() {
 		Version: Version,
 		Commands: []*cli.Command{
 			runCommand(),
-			listCommand(),
-			infoCommand(),
+			presetCommand(),
+			listCommand(),  // Deprecated: use 'preset list'
+			infoCommand(),  // Deprecated: use 'preset info'
 			validateCommand(),
 			initCommand(),
 			actionCommand(),

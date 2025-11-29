@@ -10,9 +10,12 @@ import (
 
 func listCommand() *cli.Command {
 	return &cli.Command{
-		Name:  "list",
-		Usage: "List available tools and presets",
+		Name:   "list",
+		Usage:  "List available tools and presets (deprecated: use 'preset list')",
+		Hidden: true, // Hide from help, but still works
 		Action: func(c *cli.Context) error {
+			fmt.Println("\033[33mNote: 'cidx list' is deprecated. Use 'cidx preset list' instead.\033[0m")
+			fmt.Println()
 			phases := presets.GroupByPhase()
 
 			fmt.Println("Available tools:")
