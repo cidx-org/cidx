@@ -39,7 +39,7 @@
 [presets.prettier]
 name = "prettier"
 phase = "code"
-image = "tmknom/prettier:latest"
+image = "tmknom/prettier:3.6.2"
 command = "prettier --check ."
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -66,7 +66,7 @@ command_flag = "--write"
 [presets.trivy]
 name = "trivy"
 phase = "security"
-image = "aquasec/trivy:latest"
+image = "aquasec/trivy:0.67.2"
 command = "fs /scan"
 workdir = "/scan"
 volumes = ["${WORKSPACE}:/scan"]
@@ -92,7 +92,7 @@ command_flag = "--exit-code"
 [presets.gitleaks]
 name = "gitleaks"
 phase = "security"
-image = "zricethezav/gitleaks:latest"
+image = "zricethezav/gitleaks:v8.30.0"
 command = "git ."
 workdir = "/repo"
 volumes = ["${WORKSPACE}:/repo"]
@@ -105,7 +105,7 @@ config_files = [".gitleaks.toml"]
 [presets.commitlint]
 name = "commitlint"
 phase = "code"
-image = "commitlint/commitlint:latest"
+image = "commitlint/commitlint:20.1.0"
 command = "commitlint --from ${FROM} --to ${TO}"
 workdir = "/app"
 volumes = [
@@ -131,7 +131,7 @@ TO = "HEAD"
 [presets.commitizen]
 name = "commitizen"
 phase = "code"
-image = "commitizen/commitizen:latest"
+image = "commitizen/commitizen:4.10.0"
 command = "check --rev-range ${FROM}..${TO}"
 workdir = "/app"
 volumes = [
@@ -163,7 +163,7 @@ env_var = "TO"
 [presets.ansible-lint]
 name = "ansible-lint"
 phase = "code"
-image = "quay.io/ansible/creator-ee:latest"
+image = "quay.io/ansible/creator-ee:v24.2.0"
 command = "ansible-lint"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -172,7 +172,7 @@ config_files = [".ansible-lint"]
 [presets.molecule]
 name = "molecule"
 phase = "test"
-image = "quay.io/ansible/molecule:latest"
+image = "quay.io/ansible/molecule:25.11.1"
 command = "molecule test -s ${SCENARIO}"
 workdir = "/work"
 volumes = [
@@ -192,7 +192,7 @@ env_var = "SCENARIO"
 [presets.test-hot-reload]
 name = "test-hot-reload"
 phase = "test"
-image = "alpine:latest"
+image = "alpine:3.22"
 command = "echo 'Hot reload works!'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -207,7 +207,7 @@ volumes = ["${WORKSPACE}:/work"]
 [presets.gosec]
 name = "gosec"
 phase = "security"
-image = "securego/gosec:latest"
+image = "securego/gosec:2.22.10"
 command = "./..."
 workdir = "/app"
 volumes = ["${WORKSPACE}:/app"]
@@ -240,7 +240,7 @@ command_flag = "-fmt"
 [presets.govulncheck]
 name = "govulncheck"
 phase = "security"
-image = "golang:alpine"
+image = "golang:1.24-alpine"
 command = "sh -c 'go install golang.org/x/vuln/cmd/govulncheck@latest && PATH=$PATH:/tmp/go/bin govulncheck ./...'"
 workdir = "/app"
 volumes = ["${WORKSPACE}:/app"]
@@ -248,6 +248,7 @@ volumes = ["${WORKSPACE}:/app"]
 [presets.govulncheck.env]
 HOME = "/tmp"
 GOPATH = "/tmp/go"
+GOTOOLCHAIN = "auto"
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # GO TOOLS - Linting, testing, and building Go projects
@@ -259,13 +260,14 @@ GOPATH = "/tmp/go"
 [presets.go-mod-tidy]
 name = "go-mod-tidy"
 phase = "code"
-image = "golang:alpine"
+image = "golang:1.24-alpine"
 command = "sh -c 'cp go.mod go.mod.bak && cp go.sum go.sum.bak && go mod tidy && diff go.mod go.mod.bak && diff go.sum go.sum.bak && echo \"go.mod is tidy\"'"
 workdir = "/app"
 volumes = ["${WORKSPACE}:/app"]
 
 [presets.go-mod-tidy.env]
 HOME = "/tmp"
+GOTOOLCHAIN = "auto"
 
 # GolangCI-Lint: Fast Go linters aggregator
 # Official image: golangci/golangci-lint (maintained by golangci-lint team)
@@ -274,7 +276,7 @@ HOME = "/tmp"
 [presets.golangci-lint]
 name = "golangci-lint"
 phase = "code"
-image = "golangci/golangci-lint:latest"
+image = "golangci/golangci-lint:v2.6.2"
 command = "golangci-lint run --timeout 5m"
 workdir = "/app"
 volumes = ["${WORKSPACE}:/app"]
@@ -307,10 +309,13 @@ command_flag = "--severity"
 [presets.gofmt]
 name = "gofmt"
 phase = "code"
-image = "golang:alpine"
+image = "golang:1.24-alpine"
 command = "gofmt -l ."
 workdir = "/app"
 volumes = ["${WORKSPACE}:/app"]
+
+[presets.gofmt.env]
+GOTOOLCHAIN = "auto"
 
 # Go Test: Run Go unit and integration tests
 # Official image: golang:alpine (official Go Docker image)
@@ -319,13 +324,14 @@ volumes = ["${WORKSPACE}:/app"]
 [presets.go-test]
 name = "go-test"
 phase = "test"
-image = "golang:alpine"
+image = "golang:1.24-alpine"
 command = "go test -v ./pkg/... ./cmd/..."
 workdir = "/app"
 volumes = ["${WORKSPACE}:/app"]
 
 [presets.go-test.env]
 HOME = "/tmp"
+GOTOOLCHAIN = "auto"
 
 [presets.go-test.options.coverage]
 type = "bool"
@@ -342,7 +348,7 @@ command_flag = "-race"
 [presets.godog]
 name = "godog"
 phase = "test"
-image = "golang:1.21-alpine"
+image = "golang:1.24-alpine"
 command = "go test -v ./features_test.go"
 workdir = "/app"
 volumes = ["${WORKSPACE}:/app"]
@@ -350,6 +356,7 @@ volumes = ["${WORKSPACE}:/app"]
 [presets.godog.env]
 HOME = "/tmp"
 CGO_ENABLED = "0"
+GOTOOLCHAIN = "auto"
 
 [presets.godog.options.format]
 type = "string"
@@ -370,7 +377,7 @@ command_flag = "-tags"
 [presets.go-build]
 name = "go-build"
 phase = "build"
-image = "golang:alpine"
+image = "golang:1.24-alpine"
 command = "sh -c 'VERSION=$(cat VERSION 2>/dev/null || echo dev); go build -ldflags \"-X main.Version=${VERSION} ${LDFLAGS}\" -o bin/cidx ./cmd/cidx'"
 workdir = "/app"
 volumes = ["${WORKSPACE}:/app"]
@@ -378,6 +385,7 @@ volumes = ["${WORKSPACE}:/app"]
 [presets.go-build.env]
 HOME = "/tmp"
 LDFLAGS = ""
+GOTOOLCHAIN = "auto"
 
 [presets.go-build.options.ldflags]
 type = "string"
@@ -392,7 +400,7 @@ env_var = "LDFLAGS"
 [presets.kaniko]
 name = "kaniko"
 phase = "docker"
-image = "gcr.io/kaniko-project/executor:latest"
+image = "gcr.io/kaniko-project/executor:v1.24.0"
 command = "--context=/workspace --dockerfile=Dockerfile --destination=${IMAGE_NAME}:${IMAGE_TAG} --cache=true"
 workdir = "/workspace"
 volumes = [
@@ -428,7 +436,7 @@ command_flag = "--cache"
 [presets.docker-buildx]
 name = "docker-buildx"
 phase = "docker"
-image = "docker:latest"
+image = "docker:29.0.4"
 command = "sh -c 'docker buildx build --platform linux/amd64,linux/arm64 -t ${IMAGE_NAME}:${IMAGE_TAG} --push .'"
 workdir = "/workspace"
 volumes = [
@@ -450,7 +458,7 @@ IMAGE_TAG = "latest"
 [presets.gh-release]
 name = "gh-release"
 phase = "release"
-image = "maniator/gh:latest"
+image = "maniator/gh:v2.83.1"
 command = "release create ${TAG} ${ARTIFACTS} --generate-notes"
 workdir = "/workspace"
 volumes = ["${WORKSPACE}:/workspace"]
@@ -477,7 +485,7 @@ command_flag = "--prerelease"
 [presets.goreleaser]
 name = "goreleaser"
 phase = "release"
-image = "goreleaser/goreleaser:latest"
+image = "goreleaser/goreleaser:v2.12.7"
 command = "goreleaser release --clean"
 workdir = "/workspace"
 volumes = [
