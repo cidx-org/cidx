@@ -122,23 +122,50 @@ jobs:
 
           echo "✅ **Build and tests passed**" >> $GITHUB_STEP_SUMMARY
 
+      - name: Bump version with commitizen
+        if: steps.promote.outputs.has_changes == 'true'
+        id: bump
+        run: |
+          echo "## Version Bump" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Install commitizen
+          pip install commitizen
+
+          # Get current version
+          CURRENT_VERSION=$(cz version --project 2>/dev/null || echo "0.0.0")
+          echo "Current version: $CURRENT_VERSION"
+
+          # Bump patch version (container updates are patches)
+          cz bump --yes --increment PATCH --changelog 2>&1 || true
+
+          # Get new version
+          NEW_VERSION=$(cz version --project 2>/dev/null || echo "unknown")
+          echo "New version: $NEW_VERSION"
+
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "✅ **Version bumped: $CURRENT_VERSION → $NEW_VERSION**" >> $GITHUB_STEP_SUMMARY
+
       - name: Create Pull Request
         if: steps.promote.outputs.has_changes == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore: promote container versions after security validation"
-          title: "chore: promote container versions"
+          commit-message: "chore(deps): promote container versions to ${{ steps.bump.outputs.new_version }}"
+          title: "chore(deps): promote container versions → ${{ steps.bump.outputs.new_version }}"
           body: |
             ## Container Version Promotion
 
             This PR updates container image tags in `pkg/presets/presets.toml` after security validation.
+
+            **New CIDX Version: `${{ steps.bump.outputs.new_version }}`**
 
             ### Validation Process
             1. ✅ Checked for available updates
             2. ✅ Ran Trivy security scan on each new version
             3. ✅ Only promoted images that passed HIGH/CRITICAL vulnerability check
             4. ✅ Rebuilt CIDX and ran tests
+            5. ✅ Bumped version with commitizen
 
             See the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for detailed scan results.
 
