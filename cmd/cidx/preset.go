@@ -401,7 +401,7 @@ func presetCheckUpdatesCommand() *cli.Command {
 				imageName, currentTag := parseImageTag(preset.Image)
 
 				// Get latest tag
-				latestTag, err := getLatestTag(imageName)
+				latestTag, err := getLatestTag(imageName, currentTag)
 
 				result := updateResult{
 					Name:      name,
@@ -479,21 +479,38 @@ func parseImageTag(image string) (name, tag string) {
 }
 
 // getLatestTag fetches the latest tag for an image from its registry
-func getLatestTag(image string) (string, error) {
+// currentTag is used to preserve variant suffixes (e.g., -alpine, -slim)
+func getLatestTag(image, currentTag string) (string, error) {
 	// Determine registry and repository
 	registry, repo := parseRegistry(image)
 
+	// Extract variant suffix from current tag (e.g., "1.24-alpine" -> "-alpine")
+	variantSuffix := extractVariantSuffix(currentTag)
+
 	switch registry {
 	case "docker.io":
-		return getDockerHubLatestTag(repo)
+		return getDockerHubLatestTag(repo, variantSuffix)
 	case "quay.io":
-		return getQuayLatestTag(repo)
+		return getQuayLatestTag(repo, variantSuffix)
 	case "gcr.io", "ghcr.io":
 		// GitHub/Google Container Registry - harder to query without auth
 		return "", fmt.Errorf("registry %s not supported yet", registry)
 	default:
 		return "", fmt.Errorf("unknown registry: %s", registry)
 	}
+}
+
+// extractVariantSuffix extracts the variant suffix from a tag
+// e.g., "1.24-alpine" -> "-alpine", "v2.3.0" -> ""
+func extractVariantSuffix(tag string) string {
+	// Common variant patterns
+	variants := []string{"-alpine", "-slim", "-bullseye", "-bookworm", "-buster", "-jammy", "-focal"}
+	for _, v := range variants {
+		if strings.HasSuffix(tag, v) {
+			return v
+		}
+	}
+	return ""
 }
 
 // parseRegistry extracts registry and repository from image name
@@ -515,8 +532,9 @@ func parseRegistry(image string) (registry, repo string) {
 }
 
 // getDockerHubLatestTag gets the latest tag from Docker Hub
-func getDockerHubLatestTag(repo string) (string, error) {
-	url := fmt.Sprintf("https://hub.docker.com/v2/repositories/%s/tags?page_size=20&ordering=last_updated", repo)
+// variantSuffix is the variant to match (e.g., "-alpine", "" for pure semver)
+func getDockerHubLatestTag(repo, variantSuffix string) (string, error) {
+	url := fmt.Sprintf("https://hub.docker.com/v2/repositories/%s/tags?page_size=100&ordering=last_updated", repo)
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get(url)
@@ -539,9 +557,19 @@ func getDockerHubLatestTag(repo string) (string, error) {
 		return "", err
 	}
 
-	// Find the latest semver tag (pure semver only, no platform suffixes)
-	// Only accept: X.Y.Z, vX.Y.Z, X.Y, vX.Y (no -alpine, -slim, -windowsservercore, etc.)
-	semverRegex := regexp.MustCompile(`^v?[0-9]+\.[0-9]+(\.[0-9]+)?$`)
+	// Build regex based on variant suffix
+	// For "-alpine": match "X.Y-alpine" or "X.Y.Z-alpine"
+	// For "": match pure "X.Y" or "X.Y.Z"
+	var semverRegex *regexp.Regexp
+	if variantSuffix != "" {
+		// Escape the suffix for regex and require it at the end
+		escapedSuffix := regexp.QuoteMeta(variantSuffix)
+		semverRegex = regexp.MustCompile(`^v?[0-9]+\.[0-9]+(\.[0-9]+)?` + escapedSuffix + `$`)
+	} else {
+		// Pure semver only
+		semverRegex = regexp.MustCompile(`^v?[0-9]+\.[0-9]+(\.[0-9]+)?$`)
+	}
+
 	for _, tag := range result.Results {
 		if tag.Name != "latest" && !strings.Contains(tag.Name, "sha") &&
 			!strings.Contains(tag.Name, "nightly") && semverRegex.MatchString(tag.Name) {
@@ -549,13 +577,14 @@ func getDockerHubLatestTag(repo string) (string, error) {
 		}
 	}
 
-	// No pure semver tag found
-	return "", fmt.Errorf("no semver tags found")
+	// No matching semver tag found
+	return "", fmt.Errorf("no semver tags found with suffix '%s'", variantSuffix)
 }
 
 // getQuayLatestTag gets the latest tag from Quay.io
-func getQuayLatestTag(repo string) (string, error) {
-	url := fmt.Sprintf("https://quay.io/api/v1/repository/%s/tag/?limit=20", repo)
+// variantSuffix is the variant to match (e.g., "-alpine", "" for pure semver)
+func getQuayLatestTag(repo, variantSuffix string) (string, error) {
+	url := fmt.Sprintf("https://quay.io/api/v1/repository/%s/tag/?limit=50", repo)
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get(url)
@@ -578,13 +607,20 @@ func getQuayLatestTag(repo string) (string, error) {
 		return "", err
 	}
 
-	// Find the latest semver tag
-	semverRegex := regexp.MustCompile(`^v?[0-9]+\.[0-9]+(\.[0-9]+)?$`)
+	// Build regex based on variant suffix
+	var semverRegex *regexp.Regexp
+	if variantSuffix != "" {
+		escapedSuffix := regexp.QuoteMeta(variantSuffix)
+		semverRegex = regexp.MustCompile(`^v?[0-9]+\.[0-9]+(\.[0-9]+)?` + escapedSuffix + `$`)
+	} else {
+		semverRegex = regexp.MustCompile(`^v?[0-9]+\.[0-9]+(\.[0-9]+)?$`)
+	}
+
 	for _, tag := range result.Tags {
 		if tag.Name != "latest" && semverRegex.MatchString(tag.Name) {
 			return tag.Name, nil
 		}
 	}
 
-	return "", fmt.Errorf("no tags found")
+	return "", fmt.Errorf("no semver tags found with suffix '%s'", variantSuffix)
 }
