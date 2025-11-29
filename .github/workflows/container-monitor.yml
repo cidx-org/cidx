@@ -38,10 +38,11 @@ jobs:
           echo "Updates found:"
           echo "$UPDATES_JSON" | jq .
 
-          # Track promoted images
-          PROMOTED=""
-          FAILED=""
-          SKIPPED=""
+          # Initialize counters (use files to persist across subshell)
+          echo "0" > /tmp/promoted_count
+          echo "0" > /tmp/failed_count
+          echo "0" > /tmp/skipped_count
+          echo "" > /tmp/failed_containers
 
           # Process each image with available update
           echo "$UPDATES_JSON" | jq -c '.[]' | while read -r item; do
@@ -54,7 +55,7 @@ jobs:
 
             if [ "$HAS_UPDATE" != "true" ]; then
               echo "⏭️ $NAME: Already up to date ($CURRENT)"
-              SKIPPED="$SKIPPED $NAME"
+              echo $(($(cat /tmp/skipped_count) + 1)) > /tmp/skipped_count
               continue
             fi
 
@@ -68,16 +69,18 @@ jobs:
 
             # Run Trivy security scan on NEW version
             echo "   Running Trivy scan..."
-            TRIVY_OUTPUT=$(docker run --rm aquasec/trivy:latest image \
+            TRIVY_EXIT=0
+            docker run --rm aquasec/trivy:latest image \
               --severity HIGH,CRITICAL \
               --exit-code 1 \
               --quiet \
-              "$NEW_IMAGE" 2>&1) || TRIVY_EXIT=$?
+              "$NEW_IMAGE" 2>&1 || TRIVY_EXIT=$?
 
-            if [ "${TRIVY_EXIT:-0}" -ne 0 ]; then
-              echo "   ❌ FAILED: Security vulnerabilities found"
-              echo "- ❌ **$NAME**: $CURRENT → $LATEST - Security scan failed" >> $GITHUB_STEP_SUMMARY
-              FAILED="$FAILED $NAME"
+            if [ "$TRIVY_EXIT" -ne 0 ]; then
+              echo "   ❌ FAILED: Security vulnerabilities found in $NEW_IMAGE"
+              echo "- ❌ **$NAME**: $CURRENT → $LATEST - **SECURITY VULNERABILITIES DETECTED**" >> $GITHUB_STEP_SUMMARY
+              echo $(($(cat /tmp/failed_count) + 1)) > /tmp/failed_count
+              echo "$NAME ($NEW_IMAGE)" >> /tmp/failed_containers
               continue
             fi
 
@@ -88,21 +91,52 @@ jobs:
             sed -i "s|image = \"$IMAGE\"|image = \"$NEW_IMAGE\"|g" pkg/presets/presets.toml
 
             echo "- ✅ **$NAME**: $CURRENT → $LATEST - Promoted" >> $GITHUB_STEP_SUMMARY
-            PROMOTED="$PROMOTED $NAME"
+            echo $(($(cat /tmp/promoted_count) + 1)) > /tmp/promoted_count
           done
 
-          # Check if any changes were made
+          # Read final counts
+          PROMOTED=$(cat /tmp/promoted_count)
+          FAILED=$(cat /tmp/failed_count)
+          SKIPPED=$(cat /tmp/skipped_count)
+          FAILED_LIST=$(cat /tmp/failed_containers)
+
+          echo ""
+          echo "=========================================="
+          echo "SUMMARY: Promoted=$PROMOTED, Failed=$FAILED, Skipped=$SKIPPED"
+          echo "=========================================="
+
+          # Output for next steps
+          echo "promoted_count=$PROMOTED" >> $GITHUB_OUTPUT
+          echo "failed_count=$FAILED" >> $GITHUB_OUTPUT
+          echo "skipped_count=$SKIPPED" >> $GITHUB_OUTPUT
+
+          # Add summary
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "### Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Promoted: **$PROMOTED**" >> $GITHUB_STEP_SUMMARY
+          echo "- ❌ Security failures: **$FAILED**" >> $GITHUB_STEP_SUMMARY
+          echo "- ⏭️ Already up to date: **$SKIPPED**" >> $GITHUB_STEP_SUMMARY
+
+          # Determine if we have changes to promote
           if git diff --quiet pkg/presets/presets.toml; then
-            echo ""
-            echo "No updates to promote."
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "✅ **All containers are up to date or failed validation**" >> $GITHUB_STEP_SUMMARY
             echo "has_changes=false" >> $GITHUB_OUTPUT
           else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
             echo ""
             echo "Changes made to presets.toml:"
             git diff pkg/presets/presets.toml
-            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+          # If there were security failures, save the list for the final step
+          if [ "$FAILED" -gt 0 ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### ⚠️ Security Alert" >> $GITHUB_STEP_SUMMARY
+            echo "The following containers have security vulnerabilities in their latest versions:" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "$FAILED_LIST" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "These containers were **NOT** promoted. Manual review required." >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: Rebuild and test CIDX
@@ -172,3 +206,15 @@ jobs:
             🤖 Generated automatically by Container Monitor workflow
           branch: chore/promote-containers
           delete-branch: true
+
+      - name: Report security failures
+        if: always() && steps.promote.outputs.failed_count != '0' && steps.promote.outputs.failed_count != ''
+        run: |
+          echo ""
+          echo "=============================================="
+          echo "🚨 SECURITY ALERT: ${{ steps.promote.outputs.failed_count }} container(s) have vulnerabilities!"
+          echo "=============================================="
+          echo ""
+          echo "Check the workflow summary for details."
+          echo "These containers need manual review before updating."
+          exit 1
