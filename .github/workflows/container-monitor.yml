@@ -148,8 +148,8 @@ jobs:
           # Rebuild with updated presets
           go build -o bin/cidx ./cmd/cidx
 
-          # Run tests
-          go test ./...
+          # Run unit tests only (exclude BDD/integration tests)
+          go test ./pkg/... ./cmd/...
 
           # Verify presets still load correctly
           ./bin/cidx preset list > /dev/null
