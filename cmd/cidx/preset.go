@@ -374,16 +374,21 @@ func presetCheckUpdatesCommand() *cli.Command {
 			},
 		},
 		Action: func(c *cli.Context) error {
-			fmt.Println("Checking container image versions...")
-			fmt.Println()
+			jsonOutput := c.Bool("json")
+
+			if !jsonOutput {
+				fmt.Println("Checking container image versions...")
+				fmt.Println()
+			}
 
 			type updateResult struct {
-				Name       string `json:"name"`
-				Image      string `json:"image"`
-				Current    string `json:"current"`
-				Latest     string `json:"latest"`
-				HasUpdate  bool   `json:"has_update"`
-				Error      string `json:"error,omitempty"`
+				Name      string `json:"name"`
+				Image     string `json:"image"`      // Full image reference (with tag)
+				ImageBase string `json:"image_base"` // Image without tag
+				Current   string `json:"current"`
+				Latest    string `json:"latest"`
+				HasUpdate bool   `json:"has_update"`
+				Error     string `json:"error,omitempty"`
 			}
 
 			var results []updateResult
@@ -399,9 +404,10 @@ func presetCheckUpdatesCommand() *cli.Command {
 				latestTag, err := getLatestTag(imageName)
 
 				result := updateResult{
-					Name:    name,
-					Image:   imageName,
-					Current: currentTag,
+					Name:      name,
+					Image:     preset.Image, // Full image reference
+					ImageBase: imageName,    // Image without tag
+					Current:   currentTag,
 				}
 
 				if err != nil {

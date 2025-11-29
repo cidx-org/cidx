@@ -46,10 +46,11 @@ jobs:
           # Process each image with available update
           echo "$UPDATES_JSON" | jq -c '.[]' | while read -r item; do
             NAME=$(echo "$item" | jq -r '.name')
-            CURRENT=$(echo "$item" | jq -r '.current_tag')
-            LATEST=$(echo "$item" | jq -r '.latest_tag')
+            CURRENT=$(echo "$item" | jq -r '.current')
+            LATEST=$(echo "$item" | jq -r '.latest')
             IMAGE=$(echo "$item" | jq -r '.image')
-            HAS_UPDATE=$(echo "$item" | jq -r '.update_available')
+            IMAGE_BASE=$(echo "$item" | jq -r '.image_base')
+            HAS_UPDATE=$(echo "$item" | jq -r '.has_update')
 
             if [ "$HAS_UPDATE" != "true" ]; then
               echo "⏭️ $NAME: Already up to date ($CURRENT)"
@@ -58,7 +59,6 @@ jobs:
             fi
 
             # Build new image reference
-            IMAGE_BASE=$(echo "$IMAGE" | sed 's/:.*$//')
             NEW_IMAGE="$IMAGE_BASE:$LATEST"
 
             echo ""
