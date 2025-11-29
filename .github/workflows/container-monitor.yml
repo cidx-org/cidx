@@ -1,0 +1,147 @@
+name: Container Monitor
+
+on:
+  schedule:
+    # Run weekly on Mondays at 9:00 UTC
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  promote-containers:
+    name: Validate and Promote Container Updates
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build CIDX
+        run: go build -o bin/cidx ./cmd/cidx
+
+      - name: Check for updates and validate
+        id: promote
+        run: |
+          echo "## Container Promotion Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Get updates as JSON
+          UPDATES_JSON=$(./bin/cidx preset check-updates --json)
+          echo "Updates found:"
+          echo "$UPDATES_JSON" | jq .
+
+          # Track promoted images
+          PROMOTED=""
+          FAILED=""
+          SKIPPED=""
+
+          # Process each image with available update
+          echo "$UPDATES_JSON" | jq -c '.[]' | while read -r item; do
+            NAME=$(echo "$item" | jq -r '.name')
+            CURRENT=$(echo "$item" | jq -r '.current_tag')
+            LATEST=$(echo "$item" | jq -r '.latest_tag')
+            IMAGE=$(echo "$item" | jq -r '.image')
+            HAS_UPDATE=$(echo "$item" | jq -r '.update_available')
+
+            if [ "$HAS_UPDATE" != "true" ]; then
+              echo "⏭️ $NAME: Already up to date ($CURRENT)"
+              SKIPPED="$SKIPPED $NAME"
+              continue
+            fi
+
+            # Build new image reference
+            IMAGE_BASE=$(echo "$IMAGE" | sed 's/:.*$//')
+            NEW_IMAGE="$IMAGE_BASE:$LATEST"
+
+            echo ""
+            echo "🔍 Validating: $NAME"
+            echo "   Current: $IMAGE"
+            echo "   New:     $NEW_IMAGE"
+
+            # Run Trivy security scan on NEW version
+            echo "   Running Trivy scan..."
+            TRIVY_OUTPUT=$(docker run --rm aquasec/trivy:latest image \
+              --severity HIGH,CRITICAL \
+              --exit-code 1 \
+              --quiet \
+              "$NEW_IMAGE" 2>&1) || TRIVY_EXIT=$?
+
+            if [ "${TRIVY_EXIT:-0}" -ne 0 ]; then
+              echo "   ❌ FAILED: Security vulnerabilities found"
+              echo "- ❌ **$NAME**: $CURRENT → $LATEST - Security scan failed" >> $GITHUB_STEP_SUMMARY
+              FAILED="$FAILED $NAME"
+              continue
+            fi
+
+            echo "   ✅ Security scan passed"
+
+            # Update presets.toml with new tag
+            echo "   Updating presets.toml..."
+            sed -i "s|image = \"$IMAGE\"|image = \"$NEW_IMAGE\"|g" pkg/presets/presets.toml
+
+            echo "- ✅ **$NAME**: $CURRENT → $LATEST - Promoted" >> $GITHUB_STEP_SUMMARY
+            PROMOTED="$PROMOTED $NAME"
+          done
+
+          # Check if any changes were made
+          if git diff --quiet pkg/presets/presets.toml; then
+            echo ""
+            echo "No updates to promote."
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **All containers are up to date or failed validation**" >> $GITHUB_STEP_SUMMARY
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo ""
+            echo "Changes made to presets.toml:"
+            git diff pkg/presets/presets.toml
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Rebuild and test CIDX
+        if: steps.promote.outputs.has_changes == 'true'
+        run: |
+          echo "## Build Validation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Rebuild with updated presets
+          go build -o bin/cidx ./cmd/cidx
+
+          # Run tests
+          go test ./...
+
+          # Verify presets still load correctly
+          ./bin/cidx preset list > /dev/null
+
+          echo "✅ **Build and tests passed**" >> $GITHUB_STEP_SUMMARY
+
+      - name: Create Pull Request
+        if: steps.promote.outputs.has_changes == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: promote container versions after security validation"
+          title: "chore: promote container versions"
+          body: |
+            ## Container Version Promotion
+
+            This PR updates container image tags in `pkg/presets/presets.toml` after security validation.
+
+            ### Validation Process
+            1. ✅ Checked for available updates
+            2. ✅ Ran Trivy security scan on each new version
+            3. ✅ Only promoted images that passed HIGH/CRITICAL vulnerability check
+            4. ✅ Rebuilt CIDX and ran tests
+
+            See the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for detailed scan results.
+
+            🤖 Generated automatically by Container Monitor workflow
+          branch: chore/promote-containers
+          delete-branch: true

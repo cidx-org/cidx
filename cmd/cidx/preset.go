@@ -1,10 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/cidx-org/cidx/pkg/presets"
@@ -21,6 +25,7 @@ func presetCommand() *cli.Command {
 			presetShowCommand(),
 			presetExportCommand(),
 			presetSearchCommand(),
+			presetCheckUpdatesCommand(),
 		},
 	}
 }
@@ -355,4 +360,230 @@ func truncate(s string, max int) string {
 		return s
 	}
 	return s[:max-3] + "..."
+}
+
+// presetCheckUpdatesCommand checks for available updates for container images
+func presetCheckUpdatesCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "check-updates",
+		Usage: "Check for available updates for container images",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "json",
+				Usage: "Output as JSON",
+			},
+		},
+		Action: func(c *cli.Context) error {
+			fmt.Println("Checking container image versions...")
+			fmt.Println()
+
+			type updateResult struct {
+				Name       string `json:"name"`
+				Image      string `json:"image"`
+				Current    string `json:"current"`
+				Latest     string `json:"latest"`
+				HasUpdate  bool   `json:"has_update"`
+				Error      string `json:"error,omitempty"`
+			}
+
+			var results []updateResult
+			var updatesAvailable int
+
+			for _, name := range presets.List() {
+				preset, _ := presets.Get(name)
+
+				// Parse image
+				imageName, currentTag := parseImageTag(preset.Image)
+
+				// Get latest tag
+				latestTag, err := getLatestTag(imageName)
+
+				result := updateResult{
+					Name:    name,
+					Image:   imageName,
+					Current: currentTag,
+				}
+
+				if err != nil {
+					result.Error = err.Error()
+					result.Latest = "?"
+				} else {
+					result.Latest = latestTag
+					result.HasUpdate = latestTag != currentTag && latestTag != ""
+					if result.HasUpdate {
+						updatesAvailable++
+					}
+				}
+
+				results = append(results, result)
+			}
+
+			// Sort by name
+			sort.Slice(results, func(i, j int) bool {
+				return results[i].Name < results[j].Name
+			})
+
+			if c.Bool("json") {
+				encoder := json.NewEncoder(os.Stdout)
+				encoder.SetIndent("", "  ")
+				return encoder.Encode(results)
+			}
+
+			// Print results
+			for _, r := range results {
+				if r.Error != "" {
+					fmt.Printf("  \033[33m%-20s\033[0m %s\n", r.Name, r.Error)
+				} else if r.HasUpdate {
+					fmt.Printf("  \033[32m%-20s\033[0m %s → %s \033[32m⬆️  Update available\033[0m\n",
+						r.Name, r.Current, r.Latest)
+				} else {
+					fmt.Printf("  %-20s %s \033[90m✓ Up to date\033[0m\n", r.Name, r.Current)
+				}
+			}
+
+			fmt.Println()
+			if updatesAvailable > 0 {
+				fmt.Printf("📦 %d update(s) available\n", updatesAvailable)
+			} else {
+				fmt.Println("✅ All containers are up to date")
+			}
+
+			return nil
+		},
+	}
+}
+
+// parseImageTag splits an image reference into name and tag
+func parseImageTag(image string) (name, tag string) {
+	// Handle images with digest
+	if idx := strings.Index(image, "@"); idx != -1 {
+		return image[:idx], image[idx+1:]
+	}
+
+	// Handle images with tag
+	if idx := strings.LastIndex(image, ":"); idx != -1 {
+		// Make sure it's not a port number (registry:port/image)
+		afterColon := image[idx+1:]
+		if !strings.Contains(afterColon, "/") {
+			return image[:idx], afterColon
+		}
+	}
+
+	return image, "latest"
+}
+
+// getLatestTag fetches the latest tag for an image from its registry
+func getLatestTag(image string) (string, error) {
+	// Determine registry and repository
+	registry, repo := parseRegistry(image)
+
+	switch registry {
+	case "docker.io":
+		return getDockerHubLatestTag(repo)
+	case "quay.io":
+		return getQuayLatestTag(repo)
+	case "gcr.io", "ghcr.io":
+		// GitHub/Google Container Registry - harder to query without auth
+		return "", fmt.Errorf("registry %s not supported yet", registry)
+	default:
+		return "", fmt.Errorf("unknown registry: %s", registry)
+	}
+}
+
+// parseRegistry extracts registry and repository from image name
+func parseRegistry(image string) (registry, repo string) {
+	parts := strings.SplitN(image, "/", 2)
+
+	// Check if first part looks like a registry
+	if len(parts) == 2 && (strings.Contains(parts[0], ".") || strings.Contains(parts[0], ":")) {
+		return parts[0], parts[1]
+	}
+
+	// Docker Hub official images (e.g., "alpine", "golang")
+	if len(parts) == 1 {
+		return "docker.io", "library/" + parts[0]
+	}
+
+	// Docker Hub user images (e.g., "user/repo")
+	return "docker.io", image
+}
+
+// getDockerHubLatestTag gets the latest tag from Docker Hub
+func getDockerHubLatestTag(repo string) (string, error) {
+	url := fmt.Sprintf("https://hub.docker.com/v2/repositories/%s/tags?page_size=20&ordering=last_updated", repo)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Results []struct {
+			Name string `json:"name"`
+		} `json:"results"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+
+	// Find the latest semver tag (not latest, not sha, not nightly)
+	semverRegex := regexp.MustCompile(`^v?[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-zA-Z0-9]+)?$`)
+	for _, tag := range result.Results {
+		if tag.Name != "latest" && !strings.Contains(tag.Name, "sha") &&
+			!strings.Contains(tag.Name, "nightly") && semverRegex.MatchString(tag.Name) {
+			return tag.Name, nil
+		}
+	}
+
+	// Fallback: return first non-latest tag
+	for _, tag := range result.Results {
+		if tag.Name != "latest" {
+			return tag.Name, nil
+		}
+	}
+
+	return "", fmt.Errorf("no tags found")
+}
+
+// getQuayLatestTag gets the latest tag from Quay.io
+func getQuayLatestTag(repo string) (string, error) {
+	url := fmt.Sprintf("https://quay.io/api/v1/repository/%s/tag/?limit=20", repo)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Tags []struct {
+			Name string `json:"name"`
+		} `json:"tags"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+
+	// Find the latest semver tag
+	semverRegex := regexp.MustCompile(`^v?[0-9]+\.[0-9]+(\.[0-9]+)?$`)
+	for _, tag := range result.Tags {
+		if tag.Name != "latest" && semverRegex.MatchString(tag.Name) {
+			return tag.Name, nil
+		}
+	}
+
+	return "", fmt.Errorf("no tags found")
 }
