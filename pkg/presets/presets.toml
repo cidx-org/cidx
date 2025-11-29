@@ -198,8 +198,74 @@ workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# GO SECURITY - Go-specific security scanning
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Gosec: Go Security Checker - inspects Go source code for security issues
+# Official image: securego/gosec (maintained by securego team)
+# Detects: SQL injection, command injection, hardcoded credentials, etc.
+[presets.gosec]
+name = "gosec"
+phase = "security"
+image = "securego/gosec:latest"
+command = "./..."
+workdir = "/app"
+volumes = ["${WORKSPACE}:/app"]
+
+[presets.gosec.env]
+HOME = "/tmp"
+GOTOOLCHAIN = "auto"
+
+[presets.gosec.options.severity]
+type = "string"
+default = "medium"
+description = "Minimum severity (low, medium, high)"
+command_flag = "-severity"
+
+[presets.gosec.options.confidence]
+type = "string"
+default = "medium"
+description = "Minimum confidence (low, medium, high)"
+command_flag = "-confidence"
+
+[presets.gosec.options.format]
+type = "string"
+default = "text"
+description = "Output format (text, json, csv, junit-xml, html, sarif, sonarqube)"
+command_flag = "-fmt"
+
+# Govulncheck: Official Go vulnerability scanner
+# Official image: golang:alpine (installs govulncheck at runtime)
+# Detects: Known vulnerabilities in Go dependencies (CVEs)
+[presets.govulncheck]
+name = "govulncheck"
+phase = "security"
+image = "golang:alpine"
+command = "sh -c 'go install golang.org/x/vuln/cmd/govulncheck@latest && PATH=$PATH:/tmp/go/bin govulncheck ./...'"
+workdir = "/app"
+volumes = ["${WORKSPACE}:/app"]
+
+[presets.govulncheck.env]
+HOME = "/tmp"
+GOPATH = "/tmp/go"
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # GO TOOLS - Linting, testing, and building Go projects
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Go Mod Tidy: Verify go.mod and go.sum are clean
+# Official image: golang:alpine (official Go Docker image)
+# Checks: go.mod is tidy (no unused deps, all required deps present)
+[presets.go-mod-tidy]
+name = "go-mod-tidy"
+phase = "code"
+image = "golang:alpine"
+command = "sh -c 'cp go.mod go.mod.bak && cp go.sum go.sum.bak && go mod tidy && diff go.mod go.mod.bak && diff go.sum go.sum.bak && echo \"go.mod is tidy\"'"
+workdir = "/app"
+volumes = ["${WORKSPACE}:/app"]
+
+[presets.go-mod-tidy.env]
+HOME = "/tmp"
 
 # GolangCI-Lint: Fast Go linters aggregator
 # Official image: golangci/golangci-lint (maintained by golangci-lint team)
