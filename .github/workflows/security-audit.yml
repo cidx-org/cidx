@@ -114,7 +114,7 @@ jobs:
           docker run --rm \
             -v "$(pwd)/.grype.yaml:/.grype.yaml:ro" \
             anchore/grype:latest \
-            "$IMAGE" \
+            "registry:$IMAGE" \
             --config /.grype.yaml \
             --fail-on high
 
