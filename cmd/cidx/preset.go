@@ -29,6 +29,7 @@ func presetCommand() *cli.Command {
 			presetCheckUpdatesCommand(),
 			presetScanCommand(),
 			presetImagesCommand(),
+			presetScanTargetsCommand(),
 		},
 	}
 }
@@ -892,6 +893,77 @@ func presetImagesCommand() *cli.Command {
 			}
 
 			return nil
+		},
+	}
+}
+
+// presetScanTargetsCommand returns deduplicated list of images to scan (with updates resolved)
+func presetScanTargetsCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "scan-targets",
+		Usage: "Get deduplicated list of images to scan (checks for updates, returns new or current)",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "json",
+				Usage: "Output as JSON (required for CI)",
+				Value: true,
+			},
+		},
+		Action: func(c *cli.Context) error {
+			type scanTarget struct {
+				CurrentImage string   `json:"current_image"`
+				ScanImage    string   `json:"scan_image"`
+				IsUpdate     bool     `json:"is_update"`
+				Presets      []string `json:"presets"`
+				Error        string   `json:"error,omitempty"`
+			}
+
+			// Build map of current image -> presets using it
+			imagePresets := make(map[string][]string)
+			for _, name := range presets.List() {
+				preset, _ := presets.Get(name)
+				imagePresets[preset.Image] = append(imagePresets[preset.Image], name)
+			}
+
+			// Get sorted unique current images
+			currentImages := make([]string, 0, len(imagePresets))
+			for img := range imagePresets {
+				currentImages = append(currentImages, img)
+			}
+			sort.Strings(currentImages)
+
+			var targets []scanTarget
+
+			for _, currentImage := range currentImages {
+				presetsUsing := imagePresets[currentImage]
+				sort.Strings(presetsUsing)
+
+				target := scanTarget{
+					CurrentImage: currentImage,
+					ScanImage:    currentImage, // Default: scan current
+					IsUpdate:     false,
+					Presets:      presetsUsing,
+				}
+
+				// Check for update
+				imageName, currentTag := parseImageTag(currentImage)
+				latestTag, err := getLatestTag(imageName, currentTag)
+
+				if err != nil {
+					target.Error = err.Error()
+					// Still scan current image on error
+				} else if latestTag != currentTag && latestTag != "" {
+					// Update available - scan the new version
+					target.ScanImage = imageName + ":" + latestTag
+					target.IsUpdate = true
+				}
+
+				targets = append(targets, target)
+			}
+
+			encoder := json.NewEncoder(os.Stdout)
+			encoder.SetIndent("", "  ")
+			return encoder.Encode(targets)
 		},
 	}
 }

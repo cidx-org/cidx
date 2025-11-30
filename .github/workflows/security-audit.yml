@@ -1,0 +1,115 @@
+name: Security Audit
+
+on:
+  schedule:
+    # Run daily at 6:00 UTC
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  # Job 1: Get unique images (current versions only)
+  get-images:
+    name: Get Images
+    runs-on: ubuntu-latest
+    outputs:
+      images: ${{ steps.images.outputs.images }}
+      count: ${{ steps.images.outputs.count }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build CIDX
+        run: go build -o bin/cidx ./cmd/cidx
+
+      - name: Get unique images
+        id: images
+        run: |
+          IMAGES=$(./bin/cidx preset images --json | jq -c '[.[].image]')
+          COUNT=$(echo "$IMAGES" | jq 'length')
+
+          echo "images=$IMAGES" >> $GITHUB_OUTPUT
+          echo "count=$COUNT" >> $GITHUB_OUTPUT
+
+          echo "## Security Audit" >> $GITHUB_STEP_SUMMARY
+          echo "Scanning **$COUNT** unique container images" >> $GITHUB_STEP_SUMMARY
+
+  # Job 2: Trivy scan (parallel)
+  trivy-scan:
+    name: Trivy
+    needs: get-images
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJson(needs.get-images.outputs.images) }}
+
+    steps:
+      - name: Scan
+        id: scan
+        run: |
+          IMAGE="${{ matrix.image }}"
+          if docker run --rm aquasec/trivy:latest image \
+            --severity HIGH,CRITICAL \
+            --exit-code 1 \
+            --quiet \
+            "$IMAGE" 2>&1; then
+            echo "status=clean" >> $GITHUB_OUTPUT
+          else
+            echo "status=vulnerable" >> $GITHUB_OUTPUT
+          fi
+
+  # Job 3: Grype scan (parallel)
+  grype-scan:
+    name: Grype
+    needs: get-images
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJson(needs.get-images.outputs.images) }}
+
+    steps:
+      - name: Scan
+        id: scan
+        run: |
+          IMAGE="${{ matrix.image }}"
+          if docker run --rm anchore/grype:latest \
+            "$IMAGE" \
+            --fail-on high \
+            --quiet 2>&1; then
+            echo "status=clean" >> $GITHUB_OUTPUT
+          else
+            echo "status=vulnerable" >> $GITHUB_OUTPUT
+          fi
+
+  # Job 4: Summary
+  summary:
+    name: Summary
+    needs: [get-images, trivy-scan, grype-scan]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Report
+        run: |
+          echo "## Security Audit Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Scanner | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Trivy | ${{ needs.trivy-scan.result == 'success' && 'All clean' || 'Vulnerabilities found' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Grype | ${{ needs.grype-scan.result == 'success' && 'All clean' || 'Vulnerabilities found' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Images scanned: ${{ needs.get-images.outputs.count }}**" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.trivy-scan.result }}" != "success" ] || [ "${{ needs.grype-scan.result }}" != "success" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Some containers have HIGH/CRITICAL vulnerabilities." >> $GITHUB_STEP_SUMMARY
+            echo "Check individual scan jobs for details." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
