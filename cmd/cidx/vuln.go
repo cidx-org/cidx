@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"sort"
 	"strings"
 	"time"
@@ -39,6 +40,7 @@ func vulnCommand() *cli.Command {
 			vulnCheckCommand(),
 			vulnAddCommand(),
 			vulnIgnoreCommand(),
+			vulnVerifyCommand(),
 		},
 	}
 }
@@ -357,6 +359,120 @@ func generateGrypeIgnore(cves []string) string {
 		sb.WriteString(fmt.Sprintf("  - vulnerability: %s\n", cve))
 	}
 	return sb.String()
+}
+
+func vulnVerifyCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "verify",
+		Usage: "Verify vulnerability exceptions work by scanning images with Trivy",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "file",
+				Value: defaultVulnFile,
+				Usage: "Path to vulnerability file",
+			},
+			&cli.StringFlag{
+				Name:  "image",
+				Usage: "Only verify specific image (default: all images with exceptions)",
+			},
+			&cli.BoolFlag{
+				Name:  "dry-run",
+				Usage: "Show what would be scanned without running scans",
+			},
+		},
+		Action: func(c *cli.Context) error {
+			vulns, err := loadVulnerabilities(c.String("file"))
+			if err != nil {
+				return err
+			}
+
+			// Get unique images with exceptions
+			imageExceptions := make(map[string][]string)
+			for _, v := range vulns.Vulnerabilities {
+				imageExceptions[v.Image] = append(imageExceptions[v.Image], v.CVE)
+			}
+
+			if len(imageExceptions) == 0 {
+				fmt.Println("No vulnerability exceptions to verify.")
+				return nil
+			}
+
+			imageFilter := c.String("image")
+			dryRun := c.Bool("dry-run")
+
+			fmt.Println("Verifying vulnerability exceptions...")
+			fmt.Println()
+
+			var failed []string
+			var passed []string
+
+			for image, cves := range imageExceptions {
+				if imageFilter != "" && image != imageFilter {
+					continue
+				}
+
+				fmt.Printf("Image: %s (%d exceptions)\n", image, len(cves))
+				for _, cve := range cves {
+					fmt.Printf("  - %s\n", cve)
+				}
+
+				if dryRun {
+					fmt.Println("  → [dry-run] Would scan with Trivy")
+					fmt.Println()
+					continue
+				}
+
+				// Generate ignore file
+				trivyIgnore := generateTrivyIgnore(cves)
+				ignoreFile := fmt.Sprintf("/tmp/.trivyignore-%d", os.Getpid())
+				if err := os.WriteFile(ignoreFile, []byte(trivyIgnore), 0644); err != nil {
+					return fmt.Errorf("failed to write ignore file: %w", err)
+				}
+				defer os.Remove(ignoreFile)
+
+				// Run Trivy scan
+				fmt.Printf("  → Scanning with Trivy... ")
+
+				cmd := exec.Command("docker", "run", "--rm",
+					"-v", ignoreFile+":/root/.trivyignore:ro",
+					"aquasec/trivy:latest", "image",
+					"--severity", "HIGH,CRITICAL",
+					"--ignorefile", "/root/.trivyignore",
+					"--exit-code", "1",
+					"--quiet",
+					image,
+				)
+
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					fmt.Println("FAILED")
+					fmt.Printf("  → Error: %s\n", strings.TrimSpace(string(output)))
+					failed = append(failed, image)
+				} else {
+					fmt.Println("OK")
+					passed = append(passed, image)
+				}
+				fmt.Println()
+			}
+
+			// Summary
+			fmt.Println("=" + strings.Repeat("=", 50))
+			fmt.Printf("Results: %d passed, %d failed\n", len(passed), len(failed))
+
+			if len(failed) > 0 {
+				fmt.Println("\nFailed images:")
+				for _, img := range failed {
+					fmt.Printf("  - %s\n", img)
+				}
+				fmt.Println("\nThese images still have vulnerabilities not covered by exceptions.")
+				fmt.Println("Add missing CVEs with: cidx vuln add <CVE> <IMAGE>")
+				return cli.Exit("Verification failed", 1)
+			}
+
+			fmt.Println("\nAll exceptions verified successfully!")
+			return nil
+		},
+	}
 }
 
 func loadVulnerabilities(path string) (*VulnerabilityFile, error) {
