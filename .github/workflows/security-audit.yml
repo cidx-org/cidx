@@ -6,14 +6,20 @@ on:
     - cron: "0 6 * * *"
   workflow_dispatch:
 
+env:
+  TRIVY_DB_REPOSITORY: ghcr.io/aquasecurity/trivy-db
+  GRYPE_DB_AUTO_UPDATE: false
+
 jobs:
-  # Job 1: Get unique images (current versions only)
-  get-images:
-    name: Get Images
+  # Job 1: Get unique images and setup databases
+  setup:
+    name: Setup
     runs-on: ubuntu-latest
     outputs:
       images: ${{ steps.images.outputs.images }}
       count: ${{ steps.images.outputs.count }}
+      trivy-cache-key: ${{ steps.cache-keys.outputs.trivy }}
+      grype-cache-key: ${{ steps.cache-keys.outputs.grype }}
 
     steps:
       - name: Checkout
@@ -39,15 +45,73 @@ jobs:
           echo "## Security Audit" >> $GITHUB_STEP_SUMMARY
           echo "Scanning **$COUNT** unique container images" >> $GITHUB_STEP_SUMMARY
 
+      - name: Generate cache keys
+        id: cache-keys
+        run: |
+          # Use date for daily cache refresh
+          DATE=$(date +%Y-%m-%d)
+          echo "trivy=trivy-db-$DATE" >> $GITHUB_OUTPUT
+          echo "grype=grype-db-$DATE" >> $GITHUB_OUTPUT
+
+      - name: Cache Trivy DB
+        id: trivy-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: ${{ steps.cache-keys.outputs.trivy }}
+          restore-keys: |
+            trivy-db-
+
+      - name: Download Trivy DB
+        if: steps.trivy-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.cache/trivy/db
+          docker run --rm \
+            -v ~/.cache/trivy:/root/.cache/trivy \
+            aquasec/trivy:latest image \
+            --download-db-only
+
+      - name: Cache Grype DB
+        id: grype-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/grype
+          key: ${{ steps.cache-keys.outputs.grype }}
+          restore-keys: |
+            grype-db-
+
+      - name: Download Grype DB
+        if: steps.grype-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.cache/grype/db
+          docker run --rm \
+            -v ~/.cache/grype:/root/.cache/grype \
+            -e GRYPE_DB_CACHE_DIR=/root/.cache/grype/db \
+            anchore/grype:latest db update
+
+      - name: Upload Trivy DB
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-db
+          path: ~/.cache/trivy
+          retention-days: 1
+
+      - name: Upload Grype DB
+        uses: actions/upload-artifact@v4
+        with:
+          name: grype-db
+          path: ~/.cache/grype
+          retention-days: 1
+
   # Job 2: Trivy scan (parallel) with vulnerability exceptions
   trivy-scan:
     name: Trivy
-    needs: get-images
+    needs: setup
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        image: ${{ fromJson(needs.get-images.outputs.images) }}
+        image: ${{ fromJson(needs.setup.outputs.images) }}
 
     steps:
       - name: Checkout
@@ -60,6 +124,12 @@ jobs:
 
       - name: Build CIDX
         run: go build -o bin/cidx ./cmd/cidx
+
+      - name: Download Trivy DB
+        uses: actions/download-artifact@v4
+        with:
+          name: trivy-db
+          path: ~/.cache/trivy
 
       - name: Generate ignore file
         run: |
@@ -73,21 +143,23 @@ jobs:
           IMAGE="${{ matrix.image }}"
           docker run --rm \
             -v "$(pwd)/.trivyignore:/root/.trivyignore:ro" \
+            -v "$HOME/.cache/trivy:/root/.cache/trivy:ro" \
             aquasec/trivy:latest image \
             --severity HIGH,CRITICAL \
             --ignorefile /root/.trivyignore \
+            --skip-db-update \
             --exit-code 1 \
             "$IMAGE"
 
   # Job 3: Grype scan (parallel) with vulnerability exceptions
   grype-scan:
     name: Grype
-    needs: get-images
+    needs: setup
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        image: ${{ fromJson(needs.get-images.outputs.images) }}
+        image: ${{ fromJson(needs.setup.outputs.images) }}
 
     steps:
       - name: Checkout
@@ -101,6 +173,12 @@ jobs:
       - name: Build CIDX
         run: go build -o bin/cidx ./cmd/cidx
 
+      - name: Download Grype DB
+        uses: actions/download-artifact@v4
+        with:
+          name: grype-db
+          path: ~/.cache/grype
+
       - name: Generate ignore file
         run: |
           IMAGE="${{ matrix.image }}"
@@ -113,6 +191,9 @@ jobs:
           IMAGE="${{ matrix.image }}"
           docker run --rm \
             -v "$(pwd)/.grype.yaml:/.grype.yaml:ro" \
+            -v "$HOME/.cache/grype:/root/.cache/grype:ro" \
+            -e GRYPE_DB_AUTO_UPDATE=false \
+            -e GRYPE_DB_CACHE_DIR=/root/.cache/grype/db \
             anchore/grype:latest \
             "registry:$IMAGE" \
             --config /.grype.yaml \
@@ -136,41 +217,118 @@ jobs:
         run: go build -o bin/cidx ./cmd/cidx
 
       - name: Check for expired exceptions
+        id: check
         run: |
-          echo "## Vulnerability Exceptions" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
           if ./bin/cidx vuln check --days 7; then
-            echo "No expired exceptions." >> $GITHUB_STEP_SUMMARY
+            echo "status=ok" >> $GITHUB_OUTPUT
           else
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Action required**: Some vulnerability exceptions have expired." >> $GITHUB_STEP_SUMMARY
-            echo "Run \`cidx vuln list\` to review and update or remove expired exceptions." >> $GITHUB_STEP_SUMMARY
+            echo "status=expired" >> $GITHUB_OUTPUT
           fi
 
-  # Job 5: Summary
-  summary:
-    name: Summary
-    needs: [get-images, trivy-scan, grype-scan, check-exceptions]
+      - name: Upload exception status
+        uses: actions/upload-artifact@v4
+        with:
+          name: exception-status
+          path: |
+            known-vulnerabilities.toml
+          retention-days: 1
+
+    outputs:
+      status: ${{ steps.check.outputs.status }}
+
+  # Job 5: Generate consolidated report
+  report:
+    name: Report
+    needs: [setup, trivy-scan, grype-scan, check-exceptions]
     if: always()
     runs-on: ubuntu-latest
 
     steps:
-      - name: Report
-        run: |
-          echo "## Security Audit Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Scanner | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Trivy | ${{ needs.trivy-scan.result == 'success' && 'All clean' || 'Vulnerabilities found' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Grype | ${{ needs.grype-scan.result == 'success' && 'All clean' || 'Vulnerabilities found' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Exceptions | ${{ needs.check-exceptions.result == 'success' && 'OK' || 'Review needed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Images scanned: ${{ needs.get-images.outputs.count }}**" >> $GITHUB_STEP_SUMMARY
+      - name: Checkout
+        uses: actions/checkout@v4
 
-          if [ "${{ needs.trivy-scan.result }}" != "success" ] || [ "${{ needs.grype-scan.result }}" != "success" ]; then
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build CIDX
+        run: go build -o bin/cidx ./cmd/cidx
+
+      - name: Generate Report
+        run: |
+          TRIVY_STATUS="${{ needs.trivy-scan.result }}"
+          GRYPE_STATUS="${{ needs.grype-scan.result }}"
+          EXCEPTIONS_STATUS="${{ needs.check-exceptions.outputs.status }}"
+          IMAGE_COUNT="${{ needs.setup.outputs.count }}"
+
+          # Header
+          echo "# Security Audit Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** $(date -u '+%Y-%m-%d %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "**Images Scanned:** $IMAGE_COUNT" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Scanner Results
+          echo "## Scanner Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Scanner | Status | Details |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|---------|" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$TRIVY_STATUS" = "success" ]; then
+            echo "| Trivy | :white_check_mark: Pass | No HIGH/CRITICAL vulnerabilities |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Trivy | :x: Fail | Vulnerabilities detected |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "$GRYPE_STATUS" = "success" ]; then
+            echo "| Grype | :white_check_mark: Pass | No HIGH/CRITICAL vulnerabilities |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Grype | :x: Fail | Vulnerabilities detected |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Exception Status
+          echo "## Vulnerability Exceptions" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$EXCEPTIONS_STATUS" = "ok" ]; then
+            echo ":white_check_mark: All exceptions are valid and not expired." >> $GITHUB_STEP_SUMMARY
+          else
+            echo ":warning: Some exceptions have expired or will expire soon." >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Some containers have HIGH/CRITICAL vulnerabilities." >> $GITHUB_STEP_SUMMARY
-            echo "Check individual scan jobs for details." >> $GITHUB_STEP_SUMMARY
+            echo "Run \`cidx vuln check\` locally to review." >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Current Exceptions
+          echo "### Current Exceptions" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          ./bin/cidx vuln list 2>/dev/null || echo "No exceptions configured"
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Instructions
+          if [ "$TRIVY_STATUS" != "success" ] || [ "$GRYPE_STATUS" != "success" ]; then
+            echo "## Next Steps" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "1. Check individual scan jobs for vulnerability details" >> $GITHUB_STEP_SUMMARY
+            echo "2. For accepted risks, add exceptions: \`cidx vuln add <CVE> <IMAGE>\`" >> $GITHUB_STEP_SUMMARY
+            echo "3. Verify exceptions work: \`cidx vuln verify\`" >> $GITHUB_STEP_SUMMARY
+            echo "4. Commit and push changes" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+      - name: Summary Status
+        if: always()
+        run: |
+          if [ "${{ needs.trivy-scan.result }}" = "success" ] && [ "${{ needs.grype-scan.result }}" = "success" ]; then
+            echo "All security scans passed!"
+          else
+            echo "Security vulnerabilities detected - review required"
             exit 1
           fi
