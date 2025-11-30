@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"regexp"
 	"sort"
 	"strings"
@@ -26,6 +27,7 @@ func presetCommand() *cli.Command {
 			presetExportCommand(),
 			presetSearchCommand(),
 			presetCheckUpdatesCommand(),
+			presetScanCommand(),
 		},
 	}
 }
@@ -623,4 +625,196 @@ func getQuayLatestTag(repo, variantSuffix string) (string, error) {
 	}
 
 	return "", fmt.Errorf("no semver tags found with suffix '%s'", variantSuffix)
+}
+
+// presetScanCommand scans all preset container images for security vulnerabilities
+func presetScanCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "scan",
+		Usage: "Scan all preset container images for security vulnerabilities",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "scanner",
+				Aliases: []string{"s"},
+				Usage:   "Scanner to use: trivy, grype, or all (default: all)",
+				Value:   "all",
+			},
+			&cli.StringFlag{
+				Name:    "severity",
+				Usage:   "Minimum severity to report: LOW, MEDIUM, HIGH, CRITICAL",
+				Value:   "HIGH",
+			},
+			&cli.BoolFlag{
+				Name:  "json",
+				Usage: "Output as JSON",
+			},
+			&cli.StringFlag{
+				Name:    "preset",
+				Aliases: []string{"p"},
+				Usage:   "Scan only a specific preset",
+			},
+		},
+		Action: func(c *cli.Context) error {
+			scanner := c.String("scanner")
+			severity := strings.ToUpper(c.String("severity"))
+			jsonOutput := c.Bool("json")
+			presetFilter := c.String("preset")
+
+			// Validate scanner choice
+			if scanner != "trivy" && scanner != "grype" && scanner != "all" {
+				return fmt.Errorf("invalid scanner: %s (use trivy, grype, or all)", scanner)
+			}
+
+			// Check if docker is available
+			if _, err := exec.LookPath("docker"); err != nil {
+				return fmt.Errorf("docker is required but not found in PATH")
+			}
+
+			type scanResult struct {
+				Name        string `json:"name"`
+				Image       string `json:"image"`
+				TrivyStatus string `json:"trivy_status,omitempty"`
+				GrypeStatus string `json:"grype_status,omitempty"`
+				Vulnerable  bool   `json:"vulnerable"`
+				Error       string `json:"error,omitempty"`
+			}
+
+			var results []scanResult
+			var vulnerableCount int
+
+			// Get list of presets to scan
+			presetNames := presets.List()
+			if presetFilter != "" {
+				// Check if preset exists
+				if _, err := presets.Get(presetFilter); err != nil {
+					return err
+				}
+				presetNames = []string{presetFilter}
+			}
+
+			if !jsonOutput {
+				fmt.Printf("Scanning %d container image(s) with %s...\n\n", len(presetNames), scanner)
+			}
+
+			for _, name := range presetNames {
+				preset, _ := presets.Get(name)
+
+				result := scanResult{
+					Name:  name,
+					Image: preset.Image,
+				}
+
+				if !jsonOutput {
+					fmt.Printf("Scanning %s (%s)...\n", name, preset.Image)
+				}
+
+				hasVuln := false
+
+				// Run Trivy scan
+				if scanner == "trivy" || scanner == "all" {
+					trivyResult := runTrivyScan(preset.Image, severity)
+					result.TrivyStatus = trivyResult
+					if trivyResult != "clean" {
+						hasVuln = true
+					}
+					if !jsonOutput {
+						if trivyResult == "clean" {
+							fmt.Printf("  Trivy: clean\n")
+						} else {
+							fmt.Printf("  Trivy: %s\n", trivyResult)
+						}
+					}
+				}
+
+				// Run Grype scan
+				if scanner == "grype" || scanner == "all" {
+					grypeResult := runGrypeScan(preset.Image, severity)
+					result.GrypeStatus = grypeResult
+					if grypeResult != "clean" {
+						hasVuln = true
+					}
+					if !jsonOutput {
+						if grypeResult == "clean" {
+							fmt.Printf("  Grype: clean\n")
+						} else {
+							fmt.Printf("  Grype: %s\n", grypeResult)
+						}
+					}
+				}
+
+				result.Vulnerable = hasVuln
+				if hasVuln {
+					vulnerableCount++
+				}
+				results = append(results, result)
+
+				if !jsonOutput {
+					fmt.Println()
+				}
+			}
+
+			if jsonOutput {
+				encoder := json.NewEncoder(os.Stdout)
+				encoder.SetIndent("", "  ")
+				return encoder.Encode(results)
+			}
+
+			// Print summary
+			fmt.Println("========================================")
+			fmt.Printf("Scanned: %d containers\n", len(results))
+			fmt.Printf("Clean: %d\n", len(results)-vulnerableCount)
+			fmt.Printf("Vulnerable: %d\n", vulnerableCount)
+			fmt.Println("========================================")
+
+			if vulnerableCount > 0 {
+				return fmt.Errorf("%d container(s) have vulnerabilities", vulnerableCount)
+			}
+
+			return nil
+		},
+	}
+}
+
+// runTrivyScan runs Trivy security scan on an image
+func runTrivyScan(image, severity string) string {
+	cmd := exec.Command("docker", "run", "--rm",
+		"aquasec/trivy:latest", "image",
+		"--severity", severity+",CRITICAL",
+		"--exit-code", "1",
+		"--quiet",
+		image)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			if exitErr.ExitCode() == 1 {
+				return fmt.Sprintf("vulnerabilities found (%s+)", severity)
+			}
+		}
+		return fmt.Sprintf("error: %v", err)
+	}
+	_ = output
+	return "clean"
+}
+
+// runGrypeScan runs Grype security scan on an image
+func runGrypeScan(image, severity string) string {
+	failOn := strings.ToLower(severity)
+	cmd := exec.Command("docker", "run", "--rm",
+		"anchore/grype:latest",
+		image,
+		"--fail-on", failOn,
+		"--quiet")
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			if exitErr.ExitCode() == 1 {
+				return fmt.Sprintf("vulnerabilities found (%s+)", severity)
+			}
+		}
+		return fmt.Sprintf("error: %v", err)
+	}
+	_ = output
+	return "clean"
 }
