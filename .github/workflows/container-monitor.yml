@@ -17,13 +17,13 @@ permissions:
   pull-requests: write
 
 jobs:
-  # Job 1: Security audit of ALL current container images
-  security-audit:
-    name: Security Audit - All Containers
+  # Job 1: Get unique images from presets (deduplication)
+  get-images:
+    name: Get Unique Images
     runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.skip_audit != 'true' }}
     outputs:
-      vulnerable_count: ${{ steps.audit.outputs.vulnerable_count }}
+      images: ${{ steps.images.outputs.images }}
+      count: ${{ steps.images.outputs.count }}
 
     steps:
       - name: Checkout
@@ -37,86 +37,123 @@ jobs:
       - name: Build CIDX
         run: go build -o bin/cidx ./cmd/cidx
 
-      - name: Audit all containers with Trivy and Grype
-        id: audit
+      - name: Extract unique images
+        id: images
         run: |
-          echo "## Security Audit Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Scanning ALL preset containers for vulnerabilities..." >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          # Get unique images as JSON array
+          IMAGES_JSON=$(./bin/cidx preset images --json | jq -c '[.[].image]')
+          COUNT=$(echo "$IMAGES_JSON" | jq 'length')
 
-          # Get all images from presets
-          IMAGES=$(./bin/cidx preset check-updates --json | jq -r '.[].image')
+          echo "images=$IMAGES_JSON" >> $GITHUB_OUTPUT
+          echo "count=$COUNT" >> $GITHUB_OUTPUT
 
-          # Initialize counters
-          echo "0" > /tmp/vulnerable_count
-          echo "0" > /tmp/clean_count
+          echo "Found $COUNT unique container images:"
+          echo "$IMAGES_JSON" | jq -r '.[]'
 
-          echo "| Container | Trivy | Grype | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----------|-------|-------|--------|" >> $GITHUB_STEP_SUMMARY
+  # Job 2: Security audit with Trivy (parallel matrix)
+  trivy-scan:
+    name: Trivy Scan
+    needs: get-images
+    if: ${{ github.event.inputs.skip_audit != 'true' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJson(needs.get-images.outputs.images) }}
 
-          for IMAGE in $IMAGES; do
-            NAME=$(echo "$IMAGE" | cut -d: -f1 | rev | cut -d/ -f1 | rev)
-            echo ""
-            echo "🔍 Scanning: $IMAGE"
+    steps:
+      - name: Run Trivy scan
+        id: trivy
+        run: |
+          IMAGE="${{ matrix.image }}"
+          echo "Scanning: $IMAGE"
 
-            TRIVY_STATUS="✅"
-            GRYPE_STATUS="✅"
-            OVERALL_STATUS="✅ Clean"
-            HAS_VULN=false
-
-            # Trivy scan
-            echo "   Running Trivy..."
-            if ! docker run --rm aquasec/trivy:latest image \
-              --severity HIGH,CRITICAL \
-              --exit-code 1 \
-              --quiet \
-              "$IMAGE" 2>&1; then
-              TRIVY_STATUS="❌ HIGH/CRIT"
-              HAS_VULN=true
-            fi
-
-            # Grype scan
-            echo "   Running Grype..."
-            if ! docker run --rm anchore/grype:latest \
-              "$IMAGE" \
-              --fail-on high \
-              --quiet 2>&1; then
-              GRYPE_STATUS="❌ HIGH/CRIT"
-              HAS_VULN=true
-            fi
-
-            if [ "$HAS_VULN" = true ]; then
-              OVERALL_STATUS="⚠️ Vulnerable"
-              echo $(($(cat /tmp/vulnerable_count) + 1)) > /tmp/vulnerable_count
-            else
-              echo $(($(cat /tmp/clean_count) + 1)) > /tmp/clean_count
-            fi
-
-            echo "| \`$NAME\` | $TRIVY_STATUS | $GRYPE_STATUS | $OVERALL_STATUS |" >> $GITHUB_STEP_SUMMARY
-          done
-
-          VULNERABLE=$(cat /tmp/vulnerable_count)
-          CLEAN=$(cat /tmp/clean_count)
-
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Audit Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Clean: **$CLEAN**" >> $GITHUB_STEP_SUMMARY
-          echo "- ⚠️ Vulnerable: **$VULNERABLE**" >> $GITHUB_STEP_SUMMARY
-
-          echo "vulnerable_count=$VULNERABLE" >> $GITHUB_OUTPUT
-
-          if [ "$VULNERABLE" -gt 0 ]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "⚠️ **Some containers have known vulnerabilities. Consider updating or finding alternatives.**" >> $GITHUB_STEP_SUMMARY
+          # Run Trivy
+          if docker run --rm aquasec/trivy:latest image \
+            --severity HIGH,CRITICAL \
+            --exit-code 1 \
+            --quiet \
+            "$IMAGE" 2>&1; then
+            echo "status=clean" >> $GITHUB_OUTPUT
+            echo "result=clean" >> $GITHUB_OUTPUT
+          else
+            echo "status=vulnerable" >> $GITHUB_OUTPUT
+            echo "result=HIGH/CRITICAL vulnerabilities found" >> $GITHUB_OUTPUT
           fi
 
-  # Job 2: Check for updates and promote safe ones
+      - name: Report result
+        run: |
+          if [ "${{ steps.trivy.outputs.status }}" = "clean" ]; then
+            echo "Trivy: ${{ matrix.image }} is clean"
+          else
+            echo "Trivy: ${{ matrix.image }} has vulnerabilities"
+          fi
+
+  # Job 3: Security audit with Grype (parallel matrix)
+  grype-scan:
+    name: Grype Scan
+    needs: get-images
+    if: ${{ github.event.inputs.skip_audit != 'true' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJson(needs.get-images.outputs.images) }}
+
+    steps:
+      - name: Run Grype scan
+        id: grype
+        run: |
+          IMAGE="${{ matrix.image }}"
+          echo "Scanning: $IMAGE"
+
+          # Run Grype
+          if docker run --rm anchore/grype:latest \
+            "$IMAGE" \
+            --fail-on high \
+            --quiet 2>&1; then
+            echo "status=clean" >> $GITHUB_OUTPUT
+            echo "result=clean" >> $GITHUB_OUTPUT
+          else
+            echo "status=vulnerable" >> $GITHUB_OUTPUT
+            echo "result=HIGH/CRITICAL vulnerabilities found" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Report result
+        run: |
+          if [ "${{ steps.grype.outputs.status }}" = "clean" ]; then
+            echo "Grype: ${{ matrix.image }} is clean"
+          else
+            echo "Grype: ${{ matrix.image }} has vulnerabilities"
+          fi
+
+  # Job 4: Generate audit summary
+  audit-summary:
+    name: Audit Summary
+    needs: [get-images, trivy-scan, grype-scan]
+    if: always() && github.event.inputs.skip_audit != 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## Security Audit Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Scanned **${{ needs.get-images.outputs.count }}** unique container images" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Scanner | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Trivy | ${{ needs.trivy-scan.result == 'success' && 'All clean' || 'Some failures' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Grype | ${{ needs.grype-scan.result == 'success' && 'All clean' || 'Some failures' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "View individual job logs for detailed scan results." >> $GITHUB_STEP_SUMMARY
+
+  # Job 5: Check for updates and promote safe ones
   promote-containers:
     name: Promote Container Updates
     runs-on: ubuntu-latest
-    needs: [security-audit]
-    if: always() && (needs.security-audit.result == 'success' || needs.security-audit.result == 'skipped')
+    needs: [audit-summary]
+    if: always() && (needs.audit-summary.result == 'success' || needs.audit-summary.result == 'skipped')
 
     steps:
       - name: Checkout
@@ -157,7 +194,7 @@ jobs:
             HAS_UPDATE=$(echo "$item" | jq -r '.has_update')
 
             if [ "$HAS_UPDATE" != "true" ]; then
-              echo "⏭️ $NAME: Already up to date ($CURRENT)"
+              echo "$NAME: Already up to date ($CURRENT)"
               echo $(($(cat /tmp/skipped_count) + 1)) > /tmp/skipped_count
               continue
             fi
@@ -166,7 +203,7 @@ jobs:
             NEW_IMAGE="$IMAGE_BASE:$LATEST"
 
             echo ""
-            echo "🔍 Validating: $NAME"
+            echo "Validating: $NAME"
             echo "   Current: $IMAGE"
             echo "   New:     $NEW_IMAGE"
 
@@ -179,10 +216,10 @@ jobs:
               --exit-code 1 \
               --quiet \
               "$NEW_IMAGE" 2>&1; then
-              echo "   ❌ Trivy: HIGH/CRITICAL vulnerabilities found"
+              echo "   Trivy: HIGH/CRITICAL vulnerabilities found"
               SCAN_FAILED=true
             else
-              echo "   ✅ Trivy: Clean"
+              echo "   Trivy: Clean"
             fi
 
             # Run Grype security scan on NEW version
@@ -191,27 +228,27 @@ jobs:
               "$NEW_IMAGE" \
               --fail-on high \
               --quiet 2>&1; then
-              echo "   ❌ Grype: HIGH/CRITICAL vulnerabilities found"
+              echo "   Grype: HIGH/CRITICAL vulnerabilities found"
               SCAN_FAILED=true
             else
-              echo "   ✅ Grype: Clean"
+              echo "   Grype: Clean"
             fi
 
             if [ "$SCAN_FAILED" = true ]; then
-              echo "   ❌ FAILED: Security vulnerabilities found in $NEW_IMAGE"
-              echo "- ❌ **$NAME**: $CURRENT → $LATEST - **SECURITY VULNERABILITIES DETECTED**" >> $GITHUB_STEP_SUMMARY
+              echo "   FAILED: Security vulnerabilities found in $NEW_IMAGE"
+              echo "- **$NAME**: $CURRENT -> $LATEST - **SECURITY VULNERABILITIES DETECTED**" >> $GITHUB_STEP_SUMMARY
               echo $(($(cat /tmp/failed_count) + 1)) > /tmp/failed_count
               echo "$NAME ($NEW_IMAGE)" >> /tmp/failed_containers
               continue
             fi
 
-            echo "   ✅ All security scans passed"
+            echo "   All security scans passed"
 
             # Update presets.toml with new tag
             echo "   Updating presets.toml..."
             sed -i "s|image = \"$IMAGE\"|image = \"$NEW_IMAGE\"|g" pkg/presets/presets.toml
 
-            echo "- ✅ **$NAME**: $CURRENT → $LATEST - Promoted (Trivy ✅ Grype ✅)" >> $GITHUB_STEP_SUMMARY
+            echo "- **$NAME**: $CURRENT -> $LATEST - Promoted (Trivy + Grype clean)" >> $GITHUB_STEP_SUMMARY
             echo $(($(cat /tmp/promoted_count) + 1)) > /tmp/promoted_count
           done
 
@@ -235,9 +272,9 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY
           echo "### Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Promoted: **$PROMOTED**" >> $GITHUB_STEP_SUMMARY
-          echo "- ❌ Security failures: **$FAILED**" >> $GITHUB_STEP_SUMMARY
-          echo "- ⏭️ Already up to date: **$SKIPPED**" >> $GITHUB_STEP_SUMMARY
+          echo "- Promoted: **$PROMOTED**" >> $GITHUB_STEP_SUMMARY
+          echo "- Security failures: **$FAILED**" >> $GITHUB_STEP_SUMMARY
+          echo "- Already up to date: **$SKIPPED**" >> $GITHUB_STEP_SUMMARY
 
           # Determine if we have changes to promote
           if git diff --quiet pkg/presets/presets.toml; then
@@ -275,7 +312,7 @@ jobs:
           # Verify presets still load correctly
           ./bin/cidx preset list > /dev/null
 
-          echo "✅ **Build and tests passed**" >> $GITHUB_STEP_SUMMARY
+          echo "**Build and tests passed**" >> $GITHUB_STEP_SUMMARY
 
       - name: Bump version with commitizen
         if: steps.promote.outputs.has_changes == 'true'
@@ -299,7 +336,7 @@ jobs:
           echo "New version: $NEW_VERSION"
 
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "✅ **Version bumped: $CURRENT_VERSION → $NEW_VERSION**" >> $GITHUB_STEP_SUMMARY
+          echo "**Version bumped: $CURRENT_VERSION -> $NEW_VERSION**" >> $GITHUB_STEP_SUMMARY
 
       - name: Create Pull Request
         if: steps.promote.outputs.has_changes == 'true'

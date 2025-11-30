@@ -28,6 +28,7 @@ func presetCommand() *cli.Command {
 			presetSearchCommand(),
 			presetCheckUpdatesCommand(),
 			presetScanCommand(),
+			presetImagesCommand(),
 		},
 	}
 }
@@ -817,4 +818,80 @@ func runGrypeScan(image, severity string) string {
 	}
 	_ = output
 	return "clean"
+}
+
+// presetImagesCommand lists unique container images used by presets
+func presetImagesCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "images",
+		Usage: "List unique container images used by presets (deduplicated)",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "json",
+				Usage: "Output as JSON",
+			},
+			&cli.BoolFlag{
+				Name:  "verbose",
+				Usage: "Show which presets use each image",
+			},
+		},
+		Action: func(c *cli.Context) error {
+			jsonOutput := c.Bool("json")
+			verbose := c.Bool("verbose")
+
+			// Build map of image -> presets using it
+			imagePresets := make(map[string][]string)
+			for _, name := range presets.List() {
+				preset, _ := presets.Get(name)
+				imagePresets[preset.Image] = append(imagePresets[preset.Image], name)
+			}
+
+			// Get sorted unique images
+			images := make([]string, 0, len(imagePresets))
+			for img := range imagePresets {
+				images = append(images, img)
+			}
+			sort.Strings(images)
+
+			if jsonOutput {
+				type imageInfo struct {
+					Image   string   `json:"image"`
+					Presets []string `json:"presets"`
+				}
+				var result []imageInfo
+				for _, img := range images {
+					presetsUsing := imagePresets[img]
+					sort.Strings(presetsUsing)
+					result = append(result, imageInfo{
+						Image:   img,
+						Presets: presetsUsing,
+					})
+				}
+				encoder := json.NewEncoder(os.Stdout)
+				encoder.SetIndent("", "  ")
+				return encoder.Encode(result)
+			}
+
+			// Calculate deduplication stats
+			totalPresets := len(presets.List())
+			uniqueImages := len(images)
+			duplicates := totalPresets - uniqueImages
+
+			fmt.Printf("Unique container images: %d (from %d presets, %d deduplicated)\n\n",
+				uniqueImages, totalPresets, duplicates)
+
+			for _, img := range images {
+				presetsUsing := imagePresets[img]
+				if verbose || len(presetsUsing) > 1 {
+					sort.Strings(presetsUsing)
+					fmt.Printf("  %s\n", img)
+					fmt.Printf("    └─ Used by: %s\n", strings.Join(presetsUsing, ", "))
+				} else {
+					fmt.Printf("  %s\n", img)
+				}
+			}
+
+			return nil
+		},
+	}
 }
