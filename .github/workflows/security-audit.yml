@@ -88,6 +88,12 @@ jobs:
             -v ~/.cache/grype:/root/.cache/grype \
             -e GRYPE_DB_CACHE_DIR=/root/.cache/grype/db \
             anchore/grype:latest db update
+          # Fix permissions (Docker runs as root)
+          sudo chown -R $USER:$USER ~/.cache/grype
+
+      - name: Fix Trivy DB permissions
+        if: steps.trivy-cache.outputs.cache-hit != 'true'
+        run: sudo chown -R $USER:$USER ~/.cache/trivy
 
       - name: Upload Trivy DB
         uses: actions/upload-artifact@v4
