@@ -192,7 +192,7 @@ env_var = "SCENARIO"
 [presets.test-hot-reload]
 name = "test-hot-reload"
 phase = "test"
-image = "alpine:3.22"
+image = "alpine:3.22.2"
 command = "echo 'Hot reload works!'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -240,7 +240,7 @@ command_flag = "-fmt"
 [presets.govulncheck]
 name = "govulncheck"
 phase = "security"
-image = "golang:1.24-alpine"
+image = "golang:1.25.4-alpine"
 command = "sh -c 'go install golang.org/x/vuln/cmd/govulncheck@latest && PATH=$PATH:/tmp/go/bin govulncheck ./...'"
 workdir = "/app"
 volumes = ["${WORKSPACE}:/app"]
@@ -260,7 +260,7 @@ GOTOOLCHAIN = "auto"
 [presets.go-mod-tidy]
 name = "go-mod-tidy"
 phase = "code"
-image = "golang:1.24-alpine"
+image = "golang:1.25.4-alpine"
 command = "sh -c 'cp go.mod go.mod.bak && cp go.sum go.sum.bak && go mod tidy && diff go.mod go.mod.bak && diff go.sum go.sum.bak && echo \"go.mod is tidy\"'"
 workdir = "/app"
 volumes = ["${WORKSPACE}:/app"]
@@ -295,7 +295,7 @@ command_flag = "--fix"
 [presets.shellcheck]
 name = "shellcheck"
 phase = "code"
-image = "koalaman/shellcheck:stable"
+image = "koalaman/shellcheck:v0.11.0"
 command = "sh -c 'find . -type f -name \"*.sh\" | xargs -r shellcheck || true'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -309,7 +309,7 @@ command_flag = "--severity"
 [presets.gofmt]
 name = "gofmt"
 phase = "code"
-image = "golang:1.24-alpine"
+image = "golang:1.25.4-alpine"
 command = "gofmt -l ."
 workdir = "/app"
 volumes = ["${WORKSPACE}:/app"]
@@ -324,7 +324,7 @@ GOTOOLCHAIN = "auto"
 [presets.go-test]
 name = "go-test"
 phase = "test"
-image = "golang:1.24-alpine"
+image = "golang:1.25.4-alpine"
 command = "go test -v ./pkg/... ./cmd/..."
 workdir = "/app"
 volumes = ["${WORKSPACE}:/app"]
@@ -348,7 +348,7 @@ command_flag = "-race"
 [presets.godog]
 name = "godog"
 phase = "test"
-image = "golang:1.24-alpine"
+image = "golang:1.25.4-alpine"
 command = "go test -v ./features_test.go"
 workdir = "/app"
 volumes = ["${WORKSPACE}:/app"]
@@ -377,7 +377,7 @@ command_flag = "-tags"
 [presets.go-build]
 name = "go-build"
 phase = "build"
-image = "golang:1.24-alpine"
+image = "golang:1.25.4-alpine"
 command = "sh -c 'VERSION=$(cat VERSION 2>/dev/null || echo dev); go build -ldflags \"-X main.Version=${VERSION} ${LDFLAGS}\" -o bin/cidx ./cmd/cidx'"
 workdir = "/app"
 volumes = ["${WORKSPACE}:/app"]
