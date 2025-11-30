@@ -149,7 +149,7 @@ jobs:
           IMAGE="${{ matrix.image }}"
           docker run --rm \
             -v "$(pwd)/.trivyignore:/root/.trivyignore:ro" \
-            -v "$HOME/.cache/trivy:/root/.cache/trivy:ro" \
+            -v "$HOME/.cache/trivy:/root/.cache/trivy" \
             aquasec/trivy:latest image \
             --severity HIGH,CRITICAL \
             --ignorefile /root/.trivyignore \
