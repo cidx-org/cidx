@@ -1,5 +1,8 @@
 # CIDX - CI with Declarative eXecution
 
+[![Container Monitor](https://github.com/cidx-org/cidx/actions/workflows/container-monitor.yml/badge.svg)](https://github.com/cidx-org/cidx/actions/workflows/container-monitor.yml)
+[![Security Audit](https://github.com/cidx-org/cidx/actions/workflows/security-audit.yml/badge.svg)](https://github.com/cidx-org/cidx/actions/workflows/security-audit.yml)
+
 CIDX is **two tools in one**:
 
 1. **CI/CD Abstraction Layer** - Write once, run everywhere (Local, GitHub Actions, GitLab CI, Jenkins)

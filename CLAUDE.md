@@ -50,6 +50,28 @@ go run ./cmd/cidx validate            # Validate config
 go run ./cmd/cidx run --dry-run ci    # Dry-run a pipeline
 ```
 
+### Preset Management
+
+```bash
+# List and inspect presets
+cidx preset list                      # List all presets by phase
+cidx preset info trivy                # Show preset details
+cidx preset search security           # Search presets by keyword
+cidx preset export -o presets.toml    # Export all presets to file
+
+# Container image management
+cidx preset images                    # List unique images (deduplicated)
+cidx preset images --verbose          # Show which presets use each image
+cidx preset check-updates             # Check for newer image versions
+cidx preset check-updates --json      # JSON output for CI
+
+# Security scanning
+cidx preset scan                      # Scan all images with Trivy + Grype
+cidx preset scan -p trivy             # Scan specific preset only
+cidx preset scan --scanner trivy      # Use only Trivy scanner
+cidx preset scan-targets              # Get deduplicated scan targets (for CI)
+```
+
 ### Code Quality
 
 ```bash
