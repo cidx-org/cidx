@@ -32,3 +32,23 @@ added = "2025-11-30"
 expires = "2025-12-30"
 notes = "Fixed in containerd library but docker image not yet updated"
 references = []
+
+[[vulnerabilities]]
+cve = "GHSA-cgrx-mc8f-2prm"
+image = "docker:29.0.4"
+severity = "HIGH"
+status = "awaiting-upstream"
+added = "2025-11-30"
+expires = "2025-12-30"
+notes = "opencontainers/selinux vulnerability - awaiting docker image update"
+references = []
+
+[[vulnerabilities]]
+cve = "GHSA-pwhc-rpq9-4c8w"
+image = "docker:29.0.4"
+severity = "HIGH"
+status = "awaiting-upstream"
+added = "2025-11-30"
+expires = "2025-12-30"
+notes = "containerd/v2 vulnerability - awaiting docker image update"
+references = []
