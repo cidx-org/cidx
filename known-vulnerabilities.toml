@@ -1,0 +1,34 @@
+# Known Vulnerabilities
+#
+# Track vulnerabilities that cannot be fixed by updating container images.
+# These are reviewed periodically and removed when upstream fixes are available.
+#
+# Fields:
+#   cve        - CVE identifier
+#   image      - Affected container image
+#   severity   - HIGH or CRITICAL
+#   status     - awaiting-upstream | accepted-risk | mitigated
+#   added      - Date when this exception was added (YYYY-MM-DD)
+#   expires    - Date to re-check (YYYY-MM-DD), typically 30-90 days
+#   notes      - Explanation of why this is accepted
+#   references - Links to upstream issues/PRs tracking the fix
+
+[[vulnerabilities]]
+cve = "CVE-2025-52881"
+image = "docker:29.0.4"
+severity = "HIGH"
+status = "awaiting-upstream"
+added = "2025-11-30"
+expires = "2025-12-30"
+notes = "Fixed in containerd library but docker image not yet updated"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2024-25621"
+image = "docker:29.0.4"
+severity = "HIGH"
+status = "awaiting-upstream"
+added = "2025-11-30"
+expires = "2025-12-30"
+notes = "Fixed in containerd library but docker image not yet updated"
+references = []

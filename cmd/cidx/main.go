@@ -25,6 +25,7 @@ func main() {
 			actionCommand(),
 			checkCommand,
 			branchCommand(),
+			vulnCommand(),
 			demoCommand(),
 			aboutCommand(),
 		},
