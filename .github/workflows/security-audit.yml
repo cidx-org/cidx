@@ -69,21 +69,15 @@ jobs:
           cat .trivyignore
 
       - name: Scan
-        id: scan
         run: |
           IMAGE="${{ matrix.image }}"
-          if docker run --rm \
+          docker run --rm \
             -v "$(pwd)/.trivyignore:/root/.trivyignore:ro" \
             aquasec/trivy:latest image \
             --severity HIGH,CRITICAL \
             --ignorefile /root/.trivyignore \
             --exit-code 1 \
-            --quiet \
-            "$IMAGE" 2>&1; then
-            echo "status=clean" >> $GITHUB_OUTPUT
-          else
-            echo "status=vulnerable" >> $GITHUB_OUTPUT
-          fi
+            "$IMAGE"
 
   # Job 3: Grype scan (parallel) with vulnerability exceptions
   grype-scan:
@@ -115,20 +109,14 @@ jobs:
           cat .grype.yaml
 
       - name: Scan
-        id: scan
         run: |
           IMAGE="${{ matrix.image }}"
-          if docker run --rm \
+          docker run --rm \
             -v "$(pwd)/.grype.yaml:/.grype.yaml:ro" \
             anchore/grype:latest \
             "$IMAGE" \
             --config /.grype.yaml \
-            --fail-on high \
-            --quiet 2>&1; then
-            echo "status=clean" >> $GITHUB_OUTPUT
-          else
-            echo "status=vulnerable" >> $GITHUB_OUTPUT
-          fi
+            --fail-on high
 
   # Job 4: Check for expired exceptions
   check-exceptions:
