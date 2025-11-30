@@ -175,7 +175,7 @@ jobs:
       - name: Upload results
         uses: actions/upload-artifact@v4
         with:
-          name: trivy-${{ hashFiles(format('{0}', matrix.image)) }}
+          name: trivy-${{ strategy.job-index }}
           path: results/
           retention-days: 1
 
@@ -263,7 +263,7 @@ jobs:
       - name: Upload results
         uses: actions/upload-artifact@v4
         with:
-          name: grype-${{ hashFiles(format('{0}', matrix.image)) }}
+          name: grype-${{ strategy.job-index }}
           path: results/
           retention-days: 1
 
