@@ -156,6 +156,13 @@ jobs:
             --skip-db-update \
             "$IMAGE" > results/trivy-${SAFE_NAME}.txt 2>&1 || true
 
+          # Check for auth failures (private registry)
+          if grep -q "UNAUTHORIZED\|401 Unauthorized\|authentication required" results/trivy-${SAFE_NAME}.txt 2>/dev/null; then
+            echo "⚠️ Skipping $IMAGE - requires registry authentication"
+            echo "status=auth_required" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
           # Check if vulnerabilities found
           if docker run --rm \
             -v "$(pwd)/.trivyignore:/root/.trivyignore:ro" \
@@ -246,6 +253,13 @@ jobs:
             anchore/grype:latest \
             "registry:$IMAGE" \
             --config /.grype.yaml > results/grype-${SAFE_NAME}.txt 2>&1 || true
+
+          # Check for auth failures (private registry)
+          if grep -q "UNAUTHORIZED\|401 Unauthorized\|authentication required" results/grype-${SAFE_NAME}.txt 2>/dev/null; then
+            echo "⚠️ Skipping $IMAGE - requires registry authentication"
+            echo "status=auth_required" >> $GITHUB_OUTPUT
+            exit 0
+          fi
 
           # Check if vulnerabilities found
           if docker run --rm \
