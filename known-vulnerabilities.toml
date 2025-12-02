@@ -542,3 +542,83 @@ expires = "2026-03-02"
 notes = "Vulnerability in upstream third-party image"
 references = []
 
+[[vulnerabilities]]
+cve = "CVE-2024-25621"
+image = "aquasec/trivy:0.67.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image (Trivy)"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2024-21538"
+image = "commitlint/commitlint:20.1.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image (Trivy)"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2024-25621"
+image = "gcr.io/kaniko-project/executor:v1.24.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image (Trivy)"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-47907"
+image = "gcr.io/kaniko-project/executor:v1.24.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image (Trivy)"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-8194"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image (Trivy)"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2024-52308"
+image = "maniator/gh:v2.83.1"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image (Trivy)"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2024-8775"
+image = "quay.io/ansible/creator-ee:v24.2.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image (Trivy)"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-64756"
+image = "tmknom/prettier:3.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image (Trivy)"
+references = []
+
