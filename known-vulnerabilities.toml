@@ -1360,3 +1360,469 @@ added = "2025-12-02"
 expires = "2026-03-02"
 notes = "Vulnerability in upstream third-party image"
 references = []
+
+# =============================================================================
+# ghcr.io/ansible/community-ansible-dev-tools:v25.11.0
+# Vulnerabilities from embedded kubectl binary (built with old Go/dependencies)
+# =============================================================================
+
+[[vulnerabilities]]
+cve = "CVE-2024-25621"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "containerd vulnerability in embedded kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2024-3727"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "containers/image vulnerability in embedded kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2024-41110"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "CRITICAL"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "docker/moby authz bypass in embedded kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-21613"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "CRITICAL"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "go-git argument injection in embedded kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-21614"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "go-git DoS in embedded kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2024-23652"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "CRITICAL"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "buildkit host access in embedded kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2024-23653"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "CRITICAL"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "buildkit entitlements bypass in embedded kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2024-23651"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "buildkit race condition in embedded kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2024-21626"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "runc file descriptor leak in embedded kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-31133"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "runc container escape in embedded kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-52565"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "runc container escape in embedded kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-52881"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "runc/selinux container escape in embedded kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2024-45337"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "CRITICAL"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "x/crypto SSH authz bypass in embedded kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-22869"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "x/crypto SSH DoS in embedded kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-22868"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "x/oauth2 memory consumption in embedded kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2024-24790"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "CRITICAL"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Go stdlib net/netip IPv6 issue in embedded kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2023-45288"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Go stdlib HTTP2 DoS in embedded kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2024-34156"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Go stdlib gob decoder DoS in embedded kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-47907"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Go stdlib database/sql race in embedded kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-58183"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Go stdlib tar parsing in embedded kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-58186"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Go stdlib HTTP header DoS in embedded kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-58187"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Go stdlib name constraint in embedded kubectl"
+references = []
+
+# Grype additional findings for ansible dev-tools kubectl
+[[vulnerabilities]]
+cve = "GHSA-v778-237x-gjrc"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "CRITICAL"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "x/crypto SSH auth bypass (GHSA alias) in kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "GHSA-wr6v-9f75-vh2g"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "CRITICAL"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "buildkit host access (GHSA) in kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "GHSA-4v98-7qmw-rqr8"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "CRITICAL"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "buildkit entitlements (GHSA) in kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "GHSA-xr7r-f8xq-vfvv"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "runc fd leak (GHSA) in kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "GHSA-v23v-6jw2-98fq"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "CRITICAL"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "docker authz bypass (GHSA) in kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2024-24784"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Go stdlib mail parsing in kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "GHSA-v725-9546-7q7m"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "CRITICAL"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "go-git arg injection (GHSA) in kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2024-24791"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Go stdlib HTTP/2 DoS in kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2023-24531"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "CRITICAL"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Go stdlib module path issue in kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "GHSA-6wvf-f2vw-3425"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "containers/image digest type in kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "GHSA-m3r6-h7wv-7xxv"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "buildkit race condition (GHSA) in kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "GHSA-hcg3-q754-cr77"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "x/crypto SSH DoS (GHSA) in kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2024-34158"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Go stdlib parse.go DoS in kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "GHSA-6v2p-p543-phr9"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "x/oauth2 memory consumption (GHSA) in kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "GHSA-r9px-m959-cxf4"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "go-git DoS (GHSA) in kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-22871"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "CRITICAL"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Go stdlib HTTP request issue in kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-61723"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Go stdlib issue in kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-61725"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Go stdlib issue in kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "GHSA-cgrx-mc8f-2prm"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "runc/selinux container escape (GHSA) in kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "GHSA-qw9x-cqr3-wc7r"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "runc container escape (GHSA) in kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-58188"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Go stdlib issue in kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "GHSA-9493-h29p-rfm2"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "runc issue (GHSA) in kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-4674"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Go stdlib issue in kubectl"
+references = []
+
+[[vulnerabilities]]
+cve = "GHSA-pwhc-rpq9-4c8w"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "containerd issue (GHSA) in kubectl"
+references = []
