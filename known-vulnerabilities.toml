@@ -1172,3 +1172,572 @@ expires = "2026-03-02"
 notes = "Vulnerability in upstream third-party image"
 references = []
 
+[[vulnerabilities]]
+cve = "CVE-2025-58186"
+image = "gcr.io/kaniko-project/executor:v1.24.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-58187"
+image = "gcr.io/kaniko-project/executor:v1.24.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-58187"
+image = "aquasec/trivy:0.67.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2019-19449"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2019-19814"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2021-3847"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2021-3864"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2024-21803"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2024-57995"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2024-58015"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2024-58093"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-22104"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-22107"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-22118"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-22121"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-37803"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-37825"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-38137"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-38187"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-38248"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-38322"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-38421"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-38584"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-38627"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-38636"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-39905"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-39910"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-39932"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-39933"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-39949"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-39955"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-39966"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-39968"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-39970"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-39971"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-39973"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-39981"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-39982"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-39984"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-39993"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-39994"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-39998"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-40016"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-40047"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-40064"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-40096"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-40133"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-40141"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-40154"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-40158"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-40168"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-40170"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-40176"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-40186"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-40199"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-40210"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-40212"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
