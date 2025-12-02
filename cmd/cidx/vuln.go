@@ -434,7 +434,7 @@ func vulnVerifyCommand() *cli.Command {
 				if err := os.WriteFile(ignoreFile, []byte(trivyIgnore), 0644); err != nil {
 					return fmt.Errorf("failed to write ignore file: %w", err)
 				}
-				defer os.Remove(ignoreFile)
+				defer func() { _ = os.Remove(ignoreFile) }()
 
 				// Run Trivy scan
 				fmt.Printf("  → Scanning with Trivy... ")
