@@ -1950,3 +1950,22 @@ added = "2025-12-02"
 expires = "2026-03-02"
 notes = "Vulnerability in upstream third-party image"
 references = []
+[[vulnerabilities]]
+cve = "CVE-2024-24790"
+image = "quay.io/ansible/creator-ee:v24.2.0"
+severity = "CRITICAL"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-22871"
+image = "quay.io/ansible/creator-ee:v24.2.0"
+severity = "CRITICAL"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
