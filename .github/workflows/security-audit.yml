@@ -179,9 +179,12 @@ jobs:
           path: results/
           retention-days: 1
 
-      # Note: We don't fail on third-party image vulnerabilities
-      # These are tracked and reported but not blocking CI
-      # Use cidx vuln commands for exception management
+      - name: Fail if vulnerable
+        if: steps.scan.outputs.status == 'vulnerable'
+        run: |
+          echo "❌ Unhandled vulnerabilities found in ${{ matrix.image }}"
+          echo "   Add exceptions with: cidx vuln add <CVE> ${{ matrix.image }}"
+          exit 1
 
   # Job 3: Grype scan (parallel)
   grype-scan:
@@ -267,9 +270,12 @@ jobs:
           path: results/
           retention-days: 1
 
-      # Note: We don't fail on third-party image vulnerabilities
-      # These are tracked and reported but not blocking CI
-      # Use cidx vuln commands for exception management
+      - name: Fail if vulnerable
+        if: steps.scan.outputs.status == 'vulnerable'
+        run: |
+          echo "❌ Unhandled vulnerabilities found in ${{ matrix.image }}"
+          echo "   Add exceptions with: cidx vuln add <CVE> ${{ matrix.image }}"
+          exit 1
 
   # Job 4: Check for expired exceptions
   check-exceptions:
@@ -458,13 +464,11 @@ jobs:
           echo "  Trivy: $TRIVY_RESULT"
           echo "  Grype: $GRYPE_RESULT"
 
-          # Note: We report vulnerabilities but don't fail the workflow
-          # Third-party images contain vulnerabilities we cannot fix
-          # See the report above for details
           if [ "$TRIVY_RESULT" = "success" ] && [ "$GRYPE_RESULT" = "success" ]; then
-            echo "✅ All security scans completed - no HIGH/CRITICAL vulnerabilities detected!"
+            echo "✅ All security scans passed - no unhandled vulnerabilities!"
           else
-            echo "⚠️ Security vulnerabilities detected in third-party images"
+            echo "❌ Unhandled vulnerabilities detected"
             echo "   Review the report above for details"
-            echo "   Use 'cidx vuln add' to track accepted risks"
+            echo "   Add exceptions with: cidx vuln add <CVE> <IMAGE>"
+            exit 1
           fi
