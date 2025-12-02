@@ -1741,3 +1741,212 @@ added = "2025-12-02"
 expires = "2026-03-02"
 notes = "Vulnerability in upstream third-party image"
 references = []
+[[vulnerabilities]]
+cve = "CVE-2023-45288"
+image = "quay.io/ansible/creator-ee:v24.2.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2024-24784"
+image = "quay.io/ansible/creator-ee:v24.2.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2024-24791"
+image = "quay.io/ansible/creator-ee:v24.2.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2024-34156"
+image = "quay.io/ansible/creator-ee:v24.2.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2024-34158"
+image = "quay.io/ansible/creator-ee:v24.2.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-61723"
+image = "quay.io/ansible/creator-ee:v24.2.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-61725"
+image = "quay.io/ansible/creator-ee:v24.2.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-47907"
+image = "quay.io/ansible/creator-ee:v24.2.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-58187"
+image = "quay.io/ansible/creator-ee:v24.2.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-58188"
+image = "quay.io/ansible/creator-ee:v24.2.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-4674"
+image = "quay.io/ansible/creator-ee:v24.2.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-23166"
+image = "commitlint/commitlint:20.1.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-61723"
+image = "gcr.io/kaniko-project/executor:v1.24.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-61725"
+image = "gcr.io/kaniko-project/executor:v1.24.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-58188"
+image = "gcr.io/kaniko-project/executor:v1.24.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-4674"
+image = "gcr.io/kaniko-project/executor:v1.24.0"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-59375"
+image = "golangci/golangci-lint:v2.6.2"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-61723"
+image = "goreleaser/goreleaser:v2.12.7"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-61725"
+image = "goreleaser/goreleaser:v2.12.7"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-58187"
+image = "goreleaser/goreleaser:v2.12.7"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
+
+[[vulnerabilities]]
+cve = "CVE-2025-58188"
+image = "goreleaser/goreleaser:v2.12.7"
+severity = "HIGH"
+status = "third-party"
+added = "2025-12-02"
+expires = "2026-03-02"
+notes = "Vulnerability in upstream third-party image"
+references = []
