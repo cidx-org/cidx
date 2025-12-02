@@ -163,7 +163,7 @@ env_var = "TO"
 [presets.ansible-lint]
 name = "ansible-lint"
 phase = "code"
-image = "quay.io/ansible/creator-ee:v24.2.0"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
 command = "ansible-lint"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -172,7 +172,7 @@ config_files = [".ansible-lint"]
 [presets.molecule]
 name = "molecule"
 phase = "test"
-image = "quay.io/ansible/molecule:25.11.1"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
 command = "molecule test -s ${SCENARIO}"
 workdir = "/work"
 volumes = [
