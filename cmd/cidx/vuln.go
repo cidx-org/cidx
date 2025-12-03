@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -39,6 +40,7 @@ func vulnCommand() *cli.Command {
 		Subcommands: []*cli.Command{
 			vulnListCommand(),
 			vulnCheckCommand(),
+			vulnReportCommand(),
 			vulnAddCommand(),
 			vulnIgnoreCommand(),
 			vulnVerifyCommand(),
@@ -116,9 +118,18 @@ func vulnCheckCommand() *cli.Command {
 				Value: 7,
 				Usage: "Warn for exceptions expiring within N days",
 			},
+			&cli.BoolFlag{
+				Name:  "remove-expired",
+				Usage: "Remove expired exceptions from the file",
+			},
+			&cli.BoolFlag{
+				Name:  "json",
+				Usage: "Output as JSON",
+			},
 		},
 		Action: func(c *cli.Context) error {
-			vulns, err := loadVulnerabilities(c.String("file"))
+			filePath := c.String("file")
+			vulns, err := loadVulnerabilities(filePath)
 			if err != nil {
 				return err
 			}
@@ -126,13 +137,17 @@ func vulnCheckCommand() *cli.Command {
 			warnDays := c.Int("days")
 			today := time.Now()
 			warnDate := today.AddDate(0, 0, warnDays)
+			removeExpired := c.Bool("remove-expired")
+			jsonOutput := c.Bool("json")
 
 			var expired, expiring, ok []Vulnerability
 
 			for _, v := range vulns.Vulnerabilities {
 				expires, err := time.Parse("2006-01-02", v.Expires)
 				if err != nil {
-					fmt.Printf("Warning: Invalid expiry date for %s: %s\n", v.CVE, v.Expires)
+					if !jsonOutput {
+						fmt.Printf("Warning: Invalid expiry date for %s: %s\n", v.CVE, v.Expires)
+					}
 					continue
 				}
 
@@ -143,6 +158,27 @@ func vulnCheckCommand() *cli.Command {
 				} else {
 					ok = append(ok, v)
 				}
+			}
+
+			// JSON output
+			if jsonOutput {
+				type checkResult struct {
+					Expired  []Vulnerability `json:"expired"`
+					Expiring []Vulnerability `json:"expiring"`
+					Ok       []Vulnerability `json:"ok"`
+					Removed  int             `json:"removed,omitempty"`
+				}
+				result := checkResult{
+					Expired:  expired,
+					Expiring: expiring,
+					Ok:       ok,
+				}
+				if removeExpired {
+					result.Removed = len(expired)
+				}
+				encoder := json.NewEncoder(os.Stdout)
+				encoder.SetIndent("", "  ")
+				return encoder.Encode(result)
 			}
 
 			hasIssues := false
@@ -168,6 +204,24 @@ func vulnCheckCommand() *cli.Command {
 
 			fmt.Printf("OK (%d) - Not expiring soon\n", len(ok))
 
+			// Remove expired if requested
+			if removeExpired && len(expired) > 0 {
+				// Keep only non-expired entries
+				vulns.Vulnerabilities = append(expiring, ok...)
+				sort.Slice(vulns.Vulnerabilities, func(i, j int) bool {
+					if vulns.Vulnerabilities[i].Image != vulns.Vulnerabilities[j].Image {
+						return vulns.Vulnerabilities[i].Image < vulns.Vulnerabilities[j].Image
+					}
+					return vulns.Vulnerabilities[i].CVE < vulns.Vulnerabilities[j].CVE
+				})
+
+				if err := saveVulnerabilities(filePath, vulns); err != nil {
+					return fmt.Errorf("failed to save updated file: %w", err)
+				}
+				fmt.Printf("\n✓ Removed %d expired exception(s) from %s\n", len(expired), filePath)
+				return nil // Don't fail after cleanup
+			}
+
 			if hasIssues {
 				return cli.Exit("Expired vulnerability exceptions found - review required", 1)
 			}
@@ -175,6 +229,194 @@ func vulnCheckCommand() *cli.Command {
 			return nil
 		},
 	}
+}
+
+func vulnReportCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "report",
+		Usage: "Generate consolidated vulnerability report across all images",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "file",
+				Value: defaultVulnFile,
+				Usage: "Path to vulnerability file",
+			},
+			&cli.StringFlag{
+				Name:  "group-by",
+				Value: "cve",
+				Usage: "Group by: cve (show images per CVE) or image (show CVEs per image)",
+			},
+			&cli.BoolFlag{
+				Name:  "json",
+				Usage: "Output as JSON",
+			},
+		},
+		Action: func(c *cli.Context) error {
+			vulns, err := loadVulnerabilities(c.String("file"))
+			if err != nil {
+				return err
+			}
+
+			groupBy := c.String("group-by")
+			jsonOutput := c.Bool("json")
+
+			if groupBy == "cve" {
+				return reportByCVE(vulns, jsonOutput)
+			} else if groupBy == "image" {
+				return reportByImage(vulns, jsonOutput)
+			}
+			return fmt.Errorf("invalid group-by value: %s (use cve or image)", groupBy)
+		},
+	}
+}
+
+func reportByCVE(vulns *VulnerabilityFile, jsonOutput bool) error {
+	// Group vulnerabilities by CVE
+	type cveInfo struct {
+		CVE      string   `json:"cve"`
+		Severity string   `json:"severity"`
+		Images   []string `json:"images"`
+		Status   string   `json:"status"`
+		Notes    string   `json:"notes,omitempty"`
+	}
+
+	cveMap := make(map[string]*cveInfo)
+	for _, v := range vulns.Vulnerabilities {
+		if _, exists := cveMap[v.CVE]; !exists {
+			cveMap[v.CVE] = &cveInfo{
+				CVE:      v.CVE,
+				Severity: v.Severity,
+				Status:   v.Status,
+				Notes:    v.Notes,
+				Images:   []string{},
+			}
+		}
+		cveMap[v.CVE].Images = append(cveMap[v.CVE].Images, v.Image)
+	}
+
+	// Sort CVEs by severity (CRITICAL first) then by name
+	cves := make([]*cveInfo, 0, len(cveMap))
+	for _, info := range cveMap {
+		sort.Strings(info.Images)
+		cves = append(cves, info)
+	}
+	sort.Slice(cves, func(i, j int) bool {
+		// CRITICAL > HIGH > MEDIUM > LOW
+		sevOrder := map[string]int{"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+		si, sj := sevOrder[cves[i].Severity], sevOrder[cves[j].Severity]
+		if si != sj {
+			return si < sj
+		}
+		return cves[i].CVE < cves[j].CVE
+	})
+
+	if jsonOutput {
+		encoder := json.NewEncoder(os.Stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(cves)
+	}
+
+	// Summary stats
+	criticalCount := 0
+	highCount := 0
+	multiImageCount := 0
+	for _, c := range cves {
+		if c.Severity == "CRITICAL" {
+			criticalCount++
+		} else if c.Severity == "HIGH" {
+			highCount++
+		}
+		if len(c.Images) > 1 {
+			multiImageCount++
+		}
+	}
+
+	fmt.Printf("Vulnerability Report (grouped by CVE)\n")
+	fmt.Printf("=====================================\n\n")
+	fmt.Printf("Summary: %d unique CVEs (%d CRITICAL, %d HIGH)\n", len(cves), criticalCount, highCount)
+	fmt.Printf("         %d CVEs affect multiple images\n\n", multiImageCount)
+
+	for _, c := range cves {
+		marker := ""
+		if len(c.Images) > 1 {
+			marker = fmt.Sprintf(" [%d images]", len(c.Images))
+		}
+		fmt.Printf("%s (%s)%s\n", c.CVE, c.Severity, marker)
+		for _, img := range c.Images {
+			fmt.Printf("  └─ %s\n", img)
+		}
+		if c.Notes != "" {
+			fmt.Printf("  📝 %s\n", c.Notes)
+		}
+		fmt.Println()
+	}
+
+	return nil
+}
+
+func reportByImage(vulns *VulnerabilityFile, jsonOutput bool) error {
+	// Group vulnerabilities by image
+	type imageInfo struct {
+		Image    string   `json:"image"`
+		Critical int      `json:"critical"`
+		High     int      `json:"high"`
+		CVEs     []string `json:"cves"`
+	}
+
+	imageMap := make(map[string]*imageInfo)
+	for _, v := range vulns.Vulnerabilities {
+		if _, exists := imageMap[v.Image]; !exists {
+			imageMap[v.Image] = &imageInfo{
+				Image: v.Image,
+				CVEs:  []string{},
+			}
+		}
+		imageMap[v.Image].CVEs = append(imageMap[v.Image].CVEs, v.CVE)
+		if v.Severity == "CRITICAL" {
+			imageMap[v.Image].Critical++
+		} else if v.Severity == "HIGH" {
+			imageMap[v.Image].High++
+		}
+	}
+
+	// Sort images by vulnerability count (most first)
+	images := make([]*imageInfo, 0, len(imageMap))
+	for _, info := range imageMap {
+		sort.Strings(info.CVEs)
+		images = append(images, info)
+	}
+	sort.Slice(images, func(i, j int) bool {
+		// Sort by critical first, then high, then total
+		if images[i].Critical != images[j].Critical {
+			return images[i].Critical > images[j].Critical
+		}
+		if images[i].High != images[j].High {
+			return images[i].High > images[j].High
+		}
+		return len(images[i].CVEs) > len(images[j].CVEs)
+	})
+
+	if jsonOutput {
+		encoder := json.NewEncoder(os.Stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(images)
+	}
+
+	fmt.Printf("Vulnerability Report (grouped by image)\n")
+	fmt.Printf("=======================================\n\n")
+	fmt.Printf("Summary: %d images with known vulnerabilities\n", len(images))
+	fmt.Printf("         %d total vulnerability exceptions\n\n", len(vulns.Vulnerabilities))
+
+	for _, img := range images {
+		fmt.Printf("%s\n", img.Image)
+		fmt.Printf("  %d CRITICAL, %d HIGH (%d total)\n", img.Critical, img.High, len(img.CVEs))
+		for _, cve := range img.CVEs {
+			fmt.Printf("  └─ %s\n", cve)
+		}
+		fmt.Println()
+	}
+
+	return nil
 }
 
 func vulnAddCommand() *cli.Command {
