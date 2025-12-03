@@ -655,12 +655,18 @@ func presetScanCommand() *cli.Command {
 				Aliases: []string{"p"},
 				Usage:   "Scan only a specific preset",
 			},
+			&cli.BoolFlag{
+				Name:    "verbose",
+				Aliases: []string{"v"},
+				Usage:   "Show container logs in real-time",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			scanner := c.String("scanner")
 			severity := strings.ToUpper(c.String("severity"))
 			jsonOutput := c.Bool("json")
 			presetFilter := c.String("preset")
+			verbose := c.Bool("verbose")
 
 			// Validate scanner choice
 			if scanner != "trivy" && scanner != "grype" && scanner != "all" {
@@ -714,7 +720,7 @@ func presetScanCommand() *cli.Command {
 
 				// Run Trivy scan
 				if scanner == "trivy" || scanner == "all" {
-					trivyResult := runTrivyScan(preset.Image, severity)
+					trivyResult := runTrivyScan(preset.Image, severity, verbose)
 					result.TrivyStatus = trivyResult
 					if trivyResult != "clean" {
 						hasVuln = true
@@ -730,7 +736,7 @@ func presetScanCommand() *cli.Command {
 
 				// Run Grype scan
 				if scanner == "grype" || scanner == "all" {
-					grypeResult := runGrypeScan(preset.Image, severity)
+					grypeResult := runGrypeScan(preset.Image, severity, verbose)
 					result.GrypeStatus = grypeResult
 					if grypeResult != "clean" {
 						hasVuln = true
@@ -778,14 +784,36 @@ func presetScanCommand() *cli.Command {
 }
 
 // runTrivyScan runs Trivy security scan on an image
-func runTrivyScan(image, severity string) string {
-	cmd := exec.Command("docker", "run", "--rm",
-		"aquasec/trivy:latest", "image",
-		"--severity", severity+",CRITICAL",
-		"--exit-code", "1",
-		"--quiet",
-		image)
+func runTrivyScan(image, severity string, verbose bool) string {
+	args := []string{"run", "--rm", "aquasec/trivy:latest", "image",
+		"--severity", severity + ",CRITICAL",
+		"--exit-code", "1"}
 
+	// In non-verbose mode, add --quiet flag
+	if !verbose {
+		args = append(args, "--quiet")
+	}
+	args = append(args, image)
+
+	cmd := exec.Command("docker", args...)
+
+	if verbose {
+		// Stream output in real-time
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err := cmd.Run()
+		if err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				if exitErr.ExitCode() == 1 {
+					return fmt.Sprintf("vulnerabilities found (%s+)", severity)
+				}
+			}
+			return fmt.Sprintf("error: %v", err)
+		}
+		return "clean"
+	}
+
+	// Non-verbose: capture output silently
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -800,14 +828,34 @@ func runTrivyScan(image, severity string) string {
 }
 
 // runGrypeScan runs Grype security scan on an image
-func runGrypeScan(image, severity string) string {
+func runGrypeScan(image, severity string, verbose bool) string {
 	failOn := strings.ToLower(severity)
-	cmd := exec.Command("docker", "run", "--rm",
-		"anchore/grype:latest",
-		image,
-		"--fail-on", failOn,
-		"--quiet")
+	args := []string{"run", "--rm", "anchore/grype:latest", image, "--fail-on", failOn}
 
+	// In non-verbose mode, add --quiet flag
+	if !verbose {
+		args = append(args, "--quiet")
+	}
+
+	cmd := exec.Command("docker", args...)
+
+	if verbose {
+		// Stream output in real-time
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err := cmd.Run()
+		if err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				if exitErr.ExitCode() == 1 {
+					return fmt.Sprintf("vulnerabilities found (%s+)", severity)
+				}
+			}
+			return fmt.Sprintf("error: %v", err)
+		}
+		return "clean"
+	}
+
+	// Non-verbose: capture output silently
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
