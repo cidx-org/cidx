@@ -621,3 +621,294 @@ type = "bool"
 default = false
 description = "Skip publishing"
 command_flag = "--skip=publish"
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# PYTHON LANGUAGE PACK - Linting, testing, security, and packaging
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Ruff: Extremely fast Python linter and formatter (replaces flake8, isort, black)
+# Official image: ghcr.io/astral-sh/ruff (maintained by Astral)
+# ✅ Container-first: Ready-to-run, blazingly fast
+[presets.ruff]
+name = "ruff"
+phase = "code"
+image = "ghcr.io/astral-sh/ruff:0.8.2"
+command = "check ."
+workdir = "/src"
+volumes = ["${WORKSPACE}:/src"]
+config_files = ["ruff.toml", "pyproject.toml", ".ruff.toml"]
+
+[presets.ruff.options.fix]
+type = "bool"
+default = false
+description = "Automatically fix violations"
+command_flag = "--fix"
+
+[presets.ruff.options.format]
+type = "bool"
+default = false
+description = "Run formatter instead of linter"
+command_flag = "format"
+
+# Black: The uncompromising Python code formatter
+# No official image, using pyfound/black
+[presets.black]
+name = "black"
+phase = "code"
+image = "pyfound/black:24.10.0"
+command = "black --check ."
+workdir = "/src"
+volumes = ["${WORKSPACE}:/src"]
+config_files = ["pyproject.toml", ".black.toml"]
+
+[presets.black.options.diff]
+type = "bool"
+default = false
+description = "Show diff instead of reformatting"
+command_flag = "--diff"
+
+# Mypy: Static type checker for Python
+# Using python:alpine with mypy installed
+[presets.mypy]
+name = "mypy"
+phase = "code"
+image = "python:3.13-alpine"
+command = "sh -c 'pip install --quiet mypy && mypy .'"
+workdir = "/src"
+volumes = ["${WORKSPACE}:/src"]
+config_files = ["mypy.ini", "pyproject.toml", ".mypy.ini", "setup.cfg"]
+
+[presets.mypy.env]
+MYPY_CACHE_DIR = "/tmp/.mypy_cache"
+
+[presets.mypy.options.strict]
+type = "bool"
+default = false
+description = "Enable strict mode"
+command_flag = "--strict"
+
+# Bandit: Security linter for Python
+# Finds common security issues in Python code
+[presets.bandit]
+name = "bandit"
+phase = "security"
+image = "python:3.13-alpine"
+command = "sh -c 'pip install --quiet bandit && bandit -r .'"
+workdir = "/src"
+volumes = ["${WORKSPACE}:/src"]
+config_files = [".bandit", "bandit.yaml", "pyproject.toml"]
+
+[presets.bandit.options.severity]
+type = "string"
+default = "low"
+description = "Minimum severity (low, medium, high)"
+command_flag = "-ll"
+
+[presets.bandit.options.confidence]
+type = "string"
+default = "low"
+description = "Minimum confidence (low, medium, high)"
+command_flag = "-i"
+
+# pip-audit: Scan Python dependencies for known vulnerabilities
+# Official tool from PyPA
+[presets.pip-audit]
+name = "pip-audit"
+phase = "security"
+image = "python:3.13-alpine"
+command = "sh -c 'pip install --quiet pip-audit && pip-audit'"
+workdir = "/src"
+volumes = ["${WORKSPACE}:/src"]
+
+[presets.pip-audit.options.strict]
+type = "bool"
+default = false
+description = "Fail on any vulnerability"
+command_flag = "--strict"
+
+[presets.pip-audit.options.fix]
+type = "bool"
+default = false
+description = "Attempt to fix vulnerabilities"
+command_flag = "--fix"
+
+# Pytest: Python testing framework
+# The most popular Python testing framework
+[presets.pytest]
+name = "pytest"
+phase = "test"
+image = "python:3.13-alpine"
+command = "sh -c 'pip install --quiet pytest pytest-cov && pytest'"
+workdir = "/src"
+volumes = ["${WORKSPACE}:/src"]
+config_files = ["pytest.ini", "pyproject.toml", "setup.cfg", "tox.ini"]
+
+[presets.pytest.options.verbose]
+type = "bool"
+default = false
+description = "Verbose output"
+command_flag = "-v"
+
+[presets.pytest.options.coverage]
+type = "bool"
+default = false
+description = "Generate coverage report"
+command_flag = "--cov=."
+
+# Python Build: Build wheel and sdist packages
+[presets.python-build]
+name = "python-build"
+phase = "build"
+image = "python:3.13-alpine"
+command = "sh -c 'pip install --quiet build && python -m build'"
+workdir = "/src"
+volumes = ["${WORKSPACE}:/src"]
+config_files = ["pyproject.toml", "setup.py", "setup.cfg"]
+
+[presets.python-build.env]
+OUTPUT_DIR = "dist"
+
+# Twine: Upload packages to PyPI
+# Official tool for publishing Python packages
+[presets.twine]
+name = "twine"
+phase = "release"
+image = "python:3.13-alpine"
+command = "sh -c 'pip install --quiet twine && twine upload dist/*'"
+workdir = "/src"
+volumes = ["${WORKSPACE}:/src"]
+require_ci = true
+
+[presets.twine.env]
+TWINE_USERNAME = "${PYPI_USERNAME}"
+TWINE_PASSWORD = "${PYPI_TOKEN}"
+
+[presets.twine.options.repository]
+type = "string"
+default = "pypi"
+description = "Repository (pypi, testpypi, or URL)"
+command_flag = "--repository"
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# RUST LANGUAGE PACK - Linting, testing, security, and building
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Rustfmt: Official Rust code formatter
+# Included in official Rust image
+[presets.rustfmt]
+name = "rustfmt"
+phase = "code"
+image = "rust:1.83-alpine"
+command = "cargo fmt -- --check"
+workdir = "/src"
+volumes = ["${WORKSPACE}:/src"]
+config_files = ["rustfmt.toml", ".rustfmt.toml"]
+
+[presets.rustfmt.env]
+CARGO_HOME = "/tmp/cargo"
+
+# Clippy: Official Rust linter
+# The most comprehensive Rust linter
+[presets.clippy]
+name = "clippy"
+phase = "code"
+image = "rust:1.83-alpine"
+command = "sh -c 'rustup component add clippy && cargo clippy -- -D warnings'"
+workdir = "/src"
+volumes = ["${WORKSPACE}:/src"]
+config_files = ["clippy.toml", ".clippy.toml"]
+
+[presets.clippy.env]
+CARGO_HOME = "/tmp/cargo"
+RUSTUP_HOME = "/tmp/rustup"
+
+[presets.clippy.options.pedantic]
+type = "bool"
+default = false
+description = "Enable pedantic lints"
+command_flag = "-W clippy::pedantic"
+
+# Cargo Audit: Scan Rust dependencies for known vulnerabilities
+# Official RustSec tool
+[presets.cargo-audit]
+name = "cargo-audit"
+phase = "security"
+image = "rust:1.83-alpine"
+command = "sh -c 'cargo install cargo-audit && cargo audit'"
+workdir = "/src"
+volumes = ["${WORKSPACE}:/src"]
+
+[presets.cargo-audit.env]
+CARGO_HOME = "/tmp/cargo"
+
+[presets.cargo-audit.options.deny]
+type = "bool"
+default = true
+description = "Exit with error on vulnerabilities"
+command_flag = "--deny warnings"
+
+# Cargo Test: Run Rust tests
+# Built-in Rust testing framework
+[presets.cargo-test]
+name = "cargo-test"
+phase = "test"
+image = "rust:1.83-alpine"
+command = "cargo test"
+workdir = "/src"
+volumes = ["${WORKSPACE}:/src"]
+
+[presets.cargo-test.env]
+CARGO_HOME = "/tmp/cargo"
+RUST_BACKTRACE = "1"
+
+[presets.cargo-test.options.release]
+type = "bool"
+default = false
+description = "Run tests in release mode"
+command_flag = "--release"
+
+[presets.cargo-test.options.all_features]
+type = "bool"
+default = false
+description = "Enable all features"
+command_flag = "--all-features"
+
+# Cargo Build: Build Rust project
+# Official Rust compiler
+[presets.cargo-build]
+name = "cargo-build"
+phase = "build"
+image = "rust:1.83-alpine"
+command = "cargo build --release"
+workdir = "/src"
+volumes = ["${WORKSPACE}:/src"]
+
+[presets.cargo-build.env]
+CARGO_HOME = "/tmp/cargo"
+
+[presets.cargo-build.options.target]
+type = "string"
+default = ""
+description = "Target triple (e.g., x86_64-unknown-linux-musl)"
+command_flag = "--target"
+
+# Cargo Publish: Publish crate to crates.io
+# Official Rust package registry
+[presets.cargo-publish]
+name = "cargo-publish"
+phase = "release"
+image = "rust:1.83-alpine"
+command = "cargo publish"
+workdir = "/src"
+volumes = ["${WORKSPACE}:/src"]
+require_ci = true
+
+[presets.cargo-publish.env]
+CARGO_HOME = "/tmp/cargo"
+CARGO_REGISTRY_TOKEN = "${CARGO_REGISTRY_TOKEN}"
+
+[presets.cargo-publish.options.dry_run]
+type = "bool"
+default = false
+description = "Perform a dry run"
+command_flag = "--dry-run"
