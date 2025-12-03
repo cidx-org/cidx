@@ -189,6 +189,118 @@ default = "default"
 description = "Molecule scenario to run"
 env_var = "SCENARIO"
 
+# Yamllint: Strict YAML validation (essential for Ansible)
+# Using ansible dev-tools image for consistency
+# Catches: indentation, line length, truthy values, etc.
+[presets.yamllint]
+name = "yamllint"
+phase = "code"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+command = "yamllint ."
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
+config_files = [".yamllint", ".yamllint.yml", ".yamllint.yaml"]
+
+[presets.yamllint.options.strict]
+type = "bool"
+default = false
+description = "Return non-zero exit code on warnings"
+command_flag = "--strict"
+
+[presets.yamllint.options.format]
+type = "string"
+default = "auto"
+description = "Output format (auto, standard, colored, github, parsable)"
+command_flag = "--format"
+
+# Ansible Syntax Check: Quick playbook syntax validation
+# Faster than full ansible-lint, good for pre-commit
+[presets.ansible-syntax]
+name = "ansible-syntax"
+phase = "code"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+command = "ansible-playbook --syntax-check ${PLAYBOOK}"
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
+
+[presets.ansible-syntax.env]
+PLAYBOOK = "playbook.yml"
+
+[presets.ansible-syntax.options.playbook]
+type = "string"
+default = "playbook.yml"
+description = "Playbook file to check"
+env_var = "PLAYBOOK"
+
+# Ansible Test: Run collection unit and integration tests
+# For Ansible collections following the standard structure
+[presets.ansible-test]
+name = "ansible-test"
+phase = "test"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+command = "ansible-test ${TEST_TYPE} --docker"
+workdir = "/work"
+volumes = [
+    "${WORKSPACE}:/work",
+    "/var/run/docker.sock:/var/run/docker.sock",
+]
+
+[presets.ansible-test.env]
+TEST_TYPE = "sanity"
+
+[presets.ansible-test.options.test_type]
+type = "string"
+default = "sanity"
+description = "Test type (sanity, units, integration)"
+env_var = "TEST_TYPE"
+
+[presets.ansible-test.options.python]
+type = "string"
+default = ""
+description = "Python version (3.10, 3.11, 3.12)"
+command_flag = "--python"
+
+# Ansible Galaxy Build: Build collection artifact
+# Creates .tar.gz for distribution
+[presets.ansible-galaxy-build]
+name = "ansible-galaxy-build"
+phase = "build"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+command = "ansible-galaxy collection build --output-path ${OUTPUT_PATH}"
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
+config_files = ["galaxy.yml"]
+
+[presets.ansible-galaxy-build.env]
+OUTPUT_PATH = "./dist"
+
+[presets.ansible-galaxy-build.options.force]
+type = "bool"
+default = false
+description = "Force overwrite existing artifact"
+command_flag = "--force"
+
+# Ansible Galaxy Publish: Publish collection to Ansible Galaxy
+# Requires ANSIBLE_GALAXY_TOKEN environment variable
+[presets.ansible-galaxy-publish]
+name = "ansible-galaxy-publish"
+phase = "release"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+command = "ansible-galaxy collection publish ${ARTIFACT}"
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
+require_ci = true
+
+[presets.ansible-galaxy-publish.env]
+ARTIFACT = "./dist/*.tar.gz"
+ANSIBLE_GALAXY_TOKEN = "${ANSIBLE_GALAXY_TOKEN}"
+
+[presets.ansible-galaxy-publish.options.server]
+type = "string"
+default = "https://galaxy.ansible.com"
+description = "Galaxy server URL (or Automation Hub)"
+command_flag = "--server"
+
 [presets.test-hot-reload]
 name = "test-hot-reload"
 phase = "test"
