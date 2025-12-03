@@ -260,12 +260,14 @@ func vulnReportCommand() *cli.Command {
 			groupBy := c.String("group-by")
 			jsonOutput := c.Bool("json")
 
-			if groupBy == "cve" {
+			switch groupBy {
+			case "cve":
 				return reportByCVE(vulns, jsonOutput)
-			} else if groupBy == "image" {
+			case "image":
 				return reportByImage(vulns, jsonOutput)
+			default:
+				return fmt.Errorf("invalid group-by value: %s (use cve or image)", groupBy)
 			}
-			return fmt.Errorf("invalid group-by value: %s (use cve or image)", groupBy)
 		},
 	}
 }
@@ -321,9 +323,10 @@ func reportByCVE(vulns *VulnerabilityFile, jsonOutput bool) error {
 	highCount := 0
 	multiImageCount := 0
 	for _, c := range cves {
-		if c.Severity == "CRITICAL" {
+		switch c.Severity {
+		case "CRITICAL":
 			criticalCount++
-		} else if c.Severity == "HIGH" {
+		case "HIGH":
 			highCount++
 		}
 		if len(c.Images) > 1 {
@@ -372,9 +375,10 @@ func reportByImage(vulns *VulnerabilityFile, jsonOutput bool) error {
 			}
 		}
 		imageMap[v.Image].CVEs = append(imageMap[v.Image].CVEs, v.CVE)
-		if v.Severity == "CRITICAL" {
+		switch v.Severity {
+		case "CRITICAL":
 			imageMap[v.Image].Critical++
-		} else if v.Severity == "HIGH" {
+		case "HIGH":
 			imageMap[v.Image].High++
 		}
 	}
