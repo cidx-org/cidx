@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -167,17 +168,29 @@ type StatusInfo struct {
 
 // CICheck represents a CI check status
 type CICheck struct {
-	Name   string
-	Status string // success, failure, pending, running
+	Name     string
+	Status   string // success, failure, pending, running
+	Duration string // e.g., "12s", "2m 15s"
 }
+
+// Watch mode states
+type watchMode string
+
+const (
+	watchOff    watchMode = "off"
+	watchSensor watchMode = "sensor" // Polling every 15s, waiting for CI to start
+	watchActive watchMode = "active" // Polling every 3s, CI is running
+)
 
 // Model for bubbletea
 type statusModel struct {
-	info    StatusInfo
-	loading bool
-	err     error
-	width   int
-	height  int
+	info       StatusInfo
+	loading    bool
+	err        error
+	width      int
+	height     int
+	watching   watchMode
+	watchStart time.Time
 }
 
 // Messages
@@ -189,8 +202,17 @@ type errMsg struct {
 	err error
 }
 
+type tickMsg time.Time
+
 func (m statusModel) Init() tea.Cmd {
 	return loadStatus
+}
+
+// tickCmd returns a command that sends a tick after the interval
+func tickCmd(interval time.Duration) tea.Cmd {
+	return tea.Tick(interval, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
 }
 
 func (m statusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -202,11 +224,52 @@ func (m statusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "r":
 			m.loading = true
 			return m, loadStatus
+		case "w":
+			// Toggle watch mode (only if PR exists)
+			if m.info.PRNumber > 0 {
+				if m.watching == watchOff {
+					m.watching = watchSensor
+					m.watchStart = time.Now()
+					// Start in sensor mode, will switch to active if CI is running
+					return m, tea.Batch(loadStatus, tickCmd(15*time.Second))
+				} else {
+					m.watching = watchOff
+				}
+			}
 		}
 
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+
+	case tickMsg:
+		if m.watching != watchOff {
+			// Check if any CI checks are still running
+			hasRunning := false
+			for _, check := range m.info.CIChecks {
+				status := check.Status
+				// Consider check as "in progress" if status is empty or explicitly running
+				if status == "" || status == "pending" || status == "queued" || status == "in_progress" || status == "expected" || status == "waiting" {
+					hasRunning = true
+					break
+				}
+			}
+
+			// Determine next interval based on CI state
+			var nextInterval time.Duration
+			if hasRunning {
+				// CI is running - switch to active mode (3s)
+				m.watching = watchActive
+				nextInterval = 3 * time.Second
+			} else {
+				// CI idle or finished - switch to sensor mode (15s)
+				m.watching = watchSensor
+				nextInterval = 15 * time.Second
+			}
+
+			// Continue watching (never stops automatically in sensor mode)
+			return m, tea.Batch(loadStatus, tickCmd(nextInterval))
+		}
 
 	case statusLoadedMsg:
 		m.info = msg.info
@@ -249,8 +312,19 @@ func (m statusModel) View() string {
 	// Project section
 	sections = append(sections, m.renderProjectSection())
 
-	// Help
-	help := helpStyle.Render("  [r]efresh  [q]uit")
+	// Help - show watch option only when PR exists
+	helpText := "  [r]efresh  [q]uit"
+	if m.info.PRNumber > 0 {
+		switch m.watching {
+		case watchSensor:
+			helpText = "  [w]atch:SENSOR  [r]efresh  [q]uit"
+		case watchActive:
+			helpText = "  [w]atch:ACTIVE  [r]efresh  [q]uit"
+		default:
+			helpText = "  [w]atch  [r]efresh  [q]uit"
+		}
+	}
+	help := helpStyle.Render(helpText)
 	sections = append(sections, help)
 
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
@@ -330,33 +404,97 @@ func (m statusModel) renderPRSection() string {
 		prStatus = dimStyle.Render("closed")
 	}
 
-	content.WriteString(fmt.Sprintf("🔀 PR #%d: %s  [%s]\n",
+	// Watch indicator
+	watchIndicator := ""
+	if m.watching != watchOff {
+		elapsed := time.Since(m.watchStart).Round(time.Second)
+		modeLabel := "sensor"
+		if m.watching == watchActive {
+			modeLabel = "active"
+		}
+		watchIndicator = warningStyle.Render(fmt.Sprintf(" 👀 %s (%s)", modeLabel, formatDuration(elapsed)))
+	}
+
+	content.WriteString(fmt.Sprintf("🔀 PR #%d: %s  [%s]%s\n",
 		m.info.PRNumber,
 		valueStyle.Render(m.info.PRTitle),
-		prStatus))
+		prStatus,
+		watchIndicator))
 
-	// CI checks
+	// CI checks with GitHub-style progress bar
 	if len(m.info.CIChecks) > 0 {
-		content.WriteString("   └─ ")
-		for i, check := range m.info.CIChecks {
-			if i > 0 {
-				content.WriteString(" │ ")
-			}
-			icon := ""
+		// Count statuses
+		total := len(m.info.CIChecks)
+		passed := 0
+		failed := 0
+		running := 0
+		for _, check := range m.info.CIChecks {
 			switch check.Status {
 			case "success":
-				icon = successStyle.Render("✓")
+				passed++
 			case "failure":
-				icon = errorStyle.Render("✗")
-			case "pending", "queued":
-				icon = pendingStyle.Render("○")
+				failed++
 			case "in_progress":
-				icon = warningStyle.Render("◐")
-			default:
-				icon = dimStyle.Render("?")
+				running++
 			}
-			content.WriteString(fmt.Sprintf("%s %s", icon, check.Name))
 		}
+		pending := total - passed - failed - running
+
+		// Progress bar (8 chars wide)
+		barWidth := 8
+		passedWidth := (passed * barWidth) / total
+		failedWidth := (failed * barWidth) / total
+		runningWidth := (running * barWidth) / total
+		pendingWidth := barWidth - passedWidth - failedWidth - runningWidth
+
+		bar := successStyle.Render(strings.Repeat("█", passedWidth)) +
+			errorStyle.Render(strings.Repeat("█", failedWidth)) +
+			warningStyle.Render(strings.Repeat("▓", runningWidth)) +
+			dimStyle.Render(strings.Repeat("░", pendingWidth))
+
+		// Summary text
+		summary := ""
+		if failed > 0 {
+			summary = errorStyle.Render(fmt.Sprintf("%d failed", failed))
+		} else if running > 0 {
+			summary = warningStyle.Render(fmt.Sprintf("%d running", running))
+		} else if pending > 0 {
+			summary = dimStyle.Render(fmt.Sprintf("%d pending", pending))
+		} else {
+			summary = successStyle.Render("all passed")
+		}
+
+		content.WriteString(fmt.Sprintf("   %s %d/%d checks • %s\n", bar, passed, total, summary))
+
+		// Individual checks in compact format
+		content.WriteString("   ")
+		for i, check := range m.info.CIChecks {
+			var rendered string
+			switch check.Status {
+			case "success":
+				rendered = successStyle.Render("✓")
+			case "failure":
+				rendered = errorStyle.Render("✗")
+			case "pending", "queued", "expected", "waiting", "":
+				rendered = dimStyle.Render("○")
+			case "in_progress":
+				rendered = warningStyle.Render("◐")
+			default:
+				rendered = dimStyle.Render("?")
+			}
+
+			// Show abbreviated name with icon
+			name := check.Name
+			if len(name) > 12 {
+				name = name[:11] + "…"
+			}
+
+			content.WriteString(fmt.Sprintf("%s %s", rendered, name))
+			if i < len(m.info.CIChecks)-1 {
+				content.WriteString(dimStyle.Render(" │ "))
+			}
+		}
+		content.WriteString("\n")
 	}
 
 	return boxStyle.Render(content.String())
@@ -565,6 +703,18 @@ func extractCIChecks(json string) []CICheck {
 	}
 
 	return checks
+}
+
+func formatDuration(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	minutes := int(d.Minutes())
+	seconds := int(d.Seconds()) % 60
+	if seconds == 0 {
+		return fmt.Sprintf("%dm", minutes)
+	}
+	return fmt.Sprintf("%dm%ds", minutes, seconds)
 }
 
 func shortenCheckName(name string) string {
