@@ -50,17 +50,19 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 		log.Infof("   %s", action.Description)
 	}
 
-	// Check for prepared release notes and version
+	// Check for prepared version and release notes
 	workDirCheck, _ := a.repo.GetWorkDir()
-	hasPreparedNotes := HasPreparedNotes(workDirCheck)
 	hasPreparedVer := HasPreparedVersion(workDirCheck)
 	var preparedVersion string
+	var hasPreparedNotes bool
+
 	if hasPreparedVer {
 		preparedVersion, _ = LoadPreparedVersion(workDirCheck)
+		hasPreparedNotes = HasPreparedNotes(workDirCheck, preparedVersion)
 	}
 
 	if hasPreparedNotes {
-		log.Info("📋 Using prepared release notes from .cidx/release-notes.md")
+		log.Infof("📋 Using prepared release notes from %s", GetReleaseNotesFile(preparedVersion))
 	} else {
 		log.Info("📝 No prepared notes found - GitHub will auto-generate release notes")
 		log.Info("   Tip: Run 'cidx action release prepare' before creating releases")
@@ -196,7 +198,7 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 	if !action.WatchWorkflow {
 		log.Info("✅ Release action completed")
 		// Cleanup prepared files when not watching workflow
-		a.cleanupPreparedFiles(workDir, hasPreparedNotes, hasPreparedVer)
+		a.cleanupPreparedFiles(workDir, preparedVersion, hasPreparedNotes, hasPreparedVer)
 		return nil
 	}
 
@@ -236,7 +238,7 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 				log.Infof("🎉 Release v%s completed successfully!", newVersion)
 				log.Infof("🔗 View release at: https://github.com/%s/releases/tag/v%s", a.getRepoPath(), newVersion)
 				// Cleanup prepared files after successful release
-				a.cleanupPreparedFiles(workDir, hasPreparedNotes, hasPreparedVer)
+				a.cleanupPreparedFiles(workDir, preparedVersion, hasPreparedNotes, hasPreparedVer)
 			} else {
 				log.Errorf("❌ Release workflow failed: %s", update.Workflow.Conclusion)
 				return fmt.Errorf("release workflow failed with conclusion: %s", update.Workflow.Conclusion)
@@ -302,12 +304,12 @@ func (a *ReleaseAction) getRepoPath() string {
 }
 
 // cleanupPreparedFiles removes prepared release notes and version files
-func (a *ReleaseAction) cleanupPreparedFiles(workDir string, hasNotes, hasVersion bool) {
-	if hasNotes {
-		if err := CleanupPreparedNotes(workDir); err != nil {
+func (a *ReleaseAction) cleanupPreparedFiles(workDir, version string, hasNotes, hasVersion bool) {
+	if hasNotes && version != "" {
+		if err := CleanupPreparedNotes(workDir, version); err != nil {
 			log.Warnf("⚠️  Could not cleanup release notes: %v", err)
 		} else {
-			log.Info("🧹 Cleaned up prepared release notes")
+			log.Infof("🧹 Cleaned up %s", GetReleaseNotesFile(version))
 		}
 	}
 	if hasVersion {

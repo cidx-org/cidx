@@ -35,10 +35,21 @@ func (a *ReleasePreviewAction) Execute(ctx context.Context) error {
 	log.Info("==================")
 	log.Info("")
 
-	// 1. Check for prepared notes
-	hasPrepared := HasPreparedNotes(workDir)
+	// 1. Check for prepared version first
+	var preparedVersion string
+	hasPreparedVer := HasPreparedVersion(workDir)
+	if hasPreparedVer {
+		preparedVersion, _ = LoadPreparedVersion(workDir)
+	}
+
+	// Check for prepared notes (need version to find the file)
+	hasPrepared := false
+	if hasPreparedVer {
+		hasPrepared = HasPreparedNotes(workDir, preparedVersion)
+	}
+
 	if hasPrepared {
-		log.Info("✓ Release notes prepared")
+		log.Infof("✓ Release notes prepared (%s)", GetReleaseNotesFile(preparedVersion))
 	} else {
 		log.Warn("⚠️  No release notes prepared")
 		log.Info("   Run: cidx action release prepare")
@@ -73,9 +84,7 @@ func (a *ReleasePreviewAction) Execute(ctx context.Context) error {
 
 	// 5. Check for prepared version or suggest one
 	var nextVersion string
-	hasPreparedVer := HasPreparedVersion(workDir)
 	if hasPreparedVer {
-		preparedVersion, _ := LoadPreparedVersion(workDir)
 		nextVersion = preparedVersion
 		log.Info("")
 		log.Infof("🚀 Prepared version: v%s (editable in %s)", nextVersion, ReleaseVersionFile)
@@ -91,7 +100,7 @@ func (a *ReleasePreviewAction) Execute(ctx context.Context) error {
 		log.Info("📋 Release notes preview:")
 		log.Info("─────────────────────────")
 
-		notes, err := LoadPreparedNotes(workDir)
+		notes, err := LoadPreparedNotes(workDir, preparedVersion)
 		if err == nil {
 			// Show first 20 lines
 			lines := strings.Split(notes, "\n")

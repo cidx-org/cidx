@@ -23,11 +23,16 @@ type ReleasePrepareAction struct {
 	dryRun   bool
 }
 
-// ReleaseNotesFile is the path where prepared release notes are stored
-const ReleaseNotesFile = ".cidx/release-notes.md"
+// ReleaseNotesFilePattern is the pattern for release notes files
+const ReleaseNotesFilePattern = ".cidx/release-notes-v%s.md"
 
 // ReleaseVersionFile is the path where the target version is stored
 const ReleaseVersionFile = ".cidx/release-version"
+
+// GetReleaseNotesFile returns the path for release notes with the given version
+func GetReleaseNotesFile(version string) string {
+	return fmt.Sprintf(ReleaseNotesFilePattern, version)
+}
 
 // CommitInfo holds parsed commit information
 type CommitInfo struct {
@@ -92,10 +97,11 @@ func (a *ReleasePrepareAction) Execute(ctx context.Context) error {
 
 	// 6. Save to files
 	workDir, _ := a.repo.GetWorkDir()
-	if err := a.saveReleaseNotes(notes); err != nil {
+	notesFile := GetReleaseNotesFile(nextVersion)
+	if err := a.saveReleaseNotes(notes, nextVersion); err != nil {
 		return fmt.Errorf("failed to save release notes: %w", err)
 	}
-	log.Infof("✓ Release notes saved to %s", ReleaseNotesFile)
+	log.Infof("✓ Release notes saved to %s", notesFile)
 
 	if err := SavePreparedVersion(workDir, nextVersion); err != nil {
 		return fmt.Errorf("failed to save version: %w", err)
@@ -103,14 +109,14 @@ func (a *ReleasePrepareAction) Execute(ctx context.Context) error {
 	log.Infof("✓ Target version saved to %s", ReleaseVersionFile)
 
 	// 7. Open editor
-	if err := a.openEditor(); err != nil {
+	if err := a.openEditor(nextVersion); err != nil {
 		log.Warnf("Could not open editor: %v", err)
-		log.Infof("📝 Please edit %s manually", ReleaseNotesFile)
+		log.Infof("📝 Please edit %s manually", notesFile)
 	}
 
 	log.Info("")
 	log.Info("📌 Next steps:")
-	log.Infof("   1. Review and edit %s and %s", ReleaseNotesFile, ReleaseVersionFile)
+	log.Infof("   1. Review and edit %s and %s", notesFile, ReleaseVersionFile)
 	log.Info("   2. Run: cidx action release commit")
 	log.Info("   3. Run: cidx action release preview")
 	log.Info("   4. Run: cidx action release create")
@@ -424,8 +430,8 @@ func (a *ReleasePrepareAction) readVersionFile() (string, error) {
 	return strings.TrimSpace(string(content)), nil
 }
 
-// saveReleaseNotes saves notes to the release notes file
-func (a *ReleasePrepareAction) saveReleaseNotes(notes string) error {
+// saveReleaseNotes saves notes to the release notes file with version in filename
+func (a *ReleasePrepareAction) saveReleaseNotes(notes, version string) error {
 	workDir, _ := a.repo.GetWorkDir()
 	dir := filepath.Join(workDir, ".cidx")
 
@@ -434,12 +440,12 @@ func (a *ReleasePrepareAction) saveReleaseNotes(notes string) error {
 		return err
 	}
 
-	path := filepath.Join(workDir, ReleaseNotesFile)
+	path := filepath.Join(workDir, GetReleaseNotesFile(version))
 	return os.WriteFile(path, []byte(notes), 0644)
 }
 
 // openEditor opens the release notes in the user's editor
-func (a *ReleasePrepareAction) openEditor() error {
+func (a *ReleasePrepareAction) openEditor(version string) error {
 	editor := os.Getenv("EDITOR")
 	if editor == "" {
 		editor = os.Getenv("VISUAL")
@@ -459,7 +465,7 @@ func (a *ReleasePrepareAction) openEditor() error {
 	}
 
 	workDir, _ := a.repo.GetWorkDir()
-	path := filepath.Join(workDir, ReleaseNotesFile)
+	path := filepath.Join(workDir, GetReleaseNotesFile(version))
 
 	cmd := exec.Command(editor, path)
 	cmd.Stdin = os.Stdin
@@ -469,9 +475,9 @@ func (a *ReleasePrepareAction) openEditor() error {
 	return cmd.Run()
 }
 
-// LoadPreparedNotes loads previously prepared release notes
-func LoadPreparedNotes(workDir string) (string, error) {
-	path := filepath.Join(workDir, ReleaseNotesFile)
+// LoadPreparedNotes loads previously prepared release notes for the given version
+func LoadPreparedNotes(workDir, version string) (string, error) {
+	path := filepath.Join(workDir, GetReleaseNotesFile(version))
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
@@ -479,16 +485,16 @@ func LoadPreparedNotes(workDir string) (string, error) {
 	return string(content), nil
 }
 
-// HasPreparedNotes checks if release notes have been prepared
-func HasPreparedNotes(workDir string) bool {
-	path := filepath.Join(workDir, ReleaseNotesFile)
+// HasPreparedNotes checks if release notes have been prepared for the given version
+func HasPreparedNotes(workDir, version string) bool {
+	path := filepath.Join(workDir, GetReleaseNotesFile(version))
 	_, err := os.Stat(path)
 	return err == nil
 }
 
 // CleanupPreparedNotes removes the release notes file after successful release
-func CleanupPreparedNotes(workDir string) error {
-	path := filepath.Join(workDir, ReleaseNotesFile)
+func CleanupPreparedNotes(workDir, version string) error {
+	path := filepath.Join(workDir, GetReleaseNotesFile(version))
 	return os.Remove(path)
 }
 
