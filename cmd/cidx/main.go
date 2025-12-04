@@ -16,6 +16,7 @@ func main() {
 		Usage:   "CI with Declarative eXecution - Ultra-declarative DevSecOps pipeline runner",
 		Version: Version,
 		Commands: []*cli.Command{
+			statusCommand(),
 			runCommand(),
 			presetCommand(),
 			listCommand(),  // Deprecated: use 'preset list'
