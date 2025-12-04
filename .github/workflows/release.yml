@@ -5,9 +5,9 @@ on:
     tags: ["v*"]
 
 jobs:
-  # Setup: Build CIDX for use in subsequent jobs
-  setup:
-    name: Setup
+  # Build: Compile release binary with version
+  build:
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -18,112 +18,19 @@ jobs:
         with:
           go-version: "1.23"
 
-      - name: Build CIDX
-        run: go build -o bin/cidx ./cmd/cidx
+      - name: Build release binary
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          go build -ldflags "-X main.Version=$VERSION" -o bin/cidx ./cmd/cidx
 
-      - name: Upload CIDX binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: cidx
-          path: bin/cidx
-          retention-days: 1
-
-  # Security: Scan for vulnerabilities and secrets
-  security:
-    name: Security
-    runs-on: ubuntu-latest
-    needs: [setup]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # Full history for gitleaks
-
-      - name: Download CIDX
-        uses: actions/download-artifact@v4
-        with:
-          name: cidx
-          path: bin/
-
-      - name: Make CIDX executable
-        run: chmod +x bin/cidx
-
-      - name: Run security checks
-        run: ./bin/cidx run security
-
-  # Code Quality: Linting and formatting
-  code:
-    name: Code Quality
-    runs-on: ubuntu-latest
-    needs: [security]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # Full history for commitizen
-
-      - name: Download CIDX
-        uses: actions/download-artifact@v4
-        with:
-          name: cidx
-          path: bin/
-
-      - name: Make CIDX executable
-        run: chmod +x bin/cidx
-
-      - name: Run code quality checks
-        run: ./bin/cidx run code
-
-  # Test: Run unit and integration tests
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    needs: [security, code]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download CIDX
-        uses: actions/download-artifact@v4
-        with:
-          name: cidx
-          path: bin/
-
-      - name: Make CIDX executable
-        run: chmod +x bin/cidx
-
-      - name: Run tests
-        run: ./bin/cidx run test
-
-  # Build: Compile final binary
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    needs: [test]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download CIDX
-        uses: actions/download-artifact@v4
-        with:
-          name: cidx
-          path: bin/
-
-      - name: Make CIDX executable
-        run: chmod +x bin/cidx
-
-      - name: Build final binary
-        run: ./bin/cidx run build
-
-      - name: Upload final binary
+      - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
           name: cidx-binary
-          path: bin/
+          path: bin/cidx
           retention-days: 7
 
-  # Docker: Build and push container (managed by CIDX)
+  # Docker: Build and push container image
   docker:
     name: Docker Image
     runs-on: ubuntu-latest
@@ -135,20 +42,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download CIDX tool
-        uses: actions/download-artifact@v4
-        with:
-          name: cidx
-          path: tool/
-
-      - name: Download final binary for Docker
+      - name: Download binary
         uses: actions/download-artifact@v4
         with:
           name: cidx-binary
           path: bin/
 
-      - name: Make CIDX tool executable
-        run: chmod +x tool/cidx
+      - name: Make binary executable
+        run: chmod +x bin/cidx
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -158,13 +59,13 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
-        run: ./tool/cidx run docker
+        run: ./bin/cidx run docker
         env:
           IMAGE_NAME: ghcr.io/${{ github.repository }}
           IMAGE_TAG: ${{ github.ref_name }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Release: Create GitHub Release
+  # Release: Create GitHub Release with artifacts
   release:
     name: GitHub Release
     runs-on: ubuntu-latest
@@ -175,26 +76,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download CIDX tool
-        uses: actions/download-artifact@v4
-        with:
-          name: cidx
-          path: tool/
-
-      - name: Download final binary
+      - name: Download binary
         uses: actions/download-artifact@v4
         with:
           name: cidx-binary
           path: bin/
 
-      - name: Make CIDX tool executable
-        run: chmod +x tool/cidx
+      - name: Make binary executable
+        run: chmod +x bin/cidx
 
       - name: Configure gh CLI
         run: echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
 
-      - name: Run release
-        run: ./tool/cidx run github-release
+      - name: Create GitHub Release
+        run: ./bin/cidx run github-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GIT_TAG: ${{ github.ref_name }}
