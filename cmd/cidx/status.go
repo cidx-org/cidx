@@ -235,14 +235,18 @@ func (m statusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		if m.watching {
 			// Check if all CI checks are complete
-			allDone := true
+			// A check is "done" only if it has a final status (success, failure, etc.)
+			// Empty status, pending, queued, in_progress, expected = still running
+			allDone := len(m.info.CIChecks) > 0
 			for _, check := range m.info.CIChecks {
-				if check.Status == "pending" || check.Status == "queued" || check.Status == "in_progress" {
+				status := check.Status
+				// Consider check as "in progress" if status is empty or explicitly running
+				if status == "" || status == "pending" || status == "queued" || status == "in_progress" || status == "expected" || status == "waiting" {
 					allDone = false
 					break
 				}
 			}
-			if allDone && len(m.info.CIChecks) > 0 {
+			if allDone {
 				// Stop watching when all checks are done
 				m.watching = false
 				return m, nil
