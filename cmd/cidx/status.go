@@ -421,35 +421,80 @@ func (m statusModel) renderPRSection() string {
 		prStatus,
 		watchIndicator))
 
-	// CI checks with duration
+	// CI checks with GitHub-style progress bar
 	if len(m.info.CIChecks) > 0 {
-		for i, check := range m.info.CIChecks {
-			prefix := "   ├─ "
-			if i == len(m.info.CIChecks)-1 {
-				prefix = "   └─ "
-			}
-
-			icon := ""
+		// Count statuses
+		total := len(m.info.CIChecks)
+		passed := 0
+		failed := 0
+		running := 0
+		for _, check := range m.info.CIChecks {
 			switch check.Status {
 			case "success":
-				icon = successStyle.Render("✓")
+				passed++
 			case "failure":
-				icon = errorStyle.Render("✗")
-			case "pending", "queued":
-				icon = pendingStyle.Render("○")
+				failed++
 			case "in_progress":
-				icon = warningStyle.Render("◐")
-			default:
-				icon = dimStyle.Render("?")
+				running++
 			}
-
-			duration := ""
-			if check.Duration != "" {
-				duration = dimStyle.Render(fmt.Sprintf(" (%s)", check.Duration))
-			}
-
-			content.WriteString(fmt.Sprintf("%s%s %s%s\n", prefix, icon, check.Name, duration))
 		}
+		pending := total - passed - failed - running
+
+		// Progress bar (8 chars wide)
+		barWidth := 8
+		passedWidth := (passed * barWidth) / total
+		failedWidth := (failed * barWidth) / total
+		runningWidth := (running * barWidth) / total
+		pendingWidth := barWidth - passedWidth - failedWidth - runningWidth
+
+		bar := successStyle.Render(strings.Repeat("█", passedWidth)) +
+			errorStyle.Render(strings.Repeat("█", failedWidth)) +
+			warningStyle.Render(strings.Repeat("▓", runningWidth)) +
+			dimStyle.Render(strings.Repeat("░", pendingWidth))
+
+		// Summary text
+		summary := ""
+		if failed > 0 {
+			summary = errorStyle.Render(fmt.Sprintf("%d failed", failed))
+		} else if running > 0 {
+			summary = warningStyle.Render(fmt.Sprintf("%d running", running))
+		} else if pending > 0 {
+			summary = dimStyle.Render(fmt.Sprintf("%d pending", pending))
+		} else {
+			summary = successStyle.Render("all passed")
+		}
+
+		content.WriteString(fmt.Sprintf("   %s %d/%d checks • %s\n", bar, passed, total, summary))
+
+		// Individual checks in compact format
+		content.WriteString("   ")
+		for i, check := range m.info.CIChecks {
+			var rendered string
+			switch check.Status {
+			case "success":
+				rendered = successStyle.Render("✓")
+			case "failure":
+				rendered = errorStyle.Render("✗")
+			case "pending", "queued", "expected", "waiting", "":
+				rendered = dimStyle.Render("○")
+			case "in_progress":
+				rendered = warningStyle.Render("◐")
+			default:
+				rendered = dimStyle.Render("?")
+			}
+
+			// Show abbreviated name with icon
+			name := check.Name
+			if len(name) > 12 {
+				name = name[:11] + "…"
+			}
+
+			content.WriteString(fmt.Sprintf("%s %s", rendered, name))
+			if i < len(m.info.CIChecks)-1 {
+				content.WriteString(dimStyle.Render(" │ "))
+			}
+		}
+		content.WriteString("\n")
 	}
 
 	return boxStyle.Render(content.String())
