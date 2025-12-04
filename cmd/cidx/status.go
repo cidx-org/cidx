@@ -173,16 +173,24 @@ type CICheck struct {
 	Duration string // e.g., "12s", "2m 15s"
 }
 
+// Watch mode states
+type watchMode string
+
+const (
+	watchOff    watchMode = "off"
+	watchSensor watchMode = "sensor" // Polling every 15s, waiting for CI to start
+	watchActive watchMode = "active" // Polling every 3s, CI is running
+)
+
 // Model for bubbletea
 type statusModel struct {
-	info          StatusInfo
-	loading       bool
-	err           error
-	width         int
-	height        int
-	watching      bool
-	watchInterval time.Duration
-	watchStart    time.Time
+	info       StatusInfo
+	loading    bool
+	err        error
+	width      int
+	height     int
+	watching   watchMode
+	watchStart time.Time
 }
 
 // Messages
@@ -219,11 +227,13 @@ func (m statusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "w":
 			// Toggle watch mode (only if PR exists)
 			if m.info.PRNumber > 0 {
-				m.watching = !m.watching
-				if m.watching {
+				if m.watching == watchOff {
+					m.watching = watchSensor
 					m.watchStart = time.Now()
-					m.watchInterval = 5 * time.Second
-					return m, tea.Batch(loadStatus, tickCmd(m.watchInterval))
+					// Start in sensor mode, will switch to active if CI is running
+					return m, tea.Batch(loadStatus, tickCmd(15*time.Second))
+				} else {
+					m.watching = watchOff
 				}
 			}
 		}
@@ -233,26 +243,32 @@ func (m statusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 
 	case tickMsg:
-		if m.watching {
-			// Check if all CI checks are complete
-			// A check is "done" only if it has a final status (success, failure, etc.)
-			// Empty status, pending, queued, in_progress, expected = still running
-			allDone := len(m.info.CIChecks) > 0
+		if m.watching != watchOff {
+			// Check if any CI checks are still running
+			hasRunning := false
 			for _, check := range m.info.CIChecks {
 				status := check.Status
 				// Consider check as "in progress" if status is empty or explicitly running
 				if status == "" || status == "pending" || status == "queued" || status == "in_progress" || status == "expected" || status == "waiting" {
-					allDone = false
+					hasRunning = true
 					break
 				}
 			}
-			if allDone {
-				// Stop watching when all checks are done
-				m.watching = false
-				return m, nil
+
+			// Determine next interval based on CI state
+			var nextInterval time.Duration
+			if hasRunning {
+				// CI is running - switch to active mode (3s)
+				m.watching = watchActive
+				nextInterval = 3 * time.Second
+			} else {
+				// CI idle or finished - switch to sensor mode (15s)
+				m.watching = watchSensor
+				nextInterval = 15 * time.Second
 			}
-			// Continue watching
-			return m, tea.Batch(loadStatus, tickCmd(m.watchInterval))
+
+			// Continue watching (never stops automatically in sensor mode)
+			return m, tea.Batch(loadStatus, tickCmd(nextInterval))
 		}
 
 	case statusLoadedMsg:
@@ -299,9 +315,12 @@ func (m statusModel) View() string {
 	// Help - show watch option only when PR exists
 	helpText := "  [r]efresh  [q]uit"
 	if m.info.PRNumber > 0 {
-		if m.watching {
-			helpText = "  [w]atch:ON  [r]efresh  [q]uit"
-		} else {
+		switch m.watching {
+		case watchSensor:
+			helpText = "  [w]atch:SENSOR  [r]efresh  [q]uit"
+		case watchActive:
+			helpText = "  [w]atch:ACTIVE  [r]efresh  [q]uit"
+		default:
 			helpText = "  [w]atch  [r]efresh  [q]uit"
 		}
 	}
@@ -387,9 +406,13 @@ func (m statusModel) renderPRSection() string {
 
 	// Watch indicator
 	watchIndicator := ""
-	if m.watching {
+	if m.watching != watchOff {
 		elapsed := time.Since(m.watchStart).Round(time.Second)
-		watchIndicator = warningStyle.Render(fmt.Sprintf(" 👀 watching (%s)", formatDuration(elapsed)))
+		modeLabel := "sensor"
+		if m.watching == watchActive {
+			modeLabel = "active"
+		}
+		watchIndicator = warningStyle.Render(fmt.Sprintf(" 👀 %s (%s)", modeLabel, formatDuration(elapsed)))
 	}
 
 	content.WriteString(fmt.Sprintf("🔀 PR #%d: %s  [%s]%s\n",
