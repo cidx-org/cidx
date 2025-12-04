@@ -262,6 +262,16 @@ phases = ["release", "docker"]  # Just publishing steps
 description = "Publish artifacts to registries (GitHub Releases + GHCR)"
 
 # ──────────────────────────────────────────────────────────────────────────────
+# GitHub Release Pipeline: Create GitHub release only
+# ──────────────────────────────────────────────────────────────────────────────
+# Maps to: Final job in .github/workflows/release.yml
+# Trigger: After all CI jobs pass (security, code, test, build, docker)
+# Purpose: Create GitHub release with artifacts (no re-validation)
+[pipelines.github-release]
+phases = ["release"]  # Only create the release
+description = "Create GitHub release (skips already-validated phases)"
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Quick Pipeline: Fast local validation (development)
 # ──────────────────────────────────────────────────────────────────────────────
 # Maps to: Local development workflow (no CI/CD equivalent)

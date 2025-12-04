@@ -194,7 +194,7 @@ jobs:
         run: echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
 
       - name: Run release
-        run: ./tool/cidx run release
+        run: ./tool/cidx run github-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GIT_TAG: ${{ github.ref_name }}
