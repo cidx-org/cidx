@@ -88,8 +88,12 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 		return fmt.Errorf("failed to get current branch: %w", err)
 	}
 
-	if branch != "main" {
-		log.Warnf("⚠️  You are on branch '%s', not 'main'. Are you sure you want to create a release?", branch)
+	if branch != "main" && branch != "master" {
+		log.Warnf("⚠️  You are on branch '%s', not 'main'", branch)
+		log.Info("   💡 Typical workflow for protected branches:")
+		log.Info("      1. Prepare & commit on this branch")
+		log.Info("      2. Create PR and merge to main")
+		log.Info("      3. Run 'cidx action release create' on main")
 	}
 
 	// 4. Get working directory

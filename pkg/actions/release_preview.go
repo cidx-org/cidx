@@ -147,6 +147,7 @@ func (a *ReleasePreviewAction) Execute(ctx context.Context) error {
 	branch, _ := a.repo.GetCurrentBranch()
 	if branch != "main" && branch != "master" {
 		log.Warnf("⚠️  You are on branch '%s', not main", branch)
+		log.Info("   💡 For protected branches: prepare here → commit → PR → merge → release create on main")
 		hasBlockers = true
 	}
 
