@@ -105,9 +105,6 @@ var (
 			BorderForeground(lipgloss.Color("240")).
 			Padding(0, 1)
 
-	labelStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("244"))
-
 	valueStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("255"))
 
@@ -530,9 +527,10 @@ func extractCIChecks(json string) []CICheck {
 	depth := 1
 	end := start
 	for end < len(json) && depth > 0 {
-		if json[end] == '[' {
+		switch json[end] {
+		case '[':
 			depth++
-		} else if json[end] == ']' {
+		case ']':
 			depth--
 		}
 		end++
@@ -615,12 +613,8 @@ Use --tui to force TUI mode, or --no-tui to force simple output.`,
 		},
 		Action: func(c *cli.Context) error {
 			// Determine if we should use TUI
-			useTUI := true
-
-			// Auto-detect: disable TUI in CI environments
-			if IsCI() {
-				useTUI = false
-			}
+			// Auto-detect: TUI in local, simple text in CI
+			useTUI := !IsCI()
 
 			// Explicit flags override auto-detection
 			if c.Bool("no-tui") {
