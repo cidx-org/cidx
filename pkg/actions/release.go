@@ -45,12 +45,19 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 		return fmt.Errorf("action '%s' not found in configuration", a.actionName)
 	}
 
-	// DEBUG: Log loaded action config
-	log.Infof("DEBUG: Loaded action - Entrypoint: %v, Command: %s", action.Entrypoint, action.Command)
-
 	log.Infof("🚀 Running action: %s", a.actionName)
 	if action.Description != "" {
 		log.Infof("   %s", action.Description)
+	}
+
+	// Check for prepared release notes
+	workDirCheck, _ := a.repo.GetWorkDir()
+	hasPreparedNotes := HasPreparedNotes(workDirCheck)
+	if hasPreparedNotes {
+		log.Info("📋 Using prepared release notes from .cidx/release-notes.md")
+	} else {
+		log.Info("📝 No prepared notes found - GitHub will auto-generate release notes")
+		log.Info("   Tip: Run 'cidx action release prepare' before creating releases")
 	}
 
 	// 2. Check for uncommitted changes
@@ -166,6 +173,14 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 	// 9. Watch workflow if configured
 	if !action.WatchWorkflow {
 		log.Info("✅ Release action completed")
+		// Cleanup prepared notes when not watching workflow
+		if hasPreparedNotes {
+			if err := CleanupPreparedNotes(workDir); err != nil {
+				log.Warnf("⚠️  Could not cleanup release notes: %v", err)
+			} else {
+				log.Info("🧹 Cleaned up prepared release notes")
+			}
+		}
 		return nil
 	}
 
@@ -204,6 +219,14 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 			if update.Workflow.Conclusion == "success" {
 				log.Infof("🎉 Release v%s completed successfully!", newVersion)
 				log.Infof("🔗 View release at: https://github.com/%s/releases/tag/v%s", a.getRepoPath(), newVersion)
+				// Cleanup prepared notes after successful release
+				if hasPreparedNotes {
+					if err := CleanupPreparedNotes(workDir); err != nil {
+						log.Warnf("⚠️  Could not cleanup release notes: %v", err)
+					} else {
+						log.Info("🧹 Cleaned up prepared release notes")
+					}
+				}
 			} else {
 				log.Errorf("❌ Release workflow failed: %s", update.Workflow.Conclusion)
 				return fmt.Errorf("release workflow failed with conclusion: %s", update.Workflow.Conclusion)

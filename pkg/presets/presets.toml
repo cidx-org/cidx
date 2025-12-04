@@ -571,7 +571,8 @@ IMAGE_TAG = "latest"
 name = "gh-release"
 phase = "release"
 image = "maniator/gh:v2.83.1"
-command = "release create ${TAG} ${ARTIFACTS} --generate-notes"
+# Smart command: uses prepared release notes if available, otherwise auto-generates
+command = "sh -c 'if [ -f .cidx/release-notes.md ]; then echo \"Using prepared release notes...\"; gh release create ${TAG} ${ARTIFACTS} --notes-file .cidx/release-notes.md; else echo \"Auto-generating release notes...\"; gh release create ${TAG} ${ARTIFACTS} --generate-notes; fi'"
 workdir = "/workspace"
 volumes = ["${WORKSPACE}:/workspace"]
 require_ci = false
@@ -593,6 +594,12 @@ type = "bool"
 default = false
 description = "Mark as prerelease"
 command_flag = "--prerelease"
+
+[presets.gh-release.options.notes_file]
+type = "string"
+default = ""
+description = "Path to release notes file (overrides auto-detection)"
+command_flag = "--notes-file"
 
 [presets.goreleaser]
 name = "goreleaser"

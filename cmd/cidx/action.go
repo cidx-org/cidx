@@ -111,8 +111,24 @@ func actionCommand() *cli.Command {
 				Usage: "Release management commands",
 				Subcommands: []*cli.Command{
 					{
+						Name:  "prepare",
+						Usage: "Prepare release notes for human review (fetches PRs, commits, opens editor)",
+						Flags: []cli.Flag{
+							&cli.BoolFlag{
+								Name:  "dry-run",
+								Usage: "Show what would be generated without saving",
+							},
+						},
+						Action: releasePrepareAction,
+					},
+					{
+						Name:  "preview",
+						Usage: "Preview what will happen during release (version bump, changelog, workflow)",
+						Action: releasePreviewAction,
+					},
+					{
 						Name:  "create",
-						Usage: "Create a new release with commitizen (bump version, tag, push, watch workflow)",
+						Usage: "Create a new release (bump version, tag, push, watch workflow)",
 						Flags: []cli.Flag{
 							&cli.BoolFlag{
 								Name:  "dry-run",
@@ -302,6 +318,56 @@ func prMergeAction(c *cli.Context) error {
 		c.Bool("watch"),
 		c.Bool("skip-checks"),
 		c.Bool("dry-run"),
+	)
+
+	ctx := context.Background()
+	return action.Execute(ctx)
+}
+
+func releasePrepareAction(c *cli.Context) error {
+	// Open repository
+	repo, err := vcs.OpenRepository(".")
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	// Get remote info
+	owner, repoName, err := repo.GetRemoteInfo()
+	if err != nil {
+		return fmt.Errorf("failed to get remote info: %w", err)
+	}
+
+	// Get GitHub token
+	token, err := getGitHubToken()
+	if err != nil {
+		return err
+	}
+
+	// Create GitHub provider
+	provider := github.NewClient(token, owner, repoName)
+
+	// Create and execute release prepare action
+	action := actions.NewReleasePrepare(
+		repo,
+		provider,
+		c.Bool("dry-run"),
+	)
+
+	ctx := context.Background()
+	return action.Execute(ctx)
+}
+
+func releasePreviewAction(c *cli.Context) error {
+	// Open repository
+	repo, err := vcs.OpenRepository(".")
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	// Create and execute release preview action
+	action := actions.NewReleasePreview(
+		repo,
+		false, // preview is always "dry-run" style
 	)
 
 	ctx := context.Background()
