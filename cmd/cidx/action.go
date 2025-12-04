@@ -127,6 +127,17 @@ func actionCommand() *cli.Command {
 						Action: releasePreviewAction,
 					},
 					{
+						Name:  "commit",
+						Usage: "Commit prepared release notes (shortcut for git add/commit)",
+						Flags: []cli.Flag{
+							&cli.BoolFlag{
+								Name:  "dry-run",
+								Usage: "Show what would be done without making changes",
+							},
+						},
+						Action: releaseCommitAction,
+					},
+					{
 						Name:  "create",
 						Usage: "Create a new release (bump version, tag, push, watch workflow)",
 						Flags: []cli.Flag{
@@ -368,6 +379,23 @@ func releasePreviewAction(c *cli.Context) error {
 	action := actions.NewReleasePreview(
 		repo,
 		false, // preview is always "dry-run" style
+	)
+
+	ctx := context.Background()
+	return action.Execute(ctx)
+}
+
+func releaseCommitAction(c *cli.Context) error {
+	// Open repository
+	repo, err := vcs.OpenRepository(".")
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	// Create and execute release commit action
+	action := actions.NewReleaseCommit(
+		repo,
+		c.Bool("dry-run"),
 	)
 
 	ctx := context.Background()

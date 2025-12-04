@@ -102,7 +102,7 @@ func (a *ReleasePrepareAction) Execute(ctx context.Context) error {
 	log.Info("")
 	log.Info("📌 Next steps:")
 	log.Infof("   1. Review and edit %s", ReleaseNotesFile)
-	log.Infof("   2. Commit the release notes: git add %s && git commit -m \"chore: prepare release notes\"", ReleaseNotesFile)
+	log.Info("   2. Run: cidx action release commit")
 	log.Info("   3. Run: cidx action release preview")
 	log.Info("   4. Run: cidx action release create")
 
