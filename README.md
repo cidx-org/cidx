@@ -157,6 +157,31 @@ cidx branch pr -w             # Watch CI checks until complete
 cidx branch pr -o             # Open PR in browser
 ```
 
+## Status Dashboard
+
+Interactive TUI showing project context at a glance:
+
+```bash
+cidx status                   # Launch interactive dashboard
+cidx status --no-tui          # Simple text output (auto in CI)
+```
+
+**Features:**
+
+- GitHub account and authentication status
+- Current branch with ahead/behind commits
+- Local changes (staged, modified, untracked)
+- PR info with CI check status
+- Watch mode: press `w` to auto-refresh every 5s
+
+**Keyboard shortcuts:**
+
+- `w` - Toggle watch mode (polls CI checks)
+- `r` - Refresh status
+- `q` - Quit
+
+**Environment detection:** Automatically uses simple text output in CI environments (GitHub Actions, GitLab CI, Jenkins, etc.) to avoid blocking pipelines.
+
 ## Demo
 
 ```bash
@@ -210,4 +235,3 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 # License
 
 MIT License - see [LICENSE](LICENSE)
-
