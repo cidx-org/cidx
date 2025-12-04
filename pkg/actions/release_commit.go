@@ -37,9 +37,15 @@ func (a *ReleaseCommitAction) Execute(ctx context.Context) error {
 
 	log.Info("📝 Committing release notes...")
 
+	// Check for prepared version file
+	hasVersion := HasPreparedVersion(workDir)
+
 	if a.dryRun {
 		log.Info("🏁 Dry-run mode: would execute:")
 		log.Infof("   git add %s", ReleaseNotesFile)
+		if hasVersion {
+			log.Infof("   git add %s", ReleaseVersionFile)
+		}
 		log.Info("   git commit -m \"chore: prepare release notes\"")
 		return nil
 	}
@@ -49,6 +55,15 @@ func (a *ReleaseCommitAction) Execute(ctx context.Context) error {
 	addCmd.Dir = workDir
 	if output, err := addCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to stage release notes: %w\n%s", err, output)
+	}
+
+	// Stage the version file if it exists
+	if hasVersion {
+		addVersionCmd := exec.Command("git", "add", ReleaseVersionFile)
+		addVersionCmd.Dir = workDir
+		if output, err := addVersionCmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("failed to stage version file: %w\n%s", err, output)
+		}
 	}
 
 	// Commit the release notes

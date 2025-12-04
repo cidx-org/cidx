@@ -50,14 +50,24 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 		log.Infof("   %s", action.Description)
 	}
 
-	// Check for prepared release notes
+	// Check for prepared release notes and version
 	workDirCheck, _ := a.repo.GetWorkDir()
 	hasPreparedNotes := HasPreparedNotes(workDirCheck)
+	hasPreparedVer := HasPreparedVersion(workDirCheck)
+	var preparedVersion string
+	if hasPreparedVer {
+		preparedVersion, _ = LoadPreparedVersion(workDirCheck)
+	}
+
 	if hasPreparedNotes {
 		log.Info("📋 Using prepared release notes from .cidx/release-notes.md")
 	} else {
 		log.Info("📝 No prepared notes found - GitHub will auto-generate release notes")
 		log.Info("   Tip: Run 'cidx action release prepare' before creating releases")
+	}
+
+	if hasPreparedVer {
+		log.Infof("🏷️  Using prepared version: v%s", preparedVersion)
 	}
 
 	// 2. Check for uncommitted changes
@@ -120,11 +130,23 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 		volumes[i] = strings.ReplaceAll(vol, "${WORKSPACE}", workDir)
 	}
 
+	// Modify command to use exact version if prepared
+	command := action.Command
+	if hasPreparedVer && preparedVersion != "" {
+		// Replace increment-based bump with exact version
+		// The default command is typically "cz bump --changelog --yes"
+		// We change it to "cz bump --exact-version X.X.X --changelog --yes"
+		if strings.Contains(command, "cz bump") && !strings.Contains(command, "--exact-version") {
+			command = strings.Replace(command, "cz bump", fmt.Sprintf("cz bump --exact-version %s", preparedVersion), 1)
+			log.Debugf("Modified command to use exact version: %s", command)
+		}
+	}
+
 	containerConfig := &config.ContainerConfig{
 		Name:       a.actionName,
 		Phase:      "action",
 		Image:      action.Image,
-		Command:    action.Command,
+		Command:    command,
 		Entrypoint: action.Entrypoint,
 		Workdir:    action.Workdir,
 		Volumes:    volumes,
@@ -173,14 +195,8 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 	// 9. Watch workflow if configured
 	if !action.WatchWorkflow {
 		log.Info("✅ Release action completed")
-		// Cleanup prepared notes when not watching workflow
-		if hasPreparedNotes {
-			if err := CleanupPreparedNotes(workDir); err != nil {
-				log.Warnf("⚠️  Could not cleanup release notes: %v", err)
-			} else {
-				log.Info("🧹 Cleaned up prepared release notes")
-			}
-		}
+		// Cleanup prepared files when not watching workflow
+		a.cleanupPreparedFiles(workDir, hasPreparedNotes, hasPreparedVer)
 		return nil
 	}
 
@@ -219,14 +235,8 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 			if update.Workflow.Conclusion == "success" {
 				log.Infof("🎉 Release v%s completed successfully!", newVersion)
 				log.Infof("🔗 View release at: https://github.com/%s/releases/tag/v%s", a.getRepoPath(), newVersion)
-				// Cleanup prepared notes after successful release
-				if hasPreparedNotes {
-					if err := CleanupPreparedNotes(workDir); err != nil {
-						log.Warnf("⚠️  Could not cleanup release notes: %v", err)
-					} else {
-						log.Info("🧹 Cleaned up prepared release notes")
-					}
-				}
+				// Cleanup prepared files after successful release
+				a.cleanupPreparedFiles(workDir, hasPreparedNotes, hasPreparedVer)
 			} else {
 				log.Errorf("❌ Release workflow failed: %s", update.Workflow.Conclusion)
 				return fmt.Errorf("release workflow failed with conclusion: %s", update.Workflow.Conclusion)
@@ -289,4 +299,22 @@ func (a *ReleaseAction) getRepoPath() string {
 		return "unknown/unknown"
 	}
 	return fmt.Sprintf("%s/%s", owner, repo)
+}
+
+// cleanupPreparedFiles removes prepared release notes and version files
+func (a *ReleaseAction) cleanupPreparedFiles(workDir string, hasNotes, hasVersion bool) {
+	if hasNotes {
+		if err := CleanupPreparedNotes(workDir); err != nil {
+			log.Warnf("⚠️  Could not cleanup release notes: %v", err)
+		} else {
+			log.Info("🧹 Cleaned up prepared release notes")
+		}
+	}
+	if hasVersion {
+		if err := CleanupPreparedVersion(workDir); err != nil {
+			log.Warnf("⚠️  Could not cleanup version file: %v", err)
+		} else {
+			log.Info("🧹 Cleaned up prepared version file")
+		}
+	}
 }

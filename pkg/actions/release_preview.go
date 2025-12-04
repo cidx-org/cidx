@@ -71,10 +71,19 @@ func (a *ReleasePreviewAction) Execute(ctx context.Context) error {
 		log.Infof("   📦 Other: %d", commitTypes["other"])
 	}
 
-	// 5. Suggest next version
-	nextVersion := a.suggestVersion(currentVersion, commitTypes)
-	log.Info("")
-	log.Infof("🚀 Suggested next version: v%s", nextVersion)
+	// 5. Check for prepared version or suggest one
+	var nextVersion string
+	hasPreparedVer := HasPreparedVersion(workDir)
+	if hasPreparedVer {
+		preparedVersion, _ := LoadPreparedVersion(workDir)
+		nextVersion = preparedVersion
+		log.Info("")
+		log.Infof("🚀 Prepared version: v%s (editable in %s)", nextVersion, ReleaseVersionFile)
+	} else {
+		nextVersion = a.suggestVersion(currentVersion, commitTypes)
+		log.Info("")
+		log.Infof("🚀 Suggested next version: v%s", nextVersion)
+	}
 
 	// 6. Show prepared release notes preview
 	if hasPrepared {

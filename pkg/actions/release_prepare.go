@@ -26,6 +26,9 @@ type ReleasePrepareAction struct {
 // ReleaseNotesFile is the path where prepared release notes are stored
 const ReleaseNotesFile = ".cidx/release-notes.md"
 
+// ReleaseVersionFile is the path where the target version is stored
+const ReleaseVersionFile = ".cidx/release-version"
+
 // CommitInfo holds parsed commit information
 type CommitInfo struct {
 	Hash    string
@@ -87,11 +90,17 @@ func (a *ReleasePrepareAction) Execute(ctx context.Context) error {
 		return nil
 	}
 
-	// 6. Save to file
+	// 6. Save to files
+	workDir, _ := a.repo.GetWorkDir()
 	if err := a.saveReleaseNotes(notes); err != nil {
 		return fmt.Errorf("failed to save release notes: %w", err)
 	}
 	log.Infof("✓ Release notes saved to %s", ReleaseNotesFile)
+
+	if err := SavePreparedVersion(workDir, nextVersion); err != nil {
+		return fmt.Errorf("failed to save version: %w", err)
+	}
+	log.Infof("✓ Target version saved to %s", ReleaseVersionFile)
 
 	// 7. Open editor
 	if err := a.openEditor(); err != nil {
@@ -101,7 +110,7 @@ func (a *ReleasePrepareAction) Execute(ctx context.Context) error {
 
 	log.Info("")
 	log.Info("📌 Next steps:")
-	log.Infof("   1. Review and edit %s", ReleaseNotesFile)
+	log.Infof("   1. Review and edit %s and %s", ReleaseNotesFile, ReleaseVersionFile)
 	log.Info("   2. Run: cidx action release commit")
 	log.Info("   3. Run: cidx action release preview")
 	log.Info("   4. Run: cidx action release create")
@@ -480,5 +489,38 @@ func HasPreparedNotes(workDir string) bool {
 // CleanupPreparedNotes removes the release notes file after successful release
 func CleanupPreparedNotes(workDir string) error {
 	path := filepath.Join(workDir, ReleaseNotesFile)
+	return os.Remove(path)
+}
+
+// SavePreparedVersion saves the target version to a file
+func SavePreparedVersion(workDir, version string) error {
+	dir := filepath.Join(workDir, ".cidx")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	path := filepath.Join(workDir, ReleaseVersionFile)
+	return os.WriteFile(path, []byte(version+"\n"), 0644)
+}
+
+// LoadPreparedVersion loads the target version from file
+func LoadPreparedVersion(workDir string) (string, error) {
+	path := filepath.Join(workDir, ReleaseVersionFile)
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(content)), nil
+}
+
+// HasPreparedVersion checks if a version has been prepared
+func HasPreparedVersion(workDir string) bool {
+	path := filepath.Join(workDir, ReleaseVersionFile)
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// CleanupPreparedVersion removes the version file after successful release
+func CleanupPreparedVersion(workDir string) error {
+	path := filepath.Join(workDir, ReleaseVersionFile)
 	return os.Remove(path)
 }
