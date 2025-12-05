@@ -27,6 +27,7 @@ func Load(path string) (*Config, error) {
 		Pipelines: make(map[string]Pipeline),
 		Actions:   make(map[string]Action),
 		Overrides: make(map[string]map[string]interface{}),
+		Release:   DefaultReleaseConfig(), // Start with defaults
 		Workspace: os.Getenv("PWD"),
 	}
 
@@ -37,6 +38,29 @@ func Load(path string) (*Config, error) {
 	for name, value := range raw {
 		section, ok := value.(map[string]interface{})
 		if !ok {
+			continue
+		}
+
+		// Check if this is the "release_workflow" section
+		if name == "release_workflow" {
+			if mainBranch, ok := section["main_branch"].(string); ok {
+				cfg.Release.MainBranch = mainBranch
+			}
+			if allowAny, ok := section["allow_release_from_any_branch"].(bool); ok {
+				cfg.Release.AllowReleaseFromAnyBranch = allowAny
+			}
+			if requirePrep, ok := section["require_prepare"].(bool); ok {
+				cfg.Release.RequirePrepare = requirePrep
+			}
+			if autoClean, ok := section["auto_cleanup"].(bool); ok {
+				cfg.Release.AutoCleanup = autoClean
+			}
+			if editor, ok := section["editor"].(string); ok {
+				cfg.Release.Editor = editor
+			}
+			if template, ok := section["notes_template"].(string); ok {
+				cfg.Release.NotesTemplate = template
+			}
 			continue
 		}
 

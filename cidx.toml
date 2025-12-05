@@ -42,6 +42,72 @@
 # Workspace: Current directory (auto-detected)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 🔄 RELEASE WORKFLOW CONFIGURATION
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#
+# Configure how releases are created and validated.
+# This section controls the behavior of release commands:
+#   - cidx action release prepare
+#   - cidx action release preview
+#   - cidx action release commit
+#   - cidx action release create
+#
+# WORKFLOW PATTERNS:
+# ──────────────────────────────────────────────────────────────────────────────
+#
+# 1. TRUNK-BASED DEVELOPMENT (this project)
+#    - Releases can be created from any branch
+#    - Quick iteration, continuous deployment style
+#    - Set: allow_release_from_any_branch = true
+#
+# 2. PROTECTED MAIN BRANCH (default)
+#    - Releases only from main/master branch
+#    - Enforces PR review before release
+#    - Workflow: prepare → commit → PR → merge → release create on main
+#    - Set: allow_release_from_any_branch = false (default)
+#
+# 3. STRICT REVIEW PROCESS
+#    - Requires manual preparation of release notes
+#    - Forces human review of changelog before release
+#    - Set: require_prepare = true
+#
+# 4. GITFLOW / RELEASE BRANCHES
+#    - Set main_branch to your release branch (e.g., "release", "develop")
+#    - Combine with allow_release_from_any_branch = false
+#
+[release_workflow]
+# Main branch name where releases are typically created
+# Default: "main" (also accepts "master" as equivalent)
+main_branch = "main"
+
+# Allow creating releases from any branch (trunk-based development)
+# When false: releases can only be created from main_branch
+# When true: releases can be created from any branch (current project setting)
+# Default: false
+allow_release_from_any_branch = true
+
+# Require running 'release prepare' before 'release create'
+# When true: forces manual review of release notes before releasing
+# When false: allows direct release with auto-generated notes
+# Default: false
+require_prepare = false
+
+# Automatically cleanup .cidx/release-* files after successful release
+# When true: removes prepared notes and version files after release
+# When false: keeps files for reference
+# Default: true
+auto_cleanup = true
+
+# Editor command for editing release notes (used by 'release prepare')
+# If empty, falls back to: $EDITOR → $VISUAL → vim → nano → vi → code
+# Examples: "code --wait", "vim", "nano", "subl -w"
+# editor = "code --wait"
+
+# Custom template for release notes (optional)
+# Path to a markdown template file, or leave empty for default template
+# notes_template = ".github/RELEASE_TEMPLATE.md"
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 📦 CONTAINERS CONFIGURATION
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #
