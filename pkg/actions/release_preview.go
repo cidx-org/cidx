@@ -6,21 +6,24 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/cidx-org/cidx/pkg/config"
 	"github.com/cidx-org/cidx/pkg/vcs"
 	log "github.com/sirupsen/logrus"
 )
 
 // ReleasePreviewAction shows what will happen during release
 type ReleasePreviewAction struct {
-	repo   *vcs.Repository
-	dryRun bool
+	repo          *vcs.Repository
+	releaseConfig config.ReleaseConfig
+	dryRun        bool
 }
 
 // NewReleasePreview creates a new release preview action
-func NewReleasePreview(repo *vcs.Repository, dryRun bool) *ReleasePreviewAction {
+func NewReleasePreview(repo *vcs.Repository, releaseConfig config.ReleaseConfig, dryRun bool) *ReleasePreviewAction {
 	return &ReleasePreviewAction{
-		repo:   repo,
-		dryRun: dryRun,
+		repo:          repo,
+		releaseConfig: releaseConfig,
+		dryRun:        dryRun,
 	}
 }
 
@@ -145,10 +148,17 @@ func (a *ReleasePreviewAction) Execute(ctx context.Context) error {
 
 	// Check branch
 	branch, _ := a.repo.GetCurrentBranch()
-	if branch != "main" && branch != "master" {
-		log.Warnf("⚠️  You are on branch '%s', not main", branch)
-		log.Info("   💡 For protected branches: prepare here → commit → PR → merge → release create on main")
-		hasBlockers = true
+	mainBranch := a.releaseConfig.GetMainBranch()
+	isOnMainBranch := branch == mainBranch || (mainBranch == "main" && branch == "master")
+
+	if !isOnMainBranch {
+		if a.releaseConfig.AllowReleaseFromAnyBranch {
+			log.Infof("ℹ️  You are on branch '%s' (releases allowed from any branch)", branch)
+		} else {
+			log.Warnf("⚠️  You are on branch '%s', not '%s'", branch, mainBranch)
+			log.Infof("   💡 For protected branches: prepare here → commit → PR → merge → release create on %s", mainBranch)
+			hasBlockers = true
+		}
 	}
 
 	if !hasBlockers {

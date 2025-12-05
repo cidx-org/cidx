@@ -16,19 +16,21 @@ import (
 
 // ReleaseAction orchestrates the release process using dynamic action configuration
 type ReleaseAction struct {
-	repo       *vcs.Repository
-	provider   remote.Provider
-	actionName string
-	dryRun     bool
+	repo          *vcs.Repository
+	provider      remote.Provider
+	releaseConfig config.ReleaseConfig
+	actionName    string
+	dryRun        bool
 }
 
 // NewRelease creates a new release action
-func NewRelease(repo *vcs.Repository, provider remote.Provider, actionName string, dryRun bool) *ReleaseAction {
+func NewRelease(repo *vcs.Repository, provider remote.Provider, releaseConfig config.ReleaseConfig, actionName string, dryRun bool) *ReleaseAction {
 	return &ReleaseAction{
-		repo:       repo,
-		provider:   provider,
-		actionName: actionName,
-		dryRun:     dryRun,
+		repo:          repo,
+		provider:      provider,
+		releaseConfig: releaseConfig,
+		actionName:    actionName,
+		dryRun:        dryRun,
 	}
 }
 
@@ -64,6 +66,9 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 	if hasPreparedNotes {
 		log.Infof("📋 Using prepared release notes from %s", GetReleaseNotesFile(preparedVersion))
 	} else {
+		if a.releaseConfig.RequirePrepare {
+			return fmt.Errorf("no prepared release notes found\n   Run 'cidx action release prepare' first\n   Or set require_prepare = false in [release] config")
+		}
 		log.Info("📝 No prepared notes found - GitHub will auto-generate release notes")
 		log.Info("   Tip: Run 'cidx action release prepare' before creating releases")
 	}
@@ -82,18 +87,29 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 		return fmt.Errorf("cannot create release: you have uncommitted changes. Please commit or stash them first")
 	}
 
-	// 3. Get current branch
+	// 3. Get current branch and check against config
 	branch, err := a.repo.GetCurrentBranch()
 	if err != nil {
 		return fmt.Errorf("failed to get current branch: %w", err)
 	}
 
-	if branch != "main" && branch != "master" {
-		log.Warnf("⚠️  You are on branch '%s', not 'main'", branch)
-		log.Info("   💡 Typical workflow for protected branches:")
-		log.Info("      1. Prepare & commit on this branch")
-		log.Info("      2. Create PR and merge to main")
-		log.Info("      3. Run 'cidx action release create' on main")
+	mainBranch := a.releaseConfig.GetMainBranch()
+	isOnMainBranch := branch == mainBranch || (mainBranch == "main" && branch == "master")
+
+	if !isOnMainBranch {
+		if !a.releaseConfig.AllowReleaseFromAnyBranch {
+			log.Warnf("⚠️  You are on branch '%s', not '%s'", branch, mainBranch)
+			log.Info("   💡 Typical workflow for protected branches:")
+			log.Info("      1. Prepare & commit on this branch")
+			log.Infof("      2. Create PR and merge to %s", mainBranch)
+			log.Infof("      3. Run 'cidx action release create' on %s", mainBranch)
+			log.Info("")
+			log.Info("   To allow releases from any branch, set in cidx.toml:")
+			log.Info("   [release]")
+			log.Info("   allow_release_from_any_branch = true")
+			return fmt.Errorf("releases can only be created from '%s' branch", mainBranch)
+		}
+		log.Warnf("⚠️  Creating release from branch '%s' (not '%s')", branch, mainBranch)
 	}
 
 	// 4. Get working directory
@@ -307,8 +323,13 @@ func (a *ReleaseAction) getRepoPath() string {
 	return fmt.Sprintf("%s/%s", owner, repo)
 }
 
-// cleanupPreparedFiles removes prepared release notes and version files
+// cleanupPreparedFiles removes prepared release notes and version files (if auto_cleanup is enabled)
 func (a *ReleaseAction) cleanupPreparedFiles(workDir, version string, hasNotes, hasVersion bool) {
+	if !a.releaseConfig.AutoCleanup {
+		log.Debug("Auto-cleanup disabled, keeping prepared files")
+		return
+	}
+
 	if hasNotes && version != "" {
 		if err := CleanupPreparedNotes(workDir, version); err != nil {
 			log.Warnf("⚠️  Could not cleanup release notes: %v", err)

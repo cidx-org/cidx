@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cidx-org/cidx/pkg/config"
 	"github.com/cidx-org/cidx/pkg/remote"
 	"github.com/cidx-org/cidx/pkg/vcs"
 	log "github.com/sirupsen/logrus"
@@ -18,9 +19,10 @@ import (
 
 // ReleasePrepareAction prepares release notes for human review
 type ReleasePrepareAction struct {
-	repo     *vcs.Repository
-	provider remote.Provider
-	dryRun   bool
+	repo       *vcs.Repository
+	provider   remote.Provider
+	releaseConfig config.ReleaseConfig
+	dryRun     bool
 }
 
 // ReleaseNotesFilePattern is the pattern for release notes files
@@ -45,11 +47,12 @@ type CommitInfo struct {
 }
 
 // NewReleasePrepare creates a new release prepare action
-func NewReleasePrepare(repo *vcs.Repository, provider remote.Provider, dryRun bool) *ReleasePrepareAction {
+func NewReleasePrepare(repo *vcs.Repository, provider remote.Provider, releaseConfig config.ReleaseConfig, dryRun bool) *ReleasePrepareAction {
 	return &ReleasePrepareAction{
-		repo:     repo,
-		provider: provider,
-		dryRun:   dryRun,
+		repo:          repo,
+		provider:      provider,
+		releaseConfig: releaseConfig,
+		dryRun:        dryRun,
 	}
 }
 
@@ -446,7 +449,11 @@ func (a *ReleasePrepareAction) saveReleaseNotes(notes, version string) error {
 
 // openEditor opens the release notes in the user's editor
 func (a *ReleasePrepareAction) openEditor(version string) error {
-	editor := os.Getenv("EDITOR")
+	// Priority: 1. Config editor 2. $EDITOR 3. $VISUAL 4. Common editors
+	editor := a.releaseConfig.GetEditor()
+	if editor == "" {
+		editor = os.Getenv("EDITOR")
+	}
 	if editor == "" {
 		editor = os.Getenv("VISUAL")
 	}
