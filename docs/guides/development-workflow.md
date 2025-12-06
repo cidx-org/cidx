@@ -249,6 +249,61 @@ The GitHub workflow automatically detects the tag push and creates the release.
 
 Understanding the relationship between Git tags and GitHub releases:
 
+### Tag Management Commands
+
+CIDX provides dedicated commands for managing git tags with human review:
+
+#### Tag Workflow
+
+```bash
+# 1. Prepare tag (determines version, generates message)
+cidx action tag prepare
+
+# 2. Edit prepared files (optional)
+# - .cidx/tag-version: Target version number
+# - .cidx/tag-message: Tag annotation message
+
+# 3. Preview what will happen
+cidx action tag preview
+
+# 4. Create and push the tag
+cidx action tag create
+```
+
+#### Tag Utilities
+
+```bash
+# List tags with details
+cidx action tag list --verbose
+
+# Filter by pattern
+cidx action tag list --pattern "v1.*"
+
+# Delete a tag (locally)
+cidx action tag delete v1.2.3
+
+# Delete a tag (local + remote)
+cidx action tag delete v1.2.3 --remote
+
+# Delete a protected tag (requires --force)
+cidx action tag delete v1.0.0 --remote --force
+```
+
+#### Tag Configuration
+
+Configure tag behavior in `cidx.toml`:
+
+```toml
+[tag_workflow]
+prefix = "v"                    # Tag prefix (v1.2.3)
+use_commitizen = true           # Auto-determine version from commits
+auto_push = true                # Push tags automatically
+sign_tags = false               # GPG signing
+require_annotated = true        # Require annotated tags
+protected_tags = ["v1.*"]       # Patterns that can't be deleted
+linked_to_release = true        # Tags trigger release workflow
+```
+
 ### Git Tags
 
 **What**: Immutable Git references pointing to specific commits
@@ -256,7 +311,10 @@ Understanding the relationship between Git tags and GitHub releases:
 **Location**: Stored in Git repository (`.git/refs/tags/`)
 
 ```bash
-# View all tags
+# View all tags (with cidx)
+cidx action tag list
+
+# View all tags (with git)
 git tag
 
 # View tag details
@@ -558,11 +616,35 @@ cidx action release create
 ### Tag Already Exists
 
 **Error**: "Tag v1.2.0 already exists"
-**Solution**: Delete tag locally and remotely if it was created incorrectly:
+**Solution**: Delete tag using cidx or git:
 
 ```bash
+# Using cidx (recommended)
+cidx action tag delete v1.2.0 --remote
+
+# Using git directly
 git tag -d v1.2.0
 git push origin :refs/tags/v1.2.0
+```
+
+### Cannot Delete Protected Tag
+
+**Error**: "tag v1.0.0 is protected and cannot be deleted"
+**Solution**: Use `--force` flag to override protection:
+
+```bash
+cidx action tag delete v1.0.0 --remote --force
+```
+
+### No Prepared Version Found
+
+**Error**: "no prepared version found"
+**Solution**: Run `tag prepare` before `tag create`:
+
+```bash
+cidx action tag prepare
+# Review/edit .cidx/tag-version and .cidx/tag-message
+cidx action tag create
 ```
 
 ---
@@ -575,5 +657,5 @@ git push origin :refs/tags/v1.2.0
 
 ---
 
-**Last Updated**: 2025-01-25
-**CIDX Version**: 1.1.0+
+**Last Updated**: 2025-12-06
+**CIDX Version**: 1.2.0+
