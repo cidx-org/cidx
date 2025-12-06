@@ -212,6 +212,30 @@ func actionCommand() *cli.Command {
 				},
 			},
 			{
+				Name:  "nightly",
+				Usage: "Nightly build commands",
+				Subcommands: []*cli.Command{
+					{
+						Name:  "list",
+						Usage: "List nightly builds from GitHub Actions",
+						Flags: []cli.Flag{
+							&cli.IntFlag{
+								Name:    "limit",
+								Aliases: []string{"n"},
+								Usage:   "Limit number of builds shown",
+								Value:   10,
+							},
+							&cli.BoolFlag{
+								Name:    "verbose",
+								Aliases: []string{"v"},
+								Usage:   "Show detailed build information",
+							},
+						},
+						Action: nightlyListAction,
+					},
+				},
+			},
+			{
 				Name:  "release",
 				Usage: "Release management commands",
 				Subcommands: []*cli.Command{
@@ -627,6 +651,17 @@ func tagListAction(c *cli.Context) error {
 		tagConfig,
 		c.Int("limit"),
 		c.String("pattern"),
+		c.Bool("verbose"),
+	)
+
+	ctx := context.Background()
+	return action.Execute(ctx)
+}
+
+func nightlyListAction(c *cli.Context) error {
+	// Create and execute nightly list action
+	action := actions.NewNightlyList(
+		c.Int("limit"),
 		c.Bool("verbose"),
 	)
 
