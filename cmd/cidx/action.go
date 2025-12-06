@@ -212,31 +212,6 @@ func actionCommand() *cli.Command {
 				},
 			},
 			{
-				Name:  "workflow",
-				Usage: "GitHub Actions workflow commands",
-				Subcommands: []*cli.Command{
-					{
-						Name:      "list",
-						Usage:     "List runs for a GitHub Actions workflow",
-						ArgsUsage: "<workflow-name>",
-						Flags: []cli.Flag{
-							&cli.IntFlag{
-								Name:    "limit",
-								Aliases: []string{"n"},
-								Usage:   "Limit number of runs shown",
-								Value:   10,
-							},
-							&cli.BoolFlag{
-								Name:    "verbose",
-								Aliases: []string{"v"},
-								Usage:   "Show detailed run information",
-							},
-						},
-						Action: workflowListAction,
-					},
-				},
-			},
-			{
 				Name:  "release",
 				Usage: "Release management commands",
 				Subcommands: []*cli.Command{
@@ -659,20 +634,3 @@ func tagListAction(c *cli.Context) error {
 	return action.Execute(ctx)
 }
 
-func workflowListAction(c *cli.Context) error {
-	// Get workflow name from args
-	workflow := c.Args().First()
-	if workflow == "" {
-		return fmt.Errorf("workflow name is required: cidx action workflow list <workflow-name>")
-	}
-
-	// Create and execute workflow list action
-	action := actions.NewWorkflowList(
-		workflow,
-		c.Int("limit"),
-		c.Bool("verbose"),
-	)
-
-	ctx := context.Background()
-	return action.Execute(ctx)
-}
