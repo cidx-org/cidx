@@ -649,6 +649,48 @@ cidx action tag create
 
 ---
 
+## Nightly Builds
+
+CIDX automatically builds and publishes nightly versions from the main branch.
+
+### What Are Nightly Builds?
+
+Nightly builds are development versions published after every merge to main:
+
+- **Docker image**: `ghcr.io/cidx-org/cidx:nightly`
+- **Binary artifact**: Available in GitHub Actions for 7 days
+- **Version format**: `X.Y.Z-nightly.YYYYMMDD.SHORTSHA` (e.g., `1.2.0-nightly.20251206.abc1234`)
+
+### When to Use Nightly
+
+Use nightly builds when you want to:
+
+- Test the latest features before a release
+- Validate fixes merged to main
+- Run CI with cutting-edge cidx version
+
+```bash
+# Pull nightly Docker image
+docker pull ghcr.io/cidx-org/cidx:nightly
+
+# Use in your CI
+docker run ghcr.io/cidx-org/cidx:nightly cidx validate
+```
+
+### Nightly vs Release
+
+| Aspect         | Nightly                  | Release                             |
+| -------------- | ------------------------ | ----------------------------------- |
+| Trigger        | Every push to main       | Manual `cidx action release create` |
+| Docker tag     | `:nightly`               | `:vX.Y.Z` and `:latest`             |
+| Stability      | Development              | Production-ready                    |
+| GitHub Release | No                       | Yes                                 |
+| Version        | `X.Y.Z-nightly.DATE.SHA` | `X.Y.Z`                             |
+
+**Important**: Nightly builds are **not** production-ready. Use tagged releases for production.
+
+---
+
 ## Related Documentation
 
 - [Architecture: Git Operations](../architecture-git-operations.md) - Why we use native git vs go-git
