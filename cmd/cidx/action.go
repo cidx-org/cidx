@@ -6,11 +6,28 @@ import (
 	"os"
 
 	"github.com/cidx-org/cidx/pkg/actions"
+	"github.com/cidx-org/cidx/pkg/config"
 	"github.com/cidx-org/cidx/pkg/remote/github"
 	"github.com/cidx-org/cidx/pkg/vcs"
 	"github.com/cli/go-gh/v2/pkg/auth"
 	"github.com/urfave/cli/v2"
 )
+
+// loadReleaseConfig loads the release configuration from cidx.toml or returns defaults
+func loadReleaseConfig() config.ReleaseConfig {
+	cfg, err := config.Load("cidx.toml")
+	if err != nil {
+		// Return defaults if no config file
+		return config.DefaultReleaseConfig()
+	}
+	// Apply defaults for unset values
+	if cfg.Release.MainBranch == "" {
+		cfg.Release.MainBranch = "main"
+	}
+	// AutoCleanup defaults to true (zero value is false, so we need special handling)
+	// This is already handled by the config loader or we use the default
+	return cfg.Release
+}
 
 // getGitHubToken retrieves GitHub token from env var or gh CLI auth
 func getGitHubToken() (string, error) {
@@ -111,8 +128,35 @@ func actionCommand() *cli.Command {
 				Usage: "Release management commands",
 				Subcommands: []*cli.Command{
 					{
+						Name:  "prepare",
+						Usage: "Prepare release notes for human review (fetches PRs, commits, opens editor)",
+						Flags: []cli.Flag{
+							&cli.BoolFlag{
+								Name:  "dry-run",
+								Usage: "Show what would be generated without saving",
+							},
+						},
+						Action: releasePrepareAction,
+					},
+					{
+						Name:  "preview",
+						Usage: "Preview what will happen during release (version bump, changelog, workflow)",
+						Action: releasePreviewAction,
+					},
+					{
+						Name:  "commit",
+						Usage: "Commit prepared release notes (shortcut for git add/commit)",
+						Flags: []cli.Flag{
+							&cli.BoolFlag{
+								Name:  "dry-run",
+								Usage: "Show what would be done without making changes",
+							},
+						},
+						Action: releaseCommitAction,
+					},
+					{
 						Name:  "create",
-						Usage: "Create a new release with commitizen (bump version, tag, push, watch workflow)",
+						Usage: "Create a new release (bump version, tag, push, watch workflow)",
 						Flags: []cli.Flag{
 							&cli.BoolFlag{
 								Name:  "dry-run",
@@ -182,10 +226,14 @@ func releaseCreateAction(c *cli.Context) error {
 	// Create GitHub provider
 	provider := github.NewClient(token, owner, repoName)
 
+	// Load release config
+	releaseConfig := loadReleaseConfig()
+
 	// Create and execute release action
 	action := actions.NewRelease(
 		repo,
 		provider,
+		releaseConfig,
 		"release-create", // Action name from cidx.toml
 		c.Bool("dry-run"),
 	)
@@ -301,6 +349,81 @@ func prMergeAction(c *cli.Context) error {
 		c.String("method"),
 		c.Bool("watch"),
 		c.Bool("skip-checks"),
+		c.Bool("dry-run"),
+	)
+
+	ctx := context.Background()
+	return action.Execute(ctx)
+}
+
+func releasePrepareAction(c *cli.Context) error {
+	// Open repository
+	repo, err := vcs.OpenRepository(".")
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	// Get remote info
+	owner, repoName, err := repo.GetRemoteInfo()
+	if err != nil {
+		return fmt.Errorf("failed to get remote info: %w", err)
+	}
+
+	// Get GitHub token
+	token, err := getGitHubToken()
+	if err != nil {
+		return err
+	}
+
+	// Create GitHub provider
+	provider := github.NewClient(token, owner, repoName)
+
+	// Load release config
+	releaseConfig := loadReleaseConfig()
+
+	// Create and execute release prepare action
+	action := actions.NewReleasePrepare(
+		repo,
+		provider,
+		releaseConfig,
+		c.Bool("dry-run"),
+	)
+
+	ctx := context.Background()
+	return action.Execute(ctx)
+}
+
+func releasePreviewAction(c *cli.Context) error {
+	// Open repository
+	repo, err := vcs.OpenRepository(".")
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	// Load release config
+	releaseConfig := loadReleaseConfig()
+
+	// Create and execute release preview action
+	action := actions.NewReleasePreview(
+		repo,
+		releaseConfig,
+		false, // preview is always "dry-run" style
+	)
+
+	ctx := context.Background()
+	return action.Execute(ctx)
+}
+
+func releaseCommitAction(c *cli.Context) error {
+	// Open repository
+	repo, err := vcs.OpenRepository(".")
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	// Create and execute release commit action
+	action := actions.NewReleaseCommit(
+		repo,
 		c.Bool("dry-run"),
 	)
 

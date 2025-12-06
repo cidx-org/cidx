@@ -16,19 +16,21 @@ import (
 
 // ReleaseAction orchestrates the release process using dynamic action configuration
 type ReleaseAction struct {
-	repo       *vcs.Repository
-	provider   remote.Provider
-	actionName string
-	dryRun     bool
+	repo          *vcs.Repository
+	provider      remote.Provider
+	releaseConfig config.ReleaseConfig
+	actionName    string
+	dryRun        bool
 }
 
 // NewRelease creates a new release action
-func NewRelease(repo *vcs.Repository, provider remote.Provider, actionName string, dryRun bool) *ReleaseAction {
+func NewRelease(repo *vcs.Repository, provider remote.Provider, releaseConfig config.ReleaseConfig, actionName string, dryRun bool) *ReleaseAction {
 	return &ReleaseAction{
-		repo:       repo,
-		provider:   provider,
-		actionName: actionName,
-		dryRun:     dryRun,
+		repo:          repo,
+		provider:      provider,
+		releaseConfig: releaseConfig,
+		actionName:    actionName,
+		dryRun:        dryRun,
 	}
 }
 
@@ -45,12 +47,34 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 		return fmt.Errorf("action '%s' not found in configuration", a.actionName)
 	}
 
-	// DEBUG: Log loaded action config
-	log.Infof("DEBUG: Loaded action - Entrypoint: %v, Command: %s", action.Entrypoint, action.Command)
-
 	log.Infof("🚀 Running action: %s", a.actionName)
 	if action.Description != "" {
 		log.Infof("   %s", action.Description)
+	}
+
+	// Check for prepared version and release notes
+	workDirCheck, _ := a.repo.GetWorkDir()
+	hasPreparedVer := HasPreparedVersion(workDirCheck)
+	var preparedVersion string
+	var hasPreparedNotes bool
+
+	if hasPreparedVer {
+		preparedVersion, _ = LoadPreparedVersion(workDirCheck)
+		hasPreparedNotes = HasPreparedNotes(workDirCheck, preparedVersion)
+	}
+
+	if hasPreparedNotes {
+		log.Infof("📋 Using prepared release notes from %s", GetReleaseNotesFile(preparedVersion))
+	} else {
+		if a.releaseConfig.RequirePrepare {
+			return fmt.Errorf("no prepared release notes found\n   Run 'cidx action release prepare' first\n   Or set require_prepare = false in [release] config")
+		}
+		log.Info("📝 No prepared notes found - GitHub will auto-generate release notes")
+		log.Info("   Tip: Run 'cidx action release prepare' before creating releases")
+	}
+
+	if hasPreparedVer {
+		log.Infof("🏷️  Using prepared version: v%s", preparedVersion)
 	}
 
 	// 2. Check for uncommitted changes
@@ -63,14 +87,29 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 		return fmt.Errorf("cannot create release: you have uncommitted changes. Please commit or stash them first")
 	}
 
-	// 3. Get current branch
+	// 3. Get current branch and check against config
 	branch, err := a.repo.GetCurrentBranch()
 	if err != nil {
 		return fmt.Errorf("failed to get current branch: %w", err)
 	}
 
-	if branch != "main" {
-		log.Warnf("⚠️  You are on branch '%s', not 'main'. Are you sure you want to create a release?", branch)
+	mainBranch := a.releaseConfig.GetMainBranch()
+	isOnMainBranch := branch == mainBranch || (mainBranch == "main" && branch == "master")
+
+	if !isOnMainBranch {
+		if !a.releaseConfig.AllowReleaseFromAnyBranch {
+			log.Warnf("⚠️  You are on branch '%s', not '%s'", branch, mainBranch)
+			log.Info("   💡 Typical workflow for protected branches:")
+			log.Info("      1. Prepare & commit on this branch")
+			log.Infof("      2. Create PR and merge to %s", mainBranch)
+			log.Infof("      3. Run 'cidx action release create' on %s", mainBranch)
+			log.Info("")
+			log.Info("   To allow releases from any branch, set in cidx.toml:")
+			log.Info("   [release]")
+			log.Info("   allow_release_from_any_branch = true")
+			return fmt.Errorf("releases can only be created from '%s' branch", mainBranch)
+		}
+		log.Warnf("⚠️  Creating release from branch '%s' (not '%s')", branch, mainBranch)
 	}
 
 	// 4. Get working directory
@@ -113,11 +152,23 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 		volumes[i] = strings.ReplaceAll(vol, "${WORKSPACE}", workDir)
 	}
 
+	// Modify command to use exact version if prepared
+	command := action.Command
+	if hasPreparedVer && preparedVersion != "" {
+		// Replace increment-based bump with exact version
+		// The default command is typically "cz bump --changelog --yes"
+		// We change it to "cz bump --exact-version X.X.X --changelog --yes"
+		if strings.Contains(command, "cz bump") && !strings.Contains(command, "--exact-version") {
+			command = strings.Replace(command, "cz bump", fmt.Sprintf("cz bump --exact-version %s", preparedVersion), 1)
+			log.Debugf("Modified command to use exact version: %s", command)
+		}
+	}
+
 	containerConfig := &config.ContainerConfig{
 		Name:       a.actionName,
 		Phase:      "action",
 		Image:      action.Image,
-		Command:    action.Command,
+		Command:    command,
 		Entrypoint: action.Entrypoint,
 		Workdir:    action.Workdir,
 		Volumes:    volumes,
@@ -166,6 +217,8 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 	// 9. Watch workflow if configured
 	if !action.WatchWorkflow {
 		log.Info("✅ Release action completed")
+		// Cleanup prepared files when not watching workflow
+		a.cleanupPreparedFiles(workDir, preparedVersion, hasPreparedNotes, hasPreparedVer)
 		return nil
 	}
 
@@ -204,6 +257,8 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 			if update.Workflow.Conclusion == "success" {
 				log.Infof("🎉 Release v%s completed successfully!", newVersion)
 				log.Infof("🔗 View release at: https://github.com/%s/releases/tag/v%s", a.getRepoPath(), newVersion)
+				// Cleanup prepared files after successful release
+				a.cleanupPreparedFiles(workDir, preparedVersion, hasPreparedNotes, hasPreparedVer)
 			} else {
 				log.Errorf("❌ Release workflow failed: %s", update.Workflow.Conclusion)
 				return fmt.Errorf("release workflow failed with conclusion: %s", update.Workflow.Conclusion)
@@ -266,4 +321,27 @@ func (a *ReleaseAction) getRepoPath() string {
 		return "unknown/unknown"
 	}
 	return fmt.Sprintf("%s/%s", owner, repo)
+}
+
+// cleanupPreparedFiles removes prepared release notes and version files (if auto_cleanup is enabled)
+func (a *ReleaseAction) cleanupPreparedFiles(workDir, version string, hasNotes, hasVersion bool) {
+	if !a.releaseConfig.AutoCleanup {
+		log.Debug("Auto-cleanup disabled, keeping prepared files")
+		return
+	}
+
+	if hasNotes && version != "" {
+		if err := CleanupPreparedNotes(workDir, version); err != nil {
+			log.Warnf("⚠️  Could not cleanup release notes: %v", err)
+		} else {
+			log.Infof("🧹 Cleaned up %s", GetReleaseNotesFile(version))
+		}
+	}
+	if hasVersion {
+		if err := CleanupPreparedVersion(workDir); err != nil {
+			log.Warnf("⚠️  Could not cleanup version file: %v", err)
+		} else {
+			log.Info("🧹 Cleaned up prepared version file")
+		}
+	}
 }

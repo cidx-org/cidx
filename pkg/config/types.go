@@ -6,6 +6,7 @@ type Config struct {
 	Pipelines map[string]Pipeline               `toml:"pipelines"`
 	Actions   map[string]Action                 `toml:"actions"`
 	Branch    BranchConfig                      `toml:"branch"`
+	Release   ReleaseConfig                     `toml:"release"`
 	Overrides map[string]map[string]interface{} `toml:",inline"`
 	Workspace string                            // Auto-detected or from env
 }
@@ -16,6 +17,58 @@ type BranchConfig struct {
 	NamingPattern string   `toml:"naming_pattern"`  // Regex pattern for valid branch names
 	AutoCleanup   bool     `toml:"auto_cleanup"`    // Cleanup merged branches after PR merge
 	Protected     []string `toml:"protected"`       // Branches that should never be deleted
+}
+
+// ReleaseConfig defines release workflow settings
+type ReleaseConfig struct {
+	// MainBranch is the branch where releases are created (default: "main")
+	MainBranch string `toml:"main_branch"`
+
+	// AllowReleaseFromAnyBranch allows creating releases from any branch (default: false)
+	// When false, releases can only be created from MainBranch
+	AllowReleaseFromAnyBranch bool `toml:"allow_release_from_any_branch"`
+
+	// RequirePrepare requires running 'release prepare' before 'release create' (default: false)
+	// When true, releases cannot be created without prepared notes
+	RequirePrepare bool `toml:"require_prepare"`
+
+	// AutoCleanup automatically removes .cidx/release-* files after successful release (default: true)
+	AutoCleanup bool `toml:"auto_cleanup"`
+
+	// Editor is the command to open release notes for editing (default: $EDITOR or "vim")
+	Editor string `toml:"editor"`
+
+	// NotesTemplate is a custom template for release notes (optional)
+	NotesTemplate string `toml:"notes_template"`
+}
+
+// DefaultReleaseConfig returns a ReleaseConfig with sensible defaults
+func DefaultReleaseConfig() ReleaseConfig {
+	return ReleaseConfig{
+		MainBranch:                "main",
+		AllowReleaseFromAnyBranch: false,
+		RequirePrepare:            false,
+		AutoCleanup:               true,
+		Editor:                    "", // Will fall back to $EDITOR or "vim"
+		NotesTemplate:             "",
+	}
+}
+
+// GetMainBranch returns the main branch name with fallback to "main"
+func (r *ReleaseConfig) GetMainBranch() string {
+	if r.MainBranch == "" {
+		return "main"
+	}
+	return r.MainBranch
+}
+
+// GetEditor returns the editor command with fallback to $EDITOR or "vim"
+func (r *ReleaseConfig) GetEditor() string {
+	if r.Editor != "" {
+		return r.Editor
+	}
+	// Check $EDITOR env var at runtime (in the action)
+	return ""
 }
 
 // Phase defines containers for a specific phase
