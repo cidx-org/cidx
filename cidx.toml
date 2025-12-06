@@ -108,6 +108,92 @@ auto_cleanup = true
 # notes_template = ".github/RELEASE_TEMPLATE.md"
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 🏷️  TAG WORKFLOW CONFIGURATION
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#
+# Configure how git tags are created and managed.
+# This section controls the behavior of tag commands:
+#   - cidx action tag prepare   (prepare version and message for review)
+#   - cidx action tag preview   (preview what will happen)
+#   - cidx action tag create    (create and optionally push tag)
+#   - cidx action tag delete    (delete tags locally and/or remotely)
+#   - cidx action tag list      (list tags with filtering)
+#
+# TAG vs RELEASE:
+# ──────────────────────────────────────────────────────────────────────────────
+# Tags and releases can be managed independently or together:
+#
+# 1. COMBINED (this project - default)
+#    - Tags trigger release workflows automatically
+#    - Use 'cidx action release create' which handles both
+#    - Set: linked_to_release = true
+#
+# 2. INDEPENDENT
+#    - Tags are just git markers, releases are separate
+#    - Use 'cidx action tag create' for tags only
+#    - Use 'cidx action release create' for releases only
+#    - Set: linked_to_release = false
+#
+# VERSION DETERMINATION:
+# ──────────────────────────────────────────────────────────────────────────────
+# 1. AUTOMATIC (commitizen)
+#    - Analyzes conventional commits to determine bump type
+#    - MAJOR for breaking changes, MINOR for features, PATCH for fixes
+#    - Set: use_commitizen = true
+#
+# 2. MANUAL
+#    - Increments patch version from last tag
+#    - Edit .cidx/tag-version file to customize
+#    - Set: use_commitizen = false
+#
+[tag_workflow]
+# Tag prefix (prepended to version number)
+# Examples: "v" → v1.2.3, "" → 1.2.3, "release-" → release-1.2.3
+# Default: "v"
+prefix = "v"
+
+# Regex pattern for valid tag names (optional)
+# If empty, accepts any semver-compatible tag with prefix
+# Example: "^v\\d+\\.\\d+\\.\\d+(-[a-z]+\\.\\d+)?$" for v1.2.3 or v1.2.3-beta.1
+# pattern = ""
+
+# Use commitizen to determine next version from conventional commits
+# When true: runs "cz bump --dry-run" to analyze commits
+# When false: increments patch version from last tag
+# Default: true
+use_commitizen = true
+
+# Automatically push tags to remote after creation
+# When true: git push origin <tag> is executed automatically
+# When false: tags are created locally only, push manually
+# Default: true
+auto_push = true
+
+# Sign tags with GPG (requires configured GPG key)
+# When true: creates signed tags with -s flag
+# When false: creates unsigned tags
+# Default: false
+sign_tags = false
+
+# Require annotated tags with message
+# When true: creates annotated tags with -a -m flags (recommended)
+# When false: allows lightweight tags (just a pointer)
+# Default: true
+require_annotated = true
+
+# Protected tag patterns (cannot be deleted without --force)
+# Uses glob patterns to match tag names
+# Examples: ["v1.*", "release-*", "production"]
+# Default: [] (no protection)
+protected_tags = ["v1.*"]
+
+# Link tags to release workflow
+# When true: pushing a tag should trigger release pipeline
+# When false: tags are independent from releases
+# Default: true
+linked_to_release = true
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 📦 CONTAINERS CONFIGURATION
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #

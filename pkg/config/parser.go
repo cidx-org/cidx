@@ -28,6 +28,7 @@ func Load(path string) (*Config, error) {
 		Actions:   make(map[string]Action),
 		Overrides: make(map[string]map[string]interface{}),
 		Release:   DefaultReleaseConfig(), // Start with defaults
+		Tag:       DefaultTagConfig(),     // Start with defaults
 		Workspace: os.Getenv("PWD"),
 	}
 
@@ -38,6 +39,45 @@ func Load(path string) (*Config, error) {
 	for name, value := range raw {
 		section, ok := value.(map[string]interface{})
 		if !ok {
+			continue
+		}
+
+		// Check if this is the "tag_workflow" section
+		if name == "tag_workflow" {
+			if prefix, ok := section["prefix"].(string); ok {
+				cfg.Tag.Prefix = prefix
+			}
+			if pattern, ok := section["pattern"].(string); ok {
+				cfg.Tag.Pattern = pattern
+			}
+			if useCz, ok := section["use_commitizen"].(bool); ok {
+				cfg.Tag.UseCommitizen = useCz
+			}
+			if autoPush, ok := section["auto_push"].(bool); ok {
+				cfg.Tag.AutoPush = autoPush
+			}
+			if signTags, ok := section["sign_tags"].(bool); ok {
+				cfg.Tag.SignTags = signTags
+			}
+			if reqAnnot, ok := section["require_annotated"].(bool); ok {
+				cfg.Tag.RequireAnnotated = reqAnnot
+			}
+			if linkedRel, ok := section["linked_to_release"].(bool); ok {
+				cfg.Tag.LinkedToRelease = linkedRel
+			}
+			// Parse protected_tags array
+			if protectedRaw, hasProtected := section["protected_tags"]; hasProtected {
+				switch p := protectedRaw.(type) {
+				case []interface{}:
+					for _, tag := range p {
+						if tagStr, ok := tag.(string); ok {
+							cfg.Tag.ProtectedTags = append(cfg.Tag.ProtectedTags, tagStr)
+						}
+					}
+				case []string:
+					cfg.Tag.ProtectedTags = p
+				}
+			}
 			continue
 		}
 
