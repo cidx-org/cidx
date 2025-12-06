@@ -11,10 +11,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// NightlyListAction lists nightly builds from GitHub Actions
-type NightlyListAction struct {
-	limit   int
-	verbose bool
+// WorkflowListAction lists workflow runs from GitHub Actions
+type WorkflowListAction struct {
+	workflow string
+	limit    int
+	verbose  bool
 }
 
 // WorkflowRun represents a GitHub Actions workflow run
@@ -38,31 +39,32 @@ type WorkflowRunsResponse struct {
 	WorkflowRuns []WorkflowRun `json:"workflow_runs"`
 }
 
-// NewNightlyList creates a new nightly list action
-func NewNightlyList(limit int, verbose bool) *NightlyListAction {
-	return &NightlyListAction{
-		limit:   limit,
-		verbose: verbose,
+// NewWorkflowList creates a new workflow list action
+func NewWorkflowList(workflow string, limit int, verbose bool) *WorkflowListAction {
+	return &WorkflowListAction{
+		workflow: workflow,
+		limit:    limit,
+		verbose:  verbose,
 	}
 }
 
-// Execute lists nightly builds from GitHub Actions
-func (a *NightlyListAction) Execute(ctx context.Context) error {
+// Execute lists workflow runs from GitHub Actions
+func (a *WorkflowListAction) Execute(ctx context.Context) error {
 	// Check if gh CLI is available
 	if _, err := exec.LookPath("gh"); err != nil {
 		return fmt.Errorf("gh CLI not found. Install from https://cli.github.com")
 	}
 
-	// Get workflow runs for nightly.yml
+	// Get workflow runs
 	runs, err := a.getWorkflowRuns()
 	if err != nil {
 		return fmt.Errorf("failed to get workflow runs: %w", err)
 	}
 
 	if len(runs) == 0 {
-		log.Info("No nightly builds found")
+		log.Infof("No runs found for workflow '%s'", a.workflow)
 		log.Info("")
-		log.Info("Note: Nightly builds run automatically on push to main branch.")
+		log.Infof("Note: Check that .github/workflows/%s.yml exists and has been triggered.", a.workflow)
 		return nil
 	}
 
@@ -82,11 +84,16 @@ func (a *NightlyListAction) Execute(ctx context.Context) error {
 }
 
 // getWorkflowRuns fetches workflow runs from GitHub
-func (a *NightlyListAction) getWorkflowRuns() ([]WorkflowRun, error) {
+func (a *WorkflowListAction) getWorkflowRuns() ([]WorkflowRun, error) {
 	// Use gh CLI to get workflow runs
+	workflowFile := a.workflow
+	if !strings.HasSuffix(workflowFile, ".yml") && !strings.HasSuffix(workflowFile, ".yaml") {
+		workflowFile = a.workflow + ".yml"
+	}
+
 	args := []string{
 		"api",
-		"repos/{owner}/{repo}/actions/workflows/nightly.yml/runs",
+		fmt.Sprintf("repos/{owner}/{repo}/actions/workflows/%s/runs", workflowFile),
 		"--jq", ".",
 	}
 
@@ -109,8 +116,8 @@ func (a *NightlyListAction) getWorkflowRuns() ([]WorkflowRun, error) {
 }
 
 // displaySimple shows runs in a simple list format
-func (a *NightlyListAction) displaySimple(runs []WorkflowRun) {
-	log.Infof("🌙 Nightly Builds (%d):", len(runs))
+func (a *WorkflowListAction) displaySimple(runs []WorkflowRun) {
+	log.Infof("🔄 Workflow '%s' runs (%d):", a.workflow, len(runs))
 	log.Info("")
 
 	for _, run := range runs {
@@ -126,13 +133,13 @@ func (a *NightlyListAction) displaySimple(runs []WorkflowRun) {
 }
 
 // displayVerbose shows runs with additional information
-func (a *NightlyListAction) displayVerbose(runs []WorkflowRun) {
-	log.Infof("🌙 Nightly Builds (%d):", len(runs))
+func (a *WorkflowListAction) displayVerbose(runs []WorkflowRun) {
+	log.Infof("🔄 Workflow '%s' runs (%d):", a.workflow, len(runs))
 	log.Info("")
 
 	// Header
-	fmt.Printf("  %-8s %-6s %-16s %-10s %s\n", "STATUS", "RUN", "DATE", "COMMIT", "TITLE")
-	fmt.Printf("  %-8s %-6s %-16s %-10s %s\n", "------", "---", "----", "------", "-----")
+	fmt.Printf("  %-8s %-6s %-16s %-10s %-12s %s\n", "STATUS", "RUN", "DATE", "COMMIT", "BRANCH", "TITLE")
+	fmt.Printf("  %-8s %-6s %-16s %-10s %-12s %s\n", "------", "---", "----", "------", "------", "-----")
 
 	for _, run := range runs {
 		status := a.formatStatus(run.Conclusion, run.Status)
@@ -142,12 +149,17 @@ func (a *NightlyListAction) displayVerbose(runs []WorkflowRun) {
 			shortSha = shortSha[:7]
 		}
 
-		title := run.DisplayTitle
-		if len(title) > 40 {
-			title = title[:37] + "..."
+		branch := run.HeadBranch
+		if len(branch) > 12 {
+			branch = branch[:9] + "..."
 		}
 
-		fmt.Printf("  %-8s #%-5d %-16s %-10s %s\n", status, run.RunNumber, date, shortSha, title)
+		title := run.DisplayTitle
+		if len(title) > 35 {
+			title = title[:32] + "..."
+		}
+
+		fmt.Printf("  %-8s #%-5d %-16s %-10s %-12s %s\n", status, run.RunNumber, date, shortSha, branch, title)
 	}
 
 	log.Info("")
@@ -155,18 +167,18 @@ func (a *NightlyListAction) displayVerbose(runs []WorkflowRun) {
 }
 
 // formatStatus returns a formatted status string with emoji
-func (a *NightlyListAction) formatStatus(conclusion, status string) string {
+func (a *WorkflowListAction) formatStatus(conclusion, status string) string {
 	if status == "in_progress" || status == "queued" {
-		return "🔄 running"
+		return "🔄 run"
 	}
 
 	switch conclusion {
 	case "success":
-		return "✅ success"
+		return "✅ ok"
 	case "failure":
-		return "❌ failed"
+		return "❌ fail"
 	case "cancelled":
-		return "⏹️  cancel"
+		return "⏹️  stop"
 	case "skipped":
 		return "⏭️  skip"
 	default:
