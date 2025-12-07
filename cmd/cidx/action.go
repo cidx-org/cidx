@@ -29,6 +29,16 @@ func loadReleaseConfig() config.ReleaseConfig {
 	return cfg.Release
 }
 
+// loadTagConfig loads the tag configuration from cidx.toml or returns defaults
+func loadTagConfig() config.TagConfig {
+	cfg, err := config.Load("cidx.toml")
+	if err != nil {
+		// Return defaults if no config file
+		return config.DefaultTagConfig()
+	}
+	return cfg.Tag
+}
+
 // getGitHubToken retrieves GitHub token from env var or gh CLI auth
 func getGitHubToken() (string, error) {
 	// 1. Try environment variable first
@@ -120,6 +130,84 @@ func actionCommand() *cli.Command {
 							},
 						},
 						Action: prMergeAction,
+					},
+				},
+			},
+			{
+				Name:  "tag",
+				Usage: "Tag management commands",
+				Subcommands: []*cli.Command{
+					{
+						Name:  "prepare",
+						Usage: "Prepare a tag version and message for review",
+						Flags: []cli.Flag{
+							&cli.BoolFlag{
+								Name:  "dry-run",
+								Usage: "Show what would be generated without saving",
+							},
+						},
+						Action: tagPrepareAction,
+					},
+					{
+						Name:  "preview",
+						Usage: "Preview what will happen during tag creation",
+						Action: tagPreviewAction,
+					},
+					{
+						Name:  "create",
+						Usage: "Create and optionally push a git tag",
+						Flags: []cli.Flag{
+							&cli.BoolFlag{
+								Name:  "dry-run",
+								Usage: "Show what would be done without making changes",
+							},
+						},
+						Action: tagCreateAction,
+					},
+					{
+						Name:      "delete",
+						Usage:     "Delete a git tag locally and optionally from remote",
+						ArgsUsage: "<tag-name>",
+						Flags: []cli.Flag{
+							&cli.BoolFlag{
+								Name:    "remote",
+								Aliases: []string{"r"},
+								Usage:   "Also delete from remote",
+							},
+							&cli.BoolFlag{
+								Name:    "force",
+								Aliases: []string{"f"},
+								Usage:   "Force deletion of protected tags",
+							},
+							&cli.BoolFlag{
+								Name:  "dry-run",
+								Usage: "Show what would be done without making changes",
+							},
+						},
+						Action: tagDeleteAction,
+					},
+					{
+						Name:  "list",
+						Usage: "List git tags with optional filtering",
+						Flags: []cli.Flag{
+							&cli.IntFlag{
+								Name:    "limit",
+								Aliases: []string{"n"},
+								Usage:   "Limit number of tags shown",
+								Value:   20,
+							},
+							&cli.StringFlag{
+								Name:    "pattern",
+								Aliases: []string{"p"},
+								Usage:   "Filter tags by pattern (e.g., 'v1.*')",
+							},
+							&cli.BoolFlag{
+								Name:    "verbose",
+								Aliases: []string{"v"},
+								Usage:   "Show detailed tag information",
+							},
+						},
+						Action: tagListAction,
 					},
 				},
 			},
@@ -430,3 +518,119 @@ func releaseCommitAction(c *cli.Context) error {
 	ctx := context.Background()
 	return action.Execute(ctx)
 }
+
+func tagPrepareAction(c *cli.Context) error {
+	// Open repository
+	repo, err := vcs.OpenRepository(".")
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	// Load tag config
+	tagConfig := loadTagConfig()
+
+	// Create and execute tag prepare action
+	action := actions.NewTagPrepare(
+		repo,
+		tagConfig,
+		c.Bool("dry-run"),
+	)
+
+	ctx := context.Background()
+	return action.Execute(ctx)
+}
+
+func tagPreviewAction(c *cli.Context) error {
+	// Open repository
+	repo, err := vcs.OpenRepository(".")
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	// Load tag config
+	tagConfig := loadTagConfig()
+
+	// Create and execute tag preview action
+	action := actions.NewTagPreview(
+		repo,
+		tagConfig,
+	)
+
+	ctx := context.Background()
+	return action.Execute(ctx)
+}
+
+func tagCreateAction(c *cli.Context) error {
+	// Open repository
+	repo, err := vcs.OpenRepository(".")
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	// Load tag config
+	tagConfig := loadTagConfig()
+
+	// Create and execute tag create action
+	action := actions.NewTagCreate(
+		repo,
+		tagConfig,
+		c.Bool("dry-run"),
+	)
+
+	ctx := context.Background()
+	return action.Execute(ctx)
+}
+
+func tagDeleteAction(c *cli.Context) error {
+	// Get tag name from args
+	tagName := c.Args().First()
+	if tagName == "" {
+		return fmt.Errorf("tag name is required: cidx action tag delete <tag-name>")
+	}
+
+	// Open repository
+	repo, err := vcs.OpenRepository(".")
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	// Load tag config
+	tagConfig := loadTagConfig()
+
+	// Create and execute tag delete action
+	action := actions.NewTagDelete(
+		repo,
+		tagConfig,
+		tagName,
+		c.Bool("remote"),
+		c.Bool("force"),
+		c.Bool("dry-run"),
+	)
+
+	ctx := context.Background()
+	return action.Execute(ctx)
+}
+
+func tagListAction(c *cli.Context) error {
+	// Open repository
+	repo, err := vcs.OpenRepository(".")
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	// Load tag config
+	tagConfig := loadTagConfig()
+
+	// Create and execute tag list action
+	action := actions.NewTagList(
+		repo,
+		tagConfig,
+		c.Int("limit"),
+		c.String("pattern"),
+		c.Bool("verbose"),
+	)
+
+	ctx := context.Background()
+	return action.Execute(ctx)
+}
+

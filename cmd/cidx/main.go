@@ -24,6 +24,7 @@ func main() {
 			validateCommand(),
 			initCommand(),
 			actionCommand(),
+			workflowCommand(),
 			checkCommand,
 			branchCommand(),
 			vulnCommand(),
