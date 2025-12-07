@@ -5,11 +5,15 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/cidx-org/cidx/pkg/remote"
 	"github.com/cidx-org/cidx/pkg/vcs"
 	log "github.com/sirupsen/logrus"
 )
+
+// Default timeout for waiting for CI to start
+const defaultCIStartTimeout = 60 * time.Second
 
 // PRAction manages pull request workflow
 type PRAction struct {
@@ -241,53 +245,78 @@ func (a *PRAction) mergePR(ctx context.Context) error {
 
 	// Pre-merge checks validation (unless skipped)
 	if !a.skipChecks && !a.dryRun {
-		log.Info("🔍 Checking PR status and workflows...")
-		checks, err := a.provider.GetPullRequestChecks(ctx, prNumber)
+		log.Info("🔍 Waiting for CI to start and checking PR status...")
+
+		// Wait for CI to start - this ensures we check the correct commit's CI
+		headSHA, checks, err := a.provider.WaitForChecksToStart(ctx, prNumber, defaultCIStartTimeout)
 		if err != nil {
-			return fmt.Errorf("failed to get PR checks: %w", err)
-		}
-
-		// Display current status
-		displayChecksStatus(checks)
-
-		// If checks are pending, watch them
-		if checks.Status == "pending" {
-			log.Info("⏳ Waiting for checks to complete...")
-			updates, err := a.provider.WatchPullRequestChecks(ctx, prNumber)
-			if err != nil {
-				return fmt.Errorf("failed to watch PR checks: %w", err)
+			// Check if it's a "no CI configured" error
+			if checks != nil && checks.TotalCount == 0 {
+				log.Warn("⚠️  No CI checks configured for this repository")
+				log.Info("💡 Proceeding without CI validation")
+			} else {
+				return fmt.Errorf("failed waiting for CI to start: %w", err)
 			}
+		} else {
+			shortSHA := headSHA
+			if len(shortSHA) > 7 {
+				shortSHA = shortSHA[:7]
+			}
+			log.Infof("📍 Checking CI for commit %s", shortSHA)
 
-			// Watch until complete
-			for update := range updates {
-				if update.Error != nil {
-					return update.Error
+			// Display current status
+			displayChecksStatus(checks)
+
+			// If checks are pending, watch them
+			if checks.Status == "pending" {
+				log.Info("⏳ Waiting for checks to complete...")
+				updates, err := a.provider.WatchPullRequestChecks(ctx, prNumber)
+				if err != nil {
+					return fmt.Errorf("failed to watch PR checks: %w", err)
 				}
 
-				displayChecksStatus(update.Checks)
+				// Watch until complete
+				for update := range updates {
+					if update.Error != nil {
+						return update.Error
+					}
 
-				// All checks complete
-				if update.Checks.Pending == 0 {
-					break
+					// Verify we're still watching the same commit
+					if update.Checks.HeadSHA != headSHA {
+						log.Warnf("⚠️  HEAD SHA changed during check - new commits were pushed")
+						return fmt.Errorf("HEAD SHA changed during CI check - please retry")
+					}
+
+					displayChecksStatus(update.Checks)
+
+					// All checks complete
+					if update.Checks.Pending == 0 {
+						break
+					}
+				}
+
+				// Get final status
+				checks, err = a.provider.GetPullRequestChecks(ctx, prNumber)
+				if err != nil {
+					return fmt.Errorf("failed to get final PR checks: %w", err)
+				}
+
+				// Final SHA verification
+				if checks.HeadSHA != headSHA {
+					return fmt.Errorf("HEAD SHA changed during CI check - please retry")
 				}
 			}
 
-			// Get final status
-			checks, err = a.provider.GetPullRequestChecks(ctx, prNumber)
-			if err != nil {
-				return fmt.Errorf("failed to get final PR checks: %w", err)
+			// Check if merge is safe
+			if checks.Status == "failure" {
+				log.Error("❌ Cannot merge: some checks have failed")
+				log.Info("💡 Use --skip-checks to bypass (not recommended)")
+				return fmt.Errorf("PR checks failed: %d/%d checks failed", checks.Failure, checks.TotalCount)
 			}
-		}
 
-		// Check if merge is safe
-		if checks.Status == "failure" {
-			log.Error("❌ Cannot merge: some checks have failed")
-			log.Info("💡 Use --skip-checks to bypass (not recommended)")
-			return fmt.Errorf("PR checks failed: %d/%d checks failed", checks.Failure, checks.TotalCount)
+			log.Info("✅ All checks passed! Ready to merge")
+			fmt.Println() // Separator
 		}
-
-		log.Info("✅ All checks passed! Ready to merge")
-		fmt.Println() // Separator
 	}
 
 	if a.dryRun {

@@ -331,6 +331,7 @@ func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remot
 	headSHA := pr.GetHead().GetSHA()
 
 	checks := &remote.PRChecks{
+		HeadSHA:      headSHA,
 		Checks:       []remote.CheckRun{},
 		StatusChecks: []remote.StatusCheck{},
 	}
@@ -396,6 +397,72 @@ func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remot
 	}
 
 	return checks, nil
+}
+
+// WaitForChecksToStart waits for CI checks to start for a PR
+// This solves the race condition where CI hasn't started yet when we query
+func (c *Client) WaitForChecksToStart(ctx context.Context, prNumber int, timeout time.Duration) (string, *remote.PRChecks, error) {
+	// Get PR details to get the head SHA we're waiting for
+	pr, _, err := c.client.PullRequests.Get(ctx, c.owner, c.repo, prNumber)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to get pull request: %w", err)
+	}
+
+	expectedSHA := pr.GetHead().GetSHA()
+	shortSHA := expectedSHA
+	if len(shortSHA) > 7 {
+		shortSHA = shortSHA[:7]
+	}
+
+	// Create timeout context
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	// Poll for checks to appear
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	startTime := time.Now()
+
+	for {
+		select {
+		case <-timeoutCtx.Done():
+			// Timeout reached - return current state with warning
+			checks, err := c.GetPullRequestChecks(ctx, prNumber)
+			if err != nil {
+				return expectedSHA, nil, fmt.Errorf("timeout waiting for CI to start (waited %v): %w", timeout, err)
+			}
+			// If no checks after timeout, it might be a repo without CI
+			if checks.TotalCount == 0 {
+				return expectedSHA, checks, fmt.Errorf("no CI checks found after %v - repository may not have CI configured", timeout)
+			}
+			return expectedSHA, checks, nil
+
+		case <-ticker.C:
+			checks, err := c.GetPullRequestChecks(ctx, prNumber)
+			if err != nil {
+				continue // Retry on transient errors
+			}
+
+			// Verify we're checking the right commit
+			if checks.HeadSHA != expectedSHA {
+				// SHA mismatch - CI might be running for old commit, wait for new one
+				continue
+			}
+
+			// Check if CI has started (at least one check exists)
+			if checks.TotalCount > 0 {
+				elapsed := time.Since(startTime)
+				if elapsed > 2*time.Second {
+					// Only log if we actually waited
+					_ = elapsed // Will be used by caller for logging
+				}
+				return expectedSHA, checks, nil
+			}
+
+			// No checks yet, continue waiting
+		}
+	}
 }
 
 // GetPullRequest returns a single pull request by number
