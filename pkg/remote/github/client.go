@@ -409,10 +409,6 @@ func (c *Client) WaitForChecksToStart(ctx context.Context, prNumber int, timeout
 	}
 
 	expectedSHA := pr.GetHead().GetSHA()
-	shortSHA := expectedSHA
-	if len(shortSHA) > 7 {
-		shortSHA = shortSHA[:7]
-	}
 
 	// Create timeout context
 	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
@@ -421,8 +417,6 @@ func (c *Client) WaitForChecksToStart(ctx context.Context, prNumber int, timeout
 	// Poll for checks to appear
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
-
-	startTime := time.Now()
 
 	for {
 		select {
@@ -452,11 +446,6 @@ func (c *Client) WaitForChecksToStart(ctx context.Context, prNumber int, timeout
 
 			// Check if CI has started (at least one check exists)
 			if checks.TotalCount > 0 {
-				elapsed := time.Since(startTime)
-				if elapsed > 2*time.Second {
-					// Only log if we actually waited
-					_ = elapsed // Will be used by caller for logging
-				}
 				return expectedSHA, checks, nil
 			}
 
