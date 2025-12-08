@@ -31,6 +31,24 @@ func NewClient(token, owner, repo string) *Client {
 	}
 }
 
+// NewClientWithBaseURL creates a new GitHub client for GitHub Enterprise with custom base URL
+func NewClientWithBaseURL(token, owner, repo, baseURL string) (*Client, error) {
+	client := github.NewClient(nil).WithAuthToken(token)
+
+	// Parse and set the base URL for Enterprise
+	var err error
+	client, err = client.WithEnterpriseURLs(baseURL, baseURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to set enterprise URLs: %w", err)
+	}
+
+	return &Client{
+		client: client,
+		owner:  owner,
+		repo:   repo,
+	}, nil
+}
+
 // NewClientFromEnv creates a GitHub client using environment variables and git remote
 func NewClientFromEnv() (*Client, error) {
 	// Get token from environment
