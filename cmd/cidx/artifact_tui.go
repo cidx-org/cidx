@@ -252,17 +252,19 @@ func (m artifactModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "d":
-			// Show confirmation dialog for selected items
-			if !m.confirming && !m.deleting {
+			// Show confirmation dialog for selected items (or current item if none selected)
+			if !m.confirming && !m.deleting && len(m.items) > 0 {
 				selected := 0
 				for _, item := range m.items {
 					if item.selected {
 						selected++
 					}
 				}
-				if selected > 0 {
-					m.confirming = true
+				// If nothing selected, select current item
+				if selected == 0 {
+					m.items[m.cursor].selected = true
 				}
+				m.confirming = true
 			}
 
 		case "y", "Y":
@@ -274,9 +276,12 @@ func (m artifactModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "n", "N":
-			// Cancel deletion
+			// Cancel deletion and deselect all
 			if m.confirming {
 				m.confirming = false
+				for i := range m.items {
+					m.items[i].selected = false
+				}
 			}
 
 		case "r":
