@@ -301,6 +301,12 @@ func actionCommand() *cli.Command {
 				Usage: "GitHub Actions artifact management",
 				Subcommands: []*cli.Command{
 					{
+						Name:    "tui",
+						Usage:   "Interactive artifact manager (TUI)",
+						Aliases: []string{"ui"},
+						Action:  artifactTUIAction,
+					},
+					{
 						Name:  "list",
 						Usage: "List all artifacts with storage statistics",
 						Flags: []cli.Flag{
@@ -784,5 +790,14 @@ func artifactCleanupAction(c *cli.Context) error {
 
 	ctx := context.Background()
 	return action.Execute(ctx)
+}
+
+func artifactTUIAction(c *cli.Context) error {
+	ghClient, err := getGitHubClient()
+	if err != nil {
+		return err
+	}
+
+	return runArtifactTUI(ghClient)
 }
 
