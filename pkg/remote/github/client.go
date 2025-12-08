@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -659,4 +660,117 @@ func (c *Client) DeleteExpiredArtifacts(ctx context.Context) (deleted int, freed
 	}
 
 	return deleted, freedBytes, nil
+}
+
+// GetPullRequestDetails returns comprehensive PR details for TUI display
+func (c *Client) GetPullRequestDetails(ctx context.Context, prNumber int) (*remote.PullRequestDetails, error) {
+	// Get PR details
+	pr, _, err := c.client.PullRequests.Get(ctx, c.owner, c.repo, prNumber)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pull request: %w", err)
+	}
+
+	details := &remote.PullRequestDetails{
+		Number:       pr.GetNumber(),
+		Title:        pr.GetTitle(),
+		Body:         pr.GetBody(),
+		State:        pr.GetState(),
+		Draft:        pr.GetDraft(),
+		HeadBranch:   pr.GetHead().GetRef(),
+		BaseBranch:   pr.GetBase().GetRef(),
+		HeadSHA:      pr.GetHead().GetSHA(),
+		Author:       pr.GetUser().GetLogin(),
+		CreatedAt:    pr.GetCreatedAt().Time,
+		UpdatedAt:    pr.GetUpdatedAt().Time,
+		Additions:    pr.GetAdditions(),
+		Deletions:    pr.GetDeletions(),
+		ChangedFiles: pr.GetChangedFiles(),
+		Mergeable:    pr.GetMergeable(),
+		URL:          pr.GetHTMLURL(),
+	}
+
+	// Get labels
+	for _, label := range pr.Labels {
+		details.Labels = append(details.Labels, label.GetName())
+	}
+
+	// Get reviews
+	reviews, _, err := c.client.PullRequests.ListReviews(ctx, c.owner, c.repo, prNumber, &github.ListOptions{PerPage: 100})
+	if err == nil {
+		// Track latest review state per user
+		reviewerStates := make(map[string]string)
+		for _, review := range reviews {
+			login := review.GetUser().GetLogin()
+			state := review.GetState()
+			// Only update if this is a meaningful state (APPROVED, CHANGES_REQUESTED, etc.)
+			if state != "COMMENTED" && state != "DISMISSED" {
+				reviewerStates[login] = state
+			} else if _, exists := reviewerStates[login]; !exists {
+				reviewerStates[login] = state
+			}
+		}
+		for login, state := range reviewerStates {
+			details.Reviewers = append(details.Reviewers, remote.ReviewerStatus{
+				Login: login,
+				State: state,
+			})
+		}
+	}
+
+	// Get commits
+	commits, _, err := c.client.PullRequests.ListCommits(ctx, c.owner, c.repo, prNumber, &github.ListOptions{PerPage: 100})
+	if err == nil {
+		for _, commit := range commits {
+			details.Commits = append(details.Commits, remote.CommitInfo{
+				SHA:     commit.GetSHA()[:7],
+				Message: strings.Split(commit.GetCommit().GetMessage(), "\n")[0], // First line only
+				Author:  commit.GetCommit().GetAuthor().GetName(),
+				Date:    commit.GetCommit().GetAuthor().GetDate().Time,
+			})
+		}
+	}
+
+	// Get linked issues from PR body (common patterns: "Fixes #123", "Closes #456", "Resolves #789")
+	details.LinkedIssues = c.extractLinkedIssues(ctx, pr.GetBody())
+
+	return details, nil
+}
+
+// extractLinkedIssues parses PR body for linked issues and fetches their details
+func (c *Client) extractLinkedIssues(ctx context.Context, body string) []remote.LinkedIssue {
+	var issues []remote.LinkedIssue
+	seen := make(map[int]bool)
+
+	// Match patterns like "Fixes #123", "Closes #456", "Resolves #789", "Related to #111"
+	patterns := []string{
+		`(?i)(?:fix(?:es)?|close[sd]?|resolve[sd]?|related\s+to)\s*#(\d+)`,
+		`#(\d+)`, // Also catch plain #number references
+	}
+
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(pattern)
+		matches := re.FindAllStringSubmatch(body, -1)
+		for _, match := range matches {
+			if len(match) >= 2 {
+				num, err := strconv.Atoi(match[1])
+				if err != nil || seen[num] {
+					continue
+				}
+				seen[num] = true
+
+				// Fetch issue details
+				issue, _, err := c.client.Issues.Get(ctx, c.owner, c.repo, num)
+				if err == nil && !issue.IsPullRequest() {
+					issues = append(issues, remote.LinkedIssue{
+						Number: num,
+						Title:  issue.GetTitle(),
+						State:  issue.GetState(),
+						URL:    issue.GetHTMLURL(),
+					})
+				}
+			}
+		}
+	}
+
+	return issues
 }

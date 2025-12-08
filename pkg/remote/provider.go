@@ -110,3 +110,51 @@ type ArtifactStats struct {
 	TotalSize  int64
 	Artifacts  []Artifact
 }
+
+// PullRequestDetails contains full details about a pull request for TUI display
+type PullRequestDetails struct {
+	Number       int
+	Title        string
+	Body         string
+	State        string // open, closed, merged
+	Draft        bool
+	HeadBranch   string
+	BaseBranch   string
+	HeadSHA      string
+	Author       string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	Additions    int
+	Deletions    int
+	ChangedFiles int
+	Mergeable    bool
+	MergeMethod  string // merge, squash, rebase
+	URL          string
+	Labels       []string
+	Reviewers    []ReviewerStatus
+	LinkedIssues []LinkedIssue
+	Commits      []CommitInfo
+}
+
+// ReviewerStatus represents a reviewer and their review status
+type ReviewerStatus struct {
+	Login  string
+	State  string // PENDING, APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED
+	Avatar string
+}
+
+// LinkedIssue represents an issue linked to a PR
+type LinkedIssue struct {
+	Number int
+	Title  string
+	State  string // open, closed
+	URL    string
+}
+
+// CommitInfo represents a commit in a PR
+type CommitInfo struct {
+	SHA     string
+	Message string
+	Author  string
+	Date    time.Time
+}
