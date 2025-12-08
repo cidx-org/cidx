@@ -223,6 +223,12 @@ func actionCommand() *cli.Command {
 				Usage: "Tag management commands",
 				Subcommands: []*cli.Command{
 					{
+						Name:    "tui",
+						Usage:   "Interactive tag creator (TUI)",
+						Aliases: []string{"ui"},
+						Action:  tagTUIAction,
+					},
+					{
 						Name:  "prepare",
 						Usage: "Prepare a tag version and message for review",
 						Flags: []cli.Flag{
@@ -353,6 +359,12 @@ func actionCommand() *cli.Command {
 				Name:  "release",
 				Usage: "Release management commands",
 				Subcommands: []*cli.Command{
+					{
+						Name:    "tui",
+						Usage:   "Interactive release creator (TUI)",
+						Aliases: []string{"ui"},
+						Action:  releaseTUIAction,
+					},
 					{
 						Name:  "prepare",
 						Usage: "Prepare release notes for human review (fetches PRs, commits, opens editor)",
@@ -663,6 +675,42 @@ func tagCreateAction(c *cli.Context) error {
 
 	ctx := context.Background()
 	return action.Execute(ctx)
+}
+
+func tagTUIAction(c *cli.Context) error {
+	// Open repository
+	repo, err := vcs.OpenRepository(".")
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	// Load tag config
+	tagConfig := loadTagConfig()
+
+	// Load release config (for shared settings)
+	releaseConfig := loadReleaseConfig()
+
+	return runReleaseTUI(modeTag, repo, nil, tagConfig, releaseConfig)
+}
+
+func releaseTUIAction(c *cli.Context) error {
+	// Open repository
+	repo, err := vcs.OpenRepository(".")
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	// Create provider (auto-detects GitHub/GitLab)
+	provider, err := createProvider(repo)
+	if err != nil {
+		return err
+	}
+
+	// Load configs
+	tagConfig := loadTagConfig()
+	releaseConfig := loadReleaseConfig()
+
+	return runReleaseTUI(modeRelease, repo, provider, tagConfig, releaseConfig)
 }
 
 func tagDeleteAction(c *cli.Context) error {
