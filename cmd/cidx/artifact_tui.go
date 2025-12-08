@@ -61,22 +61,23 @@ type artifactItem struct {
 
 // Artifact TUI model
 type artifactModel struct {
-	provider    *github.Client
-	items       []artifactItem
-	cursor      int
-	loading     bool
-	deleting    bool
-	confirming  bool // confirmation dialog active
-	err         error
-	width       int
-	height      int
-	offset      int // scroll offset
-	message     string
-	messageTime time.Time
-	stats       *remote.ArtifactStats
-	sortBy      string // "date", "size", "name"
-	sortDesc    bool
-	filterExp   bool // show only expired
+	provider       *github.Client
+	items          []artifactItem
+	cursor         int
+	loading        bool
+	deleting       bool
+	confirming     bool // confirmation dialog active
+	err            error
+	width          int
+	height         int
+	offset         int // scroll offset
+	message        string
+	messageTime    time.Time
+	stats          *remote.ArtifactStats
+	sortBy         string // "date", "size", "name"
+	sortDesc       bool
+	filterExp      bool // show only expired
+	deleteProgress string // current artifact being deleted
 }
 
 // Messages
@@ -91,6 +92,12 @@ type artifactDeletedMsg struct {
 
 type artifactErrorMsg struct {
 	err error
+}
+
+type artifactDeletingMsg struct {
+	name    string
+	current int
+	total   int
 }
 
 type clearMessageMsg struct{}
@@ -120,23 +127,58 @@ func (m artifactModel) loadArtifacts() tea.Cmd {
 }
 
 func (m artifactModel) deleteSelected() tea.Cmd {
-	return func() tea.Msg {
-		ctx := context.Background()
-		var deleted int
-		var freed int64
-
-		for _, item := range m.items {
-			if item.selected {
-				if err := m.provider.DeleteArtifact(ctx, item.artifact.ID); err != nil {
-					return artifactErrorMsg{err: err}
-				}
-				deleted++
-				freed += item.artifact.SizeInBytes
-			}
+	// Find first selected item to delete
+	var toDelete []artifactItem
+	for _, item := range m.items {
+		if item.selected {
+			toDelete = append(toDelete, item)
 		}
-
-		return artifactDeletedMsg{count: deleted, freed: freed}
 	}
+
+	if len(toDelete) == 0 {
+		return func() tea.Msg {
+			return artifactDeletedMsg{count: 0, freed: 0}
+		}
+	}
+
+	return m.deleteNextArtifact(toDelete, 0, 0)
+}
+
+func (m artifactModel) deleteNextArtifact(items []artifactItem, index int, freedSoFar int64) tea.Cmd {
+	if index >= len(items) {
+		return func() tea.Msg {
+			return artifactDeletedMsg{count: len(items), freed: freedSoFar}
+		}
+	}
+
+	item := items[index]
+	return tea.Sequence(
+		func() tea.Msg {
+			return artifactDeletingMsg{
+				name:    item.artifact.Name,
+				current: index + 1,
+				total:   len(items),
+			}
+		},
+		func() tea.Msg {
+			ctx := context.Background()
+			if err := m.provider.DeleteArtifact(ctx, item.artifact.ID); err != nil {
+				return artifactErrorMsg{err: err}
+			}
+			// Continue with next item
+			return artifactDeleteNextMsg{
+				items:      items,
+				nextIndex:  index + 1,
+				freedSoFar: freedSoFar + item.artifact.SizeInBytes,
+			}
+		},
+	)
+}
+
+type artifactDeleteNextMsg struct {
+	items      []artifactItem
+	nextIndex  int
+	freedSoFar int64
 }
 
 func (m *artifactModel) sortItems() {
@@ -325,8 +367,15 @@ func (m artifactModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cursor = 0
 		m.offset = 0
 
+	case artifactDeletingMsg:
+		m.deleteProgress = fmt.Sprintf("🗑️  Deleting %d/%d: %s", msg.current, msg.total, msg.name)
+
+	case artifactDeleteNextMsg:
+		return m, m.deleteNextArtifact(msg.items, msg.nextIndex, msg.freedSoFar)
+
 	case artifactDeletedMsg:
 		m.deleting = false
+		m.deleteProgress = ""
 		m.message = fmt.Sprintf("✓ Deleted %d artifacts, freed %s", msg.count, formatBytes(msg.freed))
 		m.messageTime = time.Now()
 		// Reload after delete
@@ -340,6 +389,7 @@ func (m artifactModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = msg.err
 		m.loading = false
 		m.deleting = false
+		m.deleteProgress = ""
 
 	case clearMessageMsg:
 		if time.Since(m.messageTime) >= 3*time.Second {
@@ -376,6 +426,11 @@ func (m artifactModel) View() string {
 	// Message (if any)
 	if m.message != "" {
 		sections = append(sections, artifactStatsStyle.Render("  "+m.message))
+	}
+
+	// Delete progress
+	if m.deleteProgress != "" {
+		sections = append(sections, artifactDeleteStyle.Render("  "+m.deleteProgress))
 	}
 
 	// Confirmation dialog
