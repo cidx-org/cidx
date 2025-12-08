@@ -297,6 +297,59 @@ func actionCommand() *cli.Command {
 				},
 			},
 			{
+				Name:  "artifact",
+				Usage: "GitHub Actions artifact management",
+				Subcommands: []*cli.Command{
+					{
+						Name:    "tui",
+						Usage:   "Interactive artifact manager (TUI)",
+						Aliases: []string{"ui"},
+						Action:  artifactTUIAction,
+					},
+					{
+						Name:  "list",
+						Usage: "List all artifacts with storage statistics",
+						Flags: []cli.Flag{
+							&cli.BoolFlag{
+								Name:    "verbose",
+								Aliases: []string{"v"},
+								Usage:   "Show detailed artifact information",
+							},
+						},
+						Action: artifactListAction,
+					},
+					{
+						Name:  "stats",
+						Usage: "Show artifact storage statistics",
+						Action: artifactStatsAction,
+					},
+					{
+						Name:  "cleanup",
+						Usage: "Delete artifacts to free storage space",
+						Flags: []cli.Flag{
+							&cli.BoolFlag{
+								Name:  "all",
+								Usage: "Delete all artifacts",
+							},
+							&cli.BoolFlag{
+								Name:  "expired",
+								Usage: "Delete only expired artifacts",
+							},
+							&cli.IntFlag{
+								Name:    "older-than",
+								Aliases: []string{"d"},
+								Usage:   "Delete artifacts older than N days",
+							},
+							&cli.BoolFlag{
+								Name:  "dry-run",
+								Usage: "Show what would be deleted without making changes",
+							},
+						},
+						Action: artifactCleanupAction,
+					},
+				},
+			},
+			{
 				Name:  "release",
 				Usage: "Release management commands",
 				Subcommands: []*cli.Command{
@@ -663,5 +716,88 @@ func tagListAction(c *cli.Context) error {
 
 	ctx := context.Background()
 	return action.Execute(ctx)
+}
+
+func artifactListAction(c *cli.Context) error {
+	// Open repository
+	repo, err := vcs.OpenRepository(".")
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	// Create provider (auto-detects GitHub/GitLab)
+	provider, err := createProvider(repo)
+	if err != nil {
+		return err
+	}
+
+	// Create and execute artifact list action
+	action := actions.NewArtifactList(
+		provider,
+		c.Bool("verbose"),
+	)
+
+	ctx := context.Background()
+	return action.Execute(ctx)
+}
+
+func artifactStatsAction(c *cli.Context) error {
+	// Open repository
+	repo, err := vcs.OpenRepository(".")
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	// Create provider (auto-detects GitHub/GitLab)
+	provider, err := createProvider(repo)
+	if err != nil {
+		return err
+	}
+
+	// Create and execute artifact stats action
+	action := actions.NewArtifactStats(provider)
+
+	ctx := context.Background()
+	return action.Execute(ctx)
+}
+
+func artifactCleanupAction(c *cli.Context) error {
+	// Open repository
+	repo, err := vcs.OpenRepository(".")
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	// Create provider (auto-detects GitHub/GitLab)
+	provider, err := createProvider(repo)
+	if err != nil {
+		return err
+	}
+
+	// Validate flags
+	if !c.Bool("all") && !c.Bool("expired") && c.Int("older-than") == 0 {
+		return fmt.Errorf("must specify --all, --expired, or --older-than <days>")
+	}
+
+	// Create and execute artifact cleanup action
+	action := actions.NewArtifactCleanup(
+		provider,
+		c.Bool("all"),
+		c.Bool("expired"),
+		c.Int("older-than"),
+		c.Bool("dry-run"),
+	)
+
+	ctx := context.Background()
+	return action.Execute(ctx)
+}
+
+func artifactTUIAction(c *cli.Context) error {
+	ghClient, err := getGitHubClient()
+	if err != nil {
+		return err
+	}
+
+	return runArtifactTUI(ghClient)
 }
 
