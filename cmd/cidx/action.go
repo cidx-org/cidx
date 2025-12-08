@@ -7,7 +7,9 @@ import (
 
 	"github.com/cidx-org/cidx/pkg/actions"
 	"github.com/cidx-org/cidx/pkg/config"
+	"github.com/cidx-org/cidx/pkg/remote"
 	"github.com/cidx-org/cidx/pkg/remote/github"
+	"github.com/cidx-org/cidx/pkg/remote/gitlab"
 	"github.com/cidx-org/cidx/pkg/vcs"
 	"github.com/cli/go-gh/v2/pkg/auth"
 	"github.com/urfave/cli/v2"
@@ -39,19 +41,102 @@ func loadTagConfig() config.TagConfig {
 	return cfg.Tag
 }
 
+// loadProviderConfig loads the provider configuration from cidx.toml or returns empty config
+func loadProviderConfig() config.ProviderConfig {
+	cfg, err := config.Load("cidx.toml")
+	if err != nil {
+		return config.ProviderConfig{}
+	}
+	return cfg.Provider
+}
+
 // getGitHubToken retrieves GitHub token from env var or gh CLI auth
-func getGitHubToken() (string, error) {
+func getGitHubToken(host string) (string, error) {
 	// 1. Try environment variable first
 	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
 		return token, nil
 	}
 
 	// 2. Fallback to gh CLI auth
-	token, _ := auth.TokenForHost("github.com")
+	if host == "" {
+		host = "github.com"
+	}
+	token, _ := auth.TokenForHost(host)
 	if token == "" {
 		return "", fmt.Errorf("no GitHub token found: set GITHUB_TOKEN or run 'gh auth login'")
 	}
 	return token, nil
+}
+
+// createProvider creates the appropriate remote provider based on config and remote URL
+func createProvider(repo *vcs.Repository) (remote.Provider, error) {
+	// Load provider config
+	providerCfg := loadProviderConfig()
+
+	// Get remote URL for auto-detection
+	remoteURL, err := repo.GetRemoteURL()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get remote URL: %w", err)
+	}
+
+	// Get owner/repo info
+	owner, repoName, err := repo.GetRemoteInfo()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get remote info: %w", err)
+	}
+
+	// Determine provider type
+	var providerType remote.ProviderType
+	if providerCfg.Type != "" {
+		// Explicit type from config
+		providerType = remote.ProviderType(providerCfg.Type)
+	} else {
+		// Auto-detect from remote URL
+		providerType = remote.DetectProviderFromURL(remoteURL)
+	}
+
+	// Get host for self-hosted instances
+	host := remote.ExtractHostFromURL(remoteURL)
+
+	// Create provider based on type
+	switch providerType {
+	case remote.ProviderTypeGitLab:
+		// Get GitLab token
+		token, err := gitlab.GetToken(host)
+		if err != nil {
+			return nil, err
+		}
+
+		// Check for custom base URL
+		if providerCfg.URL != "" {
+			return gitlab.NewClientWithBaseURL(token, owner, repoName, providerCfg.URL)
+		}
+
+		// Check if self-hosted (not gitlab.com)
+		if host != "" && host != "gitlab.com" {
+			baseURL := fmt.Sprintf("https://%s", host)
+			return gitlab.NewClientWithBaseURL(token, owner, repoName, baseURL)
+		}
+
+		return gitlab.NewClient(token, owner, repoName), nil
+
+	case remote.ProviderTypeGitHub:
+		// Get GitHub token
+		token, err := getGitHubToken(host)
+		if err != nil {
+			return nil, err
+		}
+
+		// Check for custom base URL (GitHub Enterprise)
+		if providerCfg.URL != "" {
+			return github.NewClientWithBaseURL(token, owner, repoName, providerCfg.URL)
+		}
+
+		return github.NewClient(token, owner, repoName), nil
+
+	default:
+		return nil, fmt.Errorf("unknown git provider for URL: %s (set [provider] type in cidx.toml)", remoteURL)
+	}
 }
 
 func actionCommand() *cli.Command {
@@ -266,20 +351,11 @@ func commitPushWatchAction(c *cli.Context) error {
 		return fmt.Errorf("failed to open repository: %w", err)
 	}
 
-	// Get remote info (owner/repo)
-	owner, repoName, err := repo.GetRemoteInfo()
-	if err != nil {
-		return fmt.Errorf("failed to get remote info: %w", err)
-	}
-
-	// Get GitHub token (from env var or gh CLI auth)
-	token, err := getGitHubToken()
+	// Create provider (auto-detects GitHub/GitLab)
+	provider, err := createProvider(repo)
 	if err != nil {
 		return err
 	}
-
-	// Create GitHub provider
-	provider := github.NewClient(token, owner, repoName)
 
 	// Create and execute action
 	action := actions.NewCommitPushWatch(
@@ -299,20 +375,11 @@ func releaseCreateAction(c *cli.Context) error {
 		return fmt.Errorf("failed to open repository: %w", err)
 	}
 
-	// Get remote info (owner/repo)
-	owner, repoName, err := repo.GetRemoteInfo()
-	if err != nil {
-		return fmt.Errorf("failed to get remote info: %w", err)
-	}
-
-	// Get GitHub token (from env var or gh CLI auth)
-	token, err := getGitHubToken()
+	// Create provider (auto-detects GitHub/GitLab)
+	provider, err := createProvider(repo)
 	if err != nil {
 		return err
 	}
-
-	// Create GitHub provider
-	provider := github.NewClient(token, owner, repoName)
 
 	// Load release config
 	releaseConfig := loadReleaseConfig()
@@ -343,20 +410,11 @@ func prCreateAction(c *cli.Context) error {
 		return fmt.Errorf("failed to open repository: %w", err)
 	}
 
-	// Get remote info
-	owner, repoName, err := repo.GetRemoteInfo()
-	if err != nil {
-		return fmt.Errorf("failed to get remote info: %w", err)
-	}
-
-	// Get GitHub token
-	token, err := getGitHubToken()
+	// Create provider (auto-detects GitHub/GitLab)
+	provider, err := createProvider(repo)
 	if err != nil {
 		return err
 	}
-
-	// Create GitHub provider
-	provider := github.NewClient(token, owner, repoName)
 
 	// Create and execute PR action
 	action := actions.NewPR(
@@ -379,20 +437,11 @@ func prReadyAction(c *cli.Context) error {
 		return fmt.Errorf("failed to open repository: %w", err)
 	}
 
-	// Get remote info
-	owner, repoName, err := repo.GetRemoteInfo()
-	if err != nil {
-		return fmt.Errorf("failed to get remote info: %w", err)
-	}
-
-	// Get GitHub token
-	token, err := getGitHubToken()
+	// Create provider (auto-detects GitHub/GitLab)
+	provider, err := createProvider(repo)
 	if err != nil {
 		return err
 	}
-
-	// Create GitHub provider
-	provider := github.NewClient(token, owner, repoName)
 
 	// Create and execute PR ready action
 	action := actions.NewPR(
@@ -415,20 +464,11 @@ func prMergeAction(c *cli.Context) error {
 		return fmt.Errorf("failed to open repository: %w", err)
 	}
 
-	// Get remote info
-	owner, repoName, err := repo.GetRemoteInfo()
-	if err != nil {
-		return fmt.Errorf("failed to get remote info: %w", err)
-	}
-
-	// Get GitHub token
-	token, err := getGitHubToken()
+	// Create provider (auto-detects GitHub/GitLab)
+	provider, err := createProvider(repo)
 	if err != nil {
 		return err
 	}
-
-	// Create GitHub provider
-	provider := github.NewClient(token, owner, repoName)
 
 	// Create and execute PR merge action
 	action := actions.NewPRMerge(
@@ -451,20 +491,11 @@ func releasePrepareAction(c *cli.Context) error {
 		return fmt.Errorf("failed to open repository: %w", err)
 	}
 
-	// Get remote info
-	owner, repoName, err := repo.GetRemoteInfo()
-	if err != nil {
-		return fmt.Errorf("failed to get remote info: %w", err)
-	}
-
-	// Get GitHub token
-	token, err := getGitHubToken()
+	// Create provider (auto-detects GitHub/GitLab)
+	provider, err := createProvider(repo)
 	if err != nil {
 		return err
 	}
-
-	// Create GitHub provider
-	provider := github.NewClient(token, owner, repoName)
 
 	// Load release config
 	releaseConfig := loadReleaseConfig()

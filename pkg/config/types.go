@@ -1,5 +1,13 @@
 package config
 
+// ProviderConfig defines git remote provider settings (GitHub, GitLab)
+type ProviderConfig struct {
+	// Type is the provider type: "github", "gitlab", or "" (auto-detect)
+	Type string `toml:"type"`
+	// URL is the base URL for self-hosted instances (e.g., "https://gitlab.mycompany.com")
+	URL string `toml:"url"`
+}
+
 // Config represents the complete CIDX configuration
 type Config struct {
 	Phases    map[string]Phase                  `toml:",inline"`
@@ -8,6 +16,7 @@ type Config struct {
 	Branch    BranchConfig                      `toml:"branch"`
 	Release   ReleaseConfig                     `toml:"release"`
 	Tag       TagConfig                         `toml:"tag"`
+	Provider  ProviderConfig                    `toml:"provider"`
 	Overrides map[string]map[string]interface{} `toml:",inline"`
 	Workspace string                            // Auto-detected or from env
 }

@@ -181,3 +181,17 @@ func (r *Repository) GetWorkDir() (string, error) {
 
 	return w.Filesystem.Root(), nil
 }
+
+// GetRemoteURL returns the URL of the origin remote
+func (r *Repository) GetRemoteURL() (string, error) {
+	remote, err := r.repo.Remote("origin")
+	if err != nil {
+		return "", fmt.Errorf("failed to get origin remote: %w", err)
+	}
+
+	if len(remote.Config().URLs) == 0 {
+		return "", fmt.Errorf("no URLs configured for origin remote")
+	}
+
+	return remote.Config().URLs[0], nil
+}
