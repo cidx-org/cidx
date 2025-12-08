@@ -91,3 +91,22 @@ type PRChecksUpdate struct {
 	Checks *PRChecks
 	Error  error
 }
+
+// Artifact represents a workflow artifact
+type Artifact struct {
+	ID           int64
+	Name         string
+	SizeInBytes  int64
+	CreatedAt    time.Time
+	ExpiresAt    time.Time
+	Expired      bool
+	WorkflowRun  string // Workflow run that created this artifact
+	WorkflowName string // Name of the workflow
+}
+
+// ArtifactStats represents artifact storage statistics
+type ArtifactStats struct {
+	TotalCount int
+	TotalSize  int64
+	Artifacts  []Artifact
+}
