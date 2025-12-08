@@ -1,6 +1,9 @@
 package remote
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Provider is the interface for CI/CD providers (GitHub, GitLab, etc.)
 type Provider interface {
@@ -24,6 +27,11 @@ type Provider interface {
 
 	// GetPullRequestChecks returns the status of all checks/workflows for a PR
 	GetPullRequestChecks(ctx context.Context, prNumber int) (*PRChecks, error)
+
+	// WaitForChecksToStart waits for CI checks to start for a PR
+	// Returns the HEAD SHA being checked and the initial checks status
+	// This ensures we don't check stale results from previous commits
+	WaitForChecksToStart(ctx context.Context, prNumber int, timeout time.Duration) (headSHA string, checks *PRChecks, err error)
 
 	// WatchPullRequestChecks streams updates for PR checks until all complete
 	WatchPullRequestChecks(ctx context.Context, prNumber int) (<-chan PRChecksUpdate, error)
@@ -58,6 +66,7 @@ type PRChecks struct {
 	Success      int
 	Failure      int
 	Status       string // pending, success, failure
+	HeadSHA      string // The commit SHA these checks are for
 	Checks       []CheckRun
 	StatusChecks []StatusCheck
 }
