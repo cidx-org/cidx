@@ -66,6 +66,7 @@ type artifactModel struct {
 	cursor      int
 	loading     bool
 	deleting    bool
+	confirming  bool // confirmation dialog active
 	err         error
 	width       int
 	height      int
@@ -250,17 +251,32 @@ func (m artifactModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.items[i].selected = m.items[i].artifact.Expired
 			}
 
-		case "d", "delete", "backspace":
-			// Delete selected
-			selected := 0
-			for _, item := range m.items {
-				if item.selected {
-					selected++
+		case "d":
+			// Show confirmation dialog for selected items
+			if !m.confirming && !m.deleting {
+				selected := 0
+				for _, item := range m.items {
+					if item.selected {
+						selected++
+					}
+				}
+				if selected > 0 {
+					m.confirming = true
 				}
 			}
-			if selected > 0 && !m.deleting {
+
+		case "y", "Y":
+			// Confirm deletion
+			if m.confirming && !m.deleting {
+				m.confirming = false
 				m.deleting = true
 				return m, m.deleteSelected()
+			}
+
+		case "n", "N":
+			// Cancel deletion
+			if m.confirming {
+				m.confirming = false
 			}
 
 		case "r":
@@ -355,6 +371,11 @@ func (m artifactModel) View() string {
 	// Message (if any)
 	if m.message != "" {
 		sections = append(sections, artifactStatsStyle.Render("  "+m.message))
+	}
+
+	// Confirmation dialog
+	if m.confirming {
+		sections = append(sections, m.renderConfirmDialog())
 	}
 
 	// Artifact list
@@ -482,8 +503,39 @@ func (m artifactModel) renderList() string {
 	return artifactBoxStyle.Render(content.String())
 }
 
+func (m artifactModel) renderConfirmDialog() string {
+	// Count selected items
+	var selectedCount int
+	var selectedSize int64
+	for _, item := range m.items {
+		if item.selected {
+			selectedCount++
+			selectedSize += item.artifact.SizeInBytes
+		}
+	}
+
+	// Build confirmation message
+	confirmStyle := lipgloss.NewStyle().
+		Border(lipgloss.DoubleBorder()).
+		BorderForeground(lipgloss.Color("196")).
+		Padding(1, 2).
+		Bold(true)
+
+	msg := fmt.Sprintf("⚠️  Delete %d artifact(s) (%s)?\n\n", selectedCount, formatBytes(selectedSize))
+	msg += artifactDeleteStyle.Render("  [y]es  ") + artifactNormalStyle.Render("  [n]o")
+
+	return confirmStyle.Render(msg)
+}
+
 func (m artifactModel) renderHelp() string {
-	help := "  [↑/↓] navigate  [space] select  [a]ll  [e]xpired  [d]elete  [s]ort  [f]ilter  [r]efresh  [q]uit"
+	var help string
+	if m.confirming {
+		help = "  Press [y] to confirm deletion, [n] to cancel"
+	} else if m.deleting {
+		help = "  🗑️  Deleting artifacts..."
+	} else {
+		help = "  [↑/↓] navigate  [space] select  [a]ll  [e]xpired  [d]elete  [s]ort  [f]ilter  [r]efresh  [q]uit"
+	}
 	return artifactHelpStyle.Render(help)
 }
 
