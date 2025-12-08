@@ -338,6 +338,12 @@ func (a *PRAction) mergePR(ctx context.Context) error {
 	log.Info("✅ PR merged successfully!")
 	log.Infof("🔗 %s", prURL)
 
+	// Post-merge cleanup: checkout main, pull, delete branch
+	if err := a.postMergeCleanup(currentBranch); err != nil {
+		log.Warnf("⚠️  Post-merge cleanup failed: %v", err)
+		log.Info("💡 You may need to manually: git checkout main && git pull")
+	}
+
 	// Watch workflow if requested
 	if !a.watchFlow {
 		log.Info("💡 Tip: Use --watch to monitor post-merge workflows")
@@ -510,4 +516,64 @@ func (a *PRAction) generatePRBody() string {
 	body += "🤖 Created with [CIDX](https://github.com/cidx-org/cidx)"
 
 	return body
+}
+
+// postMergeCleanup handles cleanup after a successful PR merge:
+// - Checkout main branch
+// - Pull latest changes
+// - Delete the merged feature branch (local and remote)
+func (a *PRAction) postMergeCleanup(mergedBranch string) error {
+	workDir, err := a.repo.GetWorkDir()
+	if err != nil {
+		return fmt.Errorf("failed to get work directory: %w", err)
+	}
+
+	log.Info("🧹 Cleaning up after merge...")
+
+	// 1. Checkout main
+	log.Info("  → Switching to main branch...")
+	checkoutCmd := exec.Command("git", "checkout", "main")
+	checkoutCmd.Dir = workDir
+	if output, err := checkoutCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to checkout main: %w\n%s", err, output)
+	}
+
+	// 2. Pull latest changes
+	log.Info("  → Pulling latest changes...")
+	pullCmd := exec.Command("git", "pull")
+	pullCmd.Dir = workDir
+	if output, err := pullCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to pull main: %w\n%s", err, output)
+	}
+
+	// 3. Delete local branch
+	log.Infof("  → Deleting local branch '%s'...", mergedBranch)
+	deleteLocalCmd := exec.Command("git", "branch", "-d", mergedBranch)
+	deleteLocalCmd.Dir = workDir
+	if output, err := deleteLocalCmd.CombinedOutput(); err != nil {
+		// Use -D if -d fails (branch might not be fully merged from git's perspective)
+		deleteLocalCmd = exec.Command("git", "branch", "-D", mergedBranch)
+		deleteLocalCmd.Dir = workDir
+		if output, err := deleteLocalCmd.CombinedOutput(); err != nil {
+			log.Warnf("  ⚠️  Could not delete local branch: %s", strings.TrimSpace(string(output)))
+		}
+	} else {
+		_ = output // Branch deleted successfully
+	}
+
+	// 4. Delete remote branch
+	log.Infof("  → Deleting remote branch '%s'...", mergedBranch)
+	deleteRemoteCmd := exec.Command("git", "push", "origin", "--delete", mergedBranch)
+	deleteRemoteCmd.Dir = workDir
+	if output, err := deleteRemoteCmd.CombinedOutput(); err != nil {
+		// Remote branch might already be deleted by GitHub
+		outputStr := strings.TrimSpace(string(output))
+		if !strings.Contains(outputStr, "remote ref does not exist") {
+			log.Warnf("  ⚠️  Could not delete remote branch: %s", outputStr)
+		}
+	}
+
+	log.Info("✅ Cleanup complete! You're on main with latest changes.")
+
+	return nil
 }
