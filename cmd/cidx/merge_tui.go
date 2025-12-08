@@ -443,6 +443,15 @@ func (m mergeModel) View() string {
 		return "\n  No PR details available.\n"
 	}
 
+	// Calculate box width (terminal width minus margins, capped)
+	boxWidth := m.width - 4
+	if boxWidth < 60 {
+		boxWidth = 60
+	}
+	if boxWidth > 100 {
+		boxWidth = 100
+	}
+
 	var b strings.Builder
 
 	// Title
@@ -451,41 +460,41 @@ func (m mergeModel) View() string {
 	b.WriteString("\n\n")
 
 	// PR Info section
-	b.WriteString(m.renderPRInfo())
+	b.WriteString(m.renderPRInfo(boxWidth))
 	b.WriteString("\n")
 
 	// CI Status section
-	b.WriteString(m.renderChecks())
+	b.WriteString(m.renderChecks(boxWidth))
 	b.WriteString("\n")
 
 	// Reviews section
-	b.WriteString(m.renderReviews())
+	b.WriteString(m.renderReviews(boxWidth))
 	b.WriteString("\n")
 
 	// Linked Issues section
 	if len(m.prDetails.LinkedIssues) > 0 {
-		b.WriteString(m.renderLinkedIssues())
+		b.WriteString(m.renderLinkedIssues(boxWidth))
 		b.WriteString("\n")
 	}
 
 	// Commits section
 	if len(m.prDetails.Commits) > 0 {
-		b.WriteString(m.renderCommits())
+		b.WriteString(m.renderCommits(boxWidth))
 		b.WriteString("\n")
 	}
 
 	// Merge Method selection
-	b.WriteString(m.renderMergeMethod())
+	b.WriteString(m.renderMergeMethod(boxWidth))
 	b.WriteString("\n")
 
 	// Commit Message editing
 	if mergeMethods[m.mergeMethod] != "rebase" {
-		b.WriteString(m.renderCommitMessage())
+		b.WriteString(m.renderCommitMessage(boxWidth))
 		b.WriteString("\n")
 	}
 
 	// Actions
-	b.WriteString(m.renderActions())
+	b.WriteString(m.renderActions(boxWidth))
 	b.WriteString("\n")
 
 	// Help
@@ -495,10 +504,9 @@ func (m mergeModel) View() string {
 	return b.String()
 }
 
-func (m mergeModel) renderPRInfo() string {
+func (m mergeModel) renderPRInfo(width int) string {
 	var b strings.Builder
 
-	boxStyle := mergeBoxStyle
 	b.WriteString(mergeLabelStyle.Render("📋 Pull Request"))
 	b.WriteString("\n")
 
@@ -533,10 +541,10 @@ func (m mergeModel) renderPRInfo() string {
 		b.WriteString(mergeWarningStyle.Render("  ⚠ Not mergeable"))
 	}
 
-	return boxStyle.Render(b.String())
+	return mergeBoxStyle.Width(width).Render(b.String())
 }
 
-func (m mergeModel) renderChecks() string {
+func (m mergeModel) renderChecks(width int) string {
 	var b strings.Builder
 
 	b.WriteString(mergeLabelStyle.Render("🔍 CI Status"))
@@ -544,7 +552,7 @@ func (m mergeModel) renderChecks() string {
 
 	if m.checks == nil || m.checks.TotalCount == 0 {
 		b.WriteString(mergeDimStyle.Render("  No checks configured"))
-		return mergeBoxStyle.Render(b.String())
+		return mergeBoxStyle.Width(width).Render(b.String())
 	}
 
 	// Summary
@@ -600,10 +608,10 @@ func (m mergeModel) renderChecks() string {
 		count++
 	}
 
-	return mergeBoxStyle.Render(b.String())
+	return mergeBoxStyle.Width(width).Render(b.String())
 }
 
-func (m mergeModel) renderReviews() string {
+func (m mergeModel) renderReviews(width int) string {
 	var b strings.Builder
 
 	b.WriteString(mergeLabelStyle.Render("👥 Reviews"))
@@ -611,7 +619,7 @@ func (m mergeModel) renderReviews() string {
 
 	if len(m.prDetails.Reviewers) == 0 {
 		b.WriteString(mergeDimStyle.Render("  No reviews yet"))
-		return mergeBoxStyle.Render(b.String())
+		return mergeBoxStyle.Width(width).Render(b.String())
 	}
 
 	for _, reviewer := range m.prDetails.Reviewers {
@@ -634,10 +642,10 @@ func (m mergeModel) renderReviews() string {
 		b.WriteString("\n")
 	}
 
-	return mergeBoxStyle.Render(b.String())
+	return mergeBoxStyle.Width(width).Render(b.String())
 }
 
-func (m mergeModel) renderLinkedIssues() string {
+func (m mergeModel) renderLinkedIssues(width int) string {
 	var b strings.Builder
 
 	b.WriteString(mergeLabelStyle.Render("🔗 Linked Issues"))
@@ -659,10 +667,10 @@ func (m mergeModel) renderLinkedIssues() string {
 		b.WriteString("\n")
 	}
 
-	return mergeBoxStyle.Render(b.String())
+	return mergeBoxStyle.Width(width).Render(b.String())
 }
 
-func (m mergeModel) renderCommits() string {
+func (m mergeModel) renderCommits(width int) string {
 	var b strings.Builder
 
 	b.WriteString(mergeLabelStyle.Render(fmt.Sprintf("📝 Commits (%d)", len(m.prDetails.Commits))))
@@ -682,15 +690,15 @@ func (m mergeModel) renderCommits() string {
 		b.WriteString("\n")
 	}
 
-	return mergeBoxStyle.Render(b.String())
+	return mergeBoxStyle.Width(width).Render(b.String())
 }
 
-func (m mergeModel) renderMergeMethod() string {
+func (m mergeModel) renderMergeMethod(width int) string {
 	var b strings.Builder
 
-	boxStyle := mergeBoxStyle
+	boxStyle := mergeBoxStyle.Width(width)
 	if m.focus == focusMergeMethod {
-		boxStyle = mergeActiveBoxStyle
+		boxStyle = mergeActiveBoxStyle.Width(width)
 	}
 
 	b.WriteString(mergeLabelStyle.Render("⚙️  Merge Method"))
@@ -725,12 +733,12 @@ func (m mergeModel) renderMergeMethod() string {
 	return boxStyle.Render(b.String())
 }
 
-func (m mergeModel) renderCommitMessage() string {
+func (m mergeModel) renderCommitMessage(width int) string {
 	var b strings.Builder
 
-	boxStyle := mergeBoxStyle
+	boxStyle := mergeBoxStyle.Width(width)
 	if m.focus == focusMergeMessage {
-		boxStyle = mergeActiveBoxStyle
+		boxStyle = mergeActiveBoxStyle.Width(width)
 	}
 
 	b.WriteString(mergeLabelStyle.Render("✏️  Commit Message"))
@@ -760,12 +768,12 @@ func (m mergeModel) renderCommitMessage() string {
 	return boxStyle.Render(b.String())
 }
 
-func (m mergeModel) renderActions() string {
+func (m mergeModel) renderActions(width int) string {
 	var b strings.Builder
 
-	boxStyle := mergeBoxStyle
+	boxStyle := mergeBoxStyle.Width(width)
 	if m.focus == focusMergeActions {
-		boxStyle = mergeActiveBoxStyle
+		boxStyle = mergeActiveBoxStyle.Width(width)
 	}
 
 	b.WriteString(mergeLabelStyle.Render("🚀 Actions"))
