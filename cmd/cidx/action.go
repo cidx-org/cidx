@@ -51,13 +51,39 @@ func loadProviderConfig() config.ProviderConfig {
 }
 
 // loadPRConfig loads the PR configuration from cidx.toml or returns defaults
+// Since Go's zero value for bool is false, we need to merge with defaults
+// to ensure sensible behavior when [pr] section is missing or incomplete
 func loadPRConfig() config.PRConfig {
+	defaults := config.DefaultPRConfig()
+
 	cfg, err := config.Load("cidx.toml")
 	if err != nil {
 		// Return defaults if no config file
-		return config.DefaultPRConfig()
+		return defaults
 	}
-	return cfg.PR
+
+	// Check if PR section was explicitly configured by looking at the raw config
+	// If no [pr] section exists, cfg.PR will have zero values for all fields
+	// We detect this by checking if all fields are at their zero values
+	pr := cfg.PR
+	if pr.DefaultMergeMethod == "" && pr.AutoRefreshInterval == 0 &&
+		!pr.ConfirmMerge && !pr.DeleteBranchAfterMerge &&
+		!pr.CheckoutAfterMerge && !pr.SyncAfterMerge {
+		// No [pr] section configured, use defaults
+		return defaults
+	}
+
+	// Merge: use config values where set, defaults where not
+	// For booleans, we can't distinguish "explicitly false" from "not set"
+	// So we only apply defaults for string/int fields that are empty/zero
+	if pr.DefaultMergeMethod == "" {
+		pr.DefaultMergeMethod = defaults.DefaultMergeMethod
+	}
+	if pr.AutoRefreshInterval == 0 {
+		pr.AutoRefreshInterval = defaults.AutoRefreshInterval
+	}
+
+	return pr
 }
 
 // getGitHubToken retrieves GitHub token from env var or gh CLI auth
