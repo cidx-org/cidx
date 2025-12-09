@@ -7,48 +7,24 @@ on:
     branches: [main]
 
 jobs:
-  # Setup: Build CIDX for use in subsequent jobs
-  setup:
-    name: Setup
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.23"
-
-      - name: Build CIDX
-        run: go build -o bin/cidx ./cmd/cidx
-
-      - name: Upload CIDX binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: cidx
-          path: bin/cidx
-          retention-days: 1
-
   # Security: Scan for vulnerabilities and secrets
   security:
     name: Security
     runs-on: ubuntu-latest
-    needs: [setup]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0 # Full history for gitleaks
 
-      - name: Download CIDX
-        uses: actions/download-artifact@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          name: cidx
-          path: bin/
+          go-version: "1.23"
+          cache: true
 
-      - name: Make CIDX executable
-        run: chmod +x bin/cidx
+      - name: Build CIDX
+        run: go build -o bin/cidx ./cmd/cidx
 
       - name: Run security checks
         run: ./bin/cidx run security
@@ -64,14 +40,14 @@ jobs:
         with:
           fetch-depth: 0 # Full history for commitizen
 
-      - name: Download CIDX
-        uses: actions/download-artifact@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          name: cidx
-          path: bin/
+          go-version: "1.23"
+          cache: true
 
-      - name: Make CIDX executable
-        run: chmod +x bin/cidx
+      - name: Build CIDX
+        run: go build -o bin/cidx ./cmd/cidx
 
       - name: Run code quality checks
         run: ./bin/cidx run code
@@ -85,42 +61,36 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download CIDX
-        uses: actions/download-artifact@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          name: cidx
-          path: bin/
+          go-version: "1.23"
+          cache: true
 
-      - name: Make CIDX executable
-        run: chmod +x bin/cidx
+      - name: Build CIDX
+        run: go build -o bin/cidx ./cmd/cidx
 
       - name: Run tests
         run: ./bin/cidx run test
 
-  # Build: Compile final binary
+  # Build: Compile final binary (only on main branch)
   build:
     name: Build
     runs-on: ubuntu-latest
     needs: [test]
+    if: github.ref == 'refs/heads/main'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download CIDX
-        uses: actions/download-artifact@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          name: cidx
-          path: bin/
+          go-version: "1.23"
+          cache: true
 
-      - name: Make CIDX executable
-        run: chmod +x bin/cidx
+      - name: Build CIDX
+        run: go build -o bin/cidx ./cmd/cidx
 
       - name: Build final binary
         run: ./bin/cidx run build
-
-      - name: Upload final binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: cidx-binary
-          path: bin/
-          retention-days: 7
