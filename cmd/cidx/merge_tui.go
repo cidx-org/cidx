@@ -103,10 +103,10 @@ type mergeModel struct {
 	checks    *remote.PRChecks
 
 	// Editable fields
-	mergeMethod  int // index into mergeMethods
-	commitTitle  textarea.Model
-	commitBody   textarea.Model
-	editingBody  bool // whether we're editing body vs title
+	mergeMethod int // index into mergeMethods
+	commitTitle textarea.Model
+	commitBody  textarea.Model
+	editingBody bool // whether we're editing body vs title
 
 	// UI state
 	focus        mergeFocus
@@ -119,6 +119,11 @@ type mergeModel struct {
 	width        int
 	height       int
 
+	// Watch mode state
+	lastKnownSHA   string        // Track SHA to detect new commits
+	autoRefresh    bool          // Whether auto-refresh is enabled
+	refreshing     bool          // Currently refreshing
+	showErrorLogs bool // Whether to show expanded error logs
 }
 
 // Messages
@@ -136,8 +141,11 @@ type prMergeSuccessMsg struct {
 }
 
 type checksRefreshMsg struct {
-	checks *remote.PRChecks
+	checks  *remote.PRChecks
+	details *remote.PullRequestDetails // Optional: nil if only refreshing checks
 }
+
+type mergeTickMsg struct{}
 
 // newMergeModel creates a new merge TUI model
 func newMergeModel(provider *github.Client, prNumber int) mergeModel {
@@ -172,13 +180,22 @@ func newMergeModel(provider *github.Client, prNumber int) mergeModel {
 		loading:      true,
 		loadingMsg:   "Loading PR details...",
 		spinner:      s,
+		autoRefresh:  true, // Enable auto-refresh by default
 	}
+}
+
+// mergeTickCmd returns a command that ticks every 5 seconds for merge TUI
+func mergeTickCmd() tea.Cmd {
+	return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+		return mergeTickMsg{}
+	})
 }
 
 func (m mergeModel) Init() tea.Cmd {
 	return tea.Batch(
 		m.spinner.Tick,
 		m.loadPRDetails(),
+		mergeTickCmd(), // Start auto-refresh ticker
 	)
 }
 
@@ -203,11 +220,21 @@ func (m mergeModel) loadPRDetails() tea.Cmd {
 	}
 }
 
-func (m mergeModel) refreshChecks() tea.Cmd {
+// refreshAll reloads both PR details and checks (for when SHA changes)
+func (m mergeModel) refreshAll() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
+
+		// Get PR details
+		details, err := m.provider.GetPullRequestDetails(ctx, m.prNumber)
+		if err != nil {
+			return checksRefreshMsg{checks: nil, details: nil}
+		}
+
+		// Get checks status
 		checks, _ := m.provider.GetPullRequestChecks(ctx, m.prNumber)
-		return checksRefreshMsg{checks: checks}
+
+		return checksRefreshMsg{checks: checks, details: details}
 	}
 }
 
@@ -221,7 +248,28 @@ func (m mergeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 
-		// Don't handle keys while loading
+		// Handle refresh even during loading (but not during initial load)
+		if msg.String() == "r" && m.prDetails != nil && !m.refreshing {
+			m.refreshing = true
+			return m, m.refreshAll()
+		}
+
+		// Toggle error logs with 'e'
+		if msg.String() == "e" && m.checks != nil {
+			m.showErrorLogs = !m.showErrorLogs
+			return m, nil
+		}
+
+		// Toggle auto-refresh with 'a'
+		if msg.String() == "a" {
+			m.autoRefresh = !m.autoRefresh
+			if m.autoRefresh {
+				cmds = append(cmds, mergeTickCmd())
+			}
+			return m, tea.Batch(cmds...)
+		}
+
+		// Don't handle other keys while loading
 		if m.loading {
 			return m, nil
 		}
@@ -300,11 +348,19 @@ func (m mergeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focus = focusMergeMessage
 				m.commitTitle.Focus()
 			}
-
-		case "r":
-			// Refresh checks
-			return m, m.refreshChecks()
 		}
+
+	case mergeTickMsg:
+		// Auto-refresh ticker
+		if m.autoRefresh && m.prDetails != nil && !m.refreshing && m.success == "" && m.err == nil {
+			m.refreshing = true
+			cmds = append(cmds, m.refreshAll())
+		}
+		// Continue ticking if auto-refresh is enabled
+		if m.autoRefresh && m.success == "" && m.err == nil {
+			cmds = append(cmds, mergeTickCmd())
+		}
+		return m, tea.Batch(cmds...)
 
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -325,7 +381,23 @@ func (m mergeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateCommitMessage()
 
 	case checksRefreshMsg:
-		m.checks = msg.checks
+		m.refreshing = false
+		if msg.checks != nil {
+			// Check if SHA changed (new commit pushed)
+			if m.lastKnownSHA != "" && m.checks != nil && msg.checks.HeadSHA != m.lastKnownSHA {
+				// New commit detected - clear old status
+				m.lastKnownSHA = msg.checks.HeadSHA
+			}
+			m.checks = msg.checks
+			if m.checks.HeadSHA != "" {
+				m.lastKnownSHA = m.checks.HeadSHA
+			}
+		}
+		// Update PR details if provided (full refresh)
+		if msg.details != nil {
+			m.prDetails = msg.details
+			m.updateCommitMessage()
+		}
 
 	case prMergeErrorMsg:
 		m.loading = false
@@ -474,7 +546,7 @@ func (m mergeModel) View() string {
 	b.WriteString("\n")
 
 	// Help
-	help := "Tab: switch section • ↑↓: navigate • Enter: confirm • r: refresh checks • q: quit"
+	help := "Tab: switch section • ↑↓: navigate • Enter: confirm • r: refresh • a: auto-refresh • e: errors • q: quit"
 	b.WriteString(mergeHelpStyle.Render(help))
 
 	return b.String()
@@ -516,7 +588,7 @@ func (m mergeModel) renderTreeView(width int) string {
 			// Issue metadata
 			if len(issue.Labels) > 0 {
 				labelsStr := strings.Join(issue.Labels, ", ")
-				b.WriteString(fmt.Sprintf("%s 🏷️  %s\n", treeVert, mergeDimStyle.Render(labelsStr)))
+				b.WriteString(fmt.Sprintf("%s 🏷 %s\n", treeVert, mergeDimStyle.Render(labelsStr)))
 			}
 			if issue.Author != "" {
 				b.WriteString(fmt.Sprintf("%s 👤 @%s\n", treeVert, mergeDimStyle.Render(issue.Author)))
@@ -618,7 +690,7 @@ func (m mergeModel) renderTreeView(width int) string {
 		// Labels
 		if len(m.prDetails.Labels) > 0 {
 			labelsLine := strings.Join(m.prDetails.Labels, ", ")
-			b.WriteString(fmt.Sprintf("%s 🏷️  %s\n", treeVert, mergeDimStyle.Render(labelsLine)))
+			b.WriteString(fmt.Sprintf("%s 🏷 %s\n", treeVert, mergeDimStyle.Render(labelsLine)))
 		}
 
 		// Reviews
@@ -675,13 +747,21 @@ func (m mergeModel) renderTreeView(width int) string {
 func (m mergeModel) renderChecks(width int) string {
 	var b strings.Builder
 
-	b.WriteString(mergeLabelStyle.Render("🔍 CI Status"))
+	// Header with auto-refresh status
+	autoRefreshStatus := ""
+	if m.autoRefresh {
+		autoRefreshStatus = " [auto]"
+	}
+	if m.refreshing {
+		autoRefreshStatus = " [refreshing...]"
+	}
+	b.WriteString(mergeLabelStyle.Render(fmt.Sprintf("🔍 CI Status%s", autoRefreshStatus)))
 	b.WriteString("\n")
 
 	if m.checks == nil || m.checks.TotalCount == 0 {
 		b.WriteString(mergeDimStyle.Render("  ⏳ Waiting for CI to start..."))
 		b.WriteString("\n")
-		b.WriteString(mergeDimStyle.Render("  Press 'r' to refresh"))
+		b.WriteString(mergeDimStyle.Render("  Press 'r' to refresh • 'a' to toggle auto-refresh"))
 		return mergeBoxStyle.Width(width).Render(b.String())
 	}
 
@@ -695,7 +775,11 @@ func (m mergeModel) renderChecks(width int) string {
 
 	// Last refresh time
 	refreshTime := m.checks.UpdatedAt.Format("15:04:05")
-	b.WriteString(mergeDimStyle.Render(fmt.Sprintf("  🔄 Last refresh: %s (press 'r' to refresh)", refreshTime)))
+	b.WriteString(mergeDimStyle.Render(fmt.Sprintf("  🔄 Last refresh: %s", refreshTime)))
+	b.WriteString("\n\n")
+
+	// Progress bar
+	b.WriteString(m.renderProgressBar(width - 6))
 	b.WriteString("\n\n")
 
 	// Summary with detailed breakdown
@@ -728,6 +812,7 @@ func (m mergeModel) renderChecks(width int) string {
 	b.WriteString("\n")
 
 	// All checks (show all, not limited)
+	hasFailures := false
 	for _, check := range m.checks.Checks {
 		var icon string
 		var style lipgloss.Style
@@ -747,6 +832,7 @@ func (m mergeModel) renderChecks(width int) string {
 				icon = "✗"
 				style = mergeCheckFailureStyle
 				statusText = " (failed)"
+				hasFailures = true
 			case "cancelled":
 				icon = "⊘"
 				style = mergeCheckPendingStyle
@@ -782,9 +868,106 @@ func (m mergeModel) renderChecks(width int) string {
 		checkLine := fmt.Sprintf("    %s %s%s", icon, check.Name, statusText)
 		b.WriteString(style.Render(checkLine))
 		b.WriteString("\n")
+
+		// Show error log if enabled and check failed
+		if m.showErrorLogs && check.Conclusion == "failure" && check.ErrorLog != "" {
+			b.WriteString(mergeErrorStyle.Render("      └─ Error: "))
+			// Show error log, indented
+			errorLines := strings.Split(check.ErrorLog, "\n")
+			for i, line := range errorLines {
+				if i > 0 {
+					b.WriteString("         ")
+				}
+				b.WriteString(mergeDimStyle.Render(line))
+				if i < len(errorLines)-1 {
+					b.WriteString("\n")
+				}
+			}
+			b.WriteString("\n")
+		}
+
+		// Show failed step if available
+		if check.Conclusion == "failure" && check.FailedStep != "" {
+			b.WriteString(mergeErrorStyle.Render(fmt.Sprintf("      └─ Failed step: %s", check.FailedStep)))
+			b.WriteString("\n")
+		}
+	}
+
+	// Error logs toggle hint
+	if hasFailures {
+		if m.showErrorLogs {
+			b.WriteString(mergeDimStyle.Render("\n  Press 'e' to hide error details"))
+		} else {
+			b.WriteString(mergeDimStyle.Render("\n  Press 'e' to show error details"))
+		}
 	}
 
 	return mergeBoxStyle.Width(width).Render(b.String())
+}
+
+// renderProgressBar creates a visual progress bar for CI status
+func (m mergeModel) renderProgressBar(width int) string {
+	if m.checks == nil || m.checks.TotalCount == 0 {
+		return ""
+	}
+
+	// Calculate progress
+	completed := m.checks.Success + m.checks.Failure
+	total := m.checks.TotalCount
+	if total == 0 {
+		total = 1 // Avoid division by zero
+	}
+
+	// Bar dimensions
+	barWidth := width - 20 // Leave space for label and percentage
+	if barWidth < 20 {
+		barWidth = 20
+	}
+
+	successWidth := (m.checks.Success * barWidth) / total
+	failureWidth := (m.checks.Failure * barWidth) / total
+	runningWidth := (m.checks.InProgress * barWidth) / total
+	queuedWidth := barWidth - successWidth - failureWidth - runningWidth
+
+	// Ensure at least 1 char for running jobs if any
+	if m.checks.InProgress > 0 && runningWidth == 0 {
+		runningWidth = 1
+		if queuedWidth > 0 {
+			queuedWidth--
+		}
+	}
+
+	// Build progress bar
+	var bar strings.Builder
+	bar.WriteString("  [")
+
+	// Success (green)
+	if successWidth > 0 {
+		bar.WriteString(mergeCheckSuccessStyle.Render(strings.Repeat("█", successWidth)))
+	}
+
+	// Failure (red)
+	if failureWidth > 0 {
+		bar.WriteString(mergeCheckFailureStyle.Render(strings.Repeat("█", failureWidth)))
+	}
+
+	// Running (yellow/orange)
+	if runningWidth > 0 {
+		bar.WriteString(mergeCheckPendingStyle.Render(strings.Repeat("▓", runningWidth)))
+	}
+
+	// Queued (dim)
+	if queuedWidth > 0 {
+		bar.WriteString(mergeDimStyle.Render(strings.Repeat("░", queuedWidth)))
+	}
+
+	bar.WriteString("]")
+
+	// Percentage
+	percentage := (completed * 100) / total
+	bar.WriteString(fmt.Sprintf(" %d%%", percentage))
+
+	return bar.String()
 }
 
 func (m mergeModel) renderMergeMethod(width int) string {
@@ -795,7 +978,7 @@ func (m mergeModel) renderMergeMethod(width int) string {
 		boxStyle = mergeActiveBoxStyle.Width(width)
 	}
 
-	b.WriteString(mergeLabelStyle.Render("⚙️  Merge Method"))
+	b.WriteString(mergeLabelStyle.Render("⚙ Merge Method"))
 	b.WriteString("\n")
 
 	for i, method := range mergeMethods {
@@ -835,7 +1018,7 @@ func (m mergeModel) renderCommitMessage(width int) string {
 		boxStyle = mergeActiveBoxStyle.Width(width)
 	}
 
-	b.WriteString(mergeLabelStyle.Render("✏️  Commit Message"))
+	b.WriteString(mergeLabelStyle.Render("✏ Commit Message"))
 	b.WriteString("\n")
 
 	// Title

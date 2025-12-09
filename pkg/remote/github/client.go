@@ -364,13 +364,27 @@ func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remot
 
 	for _, run := range checkRuns.CheckRuns {
 		check := remote.CheckRun{
-			Name:       run.GetName(),
-			Status:     run.GetStatus(),
-			Conclusion: run.GetConclusion(),
-			URL:        run.GetHTMLURL(),
-			StartedAt:  run.GetStartedAt().Time,
+			ID:          run.GetID(),
+			Name:        run.GetName(),
+			Status:      run.GetStatus(),
+			Conclusion:  run.GetConclusion(),
+			URL:         run.GetHTMLURL(),
+			StartedAt:   run.GetStartedAt().Time,
 			CompletedAt: run.GetCompletedAt().Time,
 		}
+
+		// If failed, try to get the failed step name from annotations
+		if run.GetConclusion() == "failure" && run.Output != nil {
+			if run.Output.Summary != nil && *run.Output.Summary != "" {
+				// Truncate summary to first 200 chars for error preview
+				summary := *run.Output.Summary
+				if len(summary) > 200 {
+					summary = summary[:200] + "..."
+				}
+				check.ErrorLog = summary
+			}
+		}
+
 		checks.Checks = append(checks.Checks, check)
 
 		// Count by status
