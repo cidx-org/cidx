@@ -34,9 +34,6 @@ var (
 			Foreground(lipgloss.Color("39")).
 			Bold(true)
 
-	mergeValueStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("255"))
-
 	mergeDimStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241"))
 
@@ -58,12 +55,6 @@ var (
 
 	mergeUnselectedStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("255"))
-
-	mergeIssueOpenStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("42"))
-
-	mergeIssueClosedStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("196"))
 
 	mergeReviewApprovedStyle = lipgloss.NewStyle().
 					Foreground(lipgloss.Color("42"))
@@ -459,29 +450,13 @@ func (m mergeModel) View() string {
 	b.WriteString(mergeTitleStyle.Render(title))
 	b.WriteString("\n\n")
 
-	// PR Info section
-	b.WriteString(m.renderPRInfo(boxWidth))
+	// Tree view: Issue → PR relationship
+	b.WriteString(m.renderTreeView(boxWidth))
 	b.WriteString("\n")
 
 	// CI Status section
 	b.WriteString(m.renderChecks(boxWidth))
 	b.WriteString("\n")
-
-	// Reviews section
-	b.WriteString(m.renderReviews(boxWidth))
-	b.WriteString("\n")
-
-	// Linked Issues section
-	if len(m.prDetails.LinkedIssues) > 0 {
-		b.WriteString(m.renderLinkedIssues(boxWidth))
-		b.WriteString("\n")
-	}
-
-	// Commits section
-	if len(m.prDetails.Commits) > 0 {
-		b.WriteString(m.renderCommits(boxWidth))
-		b.WriteString("\n")
-	}
 
 	// Merge Method selection
 	b.WriteString(m.renderMergeMethod(boxWidth))
@@ -504,41 +479,193 @@ func (m mergeModel) View() string {
 	return b.String()
 }
 
-func (m mergeModel) renderPRInfo(width int) string {
+// renderTreeView creates a tree representation showing Issue → PR relationship
+func (m mergeModel) renderTreeView(width int) string {
 	var b strings.Builder
 
-	b.WriteString(mergeLabelStyle.Render("📋 Pull Request"))
-	b.WriteString("\n")
+	// Tree characters
+	const (
+		treeRoot   = "📦"
+		treeBranch = "├──"
+		treeLast   = "└──"
+		treeVert   = "│  "
+		treeSpace  = "   "
+	)
 
-	// Title
-	titleLine := fmt.Sprintf("  %s", m.prDetails.Title)
-	b.WriteString(mergeValueStyle.Render(titleLine))
-	b.WriteString("\n")
+	// If we have linked issues, show Issue → PR tree
+	if len(m.prDetails.LinkedIssues) > 0 {
+		// For each linked issue, create a tree
+		for i, issue := range m.prDetails.LinkedIssues {
+			// Issue root
+			issueIcon := "🟢"
+			if issue.State == "closed" {
+				issueIcon = "🟣"
+			}
+			b.WriteString(fmt.Sprintf("%s Issue #%d\n", issueIcon, issue.Number))
 
-	// Branch info
-	branchLine := fmt.Sprintf("  %s → %s", m.prDetails.HeadBranch, m.prDetails.BaseBranch)
-	b.WriteString(mergeDimStyle.Render(branchLine))
-	b.WriteString("\n")
+			// Issue details
+			b.WriteString(fmt.Sprintf("%s %s\n", treeVert, mergeLabelStyle.Render(issue.Title)))
 
-	// Stats
-	statsLine := fmt.Sprintf("  +%d -%d • %d files • by @%s",
-		m.prDetails.Additions, m.prDetails.Deletions,
-		m.prDetails.ChangedFiles, m.prDetails.Author)
-	b.WriteString(mergeDimStyle.Render(statsLine))
-	b.WriteString("\n")
+			// Issue body (truncated)
+			if issue.Body != "" {
+				bodyPreview := truncateStr(strings.ReplaceAll(issue.Body, "\n", " "), 60)
+				b.WriteString(fmt.Sprintf("%s %s\n", treeVert, mergeDimStyle.Render(bodyPreview)))
+			}
 
-	// Labels
-	if len(m.prDetails.Labels) > 0 {
-		labelsLine := fmt.Sprintf("  Labels: %s", strings.Join(m.prDetails.Labels, ", "))
-		b.WriteString(mergeDimStyle.Render(labelsLine))
-		b.WriteString("\n")
-	}
+			// Issue metadata
+			if len(issue.Labels) > 0 {
+				labelsStr := strings.Join(issue.Labels, ", ")
+				b.WriteString(fmt.Sprintf("%s 🏷️  %s\n", treeVert, mergeDimStyle.Render(labelsStr)))
+			}
+			if issue.Author != "" {
+				b.WriteString(fmt.Sprintf("%s 👤 @%s\n", treeVert, mergeDimStyle.Render(issue.Author)))
+			}
 
-	// Mergeable status
-	if m.prDetails.Mergeable {
-		b.WriteString(mergeSuccessStyle.Render("  ✓ Ready to merge"))
+			// PR as child of issue
+			b.WriteString(fmt.Sprintf("%s\n", treeVert))
+			b.WriteString(fmt.Sprintf("%s 🔀 PR #%d\n", treeLast, m.prDetails.Number))
+
+			// PR details (indented under the issue)
+			prIndent := treeSpace
+			b.WriteString(fmt.Sprintf("%s%s %s\n", prIndent, treeBranch, mergeLabelStyle.Render(m.prDetails.Title)))
+
+			// Branch info
+			branchLine := fmt.Sprintf("%s → %s", m.prDetails.HeadBranch, m.prDetails.BaseBranch)
+			b.WriteString(fmt.Sprintf("%s%s 🌿 %s\n", prIndent, treeVert, mergeDimStyle.Render(branchLine)))
+
+			// Stats
+			statsLine := fmt.Sprintf("+%d -%d • %d files", m.prDetails.Additions, m.prDetails.Deletions, m.prDetails.ChangedFiles)
+			b.WriteString(fmt.Sprintf("%s%s 📊 %s\n", prIndent, treeVert, mergeDimStyle.Render(statsLine)))
+
+			// Author
+			b.WriteString(fmt.Sprintf("%s%s 👤 @%s\n", prIndent, treeVert, mergeDimStyle.Render(m.prDetails.Author)))
+
+			// Reviews
+			if len(m.prDetails.Reviewers) > 0 {
+				b.WriteString(fmt.Sprintf("%s%s 👥 Reviews:\n", prIndent, treeVert))
+				for j, reviewer := range m.prDetails.Reviewers {
+					prefix := treeVert + treeVert
+					if j == len(m.prDetails.Reviewers)-1 {
+						prefix = treeVert + treeSpace
+					}
+					reviewIcon := "○"
+					var reviewStyle lipgloss.Style
+					switch reviewer.State {
+					case "APPROVED":
+						reviewIcon = "✓"
+						reviewStyle = mergeReviewApprovedStyle
+					case "CHANGES_REQUESTED":
+						reviewIcon = "✗"
+						reviewStyle = mergeReviewChangesStyle
+					default:
+						reviewStyle = mergeReviewPendingStyle
+					}
+					reviewLine := fmt.Sprintf("%s @%s (%s)", reviewIcon, reviewer.Login, reviewer.State)
+					b.WriteString(fmt.Sprintf("%s%s    %s\n", prIndent, prefix, reviewStyle.Render(reviewLine)))
+				}
+			}
+
+			// Commits
+			if len(m.prDetails.Commits) > 0 {
+				b.WriteString(fmt.Sprintf("%s%s 📝 Commits (%d):\n", prIndent, treeVert, len(m.prDetails.Commits)))
+				// Show last 3 commits
+				start := 0
+				if len(m.prDetails.Commits) > 3 {
+					start = len(m.prDetails.Commits) - 3
+					b.WriteString(fmt.Sprintf("%s%s    %s\n", prIndent, treeVert, mergeDimStyle.Render(fmt.Sprintf("... %d earlier commits", start))))
+				}
+				for j := start; j < len(m.prDetails.Commits); j++ {
+					c := m.prDetails.Commits[j]
+					isLast := j == len(m.prDetails.Commits)-1
+					prefix := treeVert
+					if isLast {
+						prefix = treeSpace
+					}
+					commitLine := fmt.Sprintf("%s %s", c.SHA[:7], truncateStr(c.Message, 40))
+					b.WriteString(fmt.Sprintf("%s%s    %s\n", prIndent, prefix, mergeDimStyle.Render(commitLine)))
+				}
+			}
+
+			// Mergeable status
+			if m.prDetails.Mergeable {
+				b.WriteString(fmt.Sprintf("%s%s %s\n", prIndent, treeLast, mergeSuccessStyle.Render("✓ Ready to merge")))
+			} else {
+				b.WriteString(fmt.Sprintf("%s%s %s\n", prIndent, treeLast, mergeWarningStyle.Render("⚠ Not mergeable")))
+			}
+
+			// Add separator between multiple issues
+			if i < len(m.prDetails.LinkedIssues)-1 {
+				b.WriteString("\n")
+			}
+		}
 	} else {
-		b.WriteString(mergeWarningStyle.Render("  ⚠ Not mergeable"))
+		// No linked issues - show PR only
+		b.WriteString(fmt.Sprintf("🔀 PR #%d\n", m.prDetails.Number))
+		b.WriteString(fmt.Sprintf("%s %s\n", treeBranch, mergeLabelStyle.Render(m.prDetails.Title)))
+
+		// Branch info
+		branchLine := fmt.Sprintf("%s → %s", m.prDetails.HeadBranch, m.prDetails.BaseBranch)
+		b.WriteString(fmt.Sprintf("%s 🌿 %s\n", treeVert, mergeDimStyle.Render(branchLine)))
+
+		// Stats
+		statsLine := fmt.Sprintf("+%d -%d • %d files", m.prDetails.Additions, m.prDetails.Deletions, m.prDetails.ChangedFiles)
+		b.WriteString(fmt.Sprintf("%s 📊 %s\n", treeVert, mergeDimStyle.Render(statsLine)))
+
+		// Author
+		b.WriteString(fmt.Sprintf("%s 👤 @%s\n", treeVert, mergeDimStyle.Render(m.prDetails.Author)))
+
+		// Labels
+		if len(m.prDetails.Labels) > 0 {
+			labelsLine := strings.Join(m.prDetails.Labels, ", ")
+			b.WriteString(fmt.Sprintf("%s 🏷️  %s\n", treeVert, mergeDimStyle.Render(labelsLine)))
+		}
+
+		// Reviews
+		if len(m.prDetails.Reviewers) > 0 {
+			b.WriteString(fmt.Sprintf("%s 👥 Reviews:\n", treeVert))
+			for i, reviewer := range m.prDetails.Reviewers {
+				prefix := treeVert
+				if i == len(m.prDetails.Reviewers)-1 {
+					prefix = treeSpace
+				}
+				reviewIcon := "○"
+				var reviewStyle lipgloss.Style
+				switch reviewer.State {
+				case "APPROVED":
+					reviewIcon = "✓"
+					reviewStyle = mergeReviewApprovedStyle
+				case "CHANGES_REQUESTED":
+					reviewIcon = "✗"
+					reviewStyle = mergeReviewChangesStyle
+				default:
+					reviewStyle = mergeReviewPendingStyle
+				}
+				reviewLine := fmt.Sprintf("%s @%s (%s)", reviewIcon, reviewer.Login, reviewer.State)
+				b.WriteString(fmt.Sprintf("%s    %s\n", prefix, reviewStyle.Render(reviewLine)))
+			}
+		}
+
+		// Commits
+		if len(m.prDetails.Commits) > 0 {
+			b.WriteString(fmt.Sprintf("%s 📝 Commits (%d):\n", treeVert, len(m.prDetails.Commits)))
+			start := 0
+			if len(m.prDetails.Commits) > 3 {
+				start = len(m.prDetails.Commits) - 3
+				b.WriteString(fmt.Sprintf("%s    %s\n", treeVert, mergeDimStyle.Render(fmt.Sprintf("... %d earlier commits", start))))
+			}
+			for j := start; j < len(m.prDetails.Commits); j++ {
+				c := m.prDetails.Commits[j]
+				commitLine := fmt.Sprintf("%s %s", c.SHA[:7], truncateStr(c.Message, 40))
+				b.WriteString(fmt.Sprintf("%s    %s\n", treeVert, mergeDimStyle.Render(commitLine)))
+			}
+		}
+
+		// Mergeable status
+		if m.prDetails.Mergeable {
+			b.WriteString(fmt.Sprintf("%s %s\n", treeLast, mergeSuccessStyle.Render("✓ Ready to merge")))
+		} else {
+			b.WriteString(fmt.Sprintf("%s %s\n", treeLast, mergeWarningStyle.Render("⚠ Not mergeable")))
+		}
 	}
 
 	return mergeBoxStyle.Width(width).Render(b.String())
@@ -606,88 +733,6 @@ func (m mergeModel) renderChecks(width int) string {
 		b.WriteString(style.Render(checkLine))
 		b.WriteString("\n")
 		count++
-	}
-
-	return mergeBoxStyle.Width(width).Render(b.String())
-}
-
-func (m mergeModel) renderReviews(width int) string {
-	var b strings.Builder
-
-	b.WriteString(mergeLabelStyle.Render("👥 Reviews"))
-	b.WriteString("\n")
-
-	if len(m.prDetails.Reviewers) == 0 {
-		b.WriteString(mergeDimStyle.Render("  No reviews yet"))
-		return mergeBoxStyle.Width(width).Render(b.String())
-	}
-
-	for _, reviewer := range m.prDetails.Reviewers {
-		var icon string
-		var style lipgloss.Style
-		switch reviewer.State {
-		case "APPROVED":
-			icon = "✓"
-			style = mergeReviewApprovedStyle
-		case "CHANGES_REQUESTED":
-			icon = "✗"
-			style = mergeReviewChangesStyle
-		default:
-			icon = "○"
-			style = mergeReviewPendingStyle
-		}
-
-		line := fmt.Sprintf("  %s @%s (%s)", icon, reviewer.Login, reviewer.State)
-		b.WriteString(style.Render(line))
-		b.WriteString("\n")
-	}
-
-	return mergeBoxStyle.Width(width).Render(b.String())
-}
-
-func (m mergeModel) renderLinkedIssues(width int) string {
-	var b strings.Builder
-
-	b.WriteString(mergeLabelStyle.Render("🔗 Linked Issues"))
-	b.WriteString("\n")
-
-	for _, issue := range m.prDetails.LinkedIssues {
-		var icon string
-		var style lipgloss.Style
-		if issue.State == "open" {
-			icon = "○"
-			style = mergeIssueOpenStyle
-		} else {
-			icon = "●"
-			style = mergeIssueClosedStyle
-		}
-
-		line := fmt.Sprintf("  %s #%d: %s", icon, issue.Number, truncateStr(issue.Title, 50))
-		b.WriteString(style.Render(line))
-		b.WriteString("\n")
-	}
-
-	return mergeBoxStyle.Width(width).Render(b.String())
-}
-
-func (m mergeModel) renderCommits(width int) string {
-	var b strings.Builder
-
-	b.WriteString(mergeLabelStyle.Render(fmt.Sprintf("📝 Commits (%d)", len(m.prDetails.Commits))))
-	b.WriteString("\n")
-
-	// Show last 5 commits
-	start := 0
-	if len(m.prDetails.Commits) > 5 {
-		start = len(m.prDetails.Commits) - 5
-		b.WriteString(mergeDimStyle.Render(fmt.Sprintf("  ... %d earlier commits\n", start)))
-	}
-
-	for i := start; i < len(m.prDetails.Commits); i++ {
-		c := m.prDetails.Commits[i]
-		line := fmt.Sprintf("  %s %s", c.SHA, truncateStr(c.Message, 50))
-		b.WriteString(mergeDimStyle.Render(line))
-		b.WriteString("\n")
 	}
 
 	return mergeBoxStyle.Width(width).Render(b.String())

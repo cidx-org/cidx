@@ -145,10 +145,16 @@ type ReviewerStatus struct {
 
 // LinkedIssue represents an issue linked to a PR
 type LinkedIssue struct {
-	Number int
-	Title  string
-	State  string // open, closed
-	URL    string
+	Number    int
+	Title     string
+	Body      string
+	State     string // open, closed
+	URL       string
+	Labels    []string
+	Assignees []string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	Author    string
 }
 
 // CommitInfo represents a commit in a PR

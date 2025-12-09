@@ -761,11 +761,25 @@ func (c *Client) extractLinkedIssues(ctx context.Context, body string) []remote.
 				// Fetch issue details
 				issue, _, err := c.client.Issues.Get(ctx, c.owner, c.repo, num)
 				if err == nil && !issue.IsPullRequest() {
+					var labels []string
+					for _, l := range issue.Labels {
+						labels = append(labels, l.GetName())
+					}
+					var assignees []string
+					for _, a := range issue.Assignees {
+						assignees = append(assignees, a.GetLogin())
+					}
 					issues = append(issues, remote.LinkedIssue{
-						Number: num,
-						Title:  issue.GetTitle(),
-						State:  issue.GetState(),
-						URL:    issue.GetHTMLURL(),
+						Number:    num,
+						Title:     issue.GetTitle(),
+						Body:      issue.GetBody(),
+						State:     issue.GetState(),
+						URL:       issue.GetHTMLURL(),
+						Labels:    labels,
+						Assignees: assignees,
+						CreatedAt: issue.GetCreatedAt().Time,
+						UpdatedAt: issue.GetUpdatedAt().Time,
+						Author:    issue.GetUser().GetLogin(),
 					})
 				}
 			}
