@@ -513,8 +513,8 @@ func (m mergeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// If no post-merge actions, start watching pipeline directly
 		if m.prConfig.WatchPipelineAfterMerge {
-			m.loading = true
-			m.loadingMsg = "Watching CI pipeline on main..."
+			// Clear success to return to main screen in "merged" mode
+			m.success = ""
 			return m, tea.Batch(m.fetchMainPipeline(), mergeTickCmd(m.prConfig.AutoRefreshInterval))
 		}
 		// No watching, show quit confirmation or exit
@@ -527,14 +527,15 @@ func (m mergeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 		if msg.err != nil {
 			m.err = msg.err
+			return m, nil
 		}
 		if msg.status != "" {
 			m.postMergeStatus = msg.status
 		}
 		// After post-merge actions, start watching pipeline if configured
 		if m.prConfig.WatchPipelineAfterMerge {
-			m.loading = true
-			m.loadingMsg = "Watching CI pipeline on main..."
+			// Clear success to return to main screen in "merged" mode
+			m.success = ""
 			return m, tea.Batch(m.fetchMainPipeline(), mergeTickCmd(m.prConfig.AutoRefreshInterval))
 		}
 		// No watching, show quit confirmation or exit
@@ -780,10 +781,6 @@ func (m mergeModel) View() string {
 			mergeErrorStyle.Render("Error:"), m.err)
 	}
 
-	if m.success != "" {
-		return m.renderPostMergeView()
-	}
-
 	// Show quit confirmation dialog
 	if m.showQuitConfirmation {
 		return m.renderQuitConfirmation()
@@ -809,9 +806,15 @@ func (m mergeModel) View() string {
 
 	var b strings.Builder
 
-	// Title
-	title := fmt.Sprintf("🔀 Merge PR #%d", m.prNumber)
-	b.WriteString(mergeTitleStyle.Render(title))
+	// Title - different when merged
+	var title string
+	if m.merged {
+		title = fmt.Sprintf("✓ PR #%d MERGED - Watching main pipeline", m.prNumber)
+		b.WriteString(mergeSuccessStyle.Render(title))
+	} else {
+		title = fmt.Sprintf("🔀 Merge PR #%d", m.prNumber)
+		b.WriteString(mergeTitleStyle.Render(title))
+	}
 	b.WriteString("\n\n")
 
 	// Tree view: Issue → PR relationship
@@ -822,23 +825,51 @@ func (m mergeModel) View() string {
 	b.WriteString(m.renderChecks(boxWidth))
 	b.WriteString("\n")
 
-	// Merge Method selection
-	b.WriteString(m.renderMergeMethod(boxWidth))
-	b.WriteString("\n")
+	// In merged mode, show post-merge status instead of merge controls
+	if m.merged {
+		// Show post-merge action status
+		if m.postMergeStatus != "" {
+			var statusBox strings.Builder
+			statusBox.WriteString(mergeLabelStyle.Render("📋 Post-merge actions"))
+			statusBox.WriteString("\n")
+			for _, line := range strings.Split(m.postMergeStatus, "\n") {
+				if line != "" {
+					statusBox.WriteString(fmt.Sprintf("  %s\n", line))
+				}
+			}
+			b.WriteString(mergeBoxStyle.Width(boxWidth).Render(statusBox.String()))
+			b.WriteString("\n")
+		}
 
-	// Commit Message editing
-	if mergeMethods[m.mergeMethod] != "rebase" {
-		b.WriteString(m.renderCommitMessage(boxWidth))
+		// Help for merged mode
+		var help string
+		if m.pipelineComplete {
+			help = "q: quit • r: refresh"
+		} else {
+			help = "Watching pipeline... • q: quit • r: refresh"
+		}
+		b.WriteString(mergeHelpStyle.Render(help))
+	} else {
+		// Normal mode: show merge controls
+
+		// Merge Method selection
+		b.WriteString(m.renderMergeMethod(boxWidth))
 		b.WriteString("\n")
+
+		// Commit Message editing
+		if mergeMethods[m.mergeMethod] != "rebase" {
+			b.WriteString(m.renderCommitMessage(boxWidth))
+			b.WriteString("\n")
+		}
+
+		// Actions
+		b.WriteString(m.renderActions(boxWidth))
+		b.WriteString("\n")
+
+		// Help
+		help := "Tab: switch section • ↑↓: navigate • Enter: confirm • r: refresh • a: auto-refresh • e: errors • q: quit"
+		b.WriteString(mergeHelpStyle.Render(help))
 	}
-
-	// Actions
-	b.WriteString(m.renderActions(boxWidth))
-	b.WriteString("\n")
-
-	// Help
-	help := "Tab: switch section • ↑↓: navigate • Enter: confirm • r: refresh • a: auto-refresh • e: errors • q: quit"
-	b.WriteString(mergeHelpStyle.Render(help))
 
 	return b.String()
 }
@@ -1038,45 +1069,70 @@ func (m mergeModel) renderTreeView(width int) string {
 func (m mergeModel) renderChecks(width int) string {
 	var b strings.Builder
 
-	// Header with auto-refresh status
+	// Use mainPipelineCheck when in merged mode, otherwise use checks
+	checks := m.checks
+	if m.merged && m.mainPipelineCheck != nil {
+		checks = m.mainPipelineCheck
+	}
+
+	// Header with auto-refresh status and merged mode indicator
+	headerLabel := "🔍 CI Status"
+	if m.merged {
+		headerLabel = "🔍 Main Pipeline"
+	}
 	autoRefreshStatus := ""
-	if m.autoRefresh {
+	if m.merged && !m.pipelineComplete {
+		autoRefreshStatus = " [watching]"
+	} else if m.autoRefresh {
 		autoRefreshStatus = " [auto]"
 	}
 	if m.refreshing {
 		autoRefreshStatus = " [refreshing...]"
 	}
-	b.WriteString(mergeLabelStyle.Render(fmt.Sprintf("🔍 CI Status%s", autoRefreshStatus)))
+	b.WriteString(mergeLabelStyle.Render(fmt.Sprintf("%s%s", headerLabel, autoRefreshStatus)))
 	b.WriteString("\n")
 
-	if m.checks == nil || m.checks.TotalCount == 0 {
-		b.WriteString(mergeDimStyle.Render("  ⏳ Waiting for CI to start..."))
+	if checks == nil || checks.TotalCount == 0 {
+		if m.merged {
+			b.WriteString(mergeDimStyle.Render("  ⏳ Waiting for main pipeline to start..."))
+		} else {
+			b.WriteString(mergeDimStyle.Render("  ⏳ Waiting for CI to start..."))
+		}
 		b.WriteString("\n")
-		b.WriteString(mergeDimStyle.Render("  Press 'r' to refresh • 'a' to toggle auto-refresh"))
+		if !m.merged {
+			b.WriteString(mergeDimStyle.Render("  Press 'r' to refresh • 'a' to toggle auto-refresh"))
+		}
 		return mergeBoxStyle.Width(width).Render(b.String())
 	}
 
 	// Commit SHA (verify this is the right CI run)
-	shortSHA := m.checks.HeadSHA
+	shortSHA := checks.HeadSHA
 	if len(shortSHA) > 7 {
 		shortSHA = shortSHA[:7]
 	}
-	b.WriteString(mergeDimStyle.Render(fmt.Sprintf("  📌 Commit: %s", shortSHA)))
+	if m.merged {
+		b.WriteString(mergeDimStyle.Render(fmt.Sprintf("  📌 Branch: main (workflow %s)", shortSHA)))
+	} else {
+		b.WriteString(mergeDimStyle.Render(fmt.Sprintf("  📌 Commit: %s", shortSHA)))
+	}
 	b.WriteString("\n")
 
 	// Last refresh time
-	refreshTime := m.checks.UpdatedAt.Format("15:04:05")
-	b.WriteString(mergeDimStyle.Render(fmt.Sprintf("  🔄 Last refresh: %s", refreshTime)))
-	b.WriteString("\n\n")
+	if !checks.UpdatedAt.IsZero() {
+		refreshTime := checks.UpdatedAt.Format("15:04:05")
+		b.WriteString(mergeDimStyle.Render(fmt.Sprintf("  🔄 Last refresh: %s", refreshTime)))
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
 
 	// Progress bar
-	b.WriteString(m.renderProgressBar(width - 6))
+	b.WriteString(m.renderProgressBarWithChecks(checks, width-6))
 	b.WriteString("\n\n")
 
 	// Summary with detailed breakdown
 	var statusIcon string
 	var statusStyle lipgloss.Style
-	switch m.checks.Status {
+	switch checks.Status {
 	case "success":
 		statusIcon = "✓"
 		statusStyle = mergeCheckSuccessStyle
@@ -1089,14 +1145,14 @@ func (m mergeModel) renderChecks(width int) string {
 	}
 
 	// Status summary line
-	summary := fmt.Sprintf("  %s %d/%d checks passed", statusIcon, m.checks.Success, m.checks.TotalCount)
+	summary := fmt.Sprintf("  %s %d/%d checks passed", statusIcon, checks.Success, checks.TotalCount)
 	b.WriteString(statusStyle.Render(summary))
 	b.WriteString("\n")
 
 	// Detailed breakdown if there are pending checks
-	if m.checks.Pending > 0 {
+	if checks.Pending > 0 || checks.Queued > 0 || checks.InProgress > 0 {
 		breakdown := fmt.Sprintf("     (%d queued, %d running, %d completed)",
-			m.checks.Queued, m.checks.InProgress, m.checks.Success+m.checks.Failure)
+			checks.Queued, checks.InProgress, checks.Success+checks.Failure)
 		b.WriteString(mergeDimStyle.Render(breakdown))
 		b.WriteString("\n")
 	}
@@ -1104,7 +1160,7 @@ func (m mergeModel) renderChecks(width int) string {
 
 	// All checks (show all, not limited)
 	hasFailures := false
-	for _, check := range m.checks.Checks {
+	for _, check := range checks.Checks {
 		var icon string
 		var style lipgloss.Style
 		var statusText string
@@ -1196,15 +1252,15 @@ func (m mergeModel) renderChecks(width int) string {
 	return mergeBoxStyle.Width(width).Render(b.String())
 }
 
-// renderProgressBar creates a visual progress bar for CI status
-func (m mergeModel) renderProgressBar(width int) string {
-	if m.checks == nil || m.checks.TotalCount == 0 {
+// renderProgressBarWithChecks creates a visual progress bar for given checks
+func (m mergeModel) renderProgressBarWithChecks(checks *remote.PRChecks, width int) string {
+	if checks == nil || checks.TotalCount == 0 {
 		return ""
 	}
 
 	// Calculate progress
-	completed := m.checks.Success + m.checks.Failure
-	total := m.checks.TotalCount
+	completed := checks.Success + checks.Failure
+	total := checks.TotalCount
 	if total == 0 {
 		total = 1 // Avoid division by zero
 	}
@@ -1215,13 +1271,13 @@ func (m mergeModel) renderProgressBar(width int) string {
 		barWidth = 20
 	}
 
-	successWidth := (m.checks.Success * barWidth) / total
-	failureWidth := (m.checks.Failure * barWidth) / total
-	runningWidth := (m.checks.InProgress * barWidth) / total
+	successWidth := (checks.Success * barWidth) / total
+	failureWidth := (checks.Failure * barWidth) / total
+	runningWidth := (checks.InProgress * barWidth) / total
 	queuedWidth := barWidth - successWidth - failureWidth - runningWidth
 
 	// Ensure at least 1 char for running jobs if any
-	if m.checks.InProgress > 0 && runningWidth == 0 {
+	if checks.InProgress > 0 && runningWidth == 0 {
 		runningWidth = 1
 		if queuedWidth > 0 {
 			queuedWidth--
@@ -1297,88 +1353,6 @@ func (m mergeModel) renderConfirmation() string {
 	b.WriteString("\n")
 
 	return b.String()
-}
-
-func (m mergeModel) renderPostMergeView() string {
-	var result strings.Builder
-
-	result.WriteString(fmt.Sprintf("\n  %s\n", mergeSuccessStyle.Render("✓ "+m.success)))
-
-	// Show post-merge action status
-	if m.postMergeStatus != "" {
-		result.WriteString("\n  Post-merge actions:\n")
-		for _, line := range strings.Split(m.postMergeStatus, "\n") {
-			if line != "" {
-				result.WriteString(fmt.Sprintf("    %s\n", line))
-			}
-		}
-	}
-
-	// Show pipeline monitoring status
-	if m.prConfig.WatchPipelineAfterMerge && !m.pipelineComplete {
-		result.WriteString("\n  Pipeline on main:\n")
-		if m.mainPipelineCheck != nil {
-			// Show pipeline progress
-			checks := m.mainPipelineCheck
-			if checks.TotalCount == 0 {
-				result.WriteString("    Waiting for pipeline to start...\n")
-			} else {
-				// Status indicator
-				var statusIcon string
-				switch checks.Status {
-				case "success":
-					statusIcon = mergeSuccessStyle.Render("✓")
-				case "failure":
-					statusIcon = mergeErrorStyle.Render("✗")
-				default:
-					statusIcon = m.spinner.View()
-				}
-				result.WriteString(fmt.Sprintf("    %s %d jobs: %d success, %d running, %d queued",
-					statusIcon, checks.TotalCount, checks.Success, checks.InProgress, checks.Queued))
-				if checks.Failure > 0 {
-					result.WriteString(fmt.Sprintf(", %d failed", checks.Failure))
-				}
-				result.WriteString("\n")
-
-				// Show individual job status
-				for _, check := range checks.Checks {
-					var icon string
-					switch check.Status {
-					case "completed":
-						if check.Conclusion == "success" {
-							icon = mergeSuccessStyle.Render("✓")
-						} else {
-							icon = mergeErrorStyle.Render("✗")
-						}
-					case "in_progress":
-						icon = mergeWarningStyle.Render("●")
-					default:
-						icon = mergeDimStyle.Render("○")
-					}
-					result.WriteString(fmt.Sprintf("      %s %s\n", icon, check.Name))
-				}
-			}
-		} else {
-			result.WriteString(fmt.Sprintf("    %s Fetching pipeline status...\n", m.spinner.View()))
-		}
-	}
-
-	// Show quit confirmation if pipeline complete
-	if m.showQuitConfirmation {
-		result.WriteString("\n")
-		if m.mainPipelineCheck != nil && m.mainPipelineCheck.Status == "success" {
-			result.WriteString(mergeSuccessStyle.Render("  ✓ All pipelines completed successfully!"))
-		} else if m.mainPipelineCheck != nil && m.mainPipelineCheck.Status == "failure" {
-			result.WriteString(mergeWarningStyle.Render("  ⚠ Some pipelines failed"))
-		}
-		result.WriteString("\n\n")
-		result.WriteString(mergeSelectedStyle.Render("  Press [Q] to quit, [Enter] to stay"))
-		result.WriteString("\n")
-	} else if m.pipelineComplete && !m.prConfig.ConfirmQuitAfterMerge {
-		result.WriteString("\n  Press Enter to exit.\n")
-	}
-
-	return result.String()
 }
 
 func (m mergeModel) renderQuitConfirmation() string {
