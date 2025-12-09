@@ -83,26 +83,36 @@ func (a *PRAction) createPR(ctx context.Context) error {
 		return fmt.Errorf("you have uncommitted changes. Please commit or stash them first")
 	}
 
-	// 2. Ensure we're on main
+	// 2. Check current branch
 	currentBranch, err := a.repo.GetCurrentBranch()
 	if err != nil {
 		return fmt.Errorf("failed to get current branch: %w", err)
 	}
 
+	// 3. If on a feature branch, check if it already has a PR
 	if currentBranch != "main" {
-		log.Warnf("⚠️  You are on branch '%s', switching to 'main'...", currentBranch)
-		if err := a.repo.Checkout("main"); err != nil {
-			return fmt.Errorf("failed to checkout main: %w", err)
+		// Check if this branch already has a PR
+		existingPR, existingURL, err := a.provider.GetPullRequestByBranch(ctx, currentBranch)
+		if err == nil && existingPR > 0 {
+			// Branch already has a PR
+			log.Warnf("⚠️  Branch '%s' already has PR #%d", currentBranch, existingPR)
+			log.Infof("🔗 %s", existingURL)
+			return fmt.Errorf("branch '%s' already has an associated PR. Use 'cidx action pr ready' to mark it ready", currentBranch)
 		}
+
+		// Branch exists but has no PR - reuse it
+		log.Infof("🌿 Using existing branch '%s' (no PR associated)", currentBranch)
+		return a.createPRForExistingBranch(ctx, currentBranch)
 	}
 
-	// 3. Pull latest changes
+	// On main branch - create new branch workflow
+	// 4. Pull latest changes
 	log.Info("📥 Pulling latest changes from main...")
 	if err := a.repo.Pull(); err != nil {
 		return fmt.Errorf("failed to pull main: %w", err)
 	}
 
-	// 4. Generate branch name from title or issue
+	// 5. Generate branch name from title or issue
 	var branchName string
 	if a.issueNum != "" {
 		branchName = fmt.Sprintf("issue-%s", a.issueNum)
@@ -123,7 +133,7 @@ func (a *PRAction) createPR(ctx context.Context) error {
 		return nil
 	}
 
-	// 5. Create and checkout branch
+	// 6. Create and checkout branch
 	workDir, err := a.repo.GetWorkDir()
 	if err != nil {
 		return fmt.Errorf("failed to get work directory: %w", err)
@@ -137,7 +147,7 @@ func (a *PRAction) createPR(ctx context.Context) error {
 
 	log.Infof("✅ Branch '%s' created and checked out", branchName)
 
-	// 6. Create initial empty commit to allow PR creation
+	// 7. Create initial empty commit to allow PR creation
 	log.Info("📝 Creating initial commit...")
 	commitMsg := fmt.Sprintf("chore: initialize PR branch for %s", a.title)
 	commitCmd := exec.Command("git", "commit", "--allow-empty", "-m", commitMsg)
@@ -146,7 +156,7 @@ func (a *PRAction) createPR(ctx context.Context) error {
 		return fmt.Errorf("failed to create initial commit: %w\n%s", err, output)
 	}
 
-	// 7. Push branch to remote with initial commit
+	// 8. Push branch to remote with initial commit
 	log.Info("📤 Pushing branch to remote...")
 	pushCmd := exec.Command("git", "push", "-u", "origin", branchName)
 	pushCmd.Dir = workDir
@@ -154,7 +164,7 @@ func (a *PRAction) createPR(ctx context.Context) error {
 		return fmt.Errorf("failed to push branch: %w\n%s", err, output)
 	}
 
-	// 8. Create draft PR using GitHub API
+	// 9. Create draft PR using GitHub API
 	log.Info("📝 Creating draft pull request...")
 
 	prNumber, prURL, err := a.provider.CreatePullRequest(
@@ -181,6 +191,122 @@ func (a *PRAction) createPR(ctx context.Context) error {
 	log.Info("   4. When ready: cidx action pr ready")
 
 	return nil
+}
+
+// createPRForExistingBranch creates a PR for an existing branch that has no associated PR
+func (a *PRAction) createPRForExistingBranch(ctx context.Context, branchName string) error {
+	workDir, err := a.repo.GetWorkDir()
+	if err != nil {
+		return fmt.Errorf("failed to get work directory: %w", err)
+	}
+
+	// Check if branch has commits ahead of main
+	hasCommits, err := a.branchHasCommitsAheadOfMain(workDir)
+	if err != nil {
+		log.Warnf("⚠️  Could not check commits ahead of main: %v", err)
+	}
+
+	if a.dryRun {
+		log.Info("🏁 Dry-run mode:")
+		log.Infof("   Would use existing branch: %s", branchName)
+		log.Infof("   Would create draft PR: %s", a.title)
+		if a.issueNum != "" {
+			log.Infof("   Would link to issue: #%s", a.issueNum)
+		}
+		if !hasCommits {
+			log.Info("   Would create initial empty commit (no commits ahead of main)")
+		}
+		return nil
+	}
+
+	// If no commits ahead of main, create an initial commit
+	if !hasCommits {
+		log.Info("📝 Creating initial commit...")
+		commitMsg := fmt.Sprintf("chore: initialize PR branch for %s", a.title)
+		commitCmd := exec.Command("git", "commit", "--allow-empty", "-m", commitMsg)
+		commitCmd.Dir = workDir
+		if output, err := commitCmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("failed to create initial commit: %w\n%s", err, output)
+		}
+	}
+
+	// Check if branch is pushed to remote
+	isPushed, err := a.branchExistsOnRemote(workDir, branchName)
+	if err != nil {
+		log.Warnf("⚠️  Could not check remote branch: %v", err)
+	}
+
+	if !isPushed {
+		// Push branch to remote
+		log.Info("📤 Pushing branch to remote...")
+		pushCmd := exec.Command("git", "push", "-u", "origin", branchName)
+		pushCmd.Dir = workDir
+		if output, err := pushCmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("failed to push branch: %w\n%s", err, output)
+		}
+	} else {
+		// Push any new commits
+		log.Info("📤 Pushing commits to remote...")
+		pushCmd := exec.Command("git", "push")
+		pushCmd.Dir = workDir
+		if output, err := pushCmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("failed to push: %w\n%s", err, output)
+		}
+	}
+
+	// Create draft PR using GitHub API
+	log.Info("📝 Creating draft pull request...")
+
+	prNumber, prURL, err := a.provider.CreatePullRequest(
+		ctx,
+		a.title,
+		a.generatePRBody(),
+		branchName,
+		"main",
+		true, // draft
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create PR: %w", err)
+	}
+
+	_ = prNumber // May be useful later for tracking
+
+	log.Info("✅ Draft PR created successfully!")
+	log.Infof("🔗 %s", prURL)
+	log.Info("")
+	log.Info("📌 Next steps:")
+	log.Info("   1. Make your changes")
+	log.Info("   2. git add . && git commit -m 'feat: your changes'")
+	log.Info("   3. git push (your commits will be added to the PR)")
+	log.Info("   4. When ready: cidx action pr ready")
+
+	return nil
+}
+
+// branchHasCommitsAheadOfMain checks if the current branch has commits ahead of main
+func (a *PRAction) branchHasCommitsAheadOfMain(workDir string) (bool, error) {
+	// Get the number of commits ahead of main
+	cmd := exec.Command("git", "rev-list", "--count", "main..HEAD")
+	cmd.Dir = workDir
+	output, err := cmd.Output()
+	if err != nil {
+		return false, err
+	}
+
+	count := strings.TrimSpace(string(output))
+	return count != "0", nil
+}
+
+// branchExistsOnRemote checks if a branch exists on the remote
+func (a *PRAction) branchExistsOnRemote(workDir, branchName string) (bool, error) {
+	cmd := exec.Command("git", "ls-remote", "--heads", "origin", branchName)
+	cmd.Dir = workDir
+	output, err := cmd.Output()
+	if err != nil {
+		return false, err
+	}
+
+	return len(strings.TrimSpace(string(output))) > 0, nil
 }
 
 // markReady marks the current PR as ready for review
