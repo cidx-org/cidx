@@ -76,12 +76,15 @@ type PRChecks struct {
 
 // CheckRun represents a GitHub Actions check run
 type CheckRun struct {
-	Name       string
-	Status     string // queued, in_progress, completed
-	Conclusion string // success, failure, cancelled, skipped
-	URL        string
-	StartedAt  time.Time
+	ID          int64
+	Name        string
+	Status      string // queued, in_progress, completed
+	Conclusion  string // success, failure, cancelled, skipped
+	URL         string
+	StartedAt   time.Time
 	CompletedAt time.Time
+	FailedStep  string // Name of the failed step (if any)
+	ErrorLog    string // Last lines of error log (if failed)
 }
 
 // StatusCheck represents a commit status check

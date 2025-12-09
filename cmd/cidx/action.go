@@ -50,6 +50,16 @@ func loadProviderConfig() config.ProviderConfig {
 	return cfg.Provider
 }
 
+// loadPRConfig loads the PR configuration from cidx.toml or returns defaults
+func loadPRConfig() config.PRConfig {
+	cfg, err := config.Load("cidx.toml")
+	if err != nil {
+		// Return defaults if no config file
+		return config.DefaultPRConfig()
+	}
+	return cfg.PR
+}
+
 // getGitHubToken retrieves GitHub token from env var or gh CLI auth
 func getGitHubToken(host string) (string, error) {
 	// 1. Try environment variable first
@@ -750,7 +760,10 @@ func prTUIAction(c *cli.Context) error {
 		return fmt.Errorf("no PR found for branch %s: %w", branch, err)
 	}
 
-	return runMergeTUI(ghClient, prNumber)
+	// Load PR config
+	prConfig := loadPRConfig()
+
+	return runMergeTUI(ghClient, prNumber, prConfig)
 }
 
 func tagDeleteAction(c *cli.Context) error {

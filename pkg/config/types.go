@@ -16,6 +16,7 @@ type Config struct {
 	Branch    BranchConfig                      `toml:"branch"`
 	Release   ReleaseConfig                     `toml:"release"`
 	Tag       TagConfig                         `toml:"tag"`
+	PR        PRConfig                          `toml:"pr"`
 	Provider  ProviderConfig                    `toml:"provider"`
 	Overrides map[string]map[string]interface{} `toml:",inline"`
 	Workspace string                            // Auto-detected or from env
@@ -79,6 +80,55 @@ func (r *ReleaseConfig) GetEditor() string {
 	}
 	// Check $EDITOR env var at runtime (in the action)
 	return ""
+}
+
+// PRConfig defines pull request / merge request workflow settings
+type PRConfig struct {
+	// ConfirmMerge shows a confirmation dialog before merging (default: true)
+	ConfirmMerge bool `toml:"confirm_merge"`
+
+	// DeleteBranchAfterMerge deletes the feature branch after merge (default: true)
+	DeleteBranchAfterMerge bool `toml:"delete_branch_after_merge"`
+
+	// CheckoutAfterMerge switches to main branch after merge (default: true for trunk-based)
+	CheckoutAfterMerge bool `toml:"checkout_after_merge"`
+
+	// SyncAfterMerge pulls latest changes after checkout (default: true)
+	SyncAfterMerge bool `toml:"sync_after_merge"`
+
+	// DefaultMergeMethod is the default merge method: "squash", "merge", "rebase" (default: "squash")
+	DefaultMergeMethod string `toml:"default_merge_method"`
+
+	// AutoRefreshInterval is the interval in seconds for auto-refresh (default: 5, 0 to disable)
+	AutoRefreshInterval int `toml:"auto_refresh_interval"`
+}
+
+// DefaultPRConfig returns a PRConfig with sensible defaults for trunk-based development
+func DefaultPRConfig() PRConfig {
+	return PRConfig{
+		ConfirmMerge:           true,
+		DeleteBranchAfterMerge: true,
+		CheckoutAfterMerge:     true,
+		SyncAfterMerge:         true,
+		DefaultMergeMethod:     "squash",
+		AutoRefreshInterval:    5,
+	}
+}
+
+// GetDefaultMergeMethod returns the default merge method with fallback to "squash"
+func (p *PRConfig) GetDefaultMergeMethod() string {
+	if p.DefaultMergeMethod == "" {
+		return "squash"
+	}
+	return p.DefaultMergeMethod
+}
+
+// GetAutoRefreshInterval returns the auto-refresh interval with fallback to 5 seconds
+func (p *PRConfig) GetAutoRefreshInterval() int {
+	if p.AutoRefreshInterval <= 0 {
+		return 5
+	}
+	return p.AutoRefreshInterval
 }
 
 // TagConfig defines tag workflow settings
