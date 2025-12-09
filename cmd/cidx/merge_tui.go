@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
@@ -678,11 +679,26 @@ func (m mergeModel) renderChecks(width int) string {
 	b.WriteString("\n")
 
 	if m.checks == nil || m.checks.TotalCount == 0 {
-		b.WriteString(mergeDimStyle.Render("  No checks configured"))
+		b.WriteString(mergeDimStyle.Render("  ⏳ Waiting for CI to start..."))
+		b.WriteString("\n")
+		b.WriteString(mergeDimStyle.Render("  Press 'r' to refresh"))
 		return mergeBoxStyle.Width(width).Render(b.String())
 	}
 
-	// Summary
+	// Commit SHA (verify this is the right CI run)
+	shortSHA := m.checks.HeadSHA
+	if len(shortSHA) > 7 {
+		shortSHA = shortSHA[:7]
+	}
+	b.WriteString(mergeDimStyle.Render(fmt.Sprintf("  📌 Commit: %s", shortSHA)))
+	b.WriteString("\n")
+
+	// Last refresh time
+	refreshTime := m.checks.UpdatedAt.Format("15:04:05")
+	b.WriteString(mergeDimStyle.Render(fmt.Sprintf("  🔄 Last refresh: %s (press 'r' to refresh)", refreshTime)))
+	b.WriteString("\n\n")
+
+	// Summary with detailed breakdown
 	var statusIcon string
 	var statusStyle lipgloss.Style
 	switch m.checks.Status {
@@ -697,42 +713,75 @@ func (m mergeModel) renderChecks(width int) string {
 		statusStyle = mergeCheckPendingStyle
 	}
 
-	summary := fmt.Sprintf("  %s %d/%d checks passed",
-		statusIcon, m.checks.Success, m.checks.TotalCount)
+	// Status summary line
+	summary := fmt.Sprintf("  %s %d/%d checks passed", statusIcon, m.checks.Success, m.checks.TotalCount)
 	b.WriteString(statusStyle.Render(summary))
 	b.WriteString("\n")
 
-	// Individual checks (limit to 5)
-	count := 0
-	for _, check := range m.checks.Checks {
-		if count >= 5 {
-			remaining := len(m.checks.Checks) - 5
-			b.WriteString(mergeDimStyle.Render(fmt.Sprintf("  ... and %d more", remaining)))
-			break
-		}
+	// Detailed breakdown if there are pending checks
+	if m.checks.Pending > 0 {
+		breakdown := fmt.Sprintf("     (%d queued, %d running, %d completed)",
+			m.checks.Queued, m.checks.InProgress, m.checks.Success+m.checks.Failure)
+		b.WriteString(mergeDimStyle.Render(breakdown))
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
 
+	// All checks (show all, not limited)
+	for _, check := range m.checks.Checks {
 		var icon string
 		var style lipgloss.Style
-		switch check.Conclusion {
-		case "success":
-			icon = "✓"
-			style = mergeCheckSuccessStyle
-		case "failure":
-			icon = "✗"
-			style = mergeCheckFailureStyle
-		default:
-			if check.Status == "in_progress" {
-				icon = "●"
-			} else {
-				icon = "○"
+		var statusText string
+
+		switch check.Status {
+		case "completed":
+			switch check.Conclusion {
+			case "success":
+				icon = "✓"
+				style = mergeCheckSuccessStyle
+				if !check.CompletedAt.IsZero() {
+					duration := check.CompletedAt.Sub(check.StartedAt).Round(time.Second)
+					statusText = fmt.Sprintf(" (%s)", duration)
+				}
+			case "failure":
+				icon = "✗"
+				style = mergeCheckFailureStyle
+				statusText = " (failed)"
+			case "cancelled":
+				icon = "⊘"
+				style = mergeCheckPendingStyle
+				statusText = " (cancelled)"
+			case "skipped":
+				icon = "⊘"
+				style = mergeDimStyle
+				statusText = " (skipped)"
+			default:
+				icon = "?"
+				style = mergeCheckPendingStyle
+				statusText = fmt.Sprintf(" (%s)", check.Conclusion)
 			}
+		case "in_progress":
+			icon = "●"
 			style = mergeCheckPendingStyle
+			if !check.StartedAt.IsZero() {
+				elapsed := time.Since(check.StartedAt).Round(time.Second)
+				statusText = fmt.Sprintf(" (running %s)", elapsed)
+			} else {
+				statusText = " (running)"
+			}
+		case "queued":
+			icon = "○"
+			style = mergeDimStyle
+			statusText = " (queued)"
+		default:
+			icon = "○"
+			style = mergeDimStyle
+			statusText = fmt.Sprintf(" (%s)", check.Status)
 		}
 
-		checkLine := fmt.Sprintf("    %s %s", icon, check.Name)
+		checkLine := fmt.Sprintf("    %s %s%s", icon, check.Name, statusText)
 		b.WriteString(style.Render(checkLine))
 		b.WriteString("\n")
-		count++
 	}
 
 	return mergeBoxStyle.Width(width).Render(b.String())

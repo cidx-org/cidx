@@ -65,8 +65,11 @@ type PRChecks struct {
 	Pending      int
 	Success      int
 	Failure      int
+	Queued       int
+	InProgress   int
 	Status       string // pending, success, failure
 	HeadSHA      string // The commit SHA these checks are for
+	UpdatedAt    time.Time
 	Checks       []CheckRun
 	StatusChecks []StatusCheck
 }
@@ -77,6 +80,8 @@ type CheckRun struct {
 	Status     string // queued, in_progress, completed
 	Conclusion string // success, failure, cancelled, skipped
 	URL        string
+	StartedAt  time.Time
+	CompletedAt time.Time
 }
 
 // StatusCheck represents a commit status check

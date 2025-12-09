@@ -351,6 +351,7 @@ func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remot
 
 	checks := &remote.PRChecks{
 		HeadSHA:      headSHA,
+		UpdatedAt:    time.Now(),
 		Checks:       []remote.CheckRun{},
 		StatusChecks: []remote.StatusCheck{},
 	}
@@ -367,24 +368,35 @@ func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remot
 			Status:     run.GetStatus(),
 			Conclusion: run.GetConclusion(),
 			URL:        run.GetHTMLURL(),
+			StartedAt:  run.GetStartedAt().Time,
+			CompletedAt: run.GetCompletedAt().Time,
 		}
 		checks.Checks = append(checks.Checks, check)
 
 		// Count by status
 		checks.TotalCount++
-		if run.GetStatus() != "completed" {
+		switch run.GetStatus() {
+		case "queued":
+			checks.Queued++
 			checks.Pending++
-		} else if run.GetConclusion() == "success" {
-			checks.Success++
-		} else {
-			checks.Failure++
+		case "in_progress":
+			checks.InProgress++
+			checks.Pending++
+		case "completed":
+			if run.GetConclusion() == "success" {
+				checks.Success++
+			} else {
+				checks.Failure++
+			}
+		default:
+			checks.Pending++
 		}
 	}
 
 	// Get commit status checks (legacy status API)
 	statuses, _, err := c.client.Repositories.GetCombinedStatus(ctx, c.owner, c.repo, headSHA, &github.ListOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get combined status: %w", err)
+		return nil, fmt.Errorf("failed to list check runs: %w", err)
 	}
 
 	for _, status := range statuses.Statuses {
