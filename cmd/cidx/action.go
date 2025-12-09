@@ -216,6 +216,12 @@ func actionCommand() *cli.Command {
 						},
 						Action: prMergeAction,
 					},
+					{
+						Name:    "tui",
+						Usage:   "Interactive PR merge interface (TUI)",
+						Aliases: []string{"ui"},
+						Action:  prTUIAction,
+					},
 				},
 			},
 			{
@@ -711,6 +717,40 @@ func releaseTUIAction(c *cli.Context) error {
 	releaseConfig := loadReleaseConfig()
 
 	return runReleaseTUI(modeRelease, repo, provider, tagConfig, releaseConfig)
+}
+
+func prTUIAction(c *cli.Context) error {
+	// Open repository
+	repo, err := vcs.OpenRepository(".")
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	// Get current branch
+	branch, err := repo.GetCurrentBranch()
+	if err != nil {
+		return fmt.Errorf("failed to get current branch: %w", err)
+	}
+
+	// Create provider (must be GitHub for TUI)
+	provider, err := createProvider(repo)
+	if err != nil {
+		return err
+	}
+
+	// Cast to GitHub client (TUI requires GitHub-specific methods)
+	ghClient, ok := provider.(*github.Client)
+	if !ok {
+		return fmt.Errorf("PR TUI is only supported for GitHub repositories")
+	}
+
+	// Find PR for current branch
+	prNumber, _, err := provider.GetPullRequestByBranch(context.Background(), branch)
+	if err != nil {
+		return fmt.Errorf("no PR found for branch %s: %w", branch, err)
+	}
+
+	return runMergeTUI(ghClient, prNumber)
 }
 
 func tagDeleteAction(c *cli.Context) error {

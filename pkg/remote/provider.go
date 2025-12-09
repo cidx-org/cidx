@@ -65,8 +65,11 @@ type PRChecks struct {
 	Pending      int
 	Success      int
 	Failure      int
+	Queued       int
+	InProgress   int
 	Status       string // pending, success, failure
 	HeadSHA      string // The commit SHA these checks are for
+	UpdatedAt    time.Time
 	Checks       []CheckRun
 	StatusChecks []StatusCheck
 }
@@ -77,6 +80,8 @@ type CheckRun struct {
 	Status     string // queued, in_progress, completed
 	Conclusion string // success, failure, cancelled, skipped
 	URL        string
+	StartedAt  time.Time
+	CompletedAt time.Time
 }
 
 // StatusCheck represents a commit status check
@@ -109,4 +114,58 @@ type ArtifactStats struct {
 	TotalCount int
 	TotalSize  int64
 	Artifacts  []Artifact
+}
+
+// PullRequestDetails contains full details about a pull request for TUI display
+type PullRequestDetails struct {
+	Number       int
+	Title        string
+	Body         string
+	State        string // open, closed, merged
+	Draft        bool
+	HeadBranch   string
+	BaseBranch   string
+	HeadSHA      string
+	Author       string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	Additions    int
+	Deletions    int
+	ChangedFiles int
+	Mergeable    bool
+	MergeMethod  string // merge, squash, rebase
+	URL          string
+	Labels       []string
+	Reviewers    []ReviewerStatus
+	LinkedIssues []LinkedIssue
+	Commits      []CommitInfo
+}
+
+// ReviewerStatus represents a reviewer and their review status
+type ReviewerStatus struct {
+	Login  string
+	State  string // PENDING, APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED
+	Avatar string
+}
+
+// LinkedIssue represents an issue linked to a PR
+type LinkedIssue struct {
+	Number    int
+	Title     string
+	Body      string
+	State     string // open, closed
+	URL       string
+	Labels    []string
+	Assignees []string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	Author    string
+}
+
+// CommitInfo represents a commit in a PR
+type CommitInfo struct {
+	SHA     string
+	Message string
+	Author  string
+	Date    time.Time
 }
