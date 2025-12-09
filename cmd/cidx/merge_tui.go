@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/cidx-org/cidx/pkg/config"
 	"github.com/cidx-org/cidx/pkg/remote"
 	"github.com/cidx-org/cidx/pkg/remote/github"
 )
@@ -101,6 +103,7 @@ type mergeModel struct {
 	prNumber  int
 	prDetails *remote.PullRequestDetails
 	checks    *remote.PRChecks
+	prConfig  config.PRConfig
 
 	// Editable fields
 	mergeMethod int // index into mergeMethods
@@ -109,21 +112,23 @@ type mergeModel struct {
 	editingBody bool // whether we're editing body vs title
 
 	// UI state
-	focus        mergeFocus
-	actionCursor int
-	loading      bool
-	loadingMsg   string
-	spinner      spinner.Model
-	err          error
-	success      string
-	width        int
-	height       int
+	focus            mergeFocus
+	actionCursor     int
+	loading          bool
+	loadingMsg       string
+	spinner          spinner.Model
+	err              error
+	success          string
+	width            int
+	height           int
+	showConfirmation bool   // Show merge confirmation dialog
+	postMergeStatus  string // Status message for post-merge operations
 
 	// Watch mode state
-	lastKnownSHA   string        // Track SHA to detect new commits
-	autoRefresh    bool          // Whether auto-refresh is enabled
-	refreshing     bool          // Currently refreshing
-	showErrorLogs bool // Whether to show expanded error logs
+	lastKnownSHA  string // Track SHA to detect new commits
+	autoRefresh   bool   // Whether auto-refresh is enabled
+	refreshing    bool   // Currently refreshing
+	showErrorLogs bool   // Whether to show expanded error logs
 }
 
 // Messages
@@ -147,8 +152,13 @@ type checksRefreshMsg struct {
 
 type mergeTickMsg struct{}
 
+type postMergeMsg struct {
+	status string
+	err    error
+}
+
 // newMergeModel creates a new merge TUI model
-func newMergeModel(provider *github.Client, prNumber int) mergeModel {
+func newMergeModel(provider *github.Client, prNumber int, prConfig config.PRConfig) mergeModel {
 	// Create textarea for commit title
 	titleInput := textarea.New()
 	titleInput.Placeholder = "Commit title..."
@@ -169,10 +179,20 @@ func newMergeModel(provider *github.Client, prNumber int) mergeModel {
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
 
+	// Determine default merge method from config
+	defaultMethod := 0 // squash
+	switch prConfig.GetDefaultMergeMethod() {
+	case "merge":
+		defaultMethod = 1
+	case "rebase":
+		defaultMethod = 2
+	}
+
 	return mergeModel{
 		provider:     provider,
 		prNumber:     prNumber,
-		mergeMethod:  0, // squash by default
+		prConfig:     prConfig,
+		mergeMethod:  defaultMethod,
 		commitTitle:  titleInput,
 		commitBody:   bodyInput,
 		focus:        focusMergeMethod,
@@ -180,23 +200,29 @@ func newMergeModel(provider *github.Client, prNumber int) mergeModel {
 		loading:      true,
 		loadingMsg:   "Loading PR details...",
 		spinner:      s,
-		autoRefresh:  true, // Enable auto-refresh by default
+		autoRefresh:  prConfig.AutoRefreshInterval > 0,
 	}
 }
 
-// mergeTickCmd returns a command that ticks every 5 seconds for merge TUI
-func mergeTickCmd() tea.Cmd {
-	return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+// mergeTickCmd returns a command that ticks at the configured interval for merge TUI
+func mergeTickCmd(intervalSeconds int) tea.Cmd {
+	if intervalSeconds <= 0 {
+		intervalSeconds = 5
+	}
+	return tea.Tick(time.Duration(intervalSeconds)*time.Second, func(t time.Time) tea.Msg {
 		return mergeTickMsg{}
 	})
 }
 
 func (m mergeModel) Init() tea.Cmd {
-	return tea.Batch(
+	cmds := []tea.Cmd{
 		m.spinner.Tick,
 		m.loadPRDetails(),
-		mergeTickCmd(), // Start auto-refresh ticker
-	)
+	}
+	if m.autoRefresh {
+		cmds = append(cmds, mergeTickCmd(m.prConfig.AutoRefreshInterval))
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m mergeModel) loadPRDetails() tea.Cmd {
@@ -264,7 +290,7 @@ func (m mergeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "a" {
 			m.autoRefresh = !m.autoRefresh
 			if m.autoRefresh {
-				cmds = append(cmds, mergeTickCmd())
+				cmds = append(cmds, mergeTickCmd(m.prConfig.AutoRefreshInterval))
 			}
 			return m, tea.Batch(cmds...)
 		}
@@ -340,25 +366,56 @@ func (m mergeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "enter":
+			// If showing confirmation dialog, handle y/n
+			if m.showConfirmation {
+				// Enter in confirmation = confirm merge
+				m.showConfirmation = false
+				m.loading = true
+				m.loadingMsg = "Merging pull request..."
+				return m, m.doMerge()
+			}
+
 			switch m.focus {
 			case focusMergeActions:
+				action := mergeActions[m.actionCursor]
+				if action == "Merge" && m.prConfig.ConfirmMerge {
+					// Show confirmation dialog
+					m.showConfirmation = true
+					return m, nil
+				}
 				return m, m.executeAction()
 			case focusMergeMethod:
 				// Confirm method selection, move to message
 				m.focus = focusMergeMessage
 				m.commitTitle.Focus()
 			}
+
+		case "y", "Y":
+			// Confirm merge when in confirmation dialog
+			if m.showConfirmation {
+				m.showConfirmation = false
+				m.loading = true
+				m.loadingMsg = "Merging pull request..."
+				return m, m.doMerge()
+			}
+
+		case "n", "N", "esc":
+			// Cancel confirmation dialog
+			if m.showConfirmation {
+				m.showConfirmation = false
+				return m, nil
+			}
 		}
 
 	case mergeTickMsg:
 		// Auto-refresh ticker
-		if m.autoRefresh && m.prDetails != nil && !m.refreshing && m.success == "" && m.err == nil {
+		if m.autoRefresh && m.prDetails != nil && !m.refreshing && m.success == "" && m.err == nil && !m.showConfirmation {
 			m.refreshing = true
 			cmds = append(cmds, m.refreshAll())
 		}
 		// Continue ticking if auto-refresh is enabled
 		if m.autoRefresh && m.success == "" && m.err == nil {
-			cmds = append(cmds, mergeTickCmd())
+			cmds = append(cmds, mergeTickCmd(m.prConfig.AutoRefreshInterval))
 		}
 		return m, tea.Batch(cmds...)
 
@@ -406,6 +463,20 @@ func (m mergeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prMergeSuccessMsg:
 		m.loading = false
 		m.success = msg.message
+		// Run post-merge actions if configured
+		if m.prConfig.CheckoutAfterMerge || m.prConfig.DeleteBranchAfterMerge {
+			m.loadingMsg = "Running post-merge actions..."
+			return m, m.runPostMergeActions()
+		}
+
+	case postMergeMsg:
+		m.loading = false
+		if msg.err != nil {
+			m.err = msg.err
+		}
+		if msg.status != "" {
+			m.postMergeStatus = msg.status
+		}
 	}
 
 	// Update focused textarea
@@ -468,24 +539,88 @@ func (m mergeModel) executeAction() tea.Cmd {
 		return tea.Quit
 
 	case "Merge":
-		m.loading = true
-		m.loadingMsg = "Merging pull request..."
-		return func() tea.Msg {
-			ctx := context.Background()
-			method := mergeMethods[m.mergeMethod]
-
-			err := m.provider.MergePullRequest(ctx, m.prNumber, method)
-			if err != nil {
-				return prMergeErrorMsg{err: err}
-			}
-
-			return prMergeSuccessMsg{
-				message: fmt.Sprintf("Successfully merged PR #%d using %s method", m.prNumber, method),
-			}
+		// If confirmation is required and not shown yet, show it
+		if m.prConfig.ConfirmMerge && !m.showConfirmation {
+			return nil // Will be handled by setting showConfirmation = true
 		}
+		return m.doMerge()
 	}
 
 	return nil
+}
+
+func (m mergeModel) doMerge() tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		method := mergeMethods[m.mergeMethod]
+
+		// Perform the merge
+		err := m.provider.MergePullRequest(ctx, m.prNumber, method)
+		if err != nil {
+			return prMergeErrorMsg{err: err}
+		}
+
+		return prMergeSuccessMsg{
+			message: fmt.Sprintf("Successfully merged PR #%d using %s method", m.prNumber, method),
+		}
+	}
+}
+
+// runPostMergeActions executes post-merge operations based on config
+func (m mergeModel) runPostMergeActions() tea.Cmd {
+	return func() tea.Msg {
+		var statusMessages []string
+
+		// Delete branch after merge (if configured and not protected)
+		if m.prConfig.DeleteBranchAfterMerge && m.prDetails != nil {
+			headBranch := m.prDetails.HeadBranch
+
+			// Delete remote branch using git
+			cmd := exec.Command("git", "push", "origin", "--delete", headBranch)
+			if err := cmd.Run(); err != nil {
+				statusMessages = append(statusMessages, fmt.Sprintf("⚠ Failed to delete remote branch: %v", err))
+			} else {
+				statusMessages = append(statusMessages, fmt.Sprintf("✓ Deleted remote branch: %s", headBranch))
+			}
+
+			// Delete local branch
+			cmd = exec.Command("git", "branch", "-D", headBranch)
+			if err := cmd.Run(); err != nil {
+				// Not critical, branch might not exist locally
+				statusMessages = append(statusMessages, fmt.Sprintf("⚠ Local branch not deleted: %s", headBranch))
+			} else {
+				statusMessages = append(statusMessages, fmt.Sprintf("✓ Deleted local branch: %s", headBranch))
+			}
+		}
+
+		// Checkout main branch (if configured)
+		if m.prConfig.CheckoutAfterMerge {
+			mainBranch := "main" // Could be configurable from release config
+			cmd := exec.Command("git", "checkout", mainBranch)
+			if err := cmd.Run(); err != nil {
+				return postMergeMsg{
+					status: strings.Join(statusMessages, "\n"),
+					err:    fmt.Errorf("failed to checkout %s: %w", mainBranch, err),
+				}
+			}
+			statusMessages = append(statusMessages, fmt.Sprintf("✓ Switched to branch: %s", mainBranch))
+
+			// Sync with remote (if configured)
+			if m.prConfig.SyncAfterMerge {
+				cmd = exec.Command("git", "pull", "--ff-only")
+				if err := cmd.Run(); err != nil {
+					statusMessages = append(statusMessages, fmt.Sprintf("⚠ Failed to sync: %v", err))
+				} else {
+					statusMessages = append(statusMessages, "✓ Synced with remote")
+				}
+			}
+		}
+
+		return postMergeMsg{
+			status: strings.Join(statusMessages, "\n"),
+			err:    nil,
+		}
+	}
 }
 
 func (m mergeModel) View() string {
@@ -499,8 +634,21 @@ func (m mergeModel) View() string {
 	}
 
 	if m.success != "" {
-		return fmt.Sprintf("\n  %s\n\n  Press Enter to exit.\n",
-			mergeSuccessStyle.Render("✓ "+m.success))
+		var result strings.Builder
+		result.WriteString(fmt.Sprintf("\n  %s\n", mergeSuccessStyle.Render("✓ "+m.success)))
+		if m.postMergeStatus != "" {
+			result.WriteString("\n  Post-merge actions:\n")
+			for _, line := range strings.Split(m.postMergeStatus, "\n") {
+				result.WriteString(fmt.Sprintf("    %s\n", line))
+			}
+		}
+		result.WriteString("\n  Press Enter to exit.\n")
+		return result.String()
+	}
+
+	// Show confirmation dialog
+	if m.showConfirmation {
+		return m.renderConfirmation()
 	}
 
 	if m.prDetails == nil {
@@ -970,6 +1118,44 @@ func (m mergeModel) renderProgressBar(width int) string {
 	return bar.String()
 }
 
+func (m mergeModel) renderConfirmation() string {
+	var b strings.Builder
+
+	b.WriteString("\n")
+	b.WriteString(mergeWarningStyle.Render("  ⚠ Confirm Merge"))
+	b.WriteString("\n\n")
+
+	b.WriteString(fmt.Sprintf("  You are about to merge PR #%d into %s\n",
+		m.prNumber, m.prDetails.BaseBranch))
+	b.WriteString(fmt.Sprintf("  Method: %s\n", mergeMethods[m.mergeMethod]))
+	b.WriteString("\n")
+
+	// Show what will happen after merge
+	var postActions []string
+	if m.prConfig.DeleteBranchAfterMerge {
+		postActions = append(postActions, fmt.Sprintf("Delete branch '%s'", m.prDetails.HeadBranch))
+	}
+	if m.prConfig.CheckoutAfterMerge {
+		postActions = append(postActions, "Checkout to main")
+	}
+	if m.prConfig.SyncAfterMerge {
+		postActions = append(postActions, "Sync with remote")
+	}
+
+	if len(postActions) > 0 {
+		b.WriteString("  After merge:\n")
+		for _, action := range postActions {
+			b.WriteString(fmt.Sprintf("    • %s\n", action))
+		}
+		b.WriteString("\n")
+	}
+
+	b.WriteString(mergeSelectedStyle.Render("  Press [Y] to confirm, [N] or [Esc] to cancel"))
+	b.WriteString("\n")
+
+	return b.String()
+}
+
 func (m mergeModel) renderMergeMethod(width int) string {
 	var b strings.Builder
 
@@ -1083,8 +1269,8 @@ func truncateStr(s string, maxLen int) string {
 }
 
 // runMergeTUI runs the merge TUI
-func runMergeTUI(provider *github.Client, prNumber int) error {
-	model := newMergeModel(provider, prNumber)
+func runMergeTUI(provider *github.Client, prNumber int, prConfig config.PRConfig) error {
+	model := newMergeModel(provider, prNumber, prConfig)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 	_, err := p.Run()
 	return err
