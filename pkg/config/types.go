@@ -96,6 +96,13 @@ type PRConfig struct {
 	// SyncAfterMerge pulls latest changes after checkout (default: true)
 	SyncAfterMerge bool `toml:"sync_after_merge"`
 
+	// WatchPipelineAfterMerge monitors CI pipeline on main after merge (default: true)
+	WatchPipelineAfterMerge bool `toml:"watch_pipeline_after_merge"`
+
+	// ConfirmQuitAfterMerge shows a quit confirmation dialog after successful merge (default: true)
+	// When false, TUI exits automatically after merge completes
+	ConfirmQuitAfterMerge bool `toml:"confirm_quit_after_merge"`
+
 	// DefaultMergeMethod is the default merge method: "squash", "merge", "rebase" (default: "squash")
 	DefaultMergeMethod string `toml:"default_merge_method"`
 
@@ -106,12 +113,14 @@ type PRConfig struct {
 // DefaultPRConfig returns a PRConfig with sensible defaults for trunk-based development
 func DefaultPRConfig() PRConfig {
 	return PRConfig{
-		ConfirmMerge:           true,
-		DeleteBranchAfterMerge: true,
-		CheckoutAfterMerge:     true,
-		SyncAfterMerge:         true,
-		DefaultMergeMethod:     "squash",
-		AutoRefreshInterval:    5,
+		ConfirmMerge:            true,
+		DeleteBranchAfterMerge:  true,
+		CheckoutAfterMerge:      true,
+		SyncAfterMerge:          true,
+		WatchPipelineAfterMerge: true,
+		ConfirmQuitAfterMerge:   true,
+		DefaultMergeMethod:      "squash",
+		AutoRefreshInterval:     5,
 	}
 }
 

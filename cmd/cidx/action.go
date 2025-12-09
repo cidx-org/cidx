@@ -68,7 +68,8 @@ func loadPRConfig() config.PRConfig {
 	pr := cfg.PR
 	if pr.DefaultMergeMethod == "" && pr.AutoRefreshInterval == 0 &&
 		!pr.ConfirmMerge && !pr.DeleteBranchAfterMerge &&
-		!pr.CheckoutAfterMerge && !pr.SyncAfterMerge {
+		!pr.CheckoutAfterMerge && !pr.SyncAfterMerge &&
+		!pr.WatchPipelineAfterMerge && !pr.ConfirmQuitAfterMerge {
 		// No [pr] section configured, use defaults
 		return defaults
 	}
