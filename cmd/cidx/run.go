@@ -24,7 +24,7 @@ func runCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "backend",
 				Aliases: []string{"b"},
-				Usage:   "Executor backend: auto, docker, native (default: auto)",
+				Usage:   "Executor backend: auto, docker, podman (default: auto)",
 				Value:   "auto",
 			},
 		},

@@ -62,8 +62,10 @@ func NewRunnerWithSelector(cfg *config.Config, selector *executor.Selector, back
 	if backend == executor.BackendAuto {
 		if selector.DockerAvailable() {
 			logger.Infof("🐳 Backend: Docker (auto-detected)")
+		} else if selector.PodmanAvailable() {
+			logger.Infof("🦭 Backend: Podman (auto-detected)")
 		} else {
-			logger.Infof("⚡ Backend: Native (Docker unavailable)")
+			logger.Warnf("⚠️  No container runtime available")
 		}
 	} else {
 		logger.Infof("🔧 Backend: %s (forced)", backend)

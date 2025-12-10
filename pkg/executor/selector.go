@@ -1,16 +1,17 @@
 package executor
 
 import (
+	"context"
 	"errors"
-	"fmt"
 
+	"github.com/cidx-org/cidx/pkg/config"
 	"github.com/sirupsen/logrus"
 )
 
 // Selector manages executor selection based on availability and user preference
 type Selector struct {
 	docker  *DockerExecutor
-	native  *NativeExecutor
+	podman  *PodmanExecutor // Future: Podman support
 	logger  *logrus.Logger
 	dryRun  bool
 	verbose bool
@@ -31,12 +32,12 @@ func NewSelector(dryRun, verbose bool) (*Selector, error) {
 		logger.Debugf("Docker executor unavailable: %v", dockerErr)
 	}
 
-	// Native executor is always available
-	native := NewNativeExecutor(dryRun, verbose)
+	// TODO: Try to create Podman executor
+	// podman, podmanErr := NewPodmanExecutor(dryRun, verbose)
 
 	return &Selector{
 		docker:  docker,
-		native:  native,
+		podman:  nil, // Future: Podman support
 		logger:  logger,
 		dryRun:  dryRun,
 		verbose: verbose,
@@ -49,14 +50,11 @@ func (s *Selector) Select(toolName string, backend BackendType) (Executor, error
 	case BackendDocker:
 		return s.selectDocker()
 
-	case BackendNative:
-		return s.selectNative(toolName)
-
 	case BackendPodman:
-		return nil, errors.New("Podman executor not yet implemented")
+		return s.selectPodman()
 
 	default: // BackendAuto
-		return s.selectAuto(toolName)
+		return s.selectAuto()
 	}
 }
 
@@ -73,50 +71,51 @@ func (s *Selector) selectDocker() (Executor, error) {
 	return s.docker, nil
 }
 
-// selectNative forces native backend
-func (s *Selector) selectNative(toolName string) (Executor, error) {
-	if !s.native.CanRun(toolName) {
-		hint := s.native.GetInstallHint(toolName)
-		return nil, fmt.Errorf("tool '%s' not available natively.\nInstall: %s", toolName, hint)
+// selectPodman forces Podman backend
+func (s *Selector) selectPodman() (Executor, error) {
+	if s.podman == nil {
+		return nil, errors.New("Podman executor not yet implemented")
 	}
 
-	return s.native, nil
+	if !s.podman.Available() {
+		return nil, errors.New("Podman is not running. Start Podman and try again.")
+	}
+
+	return s.podman, nil
 }
 
 // selectAuto automatically selects the best available executor
-func (s *Selector) selectAuto(toolName string) (Executor, error) {
-	// 1. Prefer Docker if available (consistent execution)
+func (s *Selector) selectAuto() (Executor, error) {
+	// 1. Prefer Docker if available
 	if s.docker != nil && s.docker.Available() {
 		s.logger.Debugf("Auto-selected: Docker (daemon available)")
 		return s.docker, nil
 	}
 
-	// 2. Fall back to native if tool is installed locally
-	if s.native.CanRun(toolName) {
-		s.logger.Debugf("Auto-selected: Native (%s installed locally)", toolName)
-		return s.native, nil
+	// 2. Try Podman if Docker not available
+	if s.podman != nil && s.podman.Available() {
+		s.logger.Debugf("Auto-selected: Podman (Docker unavailable)")
+		return s.podman, nil
 	}
 
 	// 3. No executor available - provide helpful error
-	return nil, s.buildUnavailableError(toolName)
+	return nil, s.buildUnavailableError()
 }
 
 // buildUnavailableError creates a helpful error message when no executor is available
-func (s *Selector) buildUnavailableError(toolName string) error {
+func (s *Selector) buildUnavailableError() error {
 	var msg string
 
-	// Check if Docker was the issue
 	if s.docker == nil {
-		msg = "Docker is not installed or not accessible.\n"
+		msg = "Docker is not installed or not accessible."
 	} else if !s.docker.Available() {
-		msg = "Docker daemon is not running.\n"
+		msg = "Docker daemon is not running."
 	}
 
-	// Add native installation hint
-	hint := s.native.GetInstallHint(toolName)
-	msg += fmt.Sprintf("\nTo run '%s' natively, install it:\n  %s", toolName, hint)
-
-	msg += "\n\nOr start Docker daemon:\n  sudo systemctl start docker  # Linux\n  open -a Docker                # macOS"
+	msg += "\n\nStart a container runtime:\n"
+	msg += "  sudo systemctl start docker  # Docker on Linux\n"
+	msg += "  open -a Docker               # Docker on macOS\n"
+	msg += "  podman machine start         # Podman"
 
 	return errors.New(msg)
 }
@@ -126,20 +125,27 @@ func (s *Selector) GetDocker() *DockerExecutor {
 	return s.docker
 }
 
-// GetNative returns the Native executor
-func (s *Selector) GetNative() *NativeExecutor {
-	return s.native
-}
-
 // DockerAvailable checks if Docker is available
 func (s *Selector) DockerAvailable() bool {
 	return s.docker != nil && s.docker.Available()
 }
 
+// PodmanAvailable checks if Podman is available
+func (s *Selector) PodmanAvailable() bool {
+	return s.podman != nil && s.podman.Available()
+}
+
 // Close releases resources held by all executors
 func (s *Selector) Close() error {
 	if s.docker != nil {
-		return s.docker.Close()
+		if err := s.docker.Close(); err != nil {
+			return err
+		}
+	}
+	if s.podman != nil {
+		if err := s.podman.Close(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -152,19 +158,23 @@ func (s *Selector) ListAvailableBackends() []BackendType {
 		available = append(available, BackendDocker)
 	}
 
-	// Native is always "available" but individual tools may not be installed
-	available = append(available, BackendNative)
+	if s.podman != nil && s.podman.Available() {
+		available = append(available, BackendPodman)
+	}
 
 	return available
 }
 
-// ListAvailableNativeTools returns tools that can be run natively
-func (s *Selector) ListAvailableNativeTools() []string {
-	var tools []string
-	for _, tool := range GetSupportedTools() {
-		if s.native.CanRun(tool) {
-			tools = append(tools, tool)
-		}
-	}
-	return tools
+// PodmanExecutor is a placeholder for future Podman support
+// TODO: Implement PodmanExecutor with same interface as DockerExecutor
+type PodmanExecutor struct{}
+
+func (e *PodmanExecutor) Run(ctx context.Context, config *config.ContainerConfig) error {
+	return errors.New("Podman executor not yet implemented")
 }
+func (e *PodmanExecutor) Available() bool { return false }
+func (e *PodmanExecutor) Name() string    { return "podman" }
+func (e *PodmanExecutor) Close() error    { return nil }
+
+// Ensure PodmanExecutor implements Executor interface
+var _ Executor = (*PodmanExecutor)(nil)
