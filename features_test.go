@@ -46,6 +46,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	RegisterEventSteps(ctx, testCtx)
 	RegisterSecuritySteps(ctx, testCtx)
 	RegisterPipelineSteps(ctx, testCtx)
+	RegisterExecutorSteps(ctx, testCtx)
 
 	// Hooks
 	ctx.Before(func(ctx context.Context, sc *godog.Scenario) (context.Context, error) {
@@ -90,6 +91,10 @@ type TestContext struct {
 	CreatedReleases []string // Release IDs to clean up
 	CurrentBranch   string
 	CurrentPR       int
+
+	// Executor test state
+	Backend  string
+	Executor interface{}
 }
 
 // NewTestContext creates a new test context
@@ -130,6 +135,8 @@ func (tc *TestContext) Reset() {
 	tc.CurrentBranch = ""
 	tc.CurrentPR = 0
 	tc.GitHubToken = os.Getenv("GITHUB_TOKEN")
+	tc.Backend = ""
+	tc.Executor = nil
 }
 
 // Cleanup performs cleanup after scenario
