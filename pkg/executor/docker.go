@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/cidx-org/cidx/pkg/config"
 	"github.com/docker/docker/api/types/container"
@@ -324,3 +325,20 @@ func expandCommand(command string, env map[string]string) string {
 func (e *DockerExecutor) Close() error {
 	return e.client.Close()
 }
+
+// Available checks if Docker daemon is running and accessible
+func (e *DockerExecutor) Available() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	_, err := e.client.Ping(ctx)
+	return err == nil
+}
+
+// Name returns the executor backend name
+func (e *DockerExecutor) Name() string {
+	return "docker"
+}
+
+// Ensure DockerExecutor implements Executor interface
+var _ Executor = (*DockerExecutor)(nil)

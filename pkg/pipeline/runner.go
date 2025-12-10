@@ -15,12 +15,14 @@ import (
 // Runner orchestrates pipeline execution
 type Runner struct {
 	config   *config.Config
-	executor *executor.DockerExecutor
+	selector *executor.Selector
+	backend  executor.BackendType
 	logger   *logrus.Logger
 	env      *environment.Environment
 }
 
 // NewRunner creates a new pipeline runner
+// Deprecated: Use NewRunnerWithSelector instead
 func NewRunner(cfg *config.Config, exec *executor.DockerExecutor) *Runner {
 	logger := logrus.New()
 	env := environment.Detect()
@@ -32,9 +34,47 @@ func NewRunner(cfg *config.Config, exec *executor.DockerExecutor) *Runner {
 		logger.Infof("🔍 Environment: Local (safe mode)")
 	}
 
+	// Create selector with docker executor for backwards compatibility
+	selector, _ := executor.NewSelector(false, false)
+
 	return &Runner{
 		config:   cfg,
-		executor: exec,
+		selector: selector,
+		backend:  executor.BackendDocker,
+		logger:   logger,
+		env:      env,
+	}
+}
+
+// NewRunnerWithSelector creates a new pipeline runner with executor selector
+func NewRunnerWithSelector(cfg *config.Config, selector *executor.Selector, backend executor.BackendType) *Runner {
+	logger := logrus.New()
+	env := environment.Detect()
+
+	// Log environment detection
+	if env.IsCI {
+		logger.Infof("🔍 Environment: %s (CI mode)", env.Provider)
+	} else {
+		logger.Infof("🔍 Environment: Local (safe mode)")
+	}
+
+	// Log backend selection
+	if backend == executor.BackendAuto {
+		if selector.DockerAvailable() {
+			logger.Infof("🐳 Backend: Docker (auto-detected)")
+		} else if selector.PodmanAvailable() {
+			logger.Infof("🦭 Backend: Podman (auto-detected)")
+		} else {
+			logger.Warnf("⚠️  No container runtime available")
+		}
+	} else {
+		logger.Infof("🔧 Backend: %s (forced)", backend)
+	}
+
+	return &Runner{
+		config:   cfg,
+		selector: selector,
+		backend:  backend,
 		logger:   logger,
 		env:      env,
 	}
@@ -193,8 +233,14 @@ func (r *Runner) RunTool(ctx context.Context, toolName string) error {
 		return nil
 	}
 
+	// Select executor based on backend preference
+	exec, err := r.selector.Select(toolName, r.backend)
+	if err != nil {
+		return fmt.Errorf("executor selection failed: %w", err)
+	}
+
 	// Execute
-	return r.executor.Run(ctx, containerConfig)
+	return exec.Run(ctx, containerConfig)
 }
 
 // expandWorkspace replaces ${WORKSPACE} with the actual workspace path

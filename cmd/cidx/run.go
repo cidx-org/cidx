@@ -21,6 +21,12 @@ func runCommand() *cli.Command {
 				Aliases: []string{"n"},
 				Usage:   "Show what would be executed without running",
 			},
+			&cli.StringFlag{
+				Name:    "backend",
+				Aliases: []string{"b"},
+				Usage:   "Executor backend: auto, docker, podman (default: auto)",
+				Value:   "auto",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			if c.NArg() != 1 {
@@ -31,6 +37,7 @@ func runCommand() *cli.Command {
 			configPath := c.String("config")
 			dryRun := c.Bool("dry-run")
 			verbose := c.Bool("verbose")
+			backend := executor.ParseBackendType(c.String("backend"))
 
 			// Load config
 			if configPath == "" {
@@ -46,19 +53,19 @@ func runCommand() *cli.Command {
 				return fmt.Errorf("failed to load config: %w", err)
 			}
 
-			// Create executor
-			exec, err := executor.NewDockerExecutor(dryRun, verbose)
+			// Create executor selector
+			selector, err := executor.NewSelector(dryRun, verbose)
 			if err != nil {
-				return fmt.Errorf("failed to create executor: %w", err)
+				return fmt.Errorf("failed to create executor selector: %w", err)
 			}
 			defer func() {
-				if closeErr := exec.Close(); closeErr != nil {
+				if closeErr := selector.Close(); closeErr != nil {
 					_, _ = fmt.Fprintf(c.App.ErrWriter, "Warning: failed to close executor: %v\n", closeErr)
 				}
 			}()
 
-			// Create runner
-			runner := pipeline.NewRunner(cfg, exec)
+			// Create runner with selector
+			runner := pipeline.NewRunnerWithSelector(cfg, selector, backend)
 
 			ctx := context.Background()
 
