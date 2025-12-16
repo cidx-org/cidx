@@ -1,17 +1,15 @@
 package executor
 
 import (
-	"context"
 	"errors"
 
-	"github.com/cidx-org/cidx/pkg/config"
 	"github.com/sirupsen/logrus"
 )
 
 // Selector manages executor selection based on availability and user preference
 type Selector struct {
 	docker  *DockerExecutor
-	podman  *PodmanExecutor // Future: Podman support
+	podman  *PodmanExecutor
 	logger  *logrus.Logger
 	dryRun  bool
 	verbose bool
@@ -32,12 +30,15 @@ func NewSelector(dryRun, verbose bool) (*Selector, error) {
 		logger.Debugf("Docker executor unavailable: %v", dockerErr)
 	}
 
-	// TODO: Try to create Podman executor
-	// podman, podmanErr := NewPodmanExecutor(dryRun, verbose)
+	// Try to create Podman executor (may fail if Podman not installed)
+	podman, podmanErr := NewPodmanExecutor(dryRun, verbose)
+	if podmanErr != nil {
+		logger.Debugf("Podman executor unavailable: %v", podmanErr)
+	}
 
 	return &Selector{
 		docker:  docker,
-		podman:  nil, // Future: Podman support
+		podman:  podman,
 		logger:  logger,
 		dryRun:  dryRun,
 		verbose: verbose,
@@ -61,11 +62,11 @@ func (s *Selector) Select(toolName string, backend BackendType) (Executor, error
 // selectDocker forces Docker backend
 func (s *Selector) selectDocker() (Executor, error) {
 	if s.docker == nil {
-		return nil, errors.New("Docker client could not be initialized. Is Docker installed?")
+		return nil, errors.New("docker client could not be initialized, is Docker installed")
 	}
 
 	if !s.docker.Available() {
-		return nil, errors.New("Docker daemon is not running. Start Docker and try again.")
+		return nil, errors.New("docker daemon is not running, start Docker and try again")
 	}
 
 	return s.docker, nil
@@ -74,11 +75,11 @@ func (s *Selector) selectDocker() (Executor, error) {
 // selectPodman forces Podman backend
 func (s *Selector) selectPodman() (Executor, error) {
 	if s.podman == nil {
-		return nil, errors.New("Podman executor not yet implemented")
+		return nil, errors.New("podman is not installed, install Podman and try again")
 	}
 
 	if !s.podman.Available() {
-		return nil, errors.New("Podman is not running. Start Podman and try again.")
+		return nil, errors.New("podman is not responding, start Podman and try again")
 	}
 
 	return s.podman, nil
@@ -165,16 +166,3 @@ func (s *Selector) ListAvailableBackends() []BackendType {
 	return available
 }
 
-// PodmanExecutor is a placeholder for future Podman support
-// TODO: Implement PodmanExecutor with same interface as DockerExecutor
-type PodmanExecutor struct{}
-
-func (e *PodmanExecutor) Run(ctx context.Context, config *config.ContainerConfig) error {
-	return errors.New("Podman executor not yet implemented")
-}
-func (e *PodmanExecutor) Available() bool { return false }
-func (e *PodmanExecutor) Name() string    { return "podman" }
-func (e *PodmanExecutor) Close() error    { return nil }
-
-// Ensure PodmanExecutor implements Executor interface
-var _ Executor = (*PodmanExecutor)(nil)
