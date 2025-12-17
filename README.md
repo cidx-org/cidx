@@ -93,12 +93,31 @@ CI/CD Runner (GitLab/GitHub/Jenkins/Local)
             │               │
             └───────┬───────┘
                     │
-              Docker Containers
+            Executor Layer
+                    │
+        ┌───────────┼───────────┐
+        │           │           │
+     Docker      Podman    Kubernetes
+                              (soon)
 ```
 
 - **15+ built-in presets** - Trivy, Gitleaks, Semgrep, MegaLinter, etc.
 - **Auto-detection** - Knows images, volumes, commands for each tool
+- **Multiple backends** - Docker, Podman, or auto-detect
 - **5-line configs** - Most projects need less than 10 lines
+
+## Container Backends
+
+CIDX auto-detects your container runtime. No configuration needed:
+
+```bash
+cidx run trivy                    # Auto: Docker → Podman fallback
+cidx run trivy --backend docker   # Force Docker
+cidx run trivy --backend podman   # Force Podman
+cidx run trivy -b podman          # Short flag
+```
+
+**Philosophy**: Zero installation on host. Everything runs in containers.
 
 ## Workflow Validation
 
@@ -218,6 +237,7 @@ cidx action release create
 | -------------------- | ------------------------------------------------------------------------------ |
 | Installation         | [docs/getting-started/installation.md](docs/getting-started/installation.md)   |
 | Configuration        | [docs/getting-started/configuration.md](docs/getting-started/configuration.md) |
+| Container Backends   | [docs/core-concepts/backends.md](docs/core-concepts/backends.md)               |
 | CI Integration       | [docs/guides/ci-integration.md](docs/guides/ci-integration.md)                 |
 | Available Containers | [docs/reference/tools.md](docs/reference/tools.md)                             |
 | CLI Reference        | [docs/reference/cli.md](docs/reference/cli.md)                                 |

@@ -26,6 +26,19 @@ cidx run <name> [flags]
 **Flags:**
 
 - `--dry-run`: Print what would be executed without running it.
+- `--backend, -b`: Container runtime backend. Options: `auto`, `docker`, `podman`. Default: `auto`.
+- `--verbose, -v`: Enable verbose output.
+
+**Backend Selection:**
+
+```bash
+cidx run trivy                     # Auto-detect: Docker → Podman
+cidx run trivy --backend docker    # Force Docker
+cidx run trivy --backend podman    # Force Podman
+cidx run trivy -b podman           # Short flag
+```
+
+See [Container Backends](../core-concepts/backends.md) for more details.
 
 ### `cidx list`
 

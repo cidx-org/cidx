@@ -13,6 +13,7 @@ Welcome to the CIDX (CI with Declarative eXecution) documentation.
 ### 🧠 Core Concepts
 
 - [Philosophy](core-concepts/philosophy.md) - Why CIDX exists and its design principles
+- [Container Backends](core-concepts/backends.md) - Docker, Podman, and runtime abstraction
 - [DevOps Integration](core-concepts/devops.md) - How CIDX fits into your DevOps loop
 - [Security & Environments](core-concepts/security.md) - Local safety modes and environment detection
 - [Container Reuse](core-concepts/container-reuse.md) - Performance optimization details
