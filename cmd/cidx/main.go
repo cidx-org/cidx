@@ -12,9 +12,10 @@ var Version = "dev"
 
 func main() {
 	app := &cli.App{
-		Name:    "cidx",
-		Usage:   "CI with Declarative eXecution - Ultra-declarative DevSecOps pipeline runner",
-		Version: Version,
+		Name:                   "cidx",
+		Usage:                  "CI with Declarative eXecution - Ultra-declarative DevSecOps pipeline runner",
+		Version:                Version,
+		UseShortOptionHandling: true,
 		Commands: []*cli.Command{
 			statusCommand(),
 			runCommand(),

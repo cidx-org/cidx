@@ -14,7 +14,15 @@ func runCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "run",
 		Usage:     "Run a phase, tool, or all phases",
-		ArgsUsage: "<phase|tool|all>",
+		ArgsUsage: "[flags] <phase|tool|all>",
+		Description: `Execute containers by phase name, tool name, or all phases.
+
+Examples:
+  cidx run security                    # Run security phase
+  cidx run trivy                       # Run single tool
+  cidx run --parallel security         # Parallel execution (local only)
+  cidx run -p -j 4 security            # Parallel with 4 concurrent
+  cidx run --dry-run ci                # Dry-run full pipeline`,
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:    "dry-run",
