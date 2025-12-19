@@ -61,11 +61,11 @@ func (s *Selector) Select(toolName string, backend BackendType) (Executor, error
 // selectDocker forces Docker backend
 func (s *Selector) selectDocker() (Executor, error) {
 	if s.docker == nil {
-		return nil, errors.New("Docker client could not be initialized. Is Docker installed?")
+		return nil, errors.New("docker client could not be initialized, is Docker installed")
 	}
 
 	if !s.docker.Available() {
-		return nil, errors.New("Docker daemon is not running. Start Docker and try again.")
+		return nil, errors.New("docker daemon is not running, start Docker and try again")
 	}
 
 	return s.docker, nil
@@ -74,11 +74,11 @@ func (s *Selector) selectDocker() (Executor, error) {
 // selectPodman forces Podman backend
 func (s *Selector) selectPodman() (Executor, error) {
 	if s.podman == nil {
-		return nil, errors.New("Podman executor not yet implemented")
+		return nil, errors.New("podman executor not yet implemented")
 	}
 
 	if !s.podman.Available() {
-		return nil, errors.New("Podman is not running. Start Podman and try again.")
+		return nil, errors.New("podman is not running, start Podman and try again")
 	}
 
 	return s.podman, nil
@@ -170,7 +170,7 @@ func (s *Selector) ListAvailableBackends() []BackendType {
 type PodmanExecutor struct{}
 
 func (e *PodmanExecutor) Run(ctx context.Context, config *config.ContainerConfig) error {
-	return errors.New("Podman executor not yet implemented")
+	return errors.New("podman executor not yet implemented")
 }
 func (e *PodmanExecutor) Available() bool { return false }
 func (e *PodmanExecutor) Name() string    { return "podman" }
