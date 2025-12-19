@@ -28,6 +28,7 @@ func main() {
 			workflowCommand(),
 			checkCommand,
 			branchCommand(),
+			registryCommand(),
 			vulnCommand(),
 			demoCommand(),
 			aboutCommand(),

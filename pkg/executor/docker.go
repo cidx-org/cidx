@@ -105,6 +105,15 @@ func (e *DockerExecutor) pullImage(ctx context.Context, imageName string) error 
 
 	out, err := e.client.ImagePull(ctx, imageName, image.PullOptions{})
 	if err != nil {
+		// Check for authentication errors and provide helpful suggestions
+		if isUnauthorizedError(err) {
+			registry := extractRegistry(imageName)
+			return &AuthError{
+				Registry: registry,
+				Image:    imageName,
+				Err:      err,
+			}
+		}
 		return err
 	}
 	defer func() {
@@ -358,3 +367,74 @@ func (e *DockerExecutor) Name() string {
 
 // Ensure DockerExecutor implements Executor interface
 var _ Executor = (*DockerExecutor)(nil)
+
+// AuthError represents an authentication failure when pulling images
+type AuthError struct {
+	Registry string
+	Image    string
+	Err      error
+}
+
+func (e *AuthError) Error() string {
+	var suggestion string
+	if e.Registry == "dhi.io" {
+		suggestion = fmt.Sprintf(`
+Authentication required for Docker Hardened Images (DHI).
+
+Image: %s
+
+To authenticate (uses Docker Hub credentials):
+  cidx registry login dhi.io
+
+DHI is free and included with any Docker Hub account.
+`, e.Image)
+	} else {
+		suggestion = fmt.Sprintf(`
+Authentication required for registry: %s
+
+Image: %s
+
+To authenticate:
+  cidx registry login %s
+`, e.Registry, e.Image, e.Registry)
+	}
+	return suggestion
+}
+
+func (e *AuthError) Unwrap() error {
+	return e.Err
+}
+
+// isUnauthorizedError checks if an error is an authentication failure
+func isUnauthorizedError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := strings.ToLower(err.Error())
+	return strings.Contains(errStr, "unauthorized") ||
+		strings.Contains(errStr, "authentication required") ||
+		strings.Contains(errStr, "denied") ||
+		strings.Contains(errStr, "forbidden")
+}
+
+// extractRegistry extracts the registry hostname from an image name
+func extractRegistry(imageName string) string {
+	// Default Docker Hub registry
+	const defaultRegistry = "docker.io"
+
+	// Split on first /
+	parts := strings.SplitN(imageName, "/", 2)
+	if len(parts) == 1 {
+		// No slash, it's a Docker Hub official image
+		return defaultRegistry
+	}
+
+	// Check if first part looks like a registry (contains . or :)
+	firstPart := parts[0]
+	if strings.Contains(firstPart, ".") || strings.Contains(firstPart, ":") {
+		return firstPart
+	}
+
+	// Otherwise it's a Docker Hub user/org
+	return defaultRegistry
+}

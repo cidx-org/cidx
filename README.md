@@ -57,6 +57,35 @@ cidx run trivy      # Run specific container
 cidx run ci         # Run full CI pipeline
 ```
 
+## Docker Hardened Images (DHI)
+
+CIDX uses **Docker Hardened Images** (dhi.io) by default for maximum security:
+
+- **Near-zero CVEs** - Guaranteed minimal vulnerabilities
+- **95% smaller attack surface** - Stripped of unnecessary components
+- **SBOM included** - Full software bill of materials
+- **SLSA Level 3** - Cryptographic proof of authenticity
+
+### Authentication
+
+DHI requires Docker Hub credentials (free with any Docker Hub account):
+
+```bash
+# Check if DHI is ready
+cidx registry check
+
+# Login to DHI (uses Docker Hub credentials)
+cidx registry login dhi.io
+
+# List all configured registries
+cidx registry list
+```
+
+For CI/CD, add these secrets to your GitHub repository:
+
+- `DOCKERHUB_USERNAME` - Your Docker Hub username
+- `DOCKERHUB_TOKEN` - Docker Hub access token ([create one here](https://hub.docker.com/settings/security))
+
 ## Configuration
 
 One file, all environments:
