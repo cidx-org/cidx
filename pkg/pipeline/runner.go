@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/cidx-org/cidx/pkg/config"
 	"github.com/cidx-org/cidx/pkg/environment"
@@ -12,13 +13,22 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// RunnerOptions configures runner behavior
+type RunnerOptions struct {
+	Backend     executor.BackendType
+	Parallel    bool
+	Concurrency int
+}
+
 // Runner orchestrates pipeline execution
 type Runner struct {
-	config   *config.Config
-	selector *executor.Selector
-	backend  executor.BackendType
-	logger   *logrus.Logger
-	env      *environment.Environment
+	config      *config.Config
+	selector    *executor.Selector
+	backend     executor.BackendType
+	logger      *logrus.Logger
+	env         *environment.Environment
+	parallel    bool
+	concurrency int
 }
 
 // NewRunner creates a new pipeline runner
@@ -47,7 +57,17 @@ func NewRunner(cfg *config.Config, exec *executor.DockerExecutor) *Runner {
 }
 
 // NewRunnerWithSelector creates a new pipeline runner with executor selector
+// Deprecated: Use NewRunnerWithOptions instead
 func NewRunnerWithSelector(cfg *config.Config, selector *executor.Selector, backend executor.BackendType) *Runner {
+	return NewRunnerWithOptions(cfg, selector, RunnerOptions{
+		Backend:     backend,
+		Parallel:    false,
+		Concurrency: 2,
+	})
+}
+
+// NewRunnerWithOptions creates a new pipeline runner with full options
+func NewRunnerWithOptions(cfg *config.Config, selector *executor.Selector, opts RunnerOptions) *Runner {
 	logger := logrus.New()
 	env := environment.Detect()
 
@@ -59,7 +79,7 @@ func NewRunnerWithSelector(cfg *config.Config, selector *executor.Selector, back
 	}
 
 	// Log backend selection
-	if backend == executor.BackendAuto {
+	if opts.Backend == executor.BackendAuto {
 		if selector.DockerAvailable() {
 			logger.Infof("🐳 Backend: Docker (auto-detected)")
 		} else if selector.PodmanAvailable() {
@@ -68,15 +88,29 @@ func NewRunnerWithSelector(cfg *config.Config, selector *executor.Selector, back
 			logger.Warnf("⚠️  No container runtime available")
 		}
 	} else {
-		logger.Infof("🔧 Backend: %s (forced)", backend)
+		logger.Infof("🔧 Backend: %s (forced)", opts.Backend)
+	}
+
+	// Warn if parallel mode in CI
+	parallel := opts.Parallel
+	if parallel && env.IsCI {
+		logger.Warnf("⚠️  Parallel mode disabled in CI environment")
+		parallel = false
+	}
+
+	// Log parallel mode
+	if parallel {
+		logger.Infof("⚡ Parallel: enabled (concurrency: %d)", opts.Concurrency)
 	}
 
 	return &Runner{
-		config:   cfg,
-		selector: selector,
-		backend:  backend,
-		logger:   logger,
-		env:      env,
+		config:      cfg,
+		selector:    selector,
+		backend:     opts.Backend,
+		logger:      logger,
+		env:         env,
+		parallel:    parallel,
+		concurrency: opts.Concurrency,
 	}
 }
 
@@ -170,6 +204,12 @@ func (r *Runner) RunPhase(ctx context.Context, phaseName string, phase config.Ph
 		return nil
 	}
 
+	// Use parallel execution if enabled and multiple containers
+	if r.parallel && len(phase.Containers) > 1 {
+		return r.runPhaseParallel(ctx, phaseName, phase)
+	}
+
+	// Sequential execution (default)
 	for _, containerName := range phase.Containers {
 		if err := r.RunTool(ctx, containerName); err != nil {
 			return fmt.Errorf("container %s failed: %w", containerName, err)
@@ -177,6 +217,75 @@ func (r *Runner) RunPhase(ctx context.Context, phaseName string, phase config.Ph
 	}
 
 	r.logger.Infof("✓ Phase %s completed successfully", phaseName)
+	r.logger.Infof("")
+	return nil
+}
+
+// runPhaseParallel executes containers in parallel with concurrency limit
+func (r *Runner) runPhaseParallel(ctx context.Context, phaseName string, phase config.Phase) error {
+	r.logger.Infof("⚡ Running %d containers in parallel (max %d concurrent)", len(phase.Containers), r.concurrency)
+
+	// Create semaphore for concurrency limit
+	sem := make(chan struct{}, r.concurrency)
+
+	// Error channel to collect errors
+	errChan := make(chan error, len(phase.Containers))
+
+	// WaitGroup to track completion
+	var wg sync.WaitGroup
+
+	// Result tracking
+	var mu sync.Mutex
+	completed := 0
+	failed := 0
+
+	for _, containerName := range phase.Containers {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+
+			// Acquire semaphore
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			// Check if context cancelled
+			if ctx.Err() != nil {
+				errChan <- ctx.Err()
+				return
+			}
+
+			// Run the container
+			err := r.RunTool(ctx, name)
+
+			mu.Lock()
+			if err != nil {
+				failed++
+				r.logger.Errorf("  ✗ %s failed: %v", name, err)
+				errChan <- fmt.Errorf("container %s failed: %w", name, err)
+			} else {
+				completed++
+			}
+			mu.Unlock()
+		}(containerName)
+	}
+
+	// Wait for all to complete
+	wg.Wait()
+	close(errChan)
+
+	// Collect errors
+	var errors []error
+	for err := range errChan {
+		errors = append(errors, err)
+	}
+
+	// Report results
+	if len(errors) > 0 {
+		r.logger.Errorf("✗ Phase %s: %d/%d failed", phaseName, failed, len(phase.Containers))
+		return fmt.Errorf("phase %s had %d failures", phaseName, len(errors))
+	}
+
+	r.logger.Infof("✓ Phase %s completed successfully (%d containers)", phaseName, completed)
 	r.logger.Infof("")
 	return nil
 }

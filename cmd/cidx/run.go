@@ -14,7 +14,15 @@ func runCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "run",
 		Usage:     "Run a phase, tool, or all phases",
-		ArgsUsage: "<phase|tool|all>",
+		ArgsUsage: "[flags] <phase|tool|all>",
+		Description: `Execute containers by phase name, tool name, or all phases.
+
+Examples:
+  cidx run security                    # Run security phase
+  cidx run trivy                       # Run single tool
+  cidx run --parallel security         # Parallel execution (local only)
+  cidx run -p -j 4 security            # Parallel with 4 concurrent
+  cidx run --dry-run ci                # Dry-run full pipeline`,
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:    "dry-run",
@@ -27,6 +35,17 @@ func runCommand() *cli.Command {
 				Usage:   "Executor backend: auto, docker, podman (default: auto)",
 				Value:   "auto",
 			},
+			&cli.BoolFlag{
+				Name:    "parallel",
+				Aliases: []string{"p"},
+				Usage:   "Run containers in parallel within each phase (local only)",
+			},
+			&cli.IntFlag{
+				Name:    "concurrency",
+				Aliases: []string{"j"},
+				Usage:   "Max concurrent containers when --parallel is enabled (default: 2)",
+				Value:   2,
+			},
 		},
 		Action: func(c *cli.Context) error {
 			if c.NArg() != 1 {
@@ -38,6 +57,8 @@ func runCommand() *cli.Command {
 			dryRun := c.Bool("dry-run")
 			verbose := c.Bool("verbose")
 			backend := executor.ParseBackendType(c.String("backend"))
+			parallel := c.Bool("parallel")
+			concurrency := c.Int("concurrency")
 
 			// Load config
 			if configPath == "" {
@@ -64,8 +85,15 @@ func runCommand() *cli.Command {
 				}
 			}()
 
+			// Create runner options
+			opts := pipeline.RunnerOptions{
+				Backend:     backend,
+				Parallel:    parallel,
+				Concurrency: concurrency,
+			}
+
 			// Create runner with selector
-			runner := pipeline.NewRunnerWithSelector(cfg, selector, backend)
+			runner := pipeline.NewRunnerWithOptions(cfg, selector, opts)
 
 			ctx := context.Background()
 

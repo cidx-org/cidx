@@ -46,7 +46,7 @@ func (tc *TestContext) dockerDaemonIsRunning() error {
 	if err != nil {
 		return err
 	}
-	defer selector.Close()
+	defer func() { _ = selector.Close() }()
 
 	if !selector.DockerAvailable() {
 		return godog.ErrPending // Skip test if Docker not available
@@ -62,7 +62,7 @@ func (tc *TestContext) dockerDaemonIsNotRunning() error {
 		tc.Backend = ""
 		return nil
 	}
-	defer selector.Close()
+	defer func() { _ = selector.Close() }()
 
 	if selector.DockerAvailable() {
 		return godog.ErrPending // Skip test if Docker IS available
@@ -76,7 +76,7 @@ func (tc *TestContext) podmanIsAvailable() error {
 	if err != nil {
 		return err
 	}
-	defer selector.Close()
+	defer func() { _ = selector.Close() }()
 
 	if !selector.PodmanAvailable() {
 		return godog.ErrPending // Skip test if Podman not available
@@ -91,7 +91,7 @@ func (tc *TestContext) podmanIsNotAvailable() error {
 		tc.Backend = ""
 		return nil
 	}
-	defer selector.Close()
+	defer func() { _ = selector.Close() }()
 
 	if selector.PodmanAvailable() {
 		return godog.ErrPending // Skip test if Podman IS available
@@ -104,7 +104,7 @@ func (tc *TestContext) anyContainerRuntimeIsAvailable() error {
 	if err != nil {
 		return godog.ErrPending
 	}
-	defer selector.Close()
+	defer func() { _ = selector.Close() }()
 
 	if selector.DockerAvailable() {
 		tc.Backend = "docker"
@@ -159,7 +159,7 @@ func (tc *TestContext) iExecuteAToolViaDocker() error {
 	if err != nil {
 		return err
 	}
-	defer selector.Close()
+	defer func() { _ = selector.Close() }()
 
 	if !selector.DockerAvailable() {
 		return godog.ErrPending
