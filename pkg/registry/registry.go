@@ -13,6 +13,9 @@ import (
 // DHIRegistry is the Docker Hardened Images registry
 const DHIRegistry = "dhi.io"
 
+// DockerHubRegistry is the Docker Hub registry URL
+const DockerHubRegistry = "https://index.docker.io/v1/"
+
 // DockerConfig represents the Docker config.json structure
 type DockerConfig struct {
 	Auths      map[string]AuthEntry `json:"auths"`
@@ -120,9 +123,29 @@ func (m *Manager) Status(registryName string) (*RegistryInfo, error) {
 }
 
 // Login wraps docker login command
+// For DHI (dhi.io), it automatically reuses Docker Hub credentials if available
 func (m *Manager) Login(registryName string) error {
+	// For DHI, try to reuse Docker Hub credentials
+	if registryName == DHIRegistry {
+		if creds := m.GetDockerHubCredentials(); creds != nil {
+			fmt.Printf("🔄 Reusing Docker Hub credentials (%s) for DHI...\n", creds.Username)
+			return m.loginWithCredentials(registryName, creds)
+		}
+		fmt.Println("⚠️  No Docker Hub credentials found, falling back to interactive login...")
+	}
+
+	// Interactive login
 	cmd := exec.Command("docker", "login", registryName)
 	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// loginWithCredentials logs into a registry using provided credentials
+func (m *Manager) loginWithCredentials(registryName string, creds *Credentials) error {
+	cmd := exec.Command("docker", "login", registryName, "-u", creds.Username, "--password-stdin")
+	cmd.Stdin = strings.NewReader(creds.Secret)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -172,8 +195,23 @@ func (m *Manager) loadConfig() (*DockerConfig, error) {
 	return &config, nil
 }
 
+// Credentials holds username and password/token
+type Credentials struct {
+	Username string `json:"Username"`
+	Secret   string `json:"Secret"`
+}
+
 // checkCredsHelper checks if credentials exist in a credential helper
 func (m *Manager) checkCredsHelper(helper, registry string) (authenticated bool, username string) {
+	creds := m.getCredsFromHelper(helper, registry)
+	if creds == nil {
+		return false, ""
+	}
+	return creds.Username != "", creds.Username
+}
+
+// getCredsFromHelper retrieves full credentials from a credential helper
+func (m *Manager) getCredsFromHelper(helper, registry string) *Credentials {
 	// Docker credential helper naming convention: docker-credential-<helper>
 	helperCmd := fmt.Sprintf("docker-credential-%s", helper)
 
@@ -182,17 +220,50 @@ func (m *Manager) checkCredsHelper(helper, registry string) (authenticated bool,
 
 	output, err := cmd.Output()
 	if err != nil {
-		return false, ""
+		return nil
 	}
 
-	var creds struct {
-		Username string `json:"Username"`
-	}
+	var creds Credentials
 	if err := json.Unmarshal(output, &creds); err != nil {
-		return false, ""
+		return nil
 	}
 
-	return creds.Username != "", creds.Username
+	if creds.Username == "" {
+		return nil
+	}
+
+	return &creds
+}
+
+// GetDockerHubCredentials returns Docker Hub credentials if available
+func (m *Manager) GetDockerHubCredentials() *Credentials {
+	config, err := m.loadConfig()
+	if err != nil {
+		return nil
+	}
+
+	// Check credential helper first
+	if config.CredsStore != "" {
+		if creds := m.getCredsFromHelper(config.CredsStore, DockerHubRegistry); creds != nil {
+			return creds
+		}
+	}
+
+	// Check direct auth in config
+	if auth, ok := config.Auths[DockerHubRegistry]; ok && auth.Auth != "" {
+		decoded, err := base64.StdEncoding.DecodeString(auth.Auth)
+		if err == nil {
+			parts := strings.SplitN(string(decoded), ":", 2)
+			if len(parts) == 2 {
+				return &Credentials{
+					Username: parts[0],
+					Secret:   parts[1],
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 // FormatList formats the registry list for display

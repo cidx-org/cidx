@@ -2,6 +2,8 @@ package executor
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -9,9 +11,11 @@ import (
 	"time"
 
 	"github.com/cidx-org/cidx/pkg/config"
+	"github.com/cidx-org/cidx/pkg/registry"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
+	registrytypes "github.com/docker/docker/api/types/registry"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/sirupsen/logrus"
@@ -103,13 +107,19 @@ func (e *DockerExecutor) Run(ctx context.Context, containerConfig *config.Contai
 func (e *DockerExecutor) pullImage(ctx context.Context, imageName string) error {
 	e.logger.Debugf("Pulling image: %s", imageName)
 
-	out, err := e.client.ImagePull(ctx, imageName, image.PullOptions{})
+	// Get authentication for the registry
+	pullOpts := image.PullOptions{}
+	if authStr := e.getAuthForImage(imageName); authStr != "" {
+		pullOpts.RegistryAuth = authStr
+	}
+
+	out, err := e.client.ImagePull(ctx, imageName, pullOpts)
 	if err != nil {
 		// Check for authentication errors and provide helpful suggestions
 		if isUnauthorizedError(err) {
-			registry := extractRegistry(imageName)
+			reg := extractRegistry(imageName)
 			return &AuthError{
-				Registry: registry,
+				Registry: reg,
 				Image:    imageName,
 				Err:      err,
 			}
@@ -135,6 +145,40 @@ func (e *DockerExecutor) pullImage(ctx context.Context, imageName string) error 
 	}
 
 	return nil
+}
+
+// getAuthForImage returns the base64-encoded auth config for an image's registry
+func (e *DockerExecutor) getAuthForImage(imageName string) string {
+	reg := extractRegistry(imageName)
+	regManager := registry.NewManager()
+
+	var creds *registry.Credentials
+
+	// For DHI, use Docker Hub credentials
+	if reg == registry.DHIRegistry {
+		creds = regManager.GetDockerHubCredentials()
+	} else {
+		// Try to get credentials for this specific registry
+		// For now, we only handle DHI specially
+		return ""
+	}
+
+	if creds == nil {
+		return ""
+	}
+
+	// Encode credentials for Docker SDK
+	authConfig := registrytypes.AuthConfig{
+		Username: creds.Username,
+		Password: creds.Secret,
+	}
+
+	encodedJSON, err := json.Marshal(authConfig)
+	if err != nil {
+		return ""
+	}
+
+	return base64.URLEncoding.EncodeToString(encodedJSON)
 }
 
 // getOrCreateContainer gets an existing container or creates a new one
