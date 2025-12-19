@@ -5,6 +5,7 @@ type Preset struct {
 	Name          string            `yaml:"name" toml:"name"`
 	Phase         string            `yaml:"phase" toml:"phase"`
 	Image         string            `yaml:"image" toml:"image"`
+	Hardened      bool              `yaml:"hardened,omitempty" toml:"hardened,omitempty"` // Uses Docker Hardened Image (dhi.io)
 	Command       string            `yaml:"command" toml:"command"`
 	Workdir       string            `yaml:"workdir" toml:"workdir"`
 	Volumes       []string          `yaml:"volumes" toml:"volumes"`
