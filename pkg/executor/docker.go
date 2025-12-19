@@ -145,9 +145,24 @@ func (e *DockerExecutor) getOrCreateContainer(ctx context.Context, containerConf
 		return "", "", fmt.Errorf("failed to list containers: %w", err)
 	}
 
-	// If container exists, reuse it (keeps cache like trivy DB)
+	// If container exists, check if image has changed
 	if len(containers) > 0 {
 		existingContainer := containers[0]
+
+		// Check if image has changed (compare cidx.image label with expected image)
+		existingImage := existingContainer.Labels["cidx.image"]
+		if existingImage != "" && existingImage != containerConfig.Image {
+			e.logger.Infof("  🔄 Image updated: %s → %s, recreating container", existingImage, containerConfig.Image)
+
+			// Remove old container
+			if err := e.client.ContainerRemove(ctx, existingContainer.ID, container.RemoveOptions{Force: true}); err != nil {
+				return "", "", fmt.Errorf("failed to remove old container: %w", err)
+			}
+
+			// Create new container with updated image
+			return e.createContainer(ctx, containerConfig, volumes, command)
+		}
+
 		e.logger.Debugf("♻ Reusing container %s (preserves cache)", containerName)
 		return existingContainer.ID, containerName, nil
 	}
@@ -198,6 +213,7 @@ func (e *DockerExecutor) createContainer(ctx context.Context, containerConfig *c
 			"managed-by": "cidx",
 			"cidx.tool":  containerConfig.Name,
 			"cidx.phase": containerConfig.Phase,
+			"cidx.image": containerConfig.Image, // Track image for update detection
 		},
 	}
 

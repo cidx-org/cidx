@@ -66,7 +66,7 @@ command_flag = "--write"
 [presets.trivy]
 name = "trivy"
 phase = "security"
-image = "aquasec/trivy:0.67.2"
+image = "aquasec/trivy:0.68.2"
 command = "fs /scan"
 workdir = "/scan"
 volumes = ["${WORKSPACE}:/scan"]
@@ -163,7 +163,7 @@ env_var = "TO"
 [presets.ansible-lint]
 name = "ansible-lint"
 phase = "code"
-image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0"
 command = "ansible-lint"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -172,7 +172,7 @@ config_files = [".ansible-lint"]
 [presets.molecule]
 name = "molecule"
 phase = "test"
-image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0"
 command = "molecule test -s ${SCENARIO}"
 workdir = "/work"
 volumes = [
@@ -195,7 +195,7 @@ env_var = "SCENARIO"
 [presets.yamllint]
 name = "yamllint"
 phase = "code"
-image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0"
 command = "yamllint ."
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -218,7 +218,7 @@ command_flag = "--format"
 [presets.ansible-syntax]
 name = "ansible-syntax"
 phase = "code"
-image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0"
 command = "ansible-playbook --syntax-check ${PLAYBOOK}"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -237,7 +237,7 @@ env_var = "PLAYBOOK"
 [presets.ansible-test]
 name = "ansible-test"
 phase = "test"
-image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0"
 command = "ansible-test ${TEST_TYPE} --docker"
 workdir = "/work"
 volumes = [
@@ -265,7 +265,7 @@ command_flag = "--python"
 [presets.ansible-galaxy-build]
 name = "ansible-galaxy-build"
 phase = "build"
-image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0"
 command = "ansible-galaxy collection build --output-path ${OUTPUT_PATH}"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -285,7 +285,7 @@ command_flag = "--force"
 [presets.ansible-galaxy-publish]
 name = "ansible-galaxy-publish"
 phase = "release"
-image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0"
 command = "ansible-galaxy collection publish ${ARTIFACT}"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
