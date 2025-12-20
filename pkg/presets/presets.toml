@@ -4,22 +4,25 @@
 #
 # This file defines all built-in container configurations embedded into cidx binary.
 #
-# 🐳 PHILOSOPHY: Container-First Approach
+# 🛡️ SECURITY-FIRST: Docker Hardened Images (DHI)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# CIDX maximizes use of dedicated Docker containers for each operation.
+# CIDX uses Docker Hardened Images (dhi.io) by default for maximum security.
 #
-# Why containers?
-# - ✅ Consistent execution (same behavior locally and in CI/CD)
-# - ✅ No local installation required (just Docker)
-# - ✅ Version pinning (specify exact container version via image tags)
-# - ✅ Isolation (no conflicts between container dependencies)
-# - ✅ Reproducibility (same results everywhere, every time)
+# Why DHI?
+# - 🛡️ Near-zero CVEs (guaranteed minimal vulnerabilities)
+# - 📦 Up to 95% smaller attack surface
+# - 📋 SBOM included (full software bill of materials)
+# - 🔐 SLSA Level 3 provenance (cryptographic proof of authenticity)
+# - ✅ Compatible with Alpine/Debian (familiar base images)
 #
-# Preset Philosophy:
-# - Prefer official Docker images (e.g., commitlint/commitlint)
-# - Use vendor-maintained images when official isn't available
-# - Avoid multi-step installations (npm install, apt-get, etc.)
-# - Container should be ready-to-run with minimal setup
+# Image Priority:
+# 1. Docker Hardened Images (dhi.io/*) - preferred for security
+# 2. Official vendor images - when DHI not available
+# 3. Community images - last resort, monitored for CVEs
+#
+# Authentication:
+# DHI requires Docker Hub login: docker login dhi.io
+# Use your Docker Hub credentials (same as hub.docker.com)
 #
 # Development:
 # - Edit this file → Changes picked up with 'go run ./cmd/cidx'
@@ -61,12 +64,13 @@ command_flag = "--write"
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # Trivy: Container and filesystem vulnerability scanner
-# Official image: aquasec/trivy (maintained by Aqua Security)
+# 🛡️ DHI: Docker Hardened Image (near-zero CVEs)
 # Scans: dependencies, OS packages, misconfigurations, secrets
 [presets.trivy]
 name = "trivy"
 phase = "security"
-image = "aquasec/trivy:0.68.2"
+image = "dhi.io/trivy:0.68"
+hardened = true
 command = "fs /scan"
 workdir = "/scan"
 volumes = ["${WORKSPACE}:/scan"]
@@ -87,12 +91,11 @@ description = "Exit code when vulnerabilities are found"
 command_flag = "--exit-code"
 
 # Gitleaks: Scan git history for secrets and credentials
-# Official image: zricethezav/gitleaks (maintained by Gitleaks author)
 # Detects: API keys, passwords, tokens in git history
 [presets.gitleaks]
 name = "gitleaks"
 phase = "security"
-image = "zricethezav/gitleaks:v8.30.0"
+image = "zricethezav/gitleaks:v8.22.1"
 command = "git ."
 workdir = "/repo"
 volumes = ["${WORKSPACE}:/repo"]
@@ -304,7 +307,8 @@ command_flag = "--server"
 [presets.test-hot-reload]
 name = "test-hot-reload"
 phase = "test"
-image = "alpine:3.22.2"
+image = "dhi.io/alpine-base:3.21"
+hardened = true
 command = "echo 'Hot reload works!'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -352,7 +356,8 @@ command_flag = "-fmt"
 [presets.govulncheck]
 name = "govulncheck"
 phase = "security"
-image = "golang:1.25.4-alpine"
+image = "dhi.io/golang:1.23-alpine3.21-dev"
+hardened = true
 command = "sh -c 'go install golang.org/x/vuln/cmd/govulncheck@latest && PATH=$PATH:/tmp/go/bin govulncheck ./...'"
 workdir = "/app"
 volumes = ["${WORKSPACE}:/app"]
@@ -372,7 +377,8 @@ GOTOOLCHAIN = "auto"
 [presets.go-mod-tidy]
 name = "go-mod-tidy"
 phase = "code"
-image = "golang:1.25.4-alpine"
+image = "dhi.io/golang:1.23-alpine3.21-dev"
+hardened = true
 command = "sh -c 'cp go.mod go.mod.bak && cp go.sum go.sum.bak && go mod tidy && diff go.mod go.mod.bak && diff go.sum go.sum.bak && echo \"go.mod is tidy\"'"
 workdir = "/app"
 volumes = ["${WORKSPACE}:/app"]
@@ -404,10 +410,11 @@ default = false
 description = "Automatically fix issues where possible"
 command_flag = "--fix"
 
+# Shellcheck: Static analysis for shell scripts
 [presets.shellcheck]
 name = "shellcheck"
 phase = "code"
-image = "koalaman/shellcheck:v0.11.0"
+image = "koalaman/shellcheck:stable"
 command = "sh -c 'find . -type f -name \"*.sh\" | xargs -r shellcheck || true'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -421,7 +428,8 @@ command_flag = "--severity"
 [presets.gofmt]
 name = "gofmt"
 phase = "code"
-image = "golang:1.25.4-alpine"
+image = "dhi.io/golang:1.23-alpine3.21-dev"
+hardened = true
 command = "gofmt -l ."
 workdir = "/app"
 volumes = ["${WORKSPACE}:/app"]
@@ -436,13 +444,17 @@ GOTOOLCHAIN = "auto"
 [presets.go-test]
 name = "go-test"
 phase = "test"
-image = "golang:1.25.4-alpine"
+image = "dhi.io/golang:1.23-alpine3.21-dev"
+hardened = true
 command = "go test -v ./pkg/... ./cmd/..."
 workdir = "/app"
 volumes = ["${WORKSPACE}:/app"]
 
 [presets.go-test.env]
 HOME = "/tmp"
+GOPATH = "/tmp/go"
+GOMODCACHE = "/tmp/go-mod-cache"
+GOCACHE = "/tmp/go-build-cache"
 GOTOOLCHAIN = "auto"
 
 [presets.go-test.options.coverage]
@@ -460,13 +472,17 @@ command_flag = "-race"
 [presets.godog]
 name = "godog"
 phase = "test"
-image = "golang:1.25.4-alpine"
+image = "dhi.io/golang:1.23-alpine3.21-dev"
+hardened = true
 command = "go test -v ./features_test.go"
 workdir = "/app"
 volumes = ["${WORKSPACE}:/app"]
 
 [presets.godog.env]
 HOME = "/tmp"
+GOPATH = "/tmp/go"
+GOMODCACHE = "/tmp/go-mod-cache"
+GOCACHE = "/tmp/go-build-cache"
 CGO_ENABLED = "0"
 GOTOOLCHAIN = "auto"
 
@@ -489,13 +505,17 @@ command_flag = "-tags"
 [presets.go-build]
 name = "go-build"
 phase = "build"
-image = "golang:1.25.4-alpine"
+image = "dhi.io/golang:1.23-alpine3.21-dev"
+hardened = true
 command = "sh -c 'VERSION=$(cat VERSION 2>/dev/null || echo dev); go build -ldflags \"-X main.Version=${VERSION} ${LDFLAGS}\" -o bin/cidx ./cmd/cidx'"
 workdir = "/app"
 volumes = ["${WORKSPACE}:/app"]
 
 [presets.go-build.env]
 HOME = "/tmp"
+GOPATH = "/tmp/go"
+GOMODCACHE = "/tmp/go-mod-cache"
+GOCACHE = "/tmp/go-build-cache"
 LDFLAGS = ""
 GOTOOLCHAIN = "auto"
 
@@ -548,7 +568,8 @@ command_flag = "--cache"
 [presets.docker-buildx]
 name = "docker-buildx"
 phase = "docker"
-image = "docker:29.0.4"
+image = "dhi.io/docker:27-cli"
+hardened = true
 command = "sh -c 'docker buildx build --platform linux/amd64,linux/arm64 -t ${IMAGE_NAME}:${IMAGE_TAG} --push .'"
 workdir = "/workspace"
 volumes = [
@@ -679,7 +700,8 @@ command_flag = "--diff"
 [presets.mypy]
 name = "mypy"
 phase = "code"
-image = "python:3.13-alpine"
+image = "dhi.io/python:3.13-alpine3.21"
+hardened = true
 command = "sh -c 'pip install --quiet mypy && mypy .'"
 workdir = "/src"
 volumes = ["${WORKSPACE}:/src"]
@@ -699,7 +721,8 @@ command_flag = "--strict"
 [presets.bandit]
 name = "bandit"
 phase = "security"
-image = "python:3.13-alpine"
+image = "dhi.io/python:3.13-alpine3.21"
+hardened = true
 command = "sh -c 'pip install --quiet bandit && bandit -r .'"
 workdir = "/src"
 volumes = ["${WORKSPACE}:/src"]
@@ -722,7 +745,8 @@ command_flag = "-i"
 [presets.pip-audit]
 name = "pip-audit"
 phase = "security"
-image = "python:3.13-alpine"
+image = "dhi.io/python:3.13-alpine3.21"
+hardened = true
 command = "sh -c 'pip install --quiet pip-audit && pip-audit'"
 workdir = "/src"
 volumes = ["${WORKSPACE}:/src"]
@@ -744,7 +768,8 @@ command_flag = "--fix"
 [presets.pytest]
 name = "pytest"
 phase = "test"
-image = "python:3.13-alpine"
+image = "dhi.io/python:3.13-alpine3.21"
+hardened = true
 command = "sh -c 'pip install --quiet pytest pytest-cov && pytest'"
 workdir = "/src"
 volumes = ["${WORKSPACE}:/src"]
@@ -766,7 +791,8 @@ command_flag = "--cov=."
 [presets.python-build]
 name = "python-build"
 phase = "build"
-image = "python:3.13-alpine"
+image = "dhi.io/python:3.13-alpine3.21"
+hardened = true
 command = "sh -c 'pip install --quiet build && python -m build'"
 workdir = "/src"
 volumes = ["${WORKSPACE}:/src"]
@@ -780,7 +806,8 @@ OUTPUT_DIR = "dist"
 [presets.twine]
 name = "twine"
 phase = "release"
-image = "python:3.13-alpine"
+image = "dhi.io/python:3.13-alpine3.21"
+hardened = true
 command = "sh -c 'pip install --quiet twine && twine upload dist/*'"
 workdir = "/src"
 volumes = ["${WORKSPACE}:/src"]
@@ -805,7 +832,8 @@ command_flag = "--repository"
 [presets.rustfmt]
 name = "rustfmt"
 phase = "code"
-image = "rust:1.83-alpine"
+image = "dhi.io/rust:1.83-alpine3.21"
+hardened = true
 command = "cargo fmt -- --check"
 workdir = "/src"
 volumes = ["${WORKSPACE}:/src"]
@@ -819,7 +847,8 @@ CARGO_HOME = "/tmp/cargo"
 [presets.clippy]
 name = "clippy"
 phase = "code"
-image = "rust:1.83-alpine"
+image = "dhi.io/rust:1.83-alpine3.21"
+hardened = true
 command = "sh -c 'rustup component add clippy && cargo clippy -- -D warnings'"
 workdir = "/src"
 volumes = ["${WORKSPACE}:/src"]
@@ -840,7 +869,8 @@ command_flag = "-W clippy::pedantic"
 [presets.cargo-audit]
 name = "cargo-audit"
 phase = "security"
-image = "rust:1.83-alpine"
+image = "dhi.io/rust:1.83-alpine3.21"
+hardened = true
 command = "sh -c 'cargo install cargo-audit && cargo audit'"
 workdir = "/src"
 volumes = ["${WORKSPACE}:/src"]
@@ -859,7 +889,8 @@ command_flag = "--deny warnings"
 [presets.cargo-test]
 name = "cargo-test"
 phase = "test"
-image = "rust:1.83-alpine"
+image = "dhi.io/rust:1.83-alpine3.21"
+hardened = true
 command = "cargo test"
 workdir = "/src"
 volumes = ["${WORKSPACE}:/src"]
@@ -885,7 +916,8 @@ command_flag = "--all-features"
 [presets.cargo-build]
 name = "cargo-build"
 phase = "build"
-image = "rust:1.83-alpine"
+image = "dhi.io/rust:1.83-alpine3.21"
+hardened = true
 command = "cargo build --release"
 workdir = "/src"
 volumes = ["${WORKSPACE}:/src"]
@@ -904,7 +936,8 @@ command_flag = "--target"
 [presets.cargo-publish]
 name = "cargo-publish"
 phase = "release"
-image = "rust:1.83-alpine"
+image = "dhi.io/rust:1.83-alpine3.21"
+hardened = true
 command = "cargo publish"
 workdir = "/src"
 volumes = ["${WORKSPACE}:/src"]

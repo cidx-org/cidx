@@ -169,7 +169,7 @@ func (s *Selector) ListAvailableBackends() []BackendType {
 // TODO: Implement PodmanExecutor with same interface as DockerExecutor
 type PodmanExecutor struct{}
 
-func (e *PodmanExecutor) Run(ctx context.Context, config *config.ContainerConfig) error {
+func (e *PodmanExecutor) Run(_ context.Context, _ *config.ContainerConfig) error {
 	return errors.New("podman executor not yet implemented")
 }
 func (e *PodmanExecutor) Available() bool { return false }

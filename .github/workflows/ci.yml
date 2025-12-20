@@ -23,6 +23,14 @@ jobs:
           go-version: "1.23"
           cache: true
 
+      # Login to DHI (Docker Hardened Images) for hardened container images
+      - name: Login to Docker Hardened Images
+        uses: docker/login-action@v3
+        with:
+          registry: dhi.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Build CIDX
         run: go build -o bin/cidx ./cmd/cidx
 
@@ -46,6 +54,13 @@ jobs:
           go-version: "1.23"
           cache: true
 
+      - name: Login to Docker Hardened Images
+        uses: docker/login-action@v3
+        with:
+          registry: dhi.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Build CIDX
         run: go build -o bin/cidx ./cmd/cidx
 
@@ -66,6 +81,13 @@ jobs:
         with:
           go-version: "1.23"
           cache: true
+
+      - name: Login to Docker Hardened Images
+        uses: docker/login-action@v3
+        with:
+          registry: dhi.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build CIDX
         run: go build -o bin/cidx ./cmd/cidx
@@ -88,6 +110,13 @@ jobs:
         with:
           go-version: "1.23"
           cache: true
+
+      - name: Login to Docker Hardened Images
+        uses: docker/login-action@v3
+        with:
+          registry: dhi.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build CIDX
         run: go build -o bin/cidx ./cmd/cidx
