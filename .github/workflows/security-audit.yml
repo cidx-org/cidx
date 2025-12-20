@@ -114,14 +114,6 @@ jobs:
         with:
           go-version-file: go.mod
 
-      # Login to DHI for scanning hardened images
-      - name: Login to Docker Hardened Images
-        uses: docker/login-action@v3
-        with:
-          registry: dhi.io
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
       - name: Build CIDX
         run: go build -o bin/cidx ./cmd/cidx
 
@@ -219,14 +211,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-
-      # Login to DHI for scanning hardened images
-      - name: Login to Docker Hardened Images
-        uses: docker/login-action@v3
-        with:
-          registry: dhi.io
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build CIDX
         run: go build -o bin/cidx ./cmd/cidx

@@ -64,13 +64,11 @@ command_flag = "--write"
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # Trivy: Container and filesystem vulnerability scanner
-# 🛡️ DHI: Docker Hardened Image (near-zero CVEs)
 # Scans: dependencies, OS packages, misconfigurations, secrets
 [presets.trivy]
 name = "trivy"
 phase = "security"
-image = "dhi.io/trivy:0.68"
-hardened = true
+image = "aquasec/trivy:0.68.1"
 command = "fs /scan"
 workdir = "/scan"
 volumes = ["${WORKSPACE}:/scan"]
