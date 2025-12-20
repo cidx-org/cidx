@@ -452,6 +452,7 @@ volumes = ["${WORKSPACE}:/app"]
 
 [presets.go-test.env]
 HOME = "/tmp"
+GOPATH = "/tmp/go"
 GOMODCACHE = "/tmp/go-mod-cache"
 GOCACHE = "/tmp/go-build-cache"
 GOTOOLCHAIN = "auto"
@@ -479,6 +480,7 @@ volumes = ["${WORKSPACE}:/app"]
 
 [presets.godog.env]
 HOME = "/tmp"
+GOPATH = "/tmp/go"
 GOMODCACHE = "/tmp/go-mod-cache"
 GOCACHE = "/tmp/go-build-cache"
 CGO_ENABLED = "0"
@@ -511,6 +513,7 @@ volumes = ["${WORKSPACE}:/app"]
 
 [presets.go-build.env]
 HOME = "/tmp"
+GOPATH = "/tmp/go"
 GOMODCACHE = "/tmp/go-mod-cache"
 GOCACHE = "/tmp/go-build-cache"
 LDFLAGS = ""
