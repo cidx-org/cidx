@@ -91,13 +91,12 @@ description = "Exit code when vulnerabilities are found"
 command_flag = "--exit-code"
 
 # Gitleaks: Scan git history for secrets and credentials
-# 🛡️ DHI: Docker Hardened Image (near-zero CVEs)
+# Official image: zricethezav/gitleaks (maintained by gitleaks author)
 # Detects: API keys, passwords, tokens in git history
 [presets.gitleaks]
 name = "gitleaks"
 phase = "security"
-image = "dhi.io/gitleaks:8.22"
-hardened = true
+image = "zricethezav/gitleaks:v8.22.1"
 command = "git ."
 workdir = "/repo"
 volumes = ["${WORKSPACE}:/repo"]
@@ -413,12 +412,10 @@ description = "Automatically fix issues where possible"
 command_flag = "--fix"
 
 # Shellcheck: Static analysis for shell scripts
-# 🛡️ DHI: Docker Hardened Image (near-zero CVEs)
 [presets.shellcheck]
 name = "shellcheck"
 phase = "code"
-image = "dhi.io/shellcheck:0.10"
-hardened = true
+image = "koalaman/shellcheck:stable"
 command = "sh -c 'find . -type f -name \"*.sh\" | xargs -r shellcheck || true'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]

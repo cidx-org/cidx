@@ -306,13 +306,13 @@ func FormatStatus(info *RegistryInfo) string {
 	sb.WriteString("─────────────────────────────────\n")
 
 	if info.Authenticated {
-		sb.WriteString(fmt.Sprintf("Status:   \033[32m✓ Authenticated\033[0m\n"))
+		sb.WriteString("Status:   \033[32m✓ Authenticated\033[0m\n")
 		sb.WriteString(fmt.Sprintf("Username: %s\n", info.Username))
 		if info.CredsHelper != "" {
 			sb.WriteString(fmt.Sprintf("Backend:  %s (credential helper)\n", info.CredsHelper))
 		}
 	} else {
-		sb.WriteString(fmt.Sprintf("Status:   \033[31m✗ Not authenticated\033[0m\n"))
+		sb.WriteString("Status:   \033[31m✗ Not authenticated\033[0m\n")
 		sb.WriteString(fmt.Sprintf("\nTo authenticate:\n  cidx registry login %s\n", info.Name))
 	}
 
