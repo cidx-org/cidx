@@ -60,11 +60,14 @@ const defaultTOMLConfig = `# CIDX Configuration
 # Workspace: By default, CIDX uses the current directory as the workspace.
 # All tools will be executed in the directory where you run the command.
 
+# Version Pinning (Optional but recommended for CI consistency)
+# required_version = "1.2.3"
+
 [security]
-tools = ["trivy", "gitleaks"]
+containers = ["trivy", "gitleaks"]
 
 [code]
-tools = ["prettier"]
+containers = ["prettier"]
 
 # Optional: Override tool settings
 # [prettier]
@@ -79,6 +82,9 @@ const defaultYAMLConfig = `# CIDX Configuration
 #
 # Workspace: By default, CIDX uses the current directory as the workspace.
 # All tools will be executed in the directory where you run the command.
+
+# Version Pinning (Optional but recommended for CI consistency)
+# required_version: "1.2.3"
 
 security:
   tools: [trivy, gitleaks]

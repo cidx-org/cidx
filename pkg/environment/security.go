@@ -2,6 +2,7 @@ package environment
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cidx-org/cidx/pkg/presets"
 )
@@ -123,46 +124,9 @@ func ApplyExecutionMode(preset presets.Preset, mode *ExecutionMode) presets.Pres
 
 // removeFlag removes a flag from a command string
 func removeFlag(command, flag string) string {
-	// Simple implementation - can be improved
 	result := command
-	// Remove flag and its value if present
 	for _, variant := range []string{flag + " ", flag} {
-		result = replaceAll(result, variant, "")
+		result = strings.ReplaceAll(result, variant, "")
 	}
 	return result
-}
-
-// replaceAll is a helper to replace all occurrences
-func replaceAll(s, old, new string) string {
-	result := s
-	for {
-		before := result
-		result = replace(result, old, new)
-		if result == before {
-			break
-		}
-	}
-	return result
-}
-
-// replace replaces first occurrence
-func replace(s, old, new string) string {
-	if old == "" {
-		return s
-	}
-	idx := indexOf(s, old)
-	if idx == -1 {
-		return s
-	}
-	return s[:idx] + new + s[idx+len(old):]
-}
-
-// indexOf finds index of substring
-func indexOf(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
 }

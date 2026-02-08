@@ -51,40 +51,34 @@ func loadProviderConfig() config.ProviderConfig {
 }
 
 // loadPRConfig loads the PR configuration from cidx.toml or returns defaults
-// Since Go's zero value for bool is false, we need to merge with defaults
-// to ensure sensible behavior when [pr] section is missing or incomplete
+// The parser starts with DefaultPRConfig() and only overrides explicitly set fields,
+// so boolean defaults (true) are preserved when not specified in config
 func loadPRConfig() config.PRConfig {
-	defaults := config.DefaultPRConfig()
-
 	cfg, err := config.Load("cidx.toml")
 	if err != nil {
-		// Return defaults if no config file
-		return defaults
+		return config.DefaultPRConfig()
 	}
+	return cfg.PR
+}
 
-	// Check if PR section was explicitly configured by looking at the raw config
-	// If no [pr] section exists, cfg.PR will have zero values for all fields
-	// We detect this by checking if all fields are at their zero values
-	pr := cfg.PR
-	if pr.DefaultMergeMethod == "" && pr.AutoRefreshInterval == 0 &&
-		!pr.ConfirmMerge && !pr.DeleteBranchAfterMerge &&
-		!pr.CheckoutAfterMerge && !pr.SyncAfterMerge &&
-		!pr.WatchPipelineAfterMerge && !pr.ConfirmQuitAfterMerge {
-		// No [pr] section configured, use defaults
-		return defaults
+// withRepo opens the repository and passes it to the callback
+func withRepo(fn func(repo *vcs.Repository) error) error {
+	repo, err := vcs.OpenRepository(".")
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
 	}
+	return fn(repo)
+}
 
-	// Merge: use config values where set, defaults where not
-	// For booleans, we can't distinguish "explicitly false" from "not set"
-	// So we only apply defaults for string/int fields that are empty/zero
-	if pr.DefaultMergeMethod == "" {
-		pr.DefaultMergeMethod = defaults.DefaultMergeMethod
-	}
-	if pr.AutoRefreshInterval == 0 {
-		pr.AutoRefreshInterval = defaults.AutoRefreshInterval
-	}
-
-	return pr
+// withRepoAndProvider opens the repository, creates the provider, and passes both to the callback
+func withRepoAndProvider(fn func(repo *vcs.Repository, provider remote.Provider) error) error {
+	return withRepo(func(repo *vcs.Repository) error {
+		provider, err := createProvider(repo)
+		if err != nil {
+			return err
+		}
+		return fn(repo, provider)
+	})
 }
 
 // getGitHubToken retrieves GitHub token from env var or gh CLI auth
@@ -453,471 +447,163 @@ func actionCommand() *cli.Command {
 }
 
 func commitPushWatchAction(c *cli.Context) error {
-	// Open repository
-	repo, err := vcs.OpenRepository(".")
-	if err != nil {
-		return fmt.Errorf("failed to open repository: %w", err)
-	}
-
-	// Create provider (auto-detects GitHub/GitLab)
-	provider, err := createProvider(repo)
-	if err != nil {
-		return err
-	}
-
-	// Create and execute action
-	action := actions.NewCommitPushWatch(
-		repo,
-		provider,
-		c.String("message"),
-	)
-
-	ctx := context.Background()
-	return action.Execute(ctx)
+	return withRepoAndProvider(func(repo *vcs.Repository, provider remote.Provider) error {
+		action := actions.NewCommitPushWatch(repo, provider, c.String("message"))
+		return action.Execute(context.Background())
+	})
 }
 
 func releaseCreateAction(c *cli.Context) error {
-	// Open repository
-	repo, err := vcs.OpenRepository(".")
-	if err != nil {
-		return fmt.Errorf("failed to open repository: %w", err)
-	}
-
-	// Create provider (auto-detects GitHub/GitLab)
-	provider, err := createProvider(repo)
-	if err != nil {
-		return err
-	}
-
-	// Load release config
-	releaseConfig := loadReleaseConfig()
-
-	// Create and execute release action
-	action := actions.NewRelease(
-		repo,
-		provider,
-		releaseConfig,
-		"release-create", // Action name from cidx.toml
-		c.Bool("dry-run"),
-	)
-
-	ctx := context.Background()
-	return action.Execute(ctx)
+	return withRepoAndProvider(func(repo *vcs.Repository, provider remote.Provider) error {
+		action := actions.NewRelease(repo, provider, loadReleaseConfig(), "release-create", c.Bool("dry-run"))
+		return action.Execute(context.Background())
+	})
 }
 
 func prCreateAction(c *cli.Context) error {
-	// Get PR title from args or prompt
 	title := c.Args().First()
 	if title == "" {
 		return fmt.Errorf("PR title is required: cidx action pr create \"Your PR title\"")
 	}
 
-	// Open repository
-	repo, err := vcs.OpenRepository(".")
-	if err != nil {
-		return fmt.Errorf("failed to open repository: %w", err)
-	}
-
-	// Create provider (auto-detects GitHub/GitLab)
-	provider, err := createProvider(repo)
-	if err != nil {
-		return err
-	}
-
-	// Create and execute PR action
-	action := actions.NewPR(
-		repo,
-		provider,
-		title,
-		c.String("issue"),
-		c.Bool("dry-run"),
-		false, // not ready mode
-	)
-
-	ctx := context.Background()
-	return action.Execute(ctx)
+	return withRepoAndProvider(func(repo *vcs.Repository, provider remote.Provider) error {
+		action := actions.NewPR(repo, provider, title, c.String("issue"), c.Bool("dry-run"), false)
+		return action.Execute(context.Background())
+	})
 }
 
 func prReadyAction(c *cli.Context) error {
-	// Open repository
-	repo, err := vcs.OpenRepository(".")
-	if err != nil {
-		return fmt.Errorf("failed to open repository: %w", err)
-	}
-
-	// Create provider (auto-detects GitHub/GitLab)
-	provider, err := createProvider(repo)
-	if err != nil {
-		return err
-	}
-
-	// Create and execute PR ready action
-	action := actions.NewPR(
-		repo,
-		provider,
-		"",    // no title needed for ready
-		"",    // no issue needed for ready
-		c.Bool("dry-run"),
-		true, // ready mode
-	)
-
-	ctx := context.Background()
-	return action.Execute(ctx)
+	return withRepoAndProvider(func(repo *vcs.Repository, provider remote.Provider) error {
+		action := actions.NewPR(repo, provider, "", "", c.Bool("dry-run"), true)
+		return action.Execute(context.Background())
+	})
 }
 
 func prMergeAction(c *cli.Context) error {
-	// Open repository
-	repo, err := vcs.OpenRepository(".")
-	if err != nil {
-		return fmt.Errorf("failed to open repository: %w", err)
-	}
-
-	// Create provider (auto-detects GitHub/GitLab)
-	provider, err := createProvider(repo)
-	if err != nil {
-		return err
-	}
-
-	// Create and execute PR merge action
-	action := actions.NewPRMerge(
-		repo,
-		provider,
-		c.String("method"),
-		c.Bool("watch"),
-		c.Bool("skip-checks"),
-		c.Bool("dry-run"),
-	)
-
-	ctx := context.Background()
-	return action.Execute(ctx)
+	return withRepoAndProvider(func(repo *vcs.Repository, provider remote.Provider) error {
+		action := actions.NewPRMerge(repo, provider, c.String("method"), c.Bool("watch"), c.Bool("skip-checks"), c.Bool("dry-run"))
+		return action.Execute(context.Background())
+	})
 }
 
 func releasePrepareAction(c *cli.Context) error {
-	// Open repository
-	repo, err := vcs.OpenRepository(".")
-	if err != nil {
-		return fmt.Errorf("failed to open repository: %w", err)
-	}
-
-	// Create provider (auto-detects GitHub/GitLab)
-	provider, err := createProvider(repo)
-	if err != nil {
-		return err
-	}
-
-	// Load release config
-	releaseConfig := loadReleaseConfig()
-
-	// Create and execute release prepare action
-	action := actions.NewReleasePrepare(
-		repo,
-		provider,
-		releaseConfig,
-		c.Bool("dry-run"),
-	)
-
-	ctx := context.Background()
-	return action.Execute(ctx)
+	return withRepoAndProvider(func(repo *vcs.Repository, provider remote.Provider) error {
+		action := actions.NewReleasePrepare(repo, provider, loadReleaseConfig(), c.Bool("dry-run"))
+		return action.Execute(context.Background())
+	})
 }
 
 func releasePreviewAction(c *cli.Context) error {
-	// Open repository
-	repo, err := vcs.OpenRepository(".")
-	if err != nil {
-		return fmt.Errorf("failed to open repository: %w", err)
-	}
-
-	// Load release config
-	releaseConfig := loadReleaseConfig()
-
-	// Create and execute release preview action
-	action := actions.NewReleasePreview(
-		repo,
-		releaseConfig,
-		false, // preview is always "dry-run" style
-	)
-
-	ctx := context.Background()
-	return action.Execute(ctx)
+	return withRepo(func(repo *vcs.Repository) error {
+		action := actions.NewReleasePreview(repo, loadReleaseConfig(), false)
+		return action.Execute(context.Background())
+	})
 }
 
 func releaseCommitAction(c *cli.Context) error {
-	// Open repository
-	repo, err := vcs.OpenRepository(".")
-	if err != nil {
-		return fmt.Errorf("failed to open repository: %w", err)
-	}
-
-	// Create and execute release commit action
-	action := actions.NewReleaseCommit(
-		repo,
-		c.Bool("dry-run"),
-	)
-
-	ctx := context.Background()
-	return action.Execute(ctx)
+	return withRepo(func(repo *vcs.Repository) error {
+		action := actions.NewReleaseCommit(repo, c.Bool("dry-run"))
+		return action.Execute(context.Background())
+	})
 }
 
 func tagPrepareAction(c *cli.Context) error {
-	// Open repository
-	repo, err := vcs.OpenRepository(".")
-	if err != nil {
-		return fmt.Errorf("failed to open repository: %w", err)
-	}
-
-	// Load tag config
-	tagConfig := loadTagConfig()
-
-	// Create and execute tag prepare action
-	action := actions.NewTagPrepare(
-		repo,
-		tagConfig,
-		c.Bool("dry-run"),
-	)
-
-	ctx := context.Background()
-	return action.Execute(ctx)
+	return withRepo(func(repo *vcs.Repository) error {
+		action := actions.NewTagPrepare(repo, loadTagConfig(), c.Bool("dry-run"))
+		return action.Execute(context.Background())
+	})
 }
 
 func tagPreviewAction(c *cli.Context) error {
-	// Open repository
-	repo, err := vcs.OpenRepository(".")
-	if err != nil {
-		return fmt.Errorf("failed to open repository: %w", err)
-	}
-
-	// Load tag config
-	tagConfig := loadTagConfig()
-
-	// Create and execute tag preview action
-	action := actions.NewTagPreview(
-		repo,
-		tagConfig,
-	)
-
-	ctx := context.Background()
-	return action.Execute(ctx)
+	return withRepo(func(repo *vcs.Repository) error {
+		action := actions.NewTagPreview(repo, loadTagConfig())
+		return action.Execute(context.Background())
+	})
 }
 
 func tagCreateAction(c *cli.Context) error {
-	// Open repository
-	repo, err := vcs.OpenRepository(".")
-	if err != nil {
-		return fmt.Errorf("failed to open repository: %w", err)
-	}
-
-	// Load tag config
-	tagConfig := loadTagConfig()
-
-	// Create and execute tag create action
-	action := actions.NewTagCreate(
-		repo,
-		tagConfig,
-		c.Bool("dry-run"),
-	)
-
-	ctx := context.Background()
-	return action.Execute(ctx)
+	return withRepo(func(repo *vcs.Repository) error {
+		action := actions.NewTagCreate(repo, loadTagConfig(), c.Bool("dry-run"))
+		return action.Execute(context.Background())
+	})
 }
 
 func tagTUIAction(c *cli.Context) error {
-	// Open repository
-	repo, err := vcs.OpenRepository(".")
-	if err != nil {
-		return fmt.Errorf("failed to open repository: %w", err)
-	}
-
-	// Load tag config
-	tagConfig := loadTagConfig()
-
-	// Load release config (for shared settings)
-	releaseConfig := loadReleaseConfig()
-
-	return runReleaseTUI(modeTag, repo, nil, tagConfig, releaseConfig)
+	return withRepo(func(repo *vcs.Repository) error {
+		return runReleaseTUI(modeTag, repo, nil, loadTagConfig(), loadReleaseConfig())
+	})
 }
 
 func releaseTUIAction(c *cli.Context) error {
-	// Open repository
-	repo, err := vcs.OpenRepository(".")
-	if err != nil {
-		return fmt.Errorf("failed to open repository: %w", err)
-	}
-
-	// Create provider (auto-detects GitHub/GitLab)
-	provider, err := createProvider(repo)
-	if err != nil {
-		return err
-	}
-
-	// Load configs
-	tagConfig := loadTagConfig()
-	releaseConfig := loadReleaseConfig()
-
-	return runReleaseTUI(modeRelease, repo, provider, tagConfig, releaseConfig)
+	return withRepoAndProvider(func(repo *vcs.Repository, provider remote.Provider) error {
+		return runReleaseTUI(modeRelease, repo, provider, loadTagConfig(), loadReleaseConfig())
+	})
 }
 
 func prTUIAction(c *cli.Context) error {
-	// Open repository
-	repo, err := vcs.OpenRepository(".")
-	if err != nil {
-		return fmt.Errorf("failed to open repository: %w", err)
-	}
+	return withRepoAndProvider(func(repo *vcs.Repository, provider remote.Provider) error {
+		branch, err := repo.GetCurrentBranch()
+		if err != nil {
+			return fmt.Errorf("failed to get current branch: %w", err)
+		}
 
-	// Get current branch
-	branch, err := repo.GetCurrentBranch()
-	if err != nil {
-		return fmt.Errorf("failed to get current branch: %w", err)
-	}
+		// Cast to GitHub client (TUI requires GitHub-specific methods)
+		ghClient, ok := provider.(*github.Client)
+		if !ok {
+			return fmt.Errorf("PR TUI is only supported for GitHub repositories")
+		}
 
-	// Create provider (must be GitHub for TUI)
-	provider, err := createProvider(repo)
-	if err != nil {
-		return err
-	}
+		prNumber, _, err := provider.GetPullRequestByBranch(context.Background(), branch)
+		if err != nil {
+			return fmt.Errorf("no PR found for branch %s: %w", branch, err)
+		}
 
-	// Cast to GitHub client (TUI requires GitHub-specific methods)
-	ghClient, ok := provider.(*github.Client)
-	if !ok {
-		return fmt.Errorf("PR TUI is only supported for GitHub repositories")
-	}
-
-	// Find PR for current branch
-	prNumber, _, err := provider.GetPullRequestByBranch(context.Background(), branch)
-	if err != nil {
-		return fmt.Errorf("no PR found for branch %s: %w", branch, err)
-	}
-
-	// Load PR config
-	prConfig := loadPRConfig()
-
-	return runMergeTUI(ghClient, prNumber, prConfig)
+		return runMergeTUI(ghClient, prNumber, loadPRConfig())
+	})
 }
 
 func tagDeleteAction(c *cli.Context) error {
-	// Get tag name from args
 	tagName := c.Args().First()
 	if tagName == "" {
 		return fmt.Errorf("tag name is required: cidx action tag delete <tag-name>")
 	}
 
-	// Open repository
-	repo, err := vcs.OpenRepository(".")
-	if err != nil {
-		return fmt.Errorf("failed to open repository: %w", err)
-	}
-
-	// Load tag config
-	tagConfig := loadTagConfig()
-
-	// Create and execute tag delete action
-	action := actions.NewTagDelete(
-		repo,
-		tagConfig,
-		tagName,
-		c.Bool("remote"),
-		c.Bool("force"),
-		c.Bool("dry-run"),
-	)
-
-	ctx := context.Background()
-	return action.Execute(ctx)
+	return withRepo(func(repo *vcs.Repository) error {
+		action := actions.NewTagDelete(repo, loadTagConfig(), tagName, c.Bool("remote"), c.Bool("force"), c.Bool("dry-run"))
+		return action.Execute(context.Background())
+	})
 }
 
 func tagListAction(c *cli.Context) error {
-	// Open repository
-	repo, err := vcs.OpenRepository(".")
-	if err != nil {
-		return fmt.Errorf("failed to open repository: %w", err)
-	}
-
-	// Load tag config
-	tagConfig := loadTagConfig()
-
-	// Create and execute tag list action
-	action := actions.NewTagList(
-		repo,
-		tagConfig,
-		c.Int("limit"),
-		c.String("pattern"),
-		c.Bool("verbose"),
-	)
-
-	ctx := context.Background()
-	return action.Execute(ctx)
+	return withRepo(func(repo *vcs.Repository) error {
+		action := actions.NewTagList(repo, loadTagConfig(), c.Int("limit"), c.String("pattern"), c.Bool("verbose"))
+		return action.Execute(context.Background())
+	})
 }
 
 func artifactListAction(c *cli.Context) error {
-	// Open repository
-	repo, err := vcs.OpenRepository(".")
-	if err != nil {
-		return fmt.Errorf("failed to open repository: %w", err)
-	}
-
-	// Create provider (auto-detects GitHub/GitLab)
-	provider, err := createProvider(repo)
-	if err != nil {
-		return err
-	}
-
-	// Create and execute artifact list action
-	action := actions.NewArtifactList(
-		provider,
-		c.Bool("verbose"),
-	)
-
-	ctx := context.Background()
-	return action.Execute(ctx)
+	return withRepoAndProvider(func(_ *vcs.Repository, provider remote.Provider) error {
+		action := actions.NewArtifactList(provider, c.Bool("verbose"))
+		return action.Execute(context.Background())
+	})
 }
 
 func artifactStatsAction(c *cli.Context) error {
-	// Open repository
-	repo, err := vcs.OpenRepository(".")
-	if err != nil {
-		return fmt.Errorf("failed to open repository: %w", err)
-	}
-
-	// Create provider (auto-detects GitHub/GitLab)
-	provider, err := createProvider(repo)
-	if err != nil {
-		return err
-	}
-
-	// Create and execute artifact stats action
-	action := actions.NewArtifactStats(provider)
-
-	ctx := context.Background()
-	return action.Execute(ctx)
+	return withRepoAndProvider(func(_ *vcs.Repository, provider remote.Provider) error {
+		action := actions.NewArtifactStats(provider)
+		return action.Execute(context.Background())
+	})
 }
 
 func artifactCleanupAction(c *cli.Context) error {
-	// Open repository
-	repo, err := vcs.OpenRepository(".")
-	if err != nil {
-		return fmt.Errorf("failed to open repository: %w", err)
-	}
-
-	// Create provider (auto-detects GitHub/GitLab)
-	provider, err := createProvider(repo)
-	if err != nil {
-		return err
-	}
-
-	// Validate flags
 	if !c.Bool("all") && !c.Bool("expired") && c.Int("older-than") == 0 {
 		return fmt.Errorf("must specify --all, --expired, or --older-than <days>")
 	}
 
-	// Create and execute artifact cleanup action
-	action := actions.NewArtifactCleanup(
-		provider,
-		c.Bool("all"),
-		c.Bool("expired"),
-		c.Int("older-than"),
-		c.Bool("dry-run"),
-	)
-
-	ctx := context.Background()
-	return action.Execute(ctx)
+	return withRepoAndProvider(func(_ *vcs.Repository, provider remote.Provider) error {
+		action := actions.NewArtifactCleanup(provider, c.Bool("all"), c.Bool("expired"), c.Int("older-than"), c.Bool("dry-run"))
+		return action.Execute(context.Background())
+	})
 }
 
 func artifactTUIAction(c *cli.Context) error {

@@ -42,7 +42,7 @@ func (tc *TestContext) iHaveAValidCidxTomlConfiguration() error {
 }
 
 func (tc *TestContext) dockerDaemonIsRunning() error {
-	selector, err := executor.NewSelector(false, false)
+	selector, err := executor.NewSelector(false, false, false)
 	if err != nil {
 		return err
 	}
@@ -56,7 +56,7 @@ func (tc *TestContext) dockerDaemonIsRunning() error {
 }
 
 func (tc *TestContext) dockerDaemonIsNotRunning() error {
-	selector, err := executor.NewSelector(false, false)
+	selector, err := executor.NewSelector(false, false, false)
 	if err != nil {
 		// Docker not installed = not running
 		tc.Backend = ""
@@ -72,7 +72,7 @@ func (tc *TestContext) dockerDaemonIsNotRunning() error {
 }
 
 func (tc *TestContext) podmanIsAvailable() error {
-	selector, err := executor.NewSelector(false, false)
+	selector, err := executor.NewSelector(false, false, false)
 	if err != nil {
 		return err
 	}
@@ -86,7 +86,7 @@ func (tc *TestContext) podmanIsAvailable() error {
 }
 
 func (tc *TestContext) podmanIsNotAvailable() error {
-	selector, err := executor.NewSelector(false, false)
+	selector, err := executor.NewSelector(false, false, false)
 	if err != nil {
 		tc.Backend = ""
 		return nil
@@ -100,7 +100,7 @@ func (tc *TestContext) podmanIsNotAvailable() error {
 }
 
 func (tc *TestContext) anyContainerRuntimeIsAvailable() error {
-	selector, err := executor.NewSelector(false, false)
+	selector, err := executor.NewSelector(false, false, false)
 	if err != nil {
 		return godog.ErrPending
 	}
@@ -155,7 +155,7 @@ func (tc *TestContext) noContainerShouldActuallyRun() error {
 }
 
 func (tc *TestContext) iExecuteAToolViaDocker() error {
-	selector, err := executor.NewSelector(false, false)
+	selector, err := executor.NewSelector(false, false, false)
 	if err != nil {
 		return err
 	}

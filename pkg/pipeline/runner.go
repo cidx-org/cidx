@@ -45,7 +45,7 @@ func NewRunner(cfg *config.Config, exec *executor.DockerExecutor) *Runner {
 	}
 
 	// Create selector with docker executor for backwards compatibility
-	selector, _ := executor.NewSelector(false, false)
+	selector, _ := executor.NewSelector(false, false, false)
 
 	return &Runner{
 		config:   cfg,
@@ -313,7 +313,7 @@ func (r *Runner) RunTool(ctx context.Context, toolName string) error {
 	preset = environment.ApplyExecutionMode(preset, execMode)
 
 	// Merge with user overrides
-	var overrides map[string]interface{}
+	var overrides map[string]any
 	if r.config.Overrides != nil {
 		overrides = r.config.Overrides[toolName]
 	}

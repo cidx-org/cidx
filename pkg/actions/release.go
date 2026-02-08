@@ -176,7 +176,7 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 	}
 
 	// Execute using Docker executor
-	dockerExec, err := executor.NewDockerExecutor(false, false)
+	dockerExec, err := executor.NewDockerExecutor(false, false, false)
 	if err != nil {
 		return fmt.Errorf("failed to create executor: %w", err)
 	}
@@ -250,7 +250,7 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 			return update.Error
 		}
 
-		a.displayWorkflow(update.Workflow)
+		DisplayWorkflowStatus(update.Workflow)
 
 		if update.Workflow.Status == "completed" {
 			fmt.Println() // New line after progress
@@ -280,38 +280,6 @@ func (a *ReleaseAction) readVersionFile(workDir string) (string, error) {
 
 	version := strings.TrimSpace(string(content))
 	return version, nil
-}
-
-
-// displayWorkflow renders the current workflow status
-func (a *ReleaseAction) displayWorkflow(w *remote.Workflow) {
-	fmt.Printf("\r\033[K") // Clear line
-
-	for i, job := range w.Jobs {
-		var icon string
-		switch job.Status {
-		case "completed":
-			switch job.Conclusion {
-			case "success":
-				icon = "✓"
-			case "skipped":
-				icon = "○"
-			default:
-				icon = "✗"
-			}
-		case "in_progress":
-			icon = "⏳"
-		case "queued":
-			icon = "○"
-		default:
-			icon = "?"
-		}
-
-		fmt.Printf("[%s] %s", icon, job.Name)
-		if i < len(w.Jobs)-1 {
-			fmt.Printf(" ")
-		}
-	}
 }
 
 // getRepoPath returns owner/repo from the repository

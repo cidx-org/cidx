@@ -46,6 +46,11 @@ Examples:
 				Usage:   "Max concurrent containers when --parallel is enabled (default: 2)",
 				Value:   2,
 			},
+			&cli.BoolFlag{
+				Name:    "quiet",
+				Aliases: []string{"q"},
+				Usage:   "Suppress output and only show logs on failure",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			if c.NArg() != 1 {
@@ -56,6 +61,7 @@ Examples:
 			configPath := c.String("config")
 			dryRun := c.Bool("dry-run")
 			verbose := c.Bool("verbose")
+			quiet := c.Bool("quiet")
 			backend := executor.ParseBackendType(c.String("backend"))
 			parallel := c.Bool("parallel")
 			concurrency := c.Int("concurrency")
@@ -74,8 +80,13 @@ Examples:
 				return fmt.Errorf("failed to load config: %w", err)
 			}
 
+			// Validate required version
+			if err := config.CheckVersion(cfg, Version); err != nil {
+				return err
+			}
+
 			// Create executor selector
-			selector, err := executor.NewSelector(dryRun, verbose)
+			selector, err := executor.NewSelector(dryRun, verbose, quiet)
 			if err != nil {
 				return fmt.Errorf("failed to create executor selector: %w", err)
 			}

@@ -8,6 +8,34 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
+// knownSections lists top-level TOML sections that are decoded into typed fields.
+// Any other section with a "containers" key is treated as a phase;
+// remaining sections are container overrides.
+var knownSections = map[string]bool{
+	"tag_workflow":     true,
+	"release_workflow": true,
+	"pr":               true,
+	"branch":           true,
+	"provider":         true,
+	"pipelines":        true,
+	"actions":          true,
+	"required_version": true,
+}
+
+// typedConfig is the intermediate struct for decoding known TOML sections.
+// Fields are pre-initialized with defaults before decoding, so TOML only
+// overwrites explicitly set values (preserving e.g. PRConfig boolean defaults).
+type typedConfig struct {
+	RequiredVersion string              `toml:"required_version"`
+	TagWorkflow     TagConfig           `toml:"tag_workflow"`
+	ReleaseWorkflow ReleaseConfig       `toml:"release_workflow"`
+	PR              PRConfig            `toml:"pr"`
+	Branch          BranchConfig        `toml:"branch"`
+	Provider        ProviderConfig      `toml:"provider"`
+	Pipelines       map[string]Pipeline `toml:"pipelines"`
+	Actions         map[string]Action   `toml:"actions"`
+}
+
 // Load loads configuration from a TOML file
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
@@ -15,206 +43,83 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	// Parse TOML into generic map
-	var raw map[string]interface{}
+	// Pass 1: decode known sections into typed struct (with defaults pre-set)
+	typed := typedConfig{
+		TagWorkflow:     DefaultTagConfig(),
+		ReleaseWorkflow: DefaultReleaseConfig(),
+		PR:              DefaultPRConfig(),
+	}
+	if err := toml.Unmarshal(data, &typed); err != nil {
+		return nil, fmt.Errorf("failed to parse TOML config: %w", err)
+	}
+
+	// Pass 2: decode into raw map for dynamic sections (phases + container overrides)
+	var raw map[string]any
 	if err := toml.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("failed to parse TOML config: %w", err)
 	}
 
-	// Separate phases, pipelines, actions, and overrides
 	cfg := &Config{
-		Phases:    make(map[string]Phase),
-		Pipelines: make(map[string]Pipeline),
-		Actions:   make(map[string]Action),
-		Overrides: make(map[string]map[string]interface{}),
-		Release:   DefaultReleaseConfig(), // Start with defaults
-		Tag:       DefaultTagConfig(),     // Start with defaults
-		Workspace: os.Getenv("PWD"),
+		RequiredVersion: typed.RequiredVersion,
+		Phases:          make(map[string]Phase),
+		Pipelines:       typed.Pipelines,
+		Actions:         typed.Actions,
+		Overrides:       make(map[string]map[string]any),
+		Release:         typed.ReleaseWorkflow,
+		Tag:             typed.TagWorkflow,
+		PR:              typed.PR,
+		Branch:          typed.Branch,
+		Provider:        typed.Provider,
+		Workspace:       os.Getenv("PWD"),
 	}
 
+	if cfg.Pipelines == nil {
+		cfg.Pipelines = make(map[string]Pipeline)
+	}
+	if cfg.Actions == nil {
+		cfg.Actions = make(map[string]Action)
+	}
 	if cfg.Workspace == "" {
 		cfg.Workspace, _ = os.Getwd()
 	}
 
+	// Process dynamic sections: phases (have "containers" key) vs container overrides
 	for name, value := range raw {
-		section, ok := value.(map[string]interface{})
+		if knownSections[name] {
+			continue
+		}
+
+		section, ok := value.(map[string]any)
 		if !ok {
 			continue
 		}
 
-		// Check if this is the "tag_workflow" section
-		if name == "tag_workflow" {
-			if prefix, ok := section["prefix"].(string); ok {
-				cfg.Tag.Prefix = prefix
-			}
-			if pattern, ok := section["pattern"].(string); ok {
-				cfg.Tag.Pattern = pattern
-			}
-			if useCz, ok := section["use_commitizen"].(bool); ok {
-				cfg.Tag.UseCommitizen = useCz
-			}
-			if autoPush, ok := section["auto_push"].(bool); ok {
-				cfg.Tag.AutoPush = autoPush
-			}
-			if signTags, ok := section["sign_tags"].(bool); ok {
-				cfg.Tag.SignTags = signTags
-			}
-			if reqAnnot, ok := section["require_annotated"].(bool); ok {
-				cfg.Tag.RequireAnnotated = reqAnnot
-			}
-			if linkedRel, ok := section["linked_to_release"].(bool); ok {
-				cfg.Tag.LinkedToRelease = linkedRel
-			}
-			// Parse protected_tags array
-			if protectedRaw, hasProtected := section["protected_tags"]; hasProtected {
-				switch p := protectedRaw.(type) {
-				case []interface{}:
-					for _, tag := range p {
-						if tagStr, ok := tag.(string); ok {
-							cfg.Tag.ProtectedTags = append(cfg.Tag.ProtectedTags, tagStr)
-						}
-					}
-				case []string:
-					cfg.Tag.ProtectedTags = p
-				}
-			}
-			continue
-		}
-
-		// Check if this is the "release_workflow" section
-		if name == "release_workflow" {
-			if mainBranch, ok := section["main_branch"].(string); ok {
-				cfg.Release.MainBranch = mainBranch
-			}
-			if allowAny, ok := section["allow_release_from_any_branch"].(bool); ok {
-				cfg.Release.AllowReleaseFromAnyBranch = allowAny
-			}
-			if requirePrep, ok := section["require_prepare"].(bool); ok {
-				cfg.Release.RequirePrepare = requirePrep
-			}
-			if autoClean, ok := section["auto_cleanup"].(bool); ok {
-				cfg.Release.AutoCleanup = autoClean
-			}
-			if editor, ok := section["editor"].(string); ok {
-				cfg.Release.Editor = editor
-			}
-			if template, ok := section["notes_template"].(string); ok {
-				cfg.Release.NotesTemplate = template
-			}
-			continue
-		}
-
-		// Check if this is the "pipelines" section
-		if name == "pipelines" {
-			for pipelineName, pipelineValue := range section {
-				pipelineMap, ok := pipelineValue.(map[string]interface{})
-				if !ok {
-					continue
-				}
-
-				// Parse phases array
-				if phasesRaw, hasPhases := pipelineMap["phases"]; hasPhases {
-					phases := []string{}
-					switch p := phasesRaw.(type) {
-					case []interface{}:
-						for _, phase := range p {
-							if phaseStr, ok := phase.(string); ok {
-								phases = append(phases, phaseStr)
-							}
-						}
-					case []string:
-						phases = p
-					}
-					cfg.Pipelines[pipelineName] = Pipeline{Phases: phases}
-				}
-			}
-			continue
-		}
-
-		// Check if this is the "actions" section
-		if name == "actions" {
-			for actionName, actionValue := range section {
-				actionMap, ok := actionValue.(map[string]interface{})
-				if !ok {
-					continue
-				}
-
-				action := Action{}
-
-				if desc, ok := actionMap["description"].(string); ok {
-					action.Description = desc
-				}
-				if img, ok := actionMap["image"].(string); ok {
-					action.Image = img
-				}
-				if cmd, ok := actionMap["command"].(string); ok {
-					action.Command = cmd
-				}
-				if wd, ok := actionMap["workdir"].(string); ok {
-					action.Workdir = wd
-				}
-				if autoPush, ok := actionMap["auto_push"].(bool); ok {
-					action.AutoPush = autoPush
-				}
-				if pushTags, ok := actionMap["push_tags"].(bool); ok {
-					action.PushTags = pushTags
-				}
-				if watchWf, ok := actionMap["watch_workflow"].(bool); ok {
-					action.WatchWorkflow = watchWf
-				}
-
-				// Parse volumes array
-				if volsRaw, hasVols := actionMap["volumes"]; hasVols {
-					switch v := volsRaw.(type) {
-					case []interface{}:
-						for _, vol := range v {
-							if volStr, ok := vol.(string); ok {
-								action.Volumes = append(action.Volumes, volStr)
-							}
-						}
-					case []string:
-						action.Volumes = v
-					}
-				}
-
-				// Parse env map
-				if envRaw, hasEnv := actionMap["env"]; hasEnv {
-					if envMap, ok := envRaw.(map[string]interface{}); ok {
-						action.Env = make(map[string]string)
-						for k, v := range envMap {
-							if vStr, ok := v.(string); ok {
-								action.Env[k] = vStr
-							}
-						}
-					}
-				}
-
-				cfg.Actions[actionName] = action
-			}
-			continue
-		}
-
-		// Check if this section has a "containers" key → it's a phase
 		if containersRaw, hasContainers := section["containers"]; hasContainers {
-			containers := []string{}
-			switch t := containersRaw.(type) {
-			case []interface{}:
-				for _, container := range t {
-					if containerStr, ok := container.(string); ok {
-						containers = append(containers, containerStr)
-					}
-				}
-			case []string:
-				containers = t
-			}
-			cfg.Phases[name] = Phase{Containers: containers}
+			cfg.Phases[name] = Phase{Containers: toStringSlice(containersRaw)}
 		} else {
-			// It's a container override
 			cfg.Overrides[name] = section
 		}
 	}
 
 	return cfg, nil
+}
+
+// toStringSlice converts an any (typically []any from TOML) to []string
+func toStringSlice(v any) []string {
+	switch t := v.(type) {
+	case []any:
+		result := make([]string, 0, len(t))
+		for _, item := range t {
+			if s, ok := item.(string); ok {
+				result = append(result, s)
+			}
+		}
+		return result
+	case []string:
+		return t
+	default:
+		return nil
+	}
 }
 
 // FindConfig searches for cidx TOML config files in common locations

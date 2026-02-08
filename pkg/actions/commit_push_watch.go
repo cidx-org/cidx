@@ -84,7 +84,7 @@ func (a *CommitPushWatchAction) Execute(ctx context.Context) error {
 			return update.Error
 		}
 
-		a.displayWorkflow(update.Workflow)
+		DisplayWorkflowStatus(update.Workflow)
 
 		if update.Workflow.Status == "completed" {
 			fmt.Println() // New line after progress
@@ -99,35 +99,4 @@ func (a *CommitPushWatchAction) Execute(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-// displayWorkflow renders the current workflow status
-func (a *CommitPushWatchAction) displayWorkflow(w *remote.Workflow) {
-	fmt.Printf("\r\033[K") // Clear line
-
-	for i, job := range w.Jobs {
-		var icon string
-		switch job.Status {
-		case "completed":
-			switch job.Conclusion {
-			case "success":
-				icon = "✓"
-			case "skipped":
-				icon = "○"
-			default:
-				icon = "✗"
-			}
-		case "in_progress":
-			icon = "⏳"
-		case "queued":
-			icon = "○"
-		default:
-			icon = "?"
-		}
-
-		fmt.Printf("[%s] %s", icon, job.Name)
-		if i < len(w.Jobs)-1 {
-			fmt.Printf(" ")
-		}
-	}
 }

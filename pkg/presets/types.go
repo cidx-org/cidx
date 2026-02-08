@@ -1,5 +1,10 @@
 package presets
 
+import (
+	"fmt"
+	"strconv"
+)
+
 // Preset defines a complete tool configuration with sensible defaults
 type Preset struct {
 	Name          string            `yaml:"name" toml:"name"`
@@ -20,14 +25,14 @@ type Preset struct {
 // Option defines a configurable parameter for a preset
 type Option struct {
 	Type        string      `yaml:"type" toml:"type"`                 // string, bool, int, array
-	Default     interface{} `yaml:"default" toml:"default"`           // Default value
+	Default     any         `yaml:"default" toml:"default"`           // Default value
 	Description string      `yaml:"description" toml:"description"`   // Help text
 	EnvVar      string      `yaml:"env_var" toml:"env_var"`           // Maps to environment variable
 	CommandFlag string      `yaml:"command_flag" toml:"command_flag"` // Maps to command flag
 }
 
 // MergeWith merges user overrides into the preset
-func (p *Preset) MergeWith(overrides map[string]interface{}) *Preset {
+func (p *Preset) MergeWith(overrides map[string]any) *Preset {
 	merged := *p
 
 	if image, ok := overrides["image"].(string); ok {
@@ -62,7 +67,7 @@ func (p *Preset) MergeWith(overrides map[string]interface{}) *Preset {
 }
 
 // applyOption applies a specific option value to the preset
-func applyOption(preset *Preset, name string, opt Option, value interface{}) Preset {
+func applyOption(preset *Preset, name string, opt Option, value any) Preset {
 	p := *preset
 
 	// Apply to environment variable if specified
@@ -82,18 +87,20 @@ func applyOption(preset *Preset, name string, opt Option, value interface{}) Pre
 }
 
 // toString converts interface{} to string
-func toString(v interface{}) string {
+func toString(v any) string {
 	switch val := v.(type) {
 	case string:
 		return val
 	case int:
-		return string(rune(val))
+		return strconv.Itoa(val)
+	case int64:
+		return strconv.FormatInt(val, 10)
 	case bool:
 		if val {
 			return "true"
 		}
 		return "false"
 	default:
-		return ""
+		return fmt.Sprintf("%v", val)
 	}
 }

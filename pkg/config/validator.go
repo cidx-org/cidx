@@ -45,3 +45,21 @@ func Validate(cfg *Config) ValidationResult {
 
 	return result
 }
+
+// CheckVersion validates if the current version matches the required version in config
+func CheckVersion(cfg *Config, currentVersion string) error {
+	if cfg.RequiredVersion == "" {
+		return nil
+	}
+
+	// Always allow dev builds (maybe with a warning in the future)
+	if currentVersion == "dev" {
+		return nil
+	}
+
+	if cfg.RequiredVersion != currentVersion {
+		return fmt.Errorf("version mismatch: config requires cidx %s, but running %s", cfg.RequiredVersion, currentVersion)
+	}
+
+	return nil
+}

@@ -2,11 +2,13 @@ package executor
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -21,16 +23,21 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// DefaultTimeout is the default timeout for container execution (30 minutes)
+const DefaultTimeout = 30 * time.Minute
+
 // DockerExecutor executes tools using Docker
 type DockerExecutor struct {
 	client  *client.Client
 	logger  *logrus.Logger
 	dryRun  bool
 	verbose bool
+	quiet   bool
+	timeout time.Duration
 }
 
 // NewDockerExecutor creates a new Docker executor
-func NewDockerExecutor(dryRun, verbose bool) (*DockerExecutor, error) {
+func NewDockerExecutor(dryRun, verbose, quiet bool) (*DockerExecutor, error) {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Docker client: %w", err)
@@ -48,12 +55,21 @@ func NewDockerExecutor(dryRun, verbose bool) (*DockerExecutor, error) {
 		logger:  logger,
 		dryRun:  dryRun,
 		verbose: verbose,
+		quiet:   quiet,
+		timeout: DefaultTimeout,
 	}, nil
+}
+
+// SetTimeout sets the execution timeout for containers
+func (e *DockerExecutor) SetTimeout(d time.Duration) {
+	e.timeout = d
 }
 
 // Run executes a tool configuration
 func (e *DockerExecutor) Run(ctx context.Context, containerConfig *config.ContainerConfig) error {
-	e.logger.Infof("  ▸ Running [%s] %s", containerConfig.Phase, containerConfig.Name)
+	if !e.quiet {
+		e.logger.Infof("  ▸ Running [%s] %s", containerConfig.Phase, containerConfig.Name)
+	}
 
 	// Expand environment variables in volumes and command
 	volumes := expandVolumes(containerConfig.Volumes)
@@ -62,6 +78,13 @@ func (e *DockerExecutor) Run(ctx context.Context, containerConfig *config.Contai
 	if e.dryRun {
 		e.printDryRun(containerConfig, volumes, command)
 		return nil
+	}
+
+	// Apply execution timeout
+	if e.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, e.timeout)
+		defer cancel()
 	}
 
 	// Pull image if needed
@@ -82,7 +105,19 @@ func (e *DockerExecutor) Run(ctx context.Context, containerConfig *config.Contai
 	}
 
 	// Stream logs
-	if err := e.streamLogs(ctx, containerID); err != nil {
+	// If quiet, capture logs to buffer. If not, stream to stdout/stderr.
+	var logBuffer strings.Builder
+	var stdout, stderr io.Writer
+
+	if e.quiet {
+		stdout = &logBuffer
+		stderr = &logBuffer
+	} else {
+		stdout = os.Stdout
+		stderr = os.Stderr
+	}
+
+	if err := e.streamLogsTo(ctx, containerID, stdout, stderr); err != nil {
 		return fmt.Errorf("failed to stream logs: %w", err)
 	}
 
@@ -91,16 +126,52 @@ func (e *DockerExecutor) Run(ctx context.Context, containerConfig *config.Contai
 	select {
 	case err := <-errCh:
 		if err != nil {
+			if ctx.Err() == context.DeadlineExceeded {
+				return fmt.Errorf("container %s timed out after %v", containerConfig.Name, e.timeout)
+			}
 			return fmt.Errorf("error waiting for container: %w", err)
 		}
 	case status := <-statusCh:
 		if status.StatusCode != 0 {
+			// If quiet and failed, print the buffered logs
+			if e.quiet {
+				fmt.Print(logBuffer.String())
+			}
 			return fmt.Errorf("container exited with code %d", status.StatusCode)
 		}
+	case <-ctx.Done():
+		return fmt.Errorf("container %s timed out after %v", containerConfig.Name, e.timeout)
 	}
 
 	e.logger.Infof("  ✓ %s completed", containerConfig.Name)
 	return nil
+}
+
+// streamLogsTo streams container logs to provided writers
+func (e *DockerExecutor) streamLogsTo(ctx context.Context, containerID string, stdout, stderr io.Writer) error {
+	options := container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     true,
+	}
+
+	out, err := e.client.ContainerLogs(ctx, containerID, options)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if closeErr := out.Close(); closeErr != nil {
+			e.logger.Warnf("Failed to close container logs: %v", closeErr)
+		}
+	}()
+
+	_, err = stdcopy.StdCopy(stdout, stderr, out)
+	return err
+}
+
+// streamLogs streams container logs to stdout/stderr
+func (e *DockerExecutor) streamLogs(ctx context.Context, containerID string) error {
+	return e.streamLogsTo(ctx, containerID, os.Stdout, os.Stderr)
 }
 
 // pullImage pulls a Docker image
@@ -198,21 +269,21 @@ func (e *DockerExecutor) getOrCreateContainer(ctx context.Context, containerConf
 		return "", "", fmt.Errorf("failed to list containers: %w", err)
 	}
 
-	// If container exists, check if image has changed
+	// If container exists, check if configuration has changed
 	if len(containers) > 0 {
 		existingContainer := containers[0]
+		newHash := configHash(containerConfig.Image, command, volumes, containerConfig.Env)
+		existingHash := existingContainer.Labels["cidx.config_hash"]
 
-		// Check if image has changed (compare cidx.image label with expected image)
-		existingImage := existingContainer.Labels["cidx.image"]
-		if existingImage != "" && existingImage != containerConfig.Image {
-			e.logger.Infof("  🔄 Image updated: %s → %s, recreating container", existingImage, containerConfig.Image)
+		if existingHash != "" && existingHash != newHash {
+			e.logger.Infof("  🔄 Configuration changed for %s, recreating container", containerConfig.Name)
 
 			// Remove old container
 			if err := e.client.ContainerRemove(ctx, existingContainer.ID, container.RemoveOptions{Force: true}); err != nil {
 				return "", "", fmt.Errorf("failed to remove old container: %w", err)
 			}
 
-			// Create new container with updated image
+			// Create new container with updated config
 			return e.createContainer(ctx, containerConfig, volumes, command)
 		}
 
@@ -263,10 +334,11 @@ func (e *DockerExecutor) createContainer(ctx context.Context, containerConfig *c
 		WorkingDir: containerConfig.Workdir,
 		Env:        env,
 		Labels: map[string]string{
-			"managed-by": "cidx",
-			"cidx.tool":  containerConfig.Name,
-			"cidx.phase": containerConfig.Phase,
-			"cidx.image": containerConfig.Image, // Track image for update detection
+			"managed-by":       "cidx",
+			"cidx.tool":        containerConfig.Name,
+			"cidx.phase":       containerConfig.Phase,
+			"cidx.image":       containerConfig.Image,
+			"cidx.config_hash": configHash(containerConfig.Image, command, volumes, containerConfig.Env),
 		},
 	}
 
@@ -291,28 +363,6 @@ func (e *DockerExecutor) createContainer(ctx context.Context, containerConfig *c
 	}
 
 	return resp.ID, containerName, nil
-}
-
-// streamLogs streams container logs to stdout/stderr
-func (e *DockerExecutor) streamLogs(ctx context.Context, containerID string) error {
-	options := container.LogsOptions{
-		ShowStdout: true,
-		ShowStderr: true,
-		Follow:     true,
-	}
-
-	out, err := e.client.ContainerLogs(ctx, containerID, options)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if closeErr := out.Close(); closeErr != nil {
-			e.logger.Warnf("Failed to close container logs: %v", closeErr)
-		}
-	}()
-
-	_, err = stdcopy.StdCopy(os.Stdout, os.Stderr, out)
-	return err
 }
 
 // printDryRun prints what would be executed
@@ -388,6 +438,32 @@ func expandCommand(command string, env map[string]string) string {
 	}
 
 	return os.ExpandEnv(expanded)
+}
+
+// configHash creates a short hash of the container configuration for change detection
+func configHash(image, command string, volumes []string, env map[string]string) string {
+	h := sha256.New()
+	h.Write([]byte(image))
+	h.Write([]byte("\x00"))
+	h.Write([]byte(command))
+	h.Write([]byte("\x00"))
+	for _, v := range volumes {
+		h.Write([]byte(v))
+		h.Write([]byte("\x00"))
+	}
+	// Sort env keys for deterministic hashing
+	envKeys := make([]string, 0, len(env))
+	for k := range env {
+		envKeys = append(envKeys, k)
+	}
+	sort.Strings(envKeys)
+	for _, k := range envKeys {
+		h.Write([]byte(k))
+		h.Write([]byte("="))
+		h.Write([]byte(env[k]))
+		h.Write([]byte("\x00"))
+	}
+	return fmt.Sprintf("%x", h.Sum(nil))[:16]
 }
 
 // Close closes the Docker client

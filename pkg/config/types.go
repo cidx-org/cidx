@@ -10,24 +10,25 @@ type ProviderConfig struct {
 
 // Config represents the complete CIDX configuration
 type Config struct {
-	Phases    map[string]Phase                  `toml:",inline"`
-	Pipelines map[string]Pipeline               `toml:"pipelines"`
-	Actions   map[string]Action                 `toml:"actions"`
-	Branch    BranchConfig                      `toml:"branch"`
-	Release   ReleaseConfig                     `toml:"release"`
-	Tag       TagConfig                         `toml:"tag"`
-	PR        PRConfig                          `toml:"pr"`
-	Provider  ProviderConfig                    `toml:"provider"`
-	Overrides map[string]map[string]interface{} `toml:",inline"`
-	Workspace string                            // Auto-detected or from env
+	RequiredVersion string                     // Minimum or exact version required
+	Phases          map[string]Phase           // Phases with containers (e.g., security, code, test)
+	Pipelines       map[string]Pipeline        // Named pipelines (e.g., ci)
+	Actions         map[string]Action          // Named actions (e.g., release-create)
+	Branch          BranchConfig               // Branch management settings
+	Release         ReleaseConfig              // Release workflow settings
+	Tag             TagConfig                  // Tag workflow settings
+	PR              PRConfig                   // PR workflow settings
+	Provider        ProviderConfig             // Git provider settings
+	Overrides       map[string]map[string]any  // Container override sections
+	Workspace       string                     // Auto-detected or from env
 }
 
 // BranchConfig defines branch management settings
 type BranchConfig struct {
-	StaleDays     int      `toml:"stale_days"`      // Days before a branch is considered stale (default: 30)
-	NamingPattern string   `toml:"naming_pattern"`  // Regex pattern for valid branch names
-	AutoCleanup   bool     `toml:"auto_cleanup"`    // Cleanup merged branches after PR merge
-	Protected     []string `toml:"protected"`       // Branches that should never be deleted
+	StaleDays     int      `toml:"stale_days"`     // Days before a branch is considered stale (default: 30)
+	NamingPattern string   `toml:"naming_pattern"` // Regex pattern for valid branch names
+	AutoCleanup   bool     `toml:"auto_cleanup"`   // Cleanup merged branches after PR merge
+	Protected     []string `toml:"protected"`      // Branches that should never be deleted
 }
 
 // ReleaseConfig defines release workflow settings
@@ -216,7 +217,7 @@ type ContainerConfig struct {
 	Phase       string
 	Image       string
 	Command     string
-	Entrypoint  []string          // Override container entrypoint
+	Entrypoint  []string // Override container entrypoint
 	Workdir     string
 	Volumes     []string
 	Env         map[string]string

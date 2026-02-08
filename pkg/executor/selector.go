@@ -18,7 +18,7 @@ type Selector struct {
 }
 
 // NewSelector creates a new executor selector
-func NewSelector(dryRun, verbose bool) (*Selector, error) {
+func NewSelector(dryRun, verbose, quiet bool) (*Selector, error) {
 	logger := logrus.New()
 	if verbose {
 		logger.SetLevel(logrus.DebugLevel)
@@ -27,13 +27,13 @@ func NewSelector(dryRun, verbose bool) (*Selector, error) {
 	}
 
 	// Try to create Docker executor (may fail if Docker not installed)
-	docker, dockerErr := NewDockerExecutor(dryRun, verbose)
+	docker, dockerErr := NewDockerExecutor(dryRun, verbose, quiet)
 	if dockerErr != nil {
 		logger.Debugf("Docker executor unavailable: %v", dockerErr)
 	}
 
 	// TODO: Try to create Podman executor
-	// podman, podmanErr := NewPodmanExecutor(dryRun, verbose)
+	// podman, podmanErr := NewPodmanExecutor(dryRun, verbose, quiet)
 
 	return &Selector{
 		docker:  docker,

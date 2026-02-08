@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,88 +11,13 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/cidx-org/cidx/pkg/environment"
 	"github.com/urfave/cli/v2"
 )
 
-// Environment types
-type Environment string
-
-const (
-	EnvLocal        Environment = "local"
-	EnvGitHubActions Environment = "github-actions"
-	EnvGitLabCI     Environment = "gitlab-ci"
-	EnvJenkins      Environment = "jenkins"
-	EnvCircleCI     Environment = "circleci"
-	EnvTravisCI     Environment = "travis-ci"
-	EnvAzurePipelines Environment = "azure-pipelines"
-	EnvGenericCI    Environment = "ci"
-)
-
-// DetectEnvironment detects the current execution environment
-func DetectEnvironment() Environment {
-	// GitHub Actions
-	if os.Getenv("GITHUB_ACTIONS") == "true" {
-		return EnvGitHubActions
-	}
-
-	// GitLab CI
-	if os.Getenv("GITLAB_CI") == "true" {
-		return EnvGitLabCI
-	}
-
-	// Jenkins
-	if os.Getenv("JENKINS_URL") != "" || os.Getenv("BUILD_ID") != "" && os.Getenv("JOB_NAME") != "" {
-		return EnvJenkins
-	}
-
-	// CircleCI
-	if os.Getenv("CIRCLECI") == "true" {
-		return EnvCircleCI
-	}
-
-	// Travis CI
-	if os.Getenv("TRAVIS") == "true" {
-		return EnvTravisCI
-	}
-
-	// Azure Pipelines
-	if os.Getenv("TF_BUILD") == "true" {
-		return EnvAzurePipelines
-	}
-
-	// Generic CI detection (many CI systems set CI=true)
-	if os.Getenv("CI") == "true" {
-		return EnvGenericCI
-	}
-
-	return EnvLocal
-}
-
-// IsCI returns true if running in a CI environment
-func IsCI() bool {
-	return DetectEnvironment() != EnvLocal
-}
-
-// EnvironmentName returns a human-readable name for the environment
-func (e Environment) String() string {
-	switch e {
-	case EnvGitHubActions:
-		return "GitHub Actions"
-	case EnvGitLabCI:
-		return "GitLab CI"
-	case EnvJenkins:
-		return "Jenkins"
-	case EnvCircleCI:
-		return "CircleCI"
-	case EnvTravisCI:
-		return "Travis CI"
-	case EnvAzurePipelines:
-		return "Azure Pipelines"
-	case EnvGenericCI:
-		return "CI"
-	default:
-		return "Local"
-	}
+// detectEnv returns the detected environment info using the shared environment package
+func detectEnv() *environment.Environment {
+	return environment.Detect()
 }
 
 // Styles
@@ -132,7 +58,7 @@ var (
 // StatusInfo holds all gathered information
 type StatusInfo struct {
 	// Environment
-	Environment Environment
+	Environment *environment.Environment
 
 	// Git info
 	GitConfigured bool
@@ -506,11 +432,15 @@ func (m statusModel) renderProjectSection() string {
 	// Environment
 	envIcon := "🖥️"
 	envStyle := successStyle
-	if m.info.Environment != EnvLocal {
+	if m.info.Environment != nil && m.info.Environment.IsCI {
 		envIcon = "⚙️"
 		envStyle = pendingStyle
 	}
-	content.WriteString(fmt.Sprintf("%s  Environment: %s\n", envIcon, envStyle.Render(m.info.Environment.String())))
+	envName := "Local"
+	if m.info.Environment != nil {
+		envName = m.info.Environment.String()
+	}
+	content.WriteString(fmt.Sprintf("%s  Environment: %s\n", envIcon, envStyle.Render(envName)))
 
 	// Project name and path
 	content.WriteString(fmt.Sprintf("📁 Project: %s\n", valueStyle.Render(m.info.ProjectName)))
@@ -532,7 +462,7 @@ func loadStatus() tea.Msg {
 	info := StatusInfo{}
 
 	// Detect environment
-	info.Environment = DetectEnvironment()
+	info.Environment = detectEnv()
 
 	// Get project info
 	info.ProjectPath = runCmd("pwd")
@@ -593,17 +523,60 @@ func loadStatus() tea.Msg {
 	// Get PR for current branch
 	prJSON := runCmd("gh", "pr", "view", "--json", "number,title,state,url,statusCheckRollup")
 	if prJSON != "" {
-		// Parse PR info
-		info.PRNumber = extractJSONInt(prJSON, "number")
-		info.PRTitle = extractJSONString(prJSON, "title")
-		info.PRState = strings.ToLower(extractJSONString(prJSON, "state"))
-		info.PRURL = extractJSONString(prJSON, "url")
-
-		// Parse CI checks
-		info.CIChecks = extractCIChecks(prJSON)
+		parsePRInfo(prJSON, &info)
 	}
 
 	return statusLoadedMsg{info: info}
+}
+
+// ghPRResponse represents the JSON response from gh pr view
+type ghPRResponse struct {
+	Number             int              `json:"number"`
+	Title              string           `json:"title"`
+	State              string           `json:"state"`
+	URL                string           `json:"url"`
+	StatusCheckRollup  []ghCheckStatus  `json:"statusCheckRollup"`
+}
+
+// ghCheckStatus represents a CI check in the gh pr view response
+type ghCheckStatus struct {
+	Name       string `json:"name"`
+	Context    string `json:"context"`
+	State      string `json:"state"`
+	Conclusion string `json:"conclusion"`
+}
+
+// parsePRInfo parses PR JSON response into StatusInfo
+func parsePRInfo(data string, info *StatusInfo) {
+	var pr ghPRResponse
+	if err := json.Unmarshal([]byte(data), &pr); err != nil {
+		return
+	}
+
+	info.PRNumber = pr.Number
+	info.PRTitle = pr.Title
+	info.PRState = strings.ToLower(pr.State)
+	info.PRURL = pr.URL
+
+	for _, check := range pr.StatusCheckRollup {
+		name := check.Name
+		if name == "" {
+			name = check.Context
+		}
+		if name == "" {
+			continue
+		}
+
+		status := strings.ToLower(check.Conclusion)
+		if status == "" {
+			status = strings.ToLower(check.State)
+		}
+
+		info.CIChecks = append(info.CIChecks, CICheck{
+			Name:   shortenCheckName(name),
+			Status: status,
+		})
+	}
 }
 
 func runCmd(name string, args ...string) string {
@@ -616,93 +589,8 @@ func runCmd(name string, args ...string) string {
 }
 
 func fileExists(path string) bool {
-	cmd := exec.Command("test", "-f", path)
-	return cmd.Run() == nil
-}
-
-func extractJSONString(json, key string) string {
-	// Simple JSON extraction (avoid adding json dependency for now)
-	search := fmt.Sprintf(`"%s":"`, key)
-	idx := strings.Index(json, search)
-	if idx == -1 {
-		return ""
-	}
-	start := idx + len(search)
-	end := strings.Index(json[start:], `"`)
-	if end == -1 {
-		return ""
-	}
-	return json[start : start+end]
-}
-
-func extractJSONInt(json, key string) int {
-	search := fmt.Sprintf(`"%s":`, key)
-	idx := strings.Index(json, search)
-	if idx == -1 {
-		return 0
-	}
-	start := idx + len(search)
-	end := start
-	for end < len(json) && (json[end] >= '0' && json[end] <= '9') {
-		end++
-	}
-	val, _ := strconv.Atoi(json[start:end])
-	return val
-}
-
-func extractCIChecks(json string) []CICheck {
-	var checks []CICheck
-
-	// Look for statusCheckRollup array
-	search := `"statusCheckRollup":[`
-	idx := strings.Index(json, search)
-	if idx == -1 {
-		return checks
-	}
-
-	// Find the array end
-	start := idx + len(search)
-	depth := 1
-	end := start
-	for end < len(json) && depth > 0 {
-		switch json[end] {
-		case '[':
-			depth++
-		case ']':
-			depth--
-		}
-		end++
-	}
-
-	checkArray := json[start : end-1]
-
-	// Parse individual checks
-	for _, part := range strings.Split(checkArray, "},{") {
-		name := ""
-		status := ""
-
-		// Extract name (could be "name" or "context")
-		if n := extractJSONString(part, "name"); n != "" {
-			name = n
-		} else if n := extractJSONString(part, "context"); n != "" {
-			name = n
-		}
-
-		// Extract status (could be "conclusion" or "state")
-		if s := extractJSONString(part, "conclusion"); s != "" {
-			status = strings.ToLower(s)
-		} else if s := extractJSONString(part, "state"); s != "" {
-			status = strings.ToLower(s)
-		}
-
-		if name != "" {
-			// Shorten common names
-			name = shortenCheckName(name)
-			checks = append(checks, CICheck{Name: name, Status: status})
-		}
-	}
-
-	return checks
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 func formatDuration(d time.Duration) string {
@@ -764,7 +652,7 @@ Use --tui to force TUI mode, or --no-tui to force simple output.`,
 		Action: func(c *cli.Context) error {
 			// Determine if we should use TUI
 			// Auto-detect: TUI in local, simple text in CI
-			useTUI := !IsCI()
+			useTUI := detectEnv().IsLocal()
 
 			// Explicit flags override auto-detection
 			if c.Bool("no-tui") {
