@@ -41,6 +41,11 @@
 #
 # Workspace: Current directory (auto-detected)
 
+# Strict Version Pinning
+# Ensures all developers and CI use the exact same binary version.
+# Since we are developing CIDX itself, we require the "dev" version.
+required_version = "dev"
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 🔄 RELEASE WORKFLOW CONFIGURATION
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -251,7 +256,7 @@ exit_code = 0               # Exit code on findings (0 = don't fail build yet, 1
 # Code Quality Phase: Linting, formatting, and commit validation
 # ──────────────────────────────────────────────────────────────────────────────
 [code]
-containers = ["prettier", "golangci-lint", "commitizen"]  # Code quality containers
+containers = ["prettier", "golangci-lint", "commitizen", "shellcheck"]  # Code quality containers
 
 # Prettier: Auto-format code (Markdown, YAML, JSON, etc.)
 [containers.prettier]

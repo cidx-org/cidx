@@ -26,6 +26,9 @@ cidx run <name> [flags]
 **Flags:**
 
 - `--dry-run`: Print what would be executed without running it.
+- `--quiet, -q`: Suppress output and only show logs on failure.
+- `--parallel, -p`: Run containers in parallel (local only).
+- `--concurrency, -j`: Max concurrent containers (default: 2).
 
 ### `cidx list`
 
@@ -42,6 +45,22 @@ Show detailed information about a specific container.
 ```bash
 cidx info <container>
 ```
+
+### `cidx preset`
+
+Manage built-in container presets.
+
+```bash
+cidx preset <command>
+```
+
+**Subcommands:**
+
+- `list`: List all available presets
+- `info <name>`: Show details of a preset
+- `show <name>`: Show raw TOML definition
+- `export`: Dump all embedded presets to stdout (useful for creating a base `presets.toml`)
+- `search <term>`: Search presets
 
 ### `cidx validate`
 

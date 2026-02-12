@@ -10,6 +10,17 @@ To create a default configuration:
 cidx init
 ```
 
+### 5. Version Pinning (Security)
+
+To ensure consistency between local development and CI, you can enforce a specific version of CIDX. This guarantees that everyone uses the exact same binary and embedded presets.
+
+```toml
+# cidx.toml
+required_version = "1.2.3"
+```
+
+If a user tries to run the pipeline with a different version (e.g., `1.2.4`), CIDX will refuse to start.
+
 ## Configuration Structure
 
 The `cidx.toml` file's main purpose is to define **Pipelines**. These are sequences of execution phases that map to specific CI/CD events. CIDX reads this file, automatically detects the context (e.g., a Pull Request), and runs the pipeline that matches the event by convention.
@@ -72,7 +83,33 @@ image = "myregistry/scanner:latest"
 command = "scan ."
 ```
 
-### Environment Variables
+### 3. Custom Presets (Advanced)
+
+While `cidx.toml` configures *how* tools are used (which phase, which pipeline), `presets.toml` allows you to configure *what* the tools are (images, commands).
+
+You can override built-in presets or define new ones by creating a `presets.toml` file in:
+
+- `~/.config/cidx/presets.toml` (User-level, affects all projects)
+- `.cidx/presets.toml` (Project-level, affects this project only)
+
+> **Tip:** You can export all built-in presets to use as a starting point:
+>
+> ```bash
+> cidx preset export > .cidx/presets.toml
+> ```
+
+**Example `.cidx/presets.toml`:**
+
+```toml
+[presets.my-custom-tool]
+name = "my-custom-tool"
+image = "myorg/tool:latest"
+command = "run-check"
+phase = "test"
+description = "My custom internal tool"
+```
+
+### 4. Environment Variables
 
 CIDX supports environment variable expansion in the configuration using `${VAR}` syntax. This is useful for passing dynamic information from a CI environment to your containers.
 

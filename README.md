@@ -129,6 +129,20 @@ CI/CD Runner (GitLab/GitHub/Jenkins/Local)
 - **Auto-detection** - Knows images, volumes, commands for each tool
 - **5-line configs** - Most projects need less than 10 lines
 
+### Custom Presets
+
+You can override built-in tools or define new ones using `presets.toml`:
+
+1. **User Global**: `~/.config/cidx/presets.toml` (for all your projects)
+2. **Project Local**: `.cidx/presets.toml` (committed to repo)
+
+```toml
+[presets.my-custom-linter]
+image = "myorg/linter:latest"
+command = "lint ."
+phase = "code"
+```
+
 ## Workflow Validation
 
 Ensure your local config matches CI:

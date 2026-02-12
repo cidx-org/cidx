@@ -1,0 +1,16 @@
+# Dogfooding: Custom presets for CIDX project
+# This file demonstrates loading presets from .cidx/presets.toml
+
+[presets.shellcheck]
+name = "shellcheck"
+image = "koalaman/shellcheck:latest"
+command = "sh -c \"find . -name '*.sh' | xargs shellcheck\""
+phase = "code"
+description = "Static analysis for shell scripts (defined in .cidx/presets.toml)"
+
+[presets.dogfood-check]
+name = "dogfood-check"
+image = "alpine:latest"
+command = "echo 'woof! .cidx/presets.toml is working!'"
+phase = "test"
+description = "Verifies that project-level presets are loaded"
