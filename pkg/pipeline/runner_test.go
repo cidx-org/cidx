@@ -3,6 +3,7 @@ package pipeline
 import (
 	"testing"
 
+	"github.com/cidx-org/cidx/pkg/config"
 	"github.com/cidx-org/cidx/pkg/executor"
 )
 
@@ -56,5 +57,56 @@ func TestBackendType_String(t *testing.T) {
 		if string(tt.backend) != tt.want {
 			t.Errorf("Expected %s, got %s", tt.want, tt.backend)
 		}
+	}
+}
+
+func TestExpandWorkspace(t *testing.T) {
+	tests := []struct {
+		name      string
+		workspace string
+		volumes   []string
+		want      []string
+	}{
+		{
+			"basic replacement",
+			"/home/user/project",
+			[]string{"${WORKSPACE}:/app"},
+			[]string{"/home/user/project:/app"},
+		},
+		{
+			"multiple volumes",
+			"/src",
+			[]string{"${WORKSPACE}:/app", "${WORKSPACE}/config:/config"},
+			[]string{"/src:/app", "/src/config:/config"},
+		},
+		{
+			"no placeholder",
+			"/src",
+			[]string{"/static:/data"},
+			[]string{"/static:/data"},
+		},
+		{
+			"empty volumes",
+			"/src",
+			[]string{},
+			[]string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &Runner{
+				config: &config.Config{Workspace: tt.workspace},
+			}
+			got := r.expandWorkspace(tt.volumes)
+			if len(got) != len(tt.want) {
+				t.Fatalf("expandWorkspace() length = %d, want %d", len(got), len(tt.want))
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("expandWorkspace()[%d] = %q, want %q", i, got[i], tt.want[i])
+				}
+			}
+		})
 	}
 }
