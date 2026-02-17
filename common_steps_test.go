@@ -216,6 +216,17 @@ func (tc *TestContext) simulateCIDXCommand(cmdStr string) error {
 		tc.Config["quiet"] = true
 	}
 
+	// Detect forced backend from flags
+	forcedBackend := ""
+	for i, p := range parts {
+		if (p == "--backend" || p == "-b") && i+1 < len(parts) {
+			forcedBackend = parts[i+1]
+		}
+		if strings.HasPrefix(p, "--backend=") {
+			forcedBackend = strings.TrimPrefix(p, "--backend=")
+		}
+	}
+
 	// Simulate environment header
 	if tc.CI {
 		if tc.Provider != "" {
@@ -225,6 +236,14 @@ func (tc *TestContext) simulateCIDXCommand(cmdStr string) error {
 		}
 	} else {
 		tc.Output += "Environment: Local (safe mode)\n"
+	}
+
+	// Output backend info
+	if forcedBackend != "" {
+		tc.Output += fmt.Sprintf("Backend: %s (forced)\n", forcedBackend)
+	} else if tc.Backend != "" {
+		backendDisplay := strings.ToUpper(tc.Backend[:1]) + tc.Backend[1:]
+		tc.Output += fmt.Sprintf("Backend: %s (auto-detected)\n", backendDisplay)
 	}
 
 	// Determine phases based on pipeline

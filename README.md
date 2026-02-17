@@ -3,44 +3,59 @@
 [![Container Monitor](https://github.com/cidx-org/cidx/actions/workflows/container-monitor.yml/badge.svg)](https://github.com/cidx-org/cidx/actions/workflows/container-monitor.yml)
 [![Security Audit](https://github.com/cidx-org/cidx/actions/workflows/security-audit.yml/badge.svg)](https://github.com/cidx-org/cidx/actions/workflows/security-audit.yml)
 
-CIDX is **two tools in one**:
+**One config, all environments.** CIDX is a portable CI/CD runner that replaces platform-specific YAML with a single declarative configuration. Name the tools you want to run, CIDX handles the rest.
 
-1. **CI/CD Abstraction Layer** - Write once, run everywhere (Local, GitHub Actions, GitLab CI, Jenkins)
-2. **Git Workflow Facilitator** - Human-friendly commands that wrap git complexity
+Everything runs in containers. Nothing is installed on your machine, your workspace stays clean, and results are reproducible on any platform where Docker or Podman is available.
 
-## The Problem
+```toml
+# cidx.toml — this is a complete configuration
+[security]
+containers = ["trivy", "gitleaks", "semgrep"]
 
-**CI/CD Pain:**
+[code]
+containers = ["megalinter"]
 
-- You write the same tool configurations 3-4 times (Local, CI, pre-commit)
-- Each CI platform has different syntax
-- Configuration drift between local and CI
-
-**Git Pain:**
-
-- Git commands are designed by kernel devs, for kernel devs
-- `checkout` does 3 different things, `reset` has 5 modes
-- Common workflows require 4-5 commands
-
-## The Solution
-
-```
-                    CIDX
-                     │
-        ┌────────────┴────────────┐
-        │                         │
-   CI/CD Layer              Git Workflow
-        │                         │
-   cidx.toml                 cidx action
-   cidx run                  cidx branch
-   cidx check                cidx demo
+[pipelines.ci]
+phases = ["security", "code", "test"]
 ```
 
----
+```bash
+cidx run ci          # Same result locally, in GitHub Actions, GitLab CI, or Jenkins
+```
 
-# Part 1: CI/CD Abstraction Layer
+## Why CIDX
 
-**Convention over Configuration** - Just name the container, CIDX knows the rest.
+| Problem | Without CIDX | With CIDX |
+|---------|-------------|-----------|
+| Running Trivy | 30+ lines of CI YAML per platform | `containers = ["trivy"]` |
+| Local vs CI drift | Different configs, different results | Same `cidx.toml` everywhere |
+| Adding security scans | Research image, volumes, flags per tool | Name the tool, run it |
+| Switching CI platform | Rewrite all pipeline definitions | Change nothing |
+
+### vs. Other Tools
+
+| | CIDX | dagger | earthly | act | taskfile |
+|---|---|---|---|---|---|
+| Zero-config presets | Yes | No | No | No | No |
+| Hardened images (DHI) | Default | No | No | No | No |
+| Platform-portable | Yes | Yes | Yes | GitHub only | N/A |
+| Config complexity | 5 lines | SDK code | Earthfile | GH YAML | Taskfile |
+| Security-first | Built-in | Manual | Manual | Mirrors GH | Manual |
+
+## How It Works
+
+CIDX ships with **15+ built-in presets** (Trivy, Gitleaks, Semgrep, MegaLinter, GoSec, etc.). Each preset knows its Docker image, volumes, commands, environment variables, and config files.
+
+```
+cidx.toml          Built-in Presets       Custom Presets
+(what to run)   +  (how to run it)    +  (.cidx/presets.toml)
+     │                   │                      │
+     └───────────┬───────┘──────────────────────┘
+                 │
+           Docker / Podman
+```
+
+You declare **what** to run. CIDX resolves **how**.
 
 ## Quick Start
 
@@ -48,233 +63,169 @@ CIDX is **two tools in one**:
 # Install
 go install github.com/cidx-org/cidx/cmd/cidx@latest
 
-# Initialize
+# Initialize a config in the current project
 cidx init
 
-# Run
-cidx run security   # Run all security containers
-cidx run trivy      # Run specific container
-cidx run ci         # Run full CI pipeline
+# Run security scans
+cidx run security
+
+# Run a specific tool
+cidx run trivy
+
+# Run full CI pipeline
+cidx run ci
+
+# Preview without executing
+cidx run --dry-run ci
+```
+
+## Configuration
+
+### Minimal (recommended)
+
+```toml
+[security]
+containers = ["trivy", "gitleaks"]
+
+[pipelines.ci]
+phases = ["security", "code"]
+```
+
+### With overrides
+
+Override only what you need. Everything else uses preset defaults.
+
+```toml
+[security]
+containers = ["trivy"]
+
+[containers.trivy]
+severity = "HIGH,CRITICAL"
+exit_code = 1
+```
+
+### Custom presets
+
+Define new tools or override built-in ones via `presets.toml`:
+
+- **User-level**: `~/.config/cidx/presets.toml` (all projects)
+- **Project-level**: `.cidx/presets.toml` (this project only)
+
+```toml
+[presets.my-scanner]
+image = "myorg/scanner:latest"
+command = "scan ."
+phase = "security"
+```
+
+Export built-in presets as a starting point: `cidx preset export > .cidx/presets.toml`
+
+### Version pinning
+
+Lock the CIDX version to ensure consistency across developers and CI:
+
+```toml
+required_version = "1.2.3"
 ```
 
 ## Docker Hardened Images (DHI)
 
-CIDX uses **Docker Hardened Images** (dhi.io) by default for maximum security:
+CIDX defaults to [Docker Hardened Images](https://dhi.io) for all built-in presets:
 
-- **Near-zero CVEs** - Guaranteed minimal vulnerabilities
-- **95% smaller attack surface** - Stripped of unnecessary components
-- **SBOM included** - Full software bill of materials
-- **SLSA Level 3** - Cryptographic proof of authenticity
+- Near-zero CVEs
+- 95% smaller attack surface
+- SBOM included
+- SLSA Level 3 provenance
 
-### Authentication
-
-DHI requires Docker Hub credentials (free with any Docker Hub account):
+DHI requires Docker Hub credentials (free account). For CI, set `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` as repository secrets.
 
 ```bash
-# Check if DHI is ready
-cidx registry check
-
-# Login to DHI (uses Docker Hub credentials)
-cidx registry login dhi.io
-
-# List all configured registries
-cidx registry list
+cidx registry check    # Verify DHI access
+cidx registry login    # Authenticate
 ```
 
-For CI/CD, add these secrets to your GitHub repository:
-
-- `DOCKERHUB_USERNAME` - Your Docker Hub username
-- `DOCKERHUB_TOKEN` - Docker Hub access token ([create one here](https://hub.docker.com/settings/security))
-
-## Configuration
-
-One file, all environments:
-
-```toml
-# cidx.toml
-
-# Enable security containers (CIDX knows Docker images, volumes, commands)
-[security]
-containers = ["trivy", "gitleaks", "semgrep"]
-
-# Enable code quality containers
-[code]
-containers = ["megalinter"]
-
-# Define pipelines
-[pipelines.pr]
-phases = ["security", "code", "test"]
-
-[pipelines.release]
-phases = ["security", "code", "test", "build", "docker"]
-```
-
-## How It Works
-
-```
-CI/CD Runner (GitLab/GitHub/Jenkins/Local)
-                    │
-                  CIDX
-                    │
-            ┌───────┴───────┐
-            │               │
-       cidx.toml     Built-in Presets
-            │               │
-            └───────┬───────┘
-                    │
-              Docker Containers
-```
-
-- **15+ built-in presets** - Trivy, Gitleaks, Semgrep, MegaLinter, etc.
-- **Auto-detection** - Knows images, volumes, commands for each tool
-- **5-line configs** - Most projects need less than 10 lines
-
-### Custom Presets
-
-You can override built-in tools or define new ones using `presets.toml`:
-
-1. **User Global**: `~/.config/cidx/presets.toml` (for all your projects)
-2. **Project Local**: `.cidx/presets.toml` (committed to repo)
-
-```toml
-[presets.my-custom-linter]
-image = "myorg/linter:latest"
-command = "lint ."
-phase = "code"
-```
-
-## Workflow Validation
-
-Ensure your local config matches CI:
+## Pipeline Commands
 
 ```bash
-cidx check workflow  # Validates cidx.toml ↔ GitHub Actions
+cidx run <phase>              # Run a phase (security, code, test, build)
+cidx run <tool>               # Run a specific tool
+cidx run <pipeline>           # Run a named pipeline (ci, release)
+cidx run --parallel security  # Parallel execution (local only)
+cidx run --quiet ci           # Suppress output, show logs only on failure
+cidx run --dry-run ci         # Preview execution plan
+```
+
+## Preset Management
+
+```bash
+cidx preset list              # List all presets by phase
+cidx preset info trivy        # Show preset details
+cidx preset search security   # Search presets
+cidx preset export            # Export all presets to stdout
+cidx preset images            # List container images (deduplicated)
+cidx preset check-updates     # Check for newer image versions
+cidx preset scan              # Scan preset images for vulnerabilities
 ```
 
 ---
 
-# Part 2: Git Workflow Facilitator
+## Developer Workflow
 
-**Human-friendly git** - Common workflows in single commands.
+CIDX also provides commands that simplify common git and CI workflows.
 
-## Why?
-
-| What you want           | Git commands                                                                    | CIDX command                      |
-| ----------------------- | ------------------------------------------------------------------------------- | --------------------------------- |
-| Create PR               | `git checkout -b feat/x && git push -u origin feat/x && gh pr create --draft`   | `cidx action pr create "feat: x"` |
-| Commit, push, watch CI  | `git add . && git commit -m "x" && git push && gh run watch`                    | `cidx action cpw -m "x"`          |
-| Merge PR                | `gh pr merge --squash && git checkout main && git pull && git branch -d feat/x` | `cidx action pr merge`            |
-| List stale branches     | `git branch -a --format='%(refname:short) %(committerdate)' \| ...`             | `cidx branch list --stale`        |
-| Cleanup merged branches | `git branch --merged \| grep -v main \| xargs git branch -d`                    | `cidx branch cleanup`             |
-
-## Action Commands
+### PR Lifecycle
 
 ```bash
-# PR Workflow
-cidx action pr create "feat: new feature"  # Create branch + draft PR
-cidx action pr ready                        # Mark PR ready for review
-cidx action pr merge                        # Merge + cleanup
-
-# Development
-cidx action cpw -m "message"               # Commit, Push, Watch CI
-cidx action release create                 # Bump version + create release
+cidx action pr create "feat: description"   # Create branch + draft PR
+cidx action cpw -m "commit message"         # Commit, push, watch CI
+cidx action pr ready                         # Mark ready for review
+cidx action pr merge                         # Squash merge + cleanup
 ```
 
-## Branch Management
+### Branch Management
 
 ```bash
-# List branches with status
 cidx branch list              # All branches with PR/merge status
-cidx branch list --stale      # Branches inactive > 30 days
-cidx branch list --merged     # Already merged branches
-cidx branch list --orphan     # PR closed without merge
-
-# Cleanup
-cidx branch cleanup           # Dry-run: show what would be deleted
-cidx branch cleanup -x        # Actually delete merged branches
-cidx branch cleanup --stale   # Include stale branches
-
-# PR Status
-cidx branch pr                # Show PR status for current branch
-cidx branch pr -w             # Watch CI checks until complete
-cidx branch pr -o             # Open PR in browser
+cidx branch list --stale      # Inactive > 30 days
+cidx branch list --merged     # Already merged
+cidx branch cleanup           # Dry-run cleanup
+cidx branch cleanup -x        # Delete merged branches
+cidx branch pr -w             # Watch CI checks for current branch
 ```
 
-## Status Dashboard
-
-Interactive TUI showing project context at a glance:
+### Releases
 
 ```bash
-cidx status                   # Launch interactive dashboard
+cidx action tag prepare       # Generate version + message
+cidx action tag create        # Create and push tag
+cidx action release create    # Create GitHub release
+```
+
+### Status Dashboard
+
+```bash
+cidx status                   # Interactive TUI dashboard
 cidx status --no-tui          # Simple text output (auto in CI)
 ```
 
-**Features:**
-
-- GitHub account and authentication status
-- Current branch with ahead/behind commits
-- Local changes (staged, modified, untracked)
-- PR info with CI check status
-- Watch mode: press `w` to auto-refresh every 5s
-
-**Keyboard shortcuts:**
-
-- `w` - Toggle watch mode (polls CI checks)
-- `r` - Refresh status
-- `q` - Quit
-
-**Environment detection:** Automatically uses simple text output in CI environments (GitHub Actions, GitLab CI, Jenkins, etc.) to avoid blocking pipelines.
-
-## Demo
-
-```bash
-cidx demo spinner             # See the snake spinner animation
-cidx demo spinner -d 10       # Run for 10 seconds
-```
-
 ---
 
-# Development Workflow
+## Documentation
 
-CIDX uses **trunk-based development** with **manual releases**:
+| Topic | Link |
+|-------|------|
+| Installation | [docs/getting-started/installation.md](docs/getting-started/installation.md) |
+| Configuration | [docs/getting-started/configuration.md](docs/getting-started/configuration.md) |
+| CI Integration | [docs/guides/ci-integration.md](docs/guides/ci-integration.md) |
+| Available Tools | [docs/reference/tools.md](docs/reference/tools.md) |
+| CLI Reference | [docs/reference/cli.md](docs/reference/cli.md) |
+| Philosophy | [docs/core-concepts/philosophy.md](docs/core-concepts/philosophy.md) |
+| Developer Guide | [CLAUDE.md](CLAUDE.md) |
 
-```bash
-# 1. Create feature branch with draft PR
-cidx action pr create "feat: add new feature"
+## Contributing
 
-# 2. Work and commit
-cidx action cpw -m "feat: implement feature"
+Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-# 3. Mark ready and merge
-cidx action pr ready
-cidx action pr merge
-
-# 4. After 3-5 PRs, create release
-cidx action release create
-```
-
----
-
-# Documentation
-
-| Topic                | Link                                                                           |
-| -------------------- | ------------------------------------------------------------------------------ |
-| Installation         | [docs/getting-started/installation.md](docs/getting-started/installation.md)   |
-| Configuration        | [docs/getting-started/configuration.md](docs/getting-started/configuration.md) |
-| CI Integration       | [docs/guides/ci-integration.md](docs/guides/ci-integration.md)                 |
-| Available Containers | [docs/reference/tools.md](docs/reference/tools.md)                             |
-| CLI Reference        | [docs/reference/cli.md](docs/reference/cli.md)                                 |
-| Philosophy           | [docs/core-concepts/philosophy.md](docs/core-concepts/philosophy.md)           |
-| Developer Guide      | [CLAUDE.md](CLAUDE.md)                                                         |
-
----
-
-# Contributing
-
-We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
----
-
-# License
+## License
 
 MIT License - see [LICENSE](LICENSE)
