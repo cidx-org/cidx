@@ -25,6 +25,7 @@ type PresetTOML struct {
 	Image         string                `toml:"image"`
 	Hardened      bool                  `toml:"hardened"`
 	Command       string                `toml:"command"`
+	Entrypoint    []string              `toml:"entrypoint"`
 	Workdir       string                `toml:"workdir"`
 	Volumes       []string              `toml:"volumes"`
 	Env           map[string]string     `toml:"env"`
@@ -134,6 +135,7 @@ func parsePresetsData(data []byte, source string) (map[string]Preset, error) {
 			Image:         tomlPreset.Image,
 			Hardened:      tomlPreset.Hardened,
 			Command:       tomlPreset.Command,
+			Entrypoint:    tomlPreset.Entrypoint,
 			Workdir:       tomlPreset.Workdir,
 			Volumes:       tomlPreset.Volumes,
 			Env:           tomlPreset.Env,

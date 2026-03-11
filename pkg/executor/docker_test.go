@@ -1,18 +1,18 @@
 package executor
 
 import (
-	"os"
 	"testing"
 )
 
 func TestConfigHash_Deterministic(t *testing.T) {
 	image := "alpine:latest"
 	command := "echo hello"
+	entrypoint := []string{"sh", "-c"}
 	volumes := []string{"/src:/app"}
 	env := map[string]string{"FOO": "bar", "BAZ": "qux"}
 
-	h1 := configHash(image, command, volumes, env)
-	h2 := configHash(image, command, volumes, env)
+	h1 := configHash(image, command, entrypoint, volumes, env)
+	h2 := configHash(image, command, entrypoint, volumes, env)
 
 	if h1 != h2 {
 		t.Errorf("configHash not deterministic: %s != %s", h1, h2)
@@ -20,24 +20,26 @@ func TestConfigHash_Deterministic(t *testing.T) {
 }
 
 func TestConfigHash_DifferentInputs(t *testing.T) {
-	base := configHash("alpine:latest", "echo", nil, nil)
+	base := configHash("alpine:latest", "echo", nil, nil, nil)
 
 	tests := []struct {
-		name    string
-		image   string
-		command string
-		volumes []string
-		env     map[string]string
+		name       string
+		image      string
+		command    string
+		entrypoint []string
+		volumes    []string
+		env        map[string]string
 	}{
-		{"different image", "ubuntu:latest", "echo", nil, nil},
-		{"different command", "alpine:latest", "ls", nil, nil},
-		{"with volumes", "alpine:latest", "echo", []string{"/a:/b"}, nil},
-		{"with env", "alpine:latest", "echo", nil, map[string]string{"K": "V"}},
+		{"different image", "ubuntu:latest", "echo", nil, nil, nil},
+		{"different command", "alpine:latest", "ls", nil, nil, nil},
+		{"different entrypoint", "alpine:latest", "echo", []string{"sh", "-c"}, nil, nil},
+		{"with volumes", "alpine:latest", "echo", nil, []string{"/a:/b"}, nil},
+		{"with env", "alpine:latest", "echo", nil, nil, map[string]string{"K": "V"}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := configHash(tt.image, tt.command, tt.volumes, tt.env)
+			h := configHash(tt.image, tt.command, tt.entrypoint, tt.volumes, tt.env)
 			if h == base {
 				t.Errorf("expected different hash for %s, got same: %s", tt.name, h)
 			}
@@ -49,8 +51,8 @@ func TestConfigHash_EnvSorting(t *testing.T) {
 	env1 := map[string]string{"A": "1", "B": "2", "C": "3"}
 	env2 := map[string]string{"C": "3", "A": "1", "B": "2"}
 
-	h1 := configHash("img", "cmd", nil, env1)
-	h2 := configHash("img", "cmd", nil, env2)
+	h1 := configHash("img", "cmd", nil, nil, env1)
+	h2 := configHash("img", "cmd", nil, nil, env2)
 
 	if h1 != h2 {
 		t.Errorf("configHash should be order-independent for env: %s != %s", h1, h2)
@@ -58,7 +60,7 @@ func TestConfigHash_EnvSorting(t *testing.T) {
 }
 
 func TestConfigHash_Length(t *testing.T) {
-	h := configHash("img", "cmd", nil, nil)
+	h := configHash("img", "cmd", nil, nil, nil)
 	if len(h) != 16 {
 		t.Errorf("expected hash length 16, got %d", len(h))
 	}
@@ -66,9 +68,9 @@ func TestConfigHash_Length(t *testing.T) {
 
 func TestParseCommand_Simple(t *testing.T) {
 	tests := []struct {
-		name    string
-		input   string
-		want    []string
+		name  string
+		input string
+		want  []string
 	}{
 		{"single word", "scan", []string{"scan"}},
 		{"two words", "trivy scan", []string{"trivy", "scan"}},
@@ -119,8 +121,7 @@ func TestParseCommand_ShellCommand(t *testing.T) {
 }
 
 func TestExpandVolumes(t *testing.T) {
-	os.Setenv("TEST_WORKSPACE", "/projects/myapp")
-	defer os.Unsetenv("TEST_WORKSPACE")
+	t.Setenv("TEST_WORKSPACE", "/projects/myapp")
 
 	tests := []struct {
 		name string

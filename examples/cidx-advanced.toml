@@ -1,13 +1,21 @@
 # CIDX Configuration - Advanced
 #
-# Workspace: By default, CIDX uses the current directory as the workspace.
-# All containers will be executed in the directory where you run the command.
+# A fuller example with separate local and CI pipelines plus minimal overrides.
 
 [security]
 containers = ["trivy", "gitleaks"]
 
 [code]
 containers = ["prettier", "commitlint"]
+
+[test]
+containers = ["go-test"]
+
+[pipelines.quick]
+phases = ["security"]
+
+[pipelines.ci]
+phases = ["security", "code", "test"]
 
 [containers.trivy]
 severity = "HIGH,CRITICAL"

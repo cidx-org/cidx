@@ -1,10 +1,12 @@
-# CIDX Configuration - Simple
+# CIDX Configuration - Minimal CI
 #
-# Workspace: By default, CIDX uses the current directory as the workspace.
-# All containers will be executed in the directory where you run the command.
+# A small starting point for running the same checks locally and in CI.
 
 [security]
 containers = ["trivy", "gitleaks"]
 
 [code]
 containers = ["prettier"]
+
+[pipelines.ci]
+phases = ["security", "code"]

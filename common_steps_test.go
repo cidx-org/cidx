@@ -186,9 +186,7 @@ func (tc *TestContext) simulateCIDXCommand(cmdStr string) error {
 	parts := strings.Fields(cmdStr)
 
 	// Check for flags
-	for _, p := range parts {
-		tc.CommandFlags = append(tc.CommandFlags, p)
-	}
+	tc.CommandFlags = append(tc.CommandFlags, parts...)
 
 	// Determine what pipeline/phase is being run
 	pipelineName := ""

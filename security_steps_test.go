@@ -242,17 +242,19 @@ func (tc *TestContext) runThatPreset() error {
 
 // shouldExecuteInMode checks the preset executed in the given mode
 func (tc *TestContext) shouldExecuteInMode(mode string) error {
-	expected := fmt.Sprintf("Local mode: %s", mode)
-	if mode == "draft" {
-		expected = "draft creation only"
-	} else if mode == "no-push" {
-		expected = "build without push"
-	} else if mode == "dry-run" {
-		expected = "dry-run only"
-	} else if mode == "production" {
-		expected = "production (use with caution!)"
+	switch mode {
+	case "draft":
+		mode = "draft creation only"
+	case "no-push":
+		mode = "build without push"
+	case "dry-run":
+		mode = "dry-run only"
+	case "production":
+		mode = "production (use with caution!)"
+	default:
+		mode = fmt.Sprintf("Local mode: %s", mode)
 	}
-	if strings.Contains(tc.Output, expected) {
+	if strings.Contains(tc.Output, mode) {
 		return nil
 	}
 	return fmt.Errorf("expected mode '%s' in output, got:\n%s", mode, tc.Output)

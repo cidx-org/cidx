@@ -415,7 +415,8 @@ command_flag = "--fix"
 name = "shellcheck"
 phase = "code"
 image = "koalaman/shellcheck:stable"
-command = "sh -c 'find . -type f -name \"*.sh\" | xargs -r shellcheck || true'"
+entrypoint = ["sh", "-c"]
+command = "find . -type f -name \"*.sh\" | xargs -r shellcheck || true"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
 

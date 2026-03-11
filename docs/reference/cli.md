@@ -8,7 +8,6 @@ Initialize a new configuration file in the current directory.
 
 ```bash
 cidx init
-cidx init --format yaml  # Not yet implemented, defaults to toml
 ```
 
 ### `cidx run`
@@ -30,22 +29,6 @@ cidx run <name> [flags]
 - `--parallel, -p`: Run containers in parallel (local only).
 - `--concurrency, -j`: Max concurrent containers (default: 2).
 
-### `cidx list`
-
-List all available containers and pipelines.
-
-```bash
-cidx list
-```
-
-### `cidx info`
-
-Show detailed information about a specific container.
-
-```bash
-cidx info <container>
-```
-
 ### `cidx preset`
 
 Manage built-in container presets.
@@ -61,6 +44,22 @@ cidx preset <command>
 - `show <name>`: Show raw TOML definition
 - `export`: Dump all embedded presets to stdout (useful for creating a base `presets.toml`)
 - `search <term>`: Search presets
+
+### `cidx list` (deprecated)
+
+Deprecated alias for `cidx preset list`.
+
+```bash
+cidx list
+```
+
+### `cidx info` (deprecated)
+
+Deprecated alias for `cidx preset info <container>`.
+
+```bash
+cidx info <container>
+```
 
 ### `cidx validate`
 

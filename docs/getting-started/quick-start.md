@@ -19,49 +19,40 @@ This creates the binary at `bin/cidx`.
 This creates a `cidx.toml` file with sensible defaults:
 
 ```toml
-[settings]
-workspace = "${PWD}"
+[security]
+containers = ["trivy", "gitleaks"]
 
-[tools]
-enabled = [
-    "megalinter",
-    "trivy",
-    "gitleaks",
-]
+[code]
+containers = ["prettier"]
 
 [pipelines.ci]
 phases = ["security", "code"]
-description = "Run security and code quality checks"
 ```
 
 ### 3. List Available Tools
 
 ```bash
-./bin/cidx list
+./bin/cidx preset list
 ```
 
 Output:
 
-```
-Available tools:
+```text
+Available presets:
 
   code:
-    - ansible-lint
-    - commitlint
-    - megalinter
+   - commitlint
+   - prettier
 
   security:
-    - gitleaks
-    - trivy
-
-  test:
-    - molecule
+   - gitleaks
+   - trivy
 ```
 
 ### 4. Get Tool Information
 
 ```bash
-./bin/cidx info trivy
+./bin/cidx preset info trivy
 ```
 
 See complete preset configuration including Docker image, volumes, and options.
@@ -91,8 +82,11 @@ See what would be executed without actually running containers.
 90% of users need just this:
 
 ```toml
-[tools]
-enabled = ["trivy", "megalinter"]
+[security]
+containers = ["trivy"]
+
+[code]
+containers = ["megalinter"]
 
 [pipelines.ci]
 phases = ["security", "code"]
@@ -100,25 +94,25 @@ phases = ["security", "code"]
 
 CIDX knows:
 
-- ✅ Which Docker image to use
-- ✅ What volumes to mount
-- ✅ What command to run
-- ✅ Environment variables needed
+- Which Docker image to use
+- What volumes to mount
+- What command to run
+- Environment variables needed
 
 ### With Overrides
 
 Only override what you need:
 
 ```toml
-[tools]
-enabled = ["trivy", "megalinter"]
+[security]
+containers = ["trivy"]
 
-[tools.trivy]
+[pipelines.ci]
+phases = ["security"]
+
+[containers.trivy]
 severity = "HIGH,CRITICAL"
 exit_code = 1
-
-[tools.megalinter]
-flavor = "ansible"
 ```
 
 ### Multiple Pipelines
@@ -159,24 +153,23 @@ Create a new configuration file:
 
 ```bash
 cidx init                # Creates cidx.toml
-cidx init --format yaml  # Creates cidx.yaml
 ```
 
-#### `cidx list`
+#### `cidx preset list`
 
 List all available presets:
 
 ```bash
-cidx list
+cidx preset list
 ```
 
-#### `cidx info <container>`
+#### `cidx preset info <container>`
 
 Show detailed information about a container:
 
 ```bash
-cidx info trivy
-cidx info megalinter
+cidx preset info trivy
+cidx preset info megalinter
 ```
 
 #### `cidx validate`
@@ -203,8 +196,8 @@ cidx run --dry-run ci    # Dry-run (don't execute)
 ### Example 1: Security Scanning Only
 
 ```toml
-[tools]
-enabled = ["trivy", "gitleaks"]
+[security]
+containers = ["trivy", "gitleaks"]
 
 [pipelines.security]
 phases = ["security"]
@@ -214,38 +207,46 @@ phases = ["security"]
 ./bin/cidx run security
 ```
 
-### Example 2: Code Quality for Ansible
+### Example 2: Fast local checks and fuller CI
 
 ```toml
-[tools]
-enabled = ["megalinter", "ansible-lint", "molecule"]
+[security]
+containers = ["trivy", "gitleaks"]
 
-[tools.megalinter]
-flavor = "ansible"
+[code]
+containers = ["megalinter"]
 
-[pipelines.ansible-ci]
-phases = ["code", "test"]
+[test]
+containers = ["go-test"]
+
+[pipelines.quick]
+phases = ["security"]
+
+[pipelines.ci]
+phases = ["security", "code", "test"]
 ```
 
 ```bash
-./bin/cidx run ansible-ci
+./bin/cidx run quick
+./bin/cidx run ci
 ```
 
-### Example 3: Custom Tool
+### Example 3: Minimal overrides
 
 ```toml
-[tools]
-enabled = ["my-scanner"]
+[security]
+containers = ["trivy"]
 
-[tools.my-scanner]
-phase = "security"
-image = "mycompany/scanner:latest"
-command = "scan ."
-volumes = ["${WORKSPACE}:/scan"]
+[pipelines.ci]
+phases = ["security"]
+
+[containers.trivy]
+severity = "HIGH,CRITICAL"
+exit_code = 1
 ```
 
 ```bash
-./bin/cidx run my-scanner
+./bin/cidx run ci
 ```
 
 ## Development Workflow
@@ -301,8 +302,11 @@ code-quality:
 Begin with 2-3 tools and expand gradually:
 
 ```toml
-[tools]
-enabled = ["trivy", "megalinter"]
+[security]
+containers = ["trivy"]
+
+[code]
+containers = ["megalinter"]
 ```
 
 ### 2. Use Dry-Run
@@ -340,11 +344,11 @@ Only override when defaults don't work:
 
 ```toml
 # Good - only what's needed
-[tools.trivy]
+[containers.trivy]
 severity = "HIGH,CRITICAL"
 
 # Avoid - overriding everything
-[tools.trivy]
+[containers.trivy]
 image = "aquasec/trivy:latest"
 command = "trivy fs /scan"
 # ... etc
@@ -358,7 +362,7 @@ Solution: Run `cidx init` or specify config path with `-c`.
 
 ### "preset not found"
 
-Check container name with `cidx list`. Names are lowercase with hyphens (e.g., `ansible-lint`).
+Check container name with `cidx preset list`. Names are lowercase with hyphens (e.g., `ansible-lint`).
 
 ### "Docker daemon not running"
 
@@ -370,22 +374,22 @@ docker ps
 
 ### Tool fails to execute
 
-1. Check container is in enabled list
+1. Check the tool is listed in one of your phases
 2. Validate config: `cidx validate`
-3. Dry-run to see command: `cidx run --dry-run <container>`
-4. Run with verbose: `cidx --verbose run <container>`
+3. Dry-run to see command: `cidx run --dry-run <target>`
+4. Run with verbose: `cidx --verbose run <target>`
 
 ## Next Steps
 
 1. **Read the README**: Comprehensive guide with all features
 2. **Check examples/**: See `cidx-advanced.toml` for more options
 3. **Read CLAUDE.md**: Architecture and development guide
-4. **Check TODO.md**: Planned features and roadmap
+4. **Read docs/getting-started/configuration.md**: Understand `cidx.toml`
 5. **Contribute**: Add new presets, report issues, submit PRs
 
 ## Getting Help
 
-- View container details: `cidx info <container>`
+- View container details: `cidx preset info <container>`
 - Check command help: `cidx help <command>`
 - Validate config: `cidx validate`
 - Dry-run first: `cidx run --dry-run <target>`

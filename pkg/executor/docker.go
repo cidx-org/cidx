@@ -169,11 +169,6 @@ func (e *DockerExecutor) streamLogsTo(ctx context.Context, containerID string, s
 	return err
 }
 
-// streamLogs streams container logs to stdout/stderr
-func (e *DockerExecutor) streamLogs(ctx context.Context, containerID string) error {
-	return e.streamLogsTo(ctx, containerID, os.Stdout, os.Stderr)
-}
-
 // pullImage pulls a Docker image
 func (e *DockerExecutor) pullImage(ctx context.Context, imageName string) error {
 	e.logger.Debugf("Pulling image: %s", imageName)
@@ -272,7 +267,7 @@ func (e *DockerExecutor) getOrCreateContainer(ctx context.Context, containerConf
 	// If container exists, check if configuration has changed
 	if len(containers) > 0 {
 		existingContainer := containers[0]
-		newHash := configHash(containerConfig.Image, command, volumes, containerConfig.Env)
+		newHash := configHash(containerConfig.Image, command, containerConfig.Entrypoint, volumes, containerConfig.Env)
 		existingHash := existingContainer.Labels["cidx.config_hash"]
 
 		if existingHash != "" && existingHash != newHash {
@@ -338,7 +333,7 @@ func (e *DockerExecutor) createContainer(ctx context.Context, containerConfig *c
 			"cidx.tool":        containerConfig.Name,
 			"cidx.phase":       containerConfig.Phase,
 			"cidx.image":       containerConfig.Image,
-			"cidx.config_hash": configHash(containerConfig.Image, command, volumes, containerConfig.Env),
+			"cidx.config_hash": configHash(containerConfig.Image, command, containerConfig.Entrypoint, volumes, containerConfig.Env),
 		},
 	}
 
@@ -441,12 +436,16 @@ func expandCommand(command string, env map[string]string) string {
 }
 
 // configHash creates a short hash of the container configuration for change detection
-func configHash(image, command string, volumes []string, env map[string]string) string {
+func configHash(image, command string, entrypoint, volumes []string, env map[string]string) string {
 	h := sha256.New()
 	h.Write([]byte(image))
 	h.Write([]byte("\x00"))
 	h.Write([]byte(command))
 	h.Write([]byte("\x00"))
+	for _, part := range entrypoint {
+		h.Write([]byte(part))
+		h.Write([]byte("\x00"))
+	}
 	for _, v := range volumes {
 		h.Write([]byte(v))
 		h.Write([]byte("\x00"))

@@ -329,6 +329,7 @@ func (r *Runner) RunTool(ctx context.Context, toolName string) error {
 		Phase:       mergedPreset.Phase,
 		Image:       mergedPreset.Image,
 		Command:     mergedPreset.Command,
+		Entrypoint:  mergedPreset.Entrypoint,
 		Workdir:     mergedPreset.Workdir,
 		Volumes:     volumes,
 		Env:         mergedPreset.Env,

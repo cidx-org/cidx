@@ -1,61 +1,95 @@
-# CIDX - CI with Declarative eXecution
+# CIDX — One CI config for local and CI
 
 [![Container Monitor](https://github.com/cidx-org/cidx/actions/workflows/container-monitor.yml/badge.svg)](https://github.com/cidx-org/cidx/actions/workflows/container-monitor.yml)
 [![Security Audit](https://github.com/cidx-org/cidx/actions/workflows/security-audit.yml/badge.svg)](https://github.com/cidx-org/cidx/actions/workflows/security-audit.yml)
 
-**One config, all environments.** CIDX is a portable CI/CD runner that replaces platform-specific YAML with a single declarative configuration. Name the tools you want to run, CIDX handles the rest.
+CIDX is a container-first CI runner I built for myself. One `cidx.toml`, same checks locally and in CI.
 
-Everything runs in containers. Nothing is installed on your machine, your workspace stays clean, and results are reproducible on any platform where Docker or Podman is available.
+Everything runs in containers. Nothing is installed directly on your machine, your workspace stays clean, and common tools can be used through built-in presets.
+
+CIDX is also dogfooded on this repository: CIDX builds CIDX.
+
+## Example setups
+
+### Minimal CI
 
 ```toml
-# cidx.toml — this is a complete configuration
 [security]
-containers = ["trivy", "gitleaks", "semgrep"]
+containers = ["trivy", "gitleaks"]
 
 [code]
 containers = ["megalinter"]
+
+[pipelines.ci]
+phases = ["security", "code"]
+```
+
+```bash
+cidx run ci
+```
+
+### Fast local checks and fuller CI
+
+```toml
+[security]
+containers = ["trivy", "gitleaks"]
+
+[code]
+containers = ["megalinter"]
+
+[test]
+containers = ["go-test"]
+
+[pipelines.quick]
+phases = ["security"]
 
 [pipelines.ci]
 phases = ["security", "code", "test"]
 ```
 
 ```bash
-cidx run ci          # Same result locally, in GitHub Actions, GitLab CI, or Jenkins
+cidx run quick
+cidx run ci
 ```
 
-## Why CIDX
+### Minimal overrides
 
-| Problem | Without CIDX | With CIDX |
-|---------|-------------|-----------|
-| Running Trivy | 30+ lines of CI YAML per platform | `containers = ["trivy"]` |
-| Local vs CI drift | Different configs, different results | Same `cidx.toml` everywhere |
-| Adding security scans | Research image, volumes, flags per tool | Name the tool, run it |
-| Switching CI platform | Rewrite all pipeline definitions | Change nothing |
+```toml
+[security]
+containers = ["trivy"]
 
-### vs. Other Tools
+[pipelines.ci]
+phases = ["security"]
 
-| | CIDX | dagger | earthly | act | taskfile |
-|---|---|---|---|---|---|
-| Zero-config presets | Yes | No | No | No | No |
-| Hardened images (DHI) | Default | No | No | No | No |
-| Platform-portable | Yes | Yes | Yes | GitHub only | N/A |
-| Config complexity | 5 lines | SDK code | Earthfile | GH YAML | Taskfile |
-| Security-first | Built-in | Manual | Manual | Mirrors GH | Manual |
-
-## How It Works
-
-CIDX ships with **15+ built-in presets** (Trivy, Gitleaks, Semgrep, MegaLinter, GoSec, etc.). Each preset knows its Docker image, volumes, commands, environment variables, and config files.
-
-```
-cidx.toml          Built-in Presets       Custom Presets
-(what to run)   +  (how to run it)    +  (.cidx/presets.toml)
-     │                   │                      │
-     └───────────┬───────┘──────────────────────┘
-                 │
-           Docker / Podman
+[containers.trivy]
+severity = "HIGH,CRITICAL"
+exit_code = 1
 ```
 
-You declare **what** to run. CIDX resolves **how**.
+```bash
+cidx run ci
+```
+
+## Why I built it
+
+- Keep one CI config instead of duplicating workflow logic per platform
+- Run the same checks locally before pushing
+- Use containers and presets instead of hand-assembling tool commands
+- Start small and override only what matters
+
+## What CIDX is
+
+- A single declarative config for local runs and CI
+- A container-first way to run common checks and pipelines
+- A small set of built-in presets, with overrides when needed
+- A tool I actively use on this repository
+
+## What CIDX is not
+
+- Not a hosted CI platform
+- Not a full DevOps suite
+- Not a replacement for every platform-specific feature
+- Not trying to hide everything; it tries to keep the common path simple
 
 ## Quick Start
 
@@ -79,9 +113,26 @@ cidx run ci
 cidx run --dry-run ci
 ```
 
+## How It Works
+
+CIDX ships with **15+ built-in presets** (Trivy, Gitleaks, Semgrep, MegaLinter, GoSec, and others). Each preset knows its image, command, volumes, environment variables, and config files.
+
+```text
+cidx.toml          Built-in Presets       Custom Presets
+(what to run)   +  (how to run it)    +  (.cidx/presets.toml)
+     │                   │                      │
+     └───────────┬───────┘──────────────────────┘
+                 │
+          Docker / Podman
+```
+
+You declare **what** to run. CIDX resolves **how**.
+
 ## Configuration
 
-### Minimal (recommended)
+Start with phases and pipelines. Override only the tools that need custom flags, environment variables, or images.
+
+### Minimal
 
 ```toml
 [security]
@@ -93,7 +144,7 @@ phases = ["security", "code"]
 
 ### With overrides
 
-Override only what you need. Everything else uses preset defaults.
+Everything else can stay on preset defaults.
 
 ```toml
 [security]
@@ -106,10 +157,10 @@ exit_code = 1
 
 ### Custom presets
 
-Define new tools or override built-in ones via `presets.toml`:
+You can define new tools or override built-in ones via `presets.toml`:
 
-- **User-level**: `~/.config/cidx/presets.toml` (all projects)
-- **Project-level**: `.cidx/presets.toml` (this project only)
+- **User-level**: `~/.config/cidx/presets.toml` for all projects
+- **Project-level**: `.cidx/presets.toml` for the current repository
 
 ```toml
 [presets.my-scanner]
@@ -122,72 +173,72 @@ Export built-in presets as a starting point: `cidx preset export > .cidx/presets
 
 ### Version pinning
 
-Lock the CIDX version to ensure consistency across developers and CI:
+If you want local runs and CI to stay aligned on the same CIDX release:
 
 ```toml
 required_version = "1.2.3"
 ```
 
-## Docker Hardened Images (DHI)
+## Built-in images
 
-CIDX defaults to [Docker Hardened Images](https://dhi.io) for all built-in presets:
+Built-in presets default to [Docker Hardened Images](https://dhi.io) where available.
 
-- Near-zero CVEs
-- 95% smaller attack surface
+- Smaller attack surface
 - SBOM included
-- SLSA Level 3 provenance
+- Provenance metadata
+- Better default baseline for security-sensitive tools
 
-DHI requires Docker Hub credentials (free account). For CI, set `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` as repository secrets.
+DHI requires Docker Hub credentials. In CI, set `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` as repository secrets.
 
 ```bash
 cidx registry check    # Verify DHI access
 cidx registry login    # Authenticate
 ```
 
-## Pipeline Commands
+## Common commands
+
+### Running checks
 
 ```bash
-cidx run <phase>              # Run a phase (security, code, test, build)
+cidx run <phase>              # Run a phase such as security, code, test, or build
 cidx run <tool>               # Run a specific tool
-cidx run <pipeline>           # Run a named pipeline (ci, release)
-cidx run --parallel security  # Parallel execution (local only)
-cidx run --quiet ci           # Suppress output, show logs only on failure
-cidx run --dry-run ci         # Preview execution plan
+cidx run <pipeline>           # Run a named pipeline such as ci or release
+cidx run --parallel security  # Parallel execution within a phase (local only)
+cidx run --quiet ci           # Show logs only on failure
+cidx run --dry-run ci         # Preview the execution plan
 ```
 
-## Preset Management
+### Managing presets
 
 ```bash
 cidx preset list              # List all presets by phase
 cidx preset info trivy        # Show preset details
 cidx preset search security   # Search presets
 cidx preset export            # Export all presets to stdout
-cidx preset images            # List container images (deduplicated)
+cidx preset images            # List container images
 cidx preset check-updates     # Check for newer image versions
 cidx preset scan              # Scan preset images for vulnerabilities
 ```
 
----
+## Workflow helpers
 
-## Developer Workflow
+Because I use CIDX on CIDX, the project also includes a few helpers for day-to-day git and release work.
 
-CIDX also provides commands that simplify common git and CI workflows.
-
-### PR Lifecycle
+### PR lifecycle
 
 ```bash
-cidx action pr create "feat: description"   # Create branch + draft PR
-cidx action cpw -m "commit message"         # Commit, push, watch CI
+cidx action pr create "feat: description"   # Create branch and draft PR
+cidx action cpw -m "commit message"         # Commit, push, and watch CI
 cidx action pr ready                         # Mark ready for review
-cidx action pr merge                         # Squash merge + cleanup
+cidx action pr merge                         # Squash merge and cleanup
 ```
 
-### Branch Management
+### Branch management
 
 ```bash
-cidx branch list              # All branches with PR/merge status
-cidx branch list --stale      # Inactive > 30 days
-cidx branch list --merged     # Already merged
+cidx branch list              # All branches with PR and merge status
+cidx branch list --stale      # Inactive for more than 30 days
+cidx branch list --merged     # Already merged branches
 cidx branch cleanup           # Dry-run cleanup
 cidx branch cleanup -x        # Delete merged branches
 cidx branch pr -w             # Watch CI checks for current branch
@@ -196,31 +247,27 @@ cidx branch pr -w             # Watch CI checks for current branch
 ### Releases
 
 ```bash
-cidx action tag prepare       # Generate version + message
+cidx action tag prepare       # Generate version and message
 cidx action tag create        # Create and push tag
 cidx action release create    # Create GitHub release
 ```
 
-### Status Dashboard
+### Status dashboard
 
 ```bash
 cidx status                   # Interactive TUI dashboard
 cidx status --no-tui          # Simple text output (auto in CI)
 ```
 
----
-
 ## Documentation
 
-| Topic | Link |
-|-------|------|
-| Installation | [docs/getting-started/installation.md](docs/getting-started/installation.md) |
-| Configuration | [docs/getting-started/configuration.md](docs/getting-started/configuration.md) |
-| CI Integration | [docs/guides/ci-integration.md](docs/guides/ci-integration.md) |
-| Available Tools | [docs/reference/tools.md](docs/reference/tools.md) |
-| CLI Reference | [docs/reference/cli.md](docs/reference/cli.md) |
-| Philosophy | [docs/core-concepts/philosophy.md](docs/core-concepts/philosophy.md) |
-| Developer Guide | [CLAUDE.md](CLAUDE.md) |
+- **Installation**: [docs/getting-started/installation.md](docs/getting-started/installation.md)
+- **Configuration**: [docs/getting-started/configuration.md](docs/getting-started/configuration.md)
+- **CI Integration**: [docs/guides/ci-integration.md](docs/guides/ci-integration.md)
+- **Available Tools**: [docs/reference/tools.md](docs/reference/tools.md)
+- **CLI Reference**: [docs/reference/cli.md](docs/reference/cli.md)
+- **Philosophy**: [docs/core-concepts/philosophy.md](docs/core-concepts/philosophy.md)
+- **Development Notes**: [CLAUDE.md](CLAUDE.md)
 
 ## Contributing
 

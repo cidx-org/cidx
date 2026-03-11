@@ -72,20 +72,20 @@ severity = "HIGH,CRITICAL"
 exit_code = 1
 ```
 
-#### Defining Custom Containers
+#### Defining Custom Tools
 
-You can also define your own containers that don't have built-in presets. You must assign them to a default `phase` so CIDX knows when to run them.
+If you need a tool that does not have a built-in preset, define it in `presets.toml` rather than directly in `cidx.toml`.
 
-```toml
-[containers.my-scanner]
-phase = "security"
-image = "myregistry/scanner:latest"
-command = "scan ."
-```
+Use:
+
+- `~/.config/cidx/presets.toml` for user-level presets
+- `.cidx/presets.toml` for project-level presets
+
+`cidx.toml` should stay focused on phases, pipelines, and overrides.
 
 ### 3. Custom Presets (Advanced)
 
-While `cidx.toml` configures *how* tools are used (which phase, which pipeline), `presets.toml` allows you to configure *what* the tools are (images, commands).
+While `cidx.toml` configures _how_ tools are used (which phase, which pipeline), `presets.toml` allows you to configure _what_ the tools are (images, commands).
 
 You can override built-in presets or define new ones by creating a `presets.toml` file in:
 

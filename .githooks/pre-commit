@@ -10,18 +10,15 @@ set -e
 echo "🔍 Running CIDX pre-commit checks..."
 echo ""
 
-# Check if cidx is available
-if ! command -v cidx >/dev/null 2>&1; then
-    # Try to run via go run if cidx binary not found
-    if [ -f "cmd/cidx/main.go" ]; then
-        CIDX_CMD="go run ./cmd/cidx"
-    else
-        echo "❌ Error: cidx not found in PATH and not in development mode"
-        echo "   Install cidx or run from the cidx project directory"
-        exit 1
-    fi
-else
+# Prefer the local source tree when running inside the cidx repository.
+if [ -f "cmd/cidx/main.go" ]; then
+    CIDX_CMD="go run ./cmd/cidx"
+elif command -v cidx >/dev/null 2>&1; then
     CIDX_CMD="cidx"
+else
+    echo "❌ Error: cidx not found in PATH and not in development mode"
+    echo "   Install cidx or run from the cidx project directory"
+    exit 1
 fi
 
 # Run security checks (secrets, vulnerabilities)

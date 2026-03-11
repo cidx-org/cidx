@@ -18,7 +18,7 @@ containers = ["trivy", "gitleaks"]
 [code]
 containers = ["prettier"]
 
-[trivy]
+[containers.trivy]
 severity = "HIGH,CRITICAL"
 exit_code = 1
 `
@@ -72,6 +72,38 @@ exit_code = 1
 
 	if exitCode, ok := trivyConfig["exit_code"].(int64); !ok || exitCode != 1 {
 		t.Errorf("trivy.exit_code = %v, want 1", trivyConfig["exit_code"])
+	}
+}
+
+func TestLoad_LegacyTopLevelOverride(t *testing.T) {
+	// Create a temporary TOML config file using the legacy top-level override syntax.
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "test-config-legacy.toml")
+
+	configContent := `
+[security]
+containers = ["trivy"]
+
+[trivy]
+severity = "HIGH,CRITICAL"
+`
+
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to create test config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	trivyConfig, ok := cfg.Overrides["trivy"]
+	if !ok {
+		t.Fatal("Overrides[\"trivy\"] not found")
+	}
+
+	if severity, ok := trivyConfig["severity"].(string); !ok || severity != "HIGH,CRITICAL" {
+		t.Errorf("trivy.severity = %v, want %q", trivyConfig["severity"], "HIGH,CRITICAL")
 	}
 }
 

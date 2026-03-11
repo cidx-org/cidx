@@ -90,8 +90,8 @@ vim pkg/presets/presets.toml
 go run ./cmd/cidx run security
 
 # Validate preset syntax
-go run ./cmd/cidx list
-go run ./cmd/cidx info trivy
+go run ./cmd/cidx preset list
+go run ./cmd/cidx preset info trivy
 ```
 
 ### Hot Reload During Development
@@ -139,7 +139,7 @@ func init() {
 go build -o bin/cidx ./cmd/cidx
 
 # Binary contains all presets
-./bin/cidx list  # No external files needed
+./bin/cidx preset list  # No external files needed
 ```
 
 ### Verification
@@ -152,8 +152,8 @@ go build -o bin/cidx ./cmd/cidx
 cd /tmp
 
 # Binary works without source code
-~/projects/cidx/bin/cidx list
-~/projects/cidx/bin/cidx info trivy
+~/projects/cidx/bin/cidx preset list
+~/projects/cidx/bin/cidx preset info trivy
 ```
 
 ## Implementation Details
@@ -269,8 +269,8 @@ volumes = ["${WORKSPACE}:/workspace"]
 ### Step 2: Test Immediately
 
 ```bash
-go run ./cmd/cidx list
-go run ./cmd/cidx info newtool
+go run ./cmd/cidx preset list
+go run ./cmd/cidx preset info newtool
 go run ./cmd/cidx run --dry-run newtool
 ```
 
@@ -278,7 +278,7 @@ go run ./cmd/cidx run --dry-run newtool
 
 ```bash
 # Check preset is recognized
-go run ./cmd/cidx list | grep newtool
+go run ./cmd/cidx preset list | grep newtool
 
 # Test execution
 go run ./cmd/cidx run newtool
@@ -291,7 +291,7 @@ go run ./cmd/cidx run newtool
 go build -o bin/cidx ./cmd/cidx
 
 # Verify
-./bin/cidx info newtool
+./bin/cidx preset info newtool
 ```
 
 ## File Format Reference
@@ -367,13 +367,13 @@ go run ./tools/convert-registry.go
 - ✅ Edit `presets.toml` for all changes
 - ✅ Test with `go run` before building
 - ✅ Use comments to document complex presets
-- ✅ Validate with `cidx list` and `cidx info`
+- ✅ Validate with `cidx preset list` and `cidx preset info`
 
 ### Production
 
 - ✅ Always build with `go build` (embeds automatically)
 - ✅ Test binary in clean environment
-- ✅ Verify preset availability with `cidx list`
+- ✅ Verify preset availability with `cidx preset list`
 
 ### Version Control
 
@@ -385,7 +385,7 @@ go run ./tools/convert-registry.go
 
 ### Preset Not Found
 
-**Problem**: Tool not listed in `cidx list`
+**Problem**: Tool not listed in `cidx preset list`
 
 **Solutions**:
 

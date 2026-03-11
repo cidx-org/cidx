@@ -4,7 +4,9 @@
 [presets.shellcheck]
 name = "shellcheck"
 image = "koalaman/shellcheck:latest"
-command = "sh -c \"find . -name '*.sh' | xargs shellcheck\""
+command = ".githooks/pre-commit"
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 phase = "code"
 description = "Static analysis for shell scripts (defined in .cidx/presets.toml)"
 

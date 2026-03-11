@@ -15,7 +15,9 @@ func clearCIEnvVars(t *testing.T) {
 		"TAG_NAME", "CIRCLECI", "CIRCLE_BRANCH", "CIRCLE_TAG", "CIRCLE_PULL_REQUEST",
 	}
 	for _, v := range vars {
-		os.Unsetenv(v)
+		if err := os.Unsetenv(v); err != nil {
+			t.Fatalf("Unsetenv(%q) failed: %v", v, err)
+		}
 	}
 }
 
@@ -40,8 +42,8 @@ func TestDetect_Local(t *testing.T) {
 
 func TestDetect_GitHubActions(t *testing.T) {
 	clearCIEnvVars(t)
-	os.Setenv("GITHUB_ACTIONS", "true")
-	os.Setenv("GITHUB_REF_NAME", "feature/test")
+	t.Setenv("GITHUB_ACTIONS", "true")
+	t.Setenv("GITHUB_REF_NAME", "feature/test")
 	defer clearCIEnvVars(t)
 
 	env := Detect()
@@ -59,8 +61,8 @@ func TestDetect_GitHubActions(t *testing.T) {
 
 func TestDetect_GitHubActions_PR(t *testing.T) {
 	clearCIEnvVars(t)
-	os.Setenv("GITHUB_ACTIONS", "true")
-	os.Setenv("GITHUB_EVENT_NAME", "pull_request")
+	t.Setenv("GITHUB_ACTIONS", "true")
+	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
 	defer clearCIEnvVars(t)
 
 	env := Detect()
@@ -72,9 +74,9 @@ func TestDetect_GitHubActions_PR(t *testing.T) {
 
 func TestDetect_GitHubActions_Tag(t *testing.T) {
 	clearCIEnvVars(t)
-	os.Setenv("GITHUB_ACTIONS", "true")
-	os.Setenv("GITHUB_REF", "refs/tags/v1.0.0")
-	os.Setenv("GITHUB_REF_NAME", "v1.0.0")
+	t.Setenv("GITHUB_ACTIONS", "true")
+	t.Setenv("GITHUB_REF", "refs/tags/v1.0.0")
+	t.Setenv("GITHUB_REF_NAME", "v1.0.0")
 	defer clearCIEnvVars(t)
 
 	env := Detect()
@@ -89,8 +91,8 @@ func TestDetect_GitHubActions_Tag(t *testing.T) {
 
 func TestDetect_GitLabCI(t *testing.T) {
 	clearCIEnvVars(t)
-	os.Setenv("GITLAB_CI", "true")
-	os.Setenv("CI_COMMIT_REF_NAME", "develop")
+	t.Setenv("GITLAB_CI", "true")
+	t.Setenv("CI_COMMIT_REF_NAME", "develop")
 	defer clearCIEnvVars(t)
 
 	env := Detect()
@@ -108,8 +110,8 @@ func TestDetect_GitLabCI(t *testing.T) {
 
 func TestDetect_GitLabCI_MR(t *testing.T) {
 	clearCIEnvVars(t)
-	os.Setenv("GITLAB_CI", "true")
-	os.Setenv("CI_MERGE_REQUEST_ID", "42")
+	t.Setenv("GITLAB_CI", "true")
+	t.Setenv("CI_MERGE_REQUEST_ID", "42")
 	defer clearCIEnvVars(t)
 
 	env := Detect()
@@ -121,8 +123,8 @@ func TestDetect_GitLabCI_MR(t *testing.T) {
 
 func TestDetect_GitLabCI_Tag(t *testing.T) {
 	clearCIEnvVars(t)
-	os.Setenv("GITLAB_CI", "true")
-	os.Setenv("CI_COMMIT_TAG", "v2.0.0")
+	t.Setenv("GITLAB_CI", "true")
+	t.Setenv("CI_COMMIT_TAG", "v2.0.0")
 	defer clearCIEnvVars(t)
 
 	env := Detect()
@@ -137,8 +139,8 @@ func TestDetect_GitLabCI_Tag(t *testing.T) {
 
 func TestDetect_Jenkins(t *testing.T) {
 	clearCIEnvVars(t)
-	os.Setenv("JENKINS_HOME", "/var/jenkins")
-	os.Setenv("BRANCH_NAME", "main")
+	t.Setenv("JENKINS_HOME", "/var/jenkins")
+	t.Setenv("BRANCH_NAME", "main")
 	defer clearCIEnvVars(t)
 
 	env := Detect()
@@ -156,8 +158,8 @@ func TestDetect_Jenkins(t *testing.T) {
 
 func TestDetect_Jenkins_Tag(t *testing.T) {
 	clearCIEnvVars(t)
-	os.Setenv("JENKINS_URL", "http://jenkins.local")
-	os.Setenv("TAG_NAME", "v3.0.0")
+	t.Setenv("JENKINS_URL", "http://jenkins.local")
+	t.Setenv("TAG_NAME", "v3.0.0")
 	defer clearCIEnvVars(t)
 
 	env := Detect()
@@ -172,8 +174,8 @@ func TestDetect_Jenkins_Tag(t *testing.T) {
 
 func TestDetect_CircleCI(t *testing.T) {
 	clearCIEnvVars(t)
-	os.Setenv("CIRCLECI", "true")
-	os.Setenv("CIRCLE_BRANCH", "feature/ci")
+	t.Setenv("CIRCLECI", "true")
+	t.Setenv("CIRCLE_BRANCH", "feature/ci")
 	defer clearCIEnvVars(t)
 
 	env := Detect()
@@ -191,8 +193,8 @@ func TestDetect_CircleCI(t *testing.T) {
 
 func TestDetect_CircleCI_Tag(t *testing.T) {
 	clearCIEnvVars(t)
-	os.Setenv("CIRCLECI", "true")
-	os.Setenv("CIRCLE_TAG", "v4.0.0")
+	t.Setenv("CIRCLECI", "true")
+	t.Setenv("CIRCLE_TAG", "v4.0.0")
 	defer clearCIEnvVars(t)
 
 	env := Detect()
@@ -207,8 +209,8 @@ func TestDetect_CircleCI_Tag(t *testing.T) {
 
 func TestDetect_CircleCI_PR(t *testing.T) {
 	clearCIEnvVars(t)
-	os.Setenv("CIRCLECI", "true")
-	os.Setenv("CIRCLE_PULL_REQUEST", "https://github.com/org/repo/pull/123")
+	t.Setenv("CIRCLECI", "true")
+	t.Setenv("CIRCLE_PULL_REQUEST", "https://github.com/org/repo/pull/123")
 	defer clearCIEnvVars(t)
 
 	env := Detect()
@@ -220,7 +222,7 @@ func TestDetect_CircleCI_PR(t *testing.T) {
 
 func TestDetect_GenericCI(t *testing.T) {
 	clearCIEnvVars(t)
-	os.Setenv("CI", "true")
+	t.Setenv("CI", "true")
 	defer clearCIEnvVars(t)
 
 	env := Detect()

@@ -169,6 +169,7 @@ Add to `pkg/presets/registry.go`:
 ```
 
 Guidelines:
+
 1. Use official images (prefer DHI variants)
 2. Defaults must work without overrides
 3. Test with `cidx run toolname --dry-run`

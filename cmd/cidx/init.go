@@ -15,7 +15,7 @@ func initCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "format",
 				Aliases: []string{"f"},
-				Usage:   "Config format (toml or yaml)",
+				Usage:   "Config format (currently only toml is supported)",
 				Value:   "toml",
 			},
 		},
@@ -27,11 +27,8 @@ func initCommand() *cli.Command {
 			case "toml":
 				filename = "cidx.toml"
 				content = defaultTOMLConfig
-			case "yaml", "yml":
-				filename = "cidx.yaml"
-				content = defaultYAMLConfig
 			default:
-				return fmt.Errorf("unsupported format: %s (use toml or yaml)", format)
+				return fmt.Errorf("unsupported format: %s (only toml is currently supported)", format)
 			}
 
 			// Check if file already exists
@@ -46,9 +43,9 @@ func initCommand() *cli.Command {
 
 			fmt.Printf("Created %s\n", filename)
 			fmt.Println("\nEdit the file to enable the tools you need.")
-			fmt.Println("Run 'cidx list' to see available tools.")
+			fmt.Println("Run 'cidx preset list' to see available tools.")
 			fmt.Println("Run 'cidx validate' to check your configuration.")
-			fmt.Println("Run 'cidx run <tool>' or 'cidx run <pipeline>' to execute.")
+			fmt.Println("Run 'cidx run ci' or 'cidx run <tool>' to execute.")
 
 			return nil
 		},
@@ -69,34 +66,14 @@ containers = ["trivy", "gitleaks"]
 [code]
 containers = ["prettier"]
 
+[pipelines.ci]
+phases = ["security", "code"]
+
 # Optional: Override tool settings
-# [prettier]
+# [containers.prettier]
 # write = true
 
-# [trivy]
+# [containers.trivy]
 # severity = "HIGH,CRITICAL"
 # exit_code = 1
-`
-
-const defaultYAMLConfig = `# CIDX Configuration
-#
-# Workspace: By default, CIDX uses the current directory as the workspace.
-# All tools will be executed in the directory where you run the command.
-
-# Version Pinning (Optional but recommended for CI consistency)
-# required_version: "1.2.3"
-
-security:
-  tools: [trivy, gitleaks]
-
-code:
-  tools: [prettier]
-
-# Optional: Override tool settings
-# prettier:
-#   write: true
-
-# trivy:
-#   severity: HIGH,CRITICAL
-#   exit_code: 1
 `

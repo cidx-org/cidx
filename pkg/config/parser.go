@@ -83,8 +83,25 @@ func Load(path string) (*Config, error) {
 		cfg.Workspace, _ = os.Getwd()
 	}
 
-	// Process dynamic sections: phases (have "containers" key) vs container overrides
+	// Process nested [containers.<name>] override sections first
+	if containersRaw, hasContainers := raw["containers"]; hasContainers {
+		if containersMap, ok := containersRaw.(map[string]any); ok {
+			for name, value := range containersMap {
+				section, ok := value.(map[string]any)
+				if !ok {
+					continue
+				}
+				cfg.Overrides[name] = section
+			}
+		}
+	}
+
+	// Process dynamic sections: phases (have "containers" key) vs legacy top-level container overrides
 	for name, value := range raw {
+		if name == "containers" {
+			continue
+		}
+
 		if knownSections[name] {
 			continue
 		}

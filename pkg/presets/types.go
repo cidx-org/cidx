@@ -12,23 +12,24 @@ type Preset struct {
 	Image         string            `yaml:"image" toml:"image"`
 	Hardened      bool              `yaml:"hardened,omitempty" toml:"hardened,omitempty"` // Uses Docker Hardened Image (dhi.io)
 	Command       string            `yaml:"command" toml:"command"`
+	Entrypoint    []string          `yaml:"entrypoint" toml:"entrypoint"`
 	Workdir       string            `yaml:"workdir" toml:"workdir"`
 	Volumes       []string          `yaml:"volumes" toml:"volumes"`
 	Env           map[string]string `yaml:"env" toml:"env"`
 	ConfigFiles   []string          `yaml:"config_files" toml:"config_files"`
 	Options       map[string]Option `yaml:"options" toml:"options"`
-	RequireCI     bool              `yaml:"require_ci" toml:"require_ci"`         // Requires CI environment
-	LocalBehavior string            `yaml:"local_behavior" toml:"local_behavior"` // draft, no-push, dry-run, disabled
+	RequireCI     bool              `yaml:"require_ci" toml:"require_ci"`                     // Requires CI environment
+	LocalBehavior string            `yaml:"local_behavior" toml:"local_behavior"`             // draft, no-push, dry-run, disabled
 	Privileged    bool              `yaml:"privileged,omitempty" toml:"privileged,omitempty"` // Requires root privileges (skip user mapping)
 }
 
 // Option defines a configurable parameter for a preset
 type Option struct {
-	Type        string      `yaml:"type" toml:"type"`                 // string, bool, int, array
-	Default     any         `yaml:"default" toml:"default"`           // Default value
-	Description string      `yaml:"description" toml:"description"`   // Help text
-	EnvVar      string      `yaml:"env_var" toml:"env_var"`           // Maps to environment variable
-	CommandFlag string      `yaml:"command_flag" toml:"command_flag"` // Maps to command flag
+	Type        string `yaml:"type" toml:"type"`                 // string, bool, int, array
+	Default     any    `yaml:"default" toml:"default"`           // Default value
+	Description string `yaml:"description" toml:"description"`   // Help text
+	EnvVar      string `yaml:"env_var" toml:"env_var"`           // Maps to environment variable
+	CommandFlag string `yaml:"command_flag" toml:"command_flag"` // Maps to command flag
 }
 
 // MergeWith merges user overrides into the preset
@@ -40,6 +41,9 @@ func (p *Preset) MergeWith(overrides map[string]any) *Preset {
 	}
 	if command, ok := overrides["command"].(string); ok {
 		merged.Command = command
+	}
+	if entrypoint, ok := overrides["entrypoint"].([]string); ok {
+		merged.Entrypoint = entrypoint
 	}
 	if workdir, ok := overrides["workdir"].(string); ok {
 		merged.Workdir = workdir
