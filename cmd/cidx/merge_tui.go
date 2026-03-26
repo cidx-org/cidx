@@ -11,75 +11,31 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/cidx-org/cidx/internal/tui"
 	"github.com/cidx-org/cidx/pkg/config"
 	"github.com/cidx-org/cidx/pkg/remote"
 	"github.com/cidx-org/cidx/pkg/remote/github"
 )
 
-// Merge TUI styles
+// Merge TUI styles - aliased from shared tui package
 var (
-	mergeTitleStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("39")).
-			Padding(0, 1)
-
-	mergeBoxStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("240")).
-			Padding(0, 1)
-
-	mergeActiveBoxStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color("39")).
-				Padding(0, 1)
-
-	mergeLabelStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("39")).
-			Bold(true)
-
-	mergeDimStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241"))
-
-	mergeSuccessStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("42")).
-				Bold(true)
-
-	mergeErrorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("196")).
-			Bold(true)
-
-	mergeWarningStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("214")).
-				Bold(true)
-
-	mergeSelectedStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("39")).
-				Bold(true)
-
-	mergeUnselectedStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("255"))
-
-	mergeReviewApprovedStyle = lipgloss.NewStyle().
-					Foreground(lipgloss.Color("42"))
-
-	mergeReviewChangesStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("214"))
-
-	mergeReviewPendingStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("241"))
-
-	mergeHelpStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241")).
-			Padding(1, 0, 0, 0)
-
-	mergeCheckSuccessStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("42"))
-
-	mergeCheckFailureStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("196"))
-
-	mergeCheckPendingStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("214"))
+	mergeTitleStyle          = tui.Title
+	mergeBoxStyle            = tui.Box
+	mergeActiveBoxStyle      = tui.ActiveBox
+	mergeLabelStyle          = tui.Label
+	mergeDimStyle            = tui.Dim
+	mergeSuccessStyle        = tui.SuccessBold
+	mergeErrorStyle          = tui.ErrorBold
+	mergeWarningStyle        = tui.WarningBold
+	mergeSelectedStyle       = tui.Selected
+	mergeUnselectedStyle     = tui.Unselected
+	mergeReviewApprovedStyle = tui.Success
+	mergeReviewChangesStyle  = tui.Warning
+	mergeReviewPendingStyle  = tui.Dim
+	mergeHelpStyle           = tui.Help
+	mergeCheckSuccessStyle   = tui.Success
+	mergeCheckFailureStyle   = tui.Error
+	mergeCheckPendingStyle   = tui.Warning
 )
 
 // mergeFocus determines which section is focused

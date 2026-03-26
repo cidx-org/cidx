@@ -1,15 +1,82 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code when working with this repository.
+## What is CIDX
 
-## Project Overview
+**CIDX** (CI with Declarative eXecution) is a personal Go CLI tool that serves as both a practical CI/CD runner and a showcase of modern DevOps practices.
 
-**CIDX** (CI with Declarative eXecution) is a Go CLI tool that serves two purposes:
+It does two things:
 
-1. **Portable CI/CD Runner** — A single `cidx.toml` config runs identically on Local, GitHub Actions, GitLab CI, and Jenkins. Users declare container names, CIDX resolves images, volumes, commands, and environment variables from built-in presets.
-2. **Developer Workflow** — Human-friendly commands for PR lifecycle, branch management, releases, and CI monitoring (`cidx action`, `cidx branch`, `cidx status`).
+1. **Portable CI/CD Runner** -- A single `cidx.toml` config runs identically on local, GitHub Actions, GitLab CI, and Jenkins. Declare container names, CIDX resolves images, volumes, commands, and environment from built-in presets.
+2. **Developer Workflow** -- Human-friendly commands for PR lifecycle, branch management, releases, and CI monitoring (`cidx action`, `cidx branch`, `cidx status`).
 
-**Core Principles**: Convention over Configuration, KISS, security by default (Docker Hardened Images). Everything runs in containers — nothing is installed on the host, the workspace stays clean, and results are reproducible on any platform where Docker or Podman is available.
+**This is not a product competing with Dagger or Earthly.** It's an opinionated tool built for its author's workflow, open-sourced as a reference implementation of a DevOps philosophy: convention over configuration, container-native execution, security by default.
+
+## Project Philosophy
+
+### Core Beliefs
+
+- **Convention over Configuration** -- Presets eliminate boilerplate. Overrides are exceptional.
+- **Container-native** -- Everything runs in containers. Nothing on the host. Clean, reproducible.
+- **Security by Default** -- Docker Hardened Images, safe local modes (no-push, draft).
+- **KISS** -- Single config file. Container names are the only required input.
+- **Explicit over Magic** -- Dry-run mode, transparent merge logic, clear preset definitions.
+
+### This Project is a Showcase
+
+CIDX exists to demonstrate what a well-run project looks like in practice -- not the bullshit version with 47 badges and empty abstractions, but the real version:
+
+- **BDD-first development** -- If you can't write a Gherkin scenario for it, don't build it
+- **Trunk-based workflow** -- Short-lived branches, conventional commits, grouped releases
+- **AI-assisted development** -- A human pilots, Claude executes. Every feature is discussed before a single line is written
+- **Dogfooding** -- CIDX builds itself with its own pipeline
+- **Minimal dependencies** -- Every import must justify its existence
+
+## How We Work
+
+### The Golden Rule: Discussion Before Code
+
+Every feature follows this cycle:
+
+1. **Discuss** -- The feature is talked through conversationally. What problem does it solve? What are the trade-offs? What's the simplest approach?
+2. **Specify** -- Write BDD scenarios (Gherkin) that capture the expected behavior. This is the contract.
+3. **Implement** -- Write the code to make scenarios pass. Nothing more.
+4. **Validate** -- Run the full test suite. If it passes, it ships.
+
+No code gets written before step 1 is complete. No implementation starts before step 2 has scenarios.
+
+### Decision Tracking: GitHub Issues + BDD Scenarios
+
+Instead of ADRs (too ceremonial for a solo project), decisions are tracked through:
+
+- **GitHub Issues** -- Feature discussions, design decisions, trade-off analysis. The issue thread IS the decision record. Use labels to categorize (`design`, `decision`, `question`).
+- **BDD Scenarios** -- The executable specification. Reading `features/` tells you what the system does and why.
+- **Conventional Commits** -- The commit history tells the story of what changed and when.
+
+The combination of issue discussion + scenario specification + commit history gives full traceability without the overhead.
+
+### Trunk-Based Development
+
+- `main` is the only long-lived branch
+- Feature branches are short-lived (hours to days, not weeks)
+- All changes go through PRs with CI validation
+- Releases are grouped (3-5 PRs per release) and manually triggered
+- Tags = Releases (1:1 mapping)
+
+Use `cidx action pr create`, `cidx action pr merge`, `cidx action release create` for the workflow.
+
+### TDD/BDD Strategy
+
+**BDD (Gherkin + godog)** -- System-level behavior:
+- Feature files in `features/` organized by domain (events, security, pipelines, presets, executor)
+- Step definitions in `*_steps_test.go` at project root
+- Simulation engine (no real Docker needed to run specs)
+- `Strict: false` -- Docker-dependent scenarios are pending, not failing
+
+**Unit tests** -- Package-level correctness:
+- Standard Go `*_test.go` files in each package
+- Focus on edge cases and error paths that BDD doesn't cover
+
+**The hierarchy**: BDD scenarios define WHAT the system does. Unit tests verify HOW individual pieces work. BDD comes first.
 
 ## Architecture
 
@@ -17,209 +84,109 @@ This file provides guidance to Claude Code when working with this repository.
 
 ```
 pkg/
-├── actions/         # Git workflow commands (PR, release, tag, cpw)
-│   ├── pr.go            # PR create/ready/merge
-│   ├── commit_push_watch.go  # Commit + push + watch CI
-│   ├── release*.go      # Release lifecycle
-│   ├── tag_*.go         # Tag prepare/create/delete/list
-│   ├── artifact.go      # Build artifact handling
-│   └── workflow_*.go    # CI workflow display/list
-├── branch/          # Branch listing, formatting, git operations
-│   ├── list.go          # Branch listing with filters (stale, merged, orphan)
-│   ├── git.go           # Git operations wrapper
-│   ├── format.go        # Output formatting
-│   └── types.go         # Branch-related types
-├── config/          # TOML/YAML config parsing and validation
-│   ├── parser.go        # Load, parse, expand env vars
-│   ├── validator.go     # Config validation
-│   └── types.go         # Config, Pipeline, ContainerConfig types
-├── environment/     # CI environment detection
-│   ├── detector.go      # Auto-detect CI provider (GH Actions, GitLab, Jenkins)
-│   └── security.go      # Local safety behaviors (no-push, draft, dry-run)
-├── executor/        # Container execution layer
-│   ├── docker.go        # Docker SDK wrapper
-│   ├── selector.go      # Docker/Podman runtime selection
-│   └── types.go         # Executor interface
-├── pipeline/        # Phase-based orchestration
-│   └── runner.go        # Sequential/parallel phase execution
-├── presets/         # Built-in container configurations
-│   ├── registry.go      # GlobalRegistry with 15+ presets
-│   ├── loader.go        # Load custom presets from .cidx/presets.toml
-│   └── types.go         # Preset, Option types
-├── registry/        # Container registry operations (DHI, login)
-│   └── registry.go
-├── remote/          # Git remote provider abstraction
-│   ├── provider.go      # Remote provider interface
-│   └── factory.go       # GitHub/GitLab provider factory
-├── validator/       # CI workflow validation
-│   └── workflow.go      # Validate cidx.toml ↔ CI config consistency
-└── vcs/             # Version control abstraction
-    └── repository.go    # Git repository operations
+  actions/       Git workflow commands (PR, release, tag, cpw)
+  branch/        Branch listing, formatting, git operations
+  config/        TOML parsing, validation, types
+  environment/   CI provider detection, local safety modes
+  executor/      Docker/Podman abstraction layer
+  pipeline/      Phase-based orchestration (sequential/parallel)
+  presets/       Built-in container configurations (40+ presets)
+  registry/      Container registry operations
+  remote/        Git remote provider abstraction (GitHub, GitLab)
+  validator/     CI workflow validation
+  vcs/           Version control operations
 
-cmd/cidx/
-├── main.go          # CLI entry point (urfave/cli)
-├── run.go           # `cidx run` command
-├── list.go          # `cidx list` command
-├── info.go          # `cidx info` command
-├── init.go          # `cidx init` command
-├── validate.go      # `cidx validate` command
-├── preset.go        # `cidx preset` subcommands
-├── action.go        # `cidx action` subcommands
-├── branch.go        # `cidx branch` subcommands
-├── status.go        # `cidx status` TUI dashboard
-├── check.go         # `cidx check` workflow validation
-├── registry.go      # `cidx registry` commands
-├── workflow.go      # CI workflow commands
-├── about.go         # `cidx about` version info
-├── demo.go          # `cidx demo` spinner animation
-├── vuln.go          # Vulnerability display
-├── artifact_tui.go  # Artifact TUI components
-├── merge_tui.go     # Merge TUI components
-└── release_tui.go   # Release TUI components
+cmd/cidx/        CLI entry point and command handlers (urfave/cli)
+features/        BDD scenarios (Gherkin)
+docs/            Project documentation
 ```
 
 ### Data Flow
 
-1. **Config Load**: `config.Load()` → Parse TOML → Expand `${ENV_VARS}`
-2. **Environment Detect**: `environment.Detect()` → CI provider, event type, local safety mode
-3. **Preset Merge**: For each enabled container:
-   - `presets.Get(name)` → Load from registry (built-in + custom)
-   - `preset.MergeWith(overrides)` → Apply user overrides from `cidx.toml`
-4. **Execution**:
-   - `executor.Select()` → Choose Docker or Podman
-   - `executor.Run()` → Pull image → Create container → Stream logs
-   - `pipeline.RunPhase()` → Execute containers in phase
-   - `pipeline.RunPipeline()` → Execute phases in sequence (or parallel locally)
+1. `config.Load()` -- Parse TOML, expand `${ENV_VARS}`
+2. `environment.Detect()` -- Identify CI provider, event type, safety mode
+3. `presets.Get(name)` + `preset.MergeWith(overrides)` -- Resolve container config
+4. `executor.Select()` -- Choose Docker or Podman
+5. `pipeline.RunPhase()` / `pipeline.RunPipeline()` -- Execute
 
 ### Key Abstractions
 
-- **Preset**: Complete container definition (image, command, workdir, volumes, env, options). Ships with sensible defaults.
-- **ContainerConfig**: Runtime-resolved config after merging preset + user overrides. Ready for Docker execution.
-- **Pipeline**: Named sequence of phases (`phases = ["security", "code", "test"]`). Mapped to events by convention.
-- **Executor**: Interface abstracting Docker/Podman with `Run()`, `Available()`, `Name()`, `Close()`.
-- **Environment**: Detected CI context (provider, event type, branch, tag, PR state, local safety mode).
+- **Preset** -- Complete container definition (image, command, workdir, volumes, env, options)
+- **ContainerConfig** -- Runtime-resolved config after merging preset + user overrides
+- **Pipeline** -- Named sequence of phases, mapped to events by convention
+- **Executor** -- Interface abstracting Docker/Podman (`Run()`, `Available()`, `Name()`, `Close()`)
+- **Environment** -- Detected CI context (provider, event, branch, tag, PR state, safety mode)
 
 ## Development Commands
 
-### Building
-
 ```bash
+# Build
 go build -o bin/cidx ./cmd/cidx
-```
 
-### Testing
-
-```bash
+# Test
 go test ./...                         # All tests (unit + BDD)
-go test -v ./pkg/presets              # Specific package
+go test -v -run TestFeatures          # BDD scenarios only
 go test -cover ./...                  # With coverage
-go test -v -run TestFeatures          # BDD scenarios only (godog)
-```
 
-BDD tests use [godog](https://github.com/cucumber/godog) with feature files in `features/`. Step definitions are in `*_steps_test.go` at the project root. Tests use a simulation engine (not the real binary) and `Strict: false` so Docker-dependent scenarios are pending, not failing.
-
-### Running Locally
-
-```bash
-go run ./cmd/cidx list                # List available containers
-go run ./cmd/cidx info trivy          # Show container information
-go run ./cmd/cidx validate            # Validate config
-go run ./cmd/cidx run --dry-run ci    # Dry-run a pipeline
-```
-
-### Preset Management
-
-```bash
-cidx preset list                      # List all presets by phase
-cidx preset info trivy                # Show preset details
-cidx preset search security           # Search presets
-cidx preset export -o presets.toml    # Export all presets
-cidx preset images                    # List images (deduplicated)
-cidx preset check-updates             # Check for newer image versions
-cidx preset scan                      # Scan images with Trivy + Grype
-```
-
-### Code Quality
-
-```bash
+# Quality
 go fmt ./...
 go vet ./...
 golangci-lint run
+
+# Run locally
+go run ./cmd/cidx list                # List containers
+go run ./cmd/cidx run --dry-run ci    # Dry-run pipeline
+
+# Workflow (use cidx itself)
+cidx action pr create "feat: description"
+cidx action cpw -m "commit message"
+cidx action pr merge
+cidx action release create
+cidx run ci                           # Full local CI
 ```
 
 ## Adding New Presets
 
-Add to `pkg/presets/registry.go`:
-
 ```go
+// In pkg/presets/registry.go
 "toolname": {
     Name:    "toolname",
-    Phase:   "security",                      // security, code, test, build, docker, release
-    Image:   "org/image:tag",                 // Official Docker image
+    Phase:   "security",  // security, code, test, build, docker, release
+    Image:   "org/image:tag",
     Command: "tool scan .",
     Workdir: "/scan",
     Volumes: []string{"${WORKSPACE}:/scan"},
-    // Optional:
-    Env:         map[string]string{"KEY": "value"},
-    ConfigFiles: []string{".toolrc", "tool.yaml"},
-    Options: map[string]Option{
-        "severity": {Type: "string", Default: "HIGH", CommandFlag: "--severity"},
-    },
 }
 ```
 
-Guidelines:
+Rules: use official images (prefer DHI), defaults must work without overrides, test with `cidx run toolname --dry-run`.
 
-1. Use official images (prefer DHI variants)
-2. Defaults must work without overrides
-3. Test with `cidx run toolname --dry-run`
-
-## Configuration Patterns
+## Configuration
 
 ```toml
-# Minimal (recommended)
+# Minimal -- this is all you need
 [security]
 containers = ["trivy", "gitleaks"]
 
 [pipelines.ci]
 phases = ["security", "code"]
 
-# With overrides
+# Override only when defaults don't fit
 [containers.trivy]
 severity = "HIGH,CRITICAL"
-exit_code = 1
-
-# Custom container
-[containers.custom-scanner]
-phase = "security"
-image = "myorg/scanner:latest"
-command = "scan ."
-volumes = ["${WORKSPACE}:/scan"]
 ```
 
-## Design Principles
+## Dependencies
 
-1. **Convention over Configuration** — Built-in presets eliminate boilerplate. Overrides are exceptional.
-2. **Declarative over Imperative** — User declares what to run, not how. No shell scripting needed.
-3. **KISS** — Single config file. Container names are the only required input.
-4. **Container-native** — Everything runs in containers. Nothing installed on the host. Clean workspace, portable results.
-5. **Security by Default** — Docker Hardened Images, vulnerability scanning presets included.
-6. **Explicit over Magic** — Dry-run mode, transparent merge logic, clear preset definitions.
+Core: `BurntSushi/toml`, `docker/docker`, `urfave/cli/v2`, `charmbracelet/bubbletea`, `sirupsen/logrus`
+Test only: `cucumber/godog`
+
+Every dependency must justify its presence. No utility libraries, no "just in case" imports.
 
 ## Code Style
 
 - **Presets**: lowercase, hyphen-separated (`"ansible-lint"`)
 - **Go types**: PascalCase (`Preset`, `ContainerConfig`)
-- **Functions**: camelCase (`mergeWith`, `expandVolumes`)
 - **Errors**: Always wrap with context: `fmt.Errorf("context: %w", err)`
-- **Logging**: Use logrus. Distinguish user errors from system errors.
-
-## Dependencies
-
-- `github.com/BurntSushi/toml` — TOML parsing
-- `github.com/docker/docker` — Docker SDK
-- `github.com/urfave/cli/v2` — CLI framework
-- `github.com/sirupsen/logrus` — Structured logging
-- `github.com/cucumber/godog` — BDD testing (test only)
-
-Keep dependencies minimal.
+- **Logging**: logrus. User errors vs system errors are distinct.
+- **No dead code**: If it's not used, delete it. No `// TODO` for core functionality.

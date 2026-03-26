@@ -11,6 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/cidx-org/cidx/internal/tui"
 	"github.com/cidx-org/cidx/pkg/environment"
 	"github.com/urfave/cli/v2"
 )
@@ -20,39 +21,17 @@ func detectEnv() *environment.Environment {
 	return environment.Detect()
 }
 
-// Styles
+// Styles - aliased from shared tui package for local readability
 var (
-	titleStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("39")).
-			Padding(0, 1)
-
-	boxStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("240")).
-			Padding(0, 1)
-
-	valueStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("255"))
-
-	successStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("42"))
-
-	warningStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("214"))
-
-	errorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("196"))
-
-	pendingStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("33"))
-
-	dimStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240"))
-
-	helpStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241")).
-			Padding(1, 0, 0, 0)
+	titleStyle   = tui.Title
+	boxStyle     = tui.Box
+	valueStyle   = tui.Value
+	successStyle = tui.Success
+	warningStyle = tui.Warning
+	errorStyle   = tui.Error
+	pendingStyle = tui.Pending
+	dimStyle     = tui.Dim
+	helpStyle    = tui.Help
 )
 
 // StatusInfo holds all gathered information
