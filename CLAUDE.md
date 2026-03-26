@@ -67,12 +67,14 @@ Use `cidx action pr create`, `cidx action pr merge`, `cidx action release create
 ### TDD/BDD Strategy
 
 **BDD (Gherkin + godog)** -- System-level behavior:
+
 - Feature files in `features/` organized by domain (events, security, pipelines, presets, executor)
 - Step definitions in `*_steps_test.go` at project root
 - Simulation engine (no real Docker needed to run specs)
 - `Strict: false` -- Docker-dependent scenarios are pending, not failing
 
 **Unit tests** -- Package-level correctness:
+
 - Standard Go `*_test.go` files in each package
 - Focus on edge cases and error paths that BDD doesn't cover
 
