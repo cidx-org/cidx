@@ -1,0 +1,666 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"os/exec"
+	"regexp"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/cidx-org/cidx/pkg/presets"
+	"github.com/urfave/cli/v2"
+)
+
+// presetCheckUpdatesCommand checks for available updates for container images
+func presetCheckUpdatesCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "check-updates",
+		Usage: "Check for available updates for container images",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "json",
+				Usage: "Output as JSON",
+			},
+		},
+		Action: func(c *cli.Context) error {
+			jsonOutput := c.Bool("json")
+
+			if !jsonOutput {
+				fmt.Println("Checking container image versions...")
+				fmt.Println()
+			}
+
+			type updateResult struct {
+				Name      string `json:"name"`
+				Image     string `json:"image"`      // Full image reference (with tag)
+				ImageBase string `json:"image_base"` // Image without tag
+				Current   string `json:"current"`
+				Latest    string `json:"latest"`
+				HasUpdate bool   `json:"has_update"`
+				Error     string `json:"error,omitempty"`
+			}
+
+			var results []updateResult
+			var updatesAvailable int
+
+			for _, name := range presets.List() {
+				preset, _ := presets.Get(name)
+
+				// Parse image
+				imageName, currentTag := parseImageTag(preset.Image)
+
+				// Get latest tag
+				latestTag, err := getLatestTag(imageName, currentTag)
+
+				result := updateResult{
+					Name:      name,
+					Image:     preset.Image, // Full image reference
+					ImageBase: imageName,    // Image without tag
+					Current:   currentTag,
+				}
+
+				if err != nil {
+					result.Error = err.Error()
+					result.Latest = "?"
+				} else {
+					result.Latest = latestTag
+					result.HasUpdate = latestTag != currentTag && latestTag != ""
+					if result.HasUpdate {
+						updatesAvailable++
+					}
+				}
+
+				results = append(results, result)
+			}
+
+			// Sort by name
+			sort.Slice(results, func(i, j int) bool {
+				return results[i].Name < results[j].Name
+			})
+
+			if c.Bool("json") {
+				encoder := json.NewEncoder(os.Stdout)
+				encoder.SetIndent("", "  ")
+				return encoder.Encode(results)
+			}
+
+			// Print results
+			for _, r := range results {
+				if r.Error != "" {
+					fmt.Printf("  \033[33m%-20s\033[0m %s\n", r.Name, r.Error)
+				} else if r.HasUpdate {
+					fmt.Printf("  \033[32m%-20s\033[0m %s → %s \033[32m⬆️  Update available\033[0m\n",
+						r.Name, r.Current, r.Latest)
+				} else {
+					fmt.Printf("  %-20s %s \033[90m✓ Up to date\033[0m\n", r.Name, r.Current)
+				}
+			}
+
+			fmt.Println()
+			if updatesAvailable > 0 {
+				fmt.Printf("📦 %d update(s) available\n", updatesAvailable)
+			} else {
+				fmt.Println("✅ All containers are up to date")
+			}
+
+			return nil
+		},
+	}
+}
+
+// parseImageTag splits an image reference into name and tag
+func parseImageTag(image string) (name, tag string) {
+	// Handle images with digest
+	if idx := strings.Index(image, "@"); idx != -1 {
+		return image[:idx], image[idx+1:]
+	}
+
+	// Handle images with tag
+	if idx := strings.LastIndex(image, ":"); idx != -1 {
+		// Make sure it's not a port number (registry:port/image)
+		afterColon := image[idx+1:]
+		if !strings.Contains(afterColon, "/") {
+			return image[:idx], afterColon
+		}
+	}
+
+	return image, "latest"
+}
+
+// getLatestTag fetches the latest tag for an image from its registry
+// currentTag is used to preserve variant suffixes (e.g., -alpine, -slim)
+func getLatestTag(image, currentTag string) (string, error) {
+	// Determine registry and repository
+	registry, repo := parseRegistry(image)
+
+	// Extract variant suffix from current tag (e.g., "1.24-alpine" -> "-alpine")
+	variantSuffix := extractVariantSuffix(currentTag)
+
+	switch registry {
+	case "docker.io":
+		return getDockerHubLatestTag(repo, variantSuffix)
+	case "quay.io":
+		return getQuayLatestTag(repo, variantSuffix)
+	case "gcr.io", "ghcr.io":
+		// GitHub/Google Container Registry - harder to query without auth
+		return "", fmt.Errorf("registry %s not supported yet", registry)
+	default:
+		return "", fmt.Errorf("unknown registry: %s", registry)
+	}
+}
+
+// extractVariantSuffix extracts the variant suffix from a tag
+// e.g., "1.24-alpine" -> "-alpine", "v2.3.0" -> ""
+func extractVariantSuffix(tag string) string {
+	// Common variant patterns
+	variants := []string{"-alpine", "-slim", "-bullseye", "-bookworm", "-buster", "-jammy", "-focal"}
+	for _, v := range variants {
+		if strings.HasSuffix(tag, v) {
+			return v
+		}
+	}
+	return ""
+}
+
+// parseRegistry extracts registry and repository from image name
+func parseRegistry(image string) (registry, repo string) {
+	parts := strings.SplitN(image, "/", 2)
+
+	// Check if first part looks like a registry
+	if len(parts) == 2 && (strings.Contains(parts[0], ".") || strings.Contains(parts[0], ":")) {
+		return parts[0], parts[1]
+	}
+
+	// Docker Hub official images (e.g., "alpine", "golang")
+	if len(parts) == 1 {
+		return "docker.io", "library/" + parts[0]
+	}
+
+	// Docker Hub user images (e.g., "user/repo")
+	return "docker.io", image
+}
+
+// getDockerHubLatestTag gets the latest tag from Docker Hub
+// variantSuffix is the variant to match (e.g., "-alpine", "" for pure semver)
+func getDockerHubLatestTag(repo, variantSuffix string) (string, error) {
+	url := fmt.Sprintf("https://hub.docker.com/v2/repositories/%s/tags?page_size=100&ordering=last_updated", repo)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Results []struct {
+			Name string `json:"name"`
+		} `json:"results"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+
+	// Build regex based on variant suffix
+	// For "-alpine": match "X.Y-alpine" or "X.Y.Z-alpine"
+	// For "": match pure "X.Y" or "X.Y.Z"
+	var semverRegex *regexp.Regexp
+	if variantSuffix != "" {
+		// Escape the suffix for regex and require it at the end
+		escapedSuffix := regexp.QuoteMeta(variantSuffix)
+		semverRegex = regexp.MustCompile(`^v?[0-9]+\.[0-9]+(\.[0-9]+)?` + escapedSuffix + `$`)
+	} else {
+		// Pure semver only
+		semverRegex = regexp.MustCompile(`^v?[0-9]+\.[0-9]+(\.[0-9]+)?$`)
+	}
+
+	for _, tag := range result.Results {
+		if tag.Name != "latest" && !strings.Contains(tag.Name, "sha") &&
+			!strings.Contains(tag.Name, "nightly") && semverRegex.MatchString(tag.Name) {
+			return tag.Name, nil
+		}
+	}
+
+	// No matching semver tag found
+	return "", fmt.Errorf("no semver tags found with suffix '%s'", variantSuffix)
+}
+
+// getQuayLatestTag gets the latest tag from Quay.io
+// variantSuffix is the variant to match (e.g., "-alpine", "" for pure semver)
+func getQuayLatestTag(repo, variantSuffix string) (string, error) {
+	url := fmt.Sprintf("https://quay.io/api/v1/repository/%s/tag/?limit=50", repo)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Tags []struct {
+			Name string `json:"name"`
+		} `json:"tags"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+
+	// Build regex based on variant suffix
+	var semverRegex *regexp.Regexp
+	if variantSuffix != "" {
+		escapedSuffix := regexp.QuoteMeta(variantSuffix)
+		semverRegex = regexp.MustCompile(`^v?[0-9]+\.[0-9]+(\.[0-9]+)?` + escapedSuffix + `$`)
+	} else {
+		semverRegex = regexp.MustCompile(`^v?[0-9]+\.[0-9]+(\.[0-9]+)?$`)
+	}
+
+	for _, tag := range result.Tags {
+		if tag.Name != "latest" && semverRegex.MatchString(tag.Name) {
+			return tag.Name, nil
+		}
+	}
+
+	return "", fmt.Errorf("no semver tags found with suffix '%s'", variantSuffix)
+}
+
+// presetScanCommand scans all preset container images for security vulnerabilities
+func presetScanCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "scan",
+		Usage: "Scan all preset container images for security vulnerabilities",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "scanner",
+				Aliases: []string{"s"},
+				Usage:   "Scanner to use: trivy, grype, or all (default: all)",
+				Value:   "all",
+			},
+			&cli.StringFlag{
+				Name:    "severity",
+				Usage:   "Minimum severity to report: LOW, MEDIUM, HIGH, CRITICAL",
+				Value:   "HIGH",
+			},
+			&cli.BoolFlag{
+				Name:  "json",
+				Usage: "Output as JSON",
+			},
+			&cli.StringFlag{
+				Name:    "preset",
+				Aliases: []string{"p"},
+				Usage:   "Scan only a specific preset",
+			},
+			&cli.BoolFlag{
+				Name:    "verbose",
+				Aliases: []string{"v"},
+				Usage:   "Show container logs in real-time",
+			},
+		},
+		Action: func(c *cli.Context) error {
+			scanner := c.String("scanner")
+			severity := strings.ToUpper(c.String("severity"))
+			jsonOutput := c.Bool("json")
+			presetFilter := c.String("preset")
+			verbose := c.Bool("verbose")
+
+			// Validate scanner choice
+			if scanner != "trivy" && scanner != "grype" && scanner != "all" {
+				return fmt.Errorf("invalid scanner: %s (use trivy, grype, or all)", scanner)
+			}
+
+			// Check if docker is available
+			if _, err := exec.LookPath("docker"); err != nil {
+				return fmt.Errorf("docker is required but not found in PATH")
+			}
+
+			type scanResult struct {
+				Name        string `json:"name"`
+				Image       string `json:"image"`
+				TrivyStatus string `json:"trivy_status,omitempty"`
+				GrypeStatus string `json:"grype_status,omitempty"`
+				Vulnerable  bool   `json:"vulnerable"`
+				Error       string `json:"error,omitempty"`
+			}
+
+			var results []scanResult
+			var vulnerableCount int
+
+			// Get list of presets to scan
+			presetNames := presets.List()
+			if presetFilter != "" {
+				// Check if preset exists
+				if _, err := presets.Get(presetFilter); err != nil {
+					return err
+				}
+				presetNames = []string{presetFilter}
+			}
+
+			if !jsonOutput {
+				fmt.Printf("Scanning %d container image(s) with %s...\n\n", len(presetNames), scanner)
+			}
+
+			for _, name := range presetNames {
+				preset, _ := presets.Get(name)
+
+				result := scanResult{
+					Name:  name,
+					Image: preset.Image,
+				}
+
+				if !jsonOutput {
+					fmt.Printf("Scanning %s (%s)...\n", name, preset.Image)
+				}
+
+				hasVuln := false
+
+				// Run Trivy scan
+				if scanner == "trivy" || scanner == "all" {
+					trivyResult := runTrivyScan(preset.Image, severity, verbose)
+					result.TrivyStatus = trivyResult
+					if trivyResult != "clean" {
+						hasVuln = true
+					}
+					if !jsonOutput {
+						if trivyResult == "clean" {
+							fmt.Printf("  Trivy: clean\n")
+						} else {
+							fmt.Printf("  Trivy: %s\n", trivyResult)
+						}
+					}
+				}
+
+				// Run Grype scan
+				if scanner == "grype" || scanner == "all" {
+					grypeResult := runGrypeScan(preset.Image, severity, verbose)
+					result.GrypeStatus = grypeResult
+					if grypeResult != "clean" {
+						hasVuln = true
+					}
+					if !jsonOutput {
+						if grypeResult == "clean" {
+							fmt.Printf("  Grype: clean\n")
+						} else {
+							fmt.Printf("  Grype: %s\n", grypeResult)
+						}
+					}
+				}
+
+				result.Vulnerable = hasVuln
+				if hasVuln {
+					vulnerableCount++
+				}
+				results = append(results, result)
+
+				if !jsonOutput {
+					fmt.Println()
+				}
+			}
+
+			if jsonOutput {
+				encoder := json.NewEncoder(os.Stdout)
+				encoder.SetIndent("", "  ")
+				return encoder.Encode(results)
+			}
+
+			// Print summary
+			fmt.Println("========================================")
+			fmt.Printf("Scanned: %d containers\n", len(results))
+			fmt.Printf("Clean: %d\n", len(results)-vulnerableCount)
+			fmt.Printf("Vulnerable: %d\n", vulnerableCount)
+			fmt.Println("========================================")
+
+			if vulnerableCount > 0 {
+				return fmt.Errorf("%d container(s) have vulnerabilities", vulnerableCount)
+			}
+
+			return nil
+		},
+	}
+}
+
+// runTrivyScan runs Trivy security scan on an image
+func runTrivyScan(image, severity string, verbose bool) string {
+	args := []string{"run", "--rm", "aquasec/trivy:latest", "image",
+		"--severity", severity + ",CRITICAL",
+		"--exit-code", "1"}
+
+	// In non-verbose mode, add --quiet flag
+	if !verbose {
+		args = append(args, "--quiet")
+	}
+	args = append(args, image)
+
+	cmd := exec.Command("docker", args...)
+
+	if verbose {
+		// Stream output in real-time
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err := cmd.Run()
+		if err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				if exitErr.ExitCode() == 1 {
+					return fmt.Sprintf("vulnerabilities found (%s+)", severity)
+				}
+			}
+			return fmt.Sprintf("error: %v", err)
+		}
+		return "clean"
+	}
+
+	// Non-verbose: capture output silently
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			if exitErr.ExitCode() == 1 {
+				return fmt.Sprintf("vulnerabilities found (%s+)", severity)
+			}
+		}
+		return fmt.Sprintf("error: %v", err)
+	}
+	_ = output
+	return "clean"
+}
+
+// runGrypeScan runs Grype security scan on an image
+func runGrypeScan(image, severity string, verbose bool) string {
+	failOn := strings.ToLower(severity)
+	args := []string{"run", "--rm", "anchore/grype:latest", image, "--fail-on", failOn}
+
+	// In non-verbose mode, add --quiet flag
+	if !verbose {
+		args = append(args, "--quiet")
+	}
+
+	cmd := exec.Command("docker", args...)
+
+	if verbose {
+		// Stream output in real-time
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err := cmd.Run()
+		if err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				if exitErr.ExitCode() == 1 {
+					return fmt.Sprintf("vulnerabilities found (%s+)", severity)
+				}
+			}
+			return fmt.Sprintf("error: %v", err)
+		}
+		return "clean"
+	}
+
+	// Non-verbose: capture output silently
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			if exitErr.ExitCode() == 1 {
+				return fmt.Sprintf("vulnerabilities found (%s+)", severity)
+			}
+		}
+		return fmt.Sprintf("error: %v", err)
+	}
+	_ = output
+	return "clean"
+}
+
+// presetImagesCommand lists unique container images used by presets
+func presetImagesCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "images",
+		Usage: "List unique container images used by presets (deduplicated)",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "json",
+				Usage: "Output as JSON",
+			},
+			&cli.BoolFlag{
+				Name:  "verbose",
+				Usage: "Show which presets use each image",
+			},
+		},
+		Action: func(c *cli.Context) error {
+			jsonOutput := c.Bool("json")
+			verbose := c.Bool("verbose")
+
+			// Build map of image -> presets using it
+			imagePresets := make(map[string][]string)
+			for _, name := range presets.List() {
+				preset, _ := presets.Get(name)
+				imagePresets[preset.Image] = append(imagePresets[preset.Image], name)
+			}
+
+			// Get sorted unique images
+			images := make([]string, 0, len(imagePresets))
+			for img := range imagePresets {
+				images = append(images, img)
+			}
+			sort.Strings(images)
+
+			if jsonOutput {
+				type imageInfo struct {
+					Image   string   `json:"image"`
+					Presets []string `json:"presets"`
+				}
+				var result []imageInfo
+				for _, img := range images {
+					presetsUsing := imagePresets[img]
+					sort.Strings(presetsUsing)
+					result = append(result, imageInfo{
+						Image:   img,
+						Presets: presetsUsing,
+					})
+				}
+				encoder := json.NewEncoder(os.Stdout)
+				encoder.SetIndent("", "  ")
+				return encoder.Encode(result)
+			}
+
+			// Calculate deduplication stats
+			totalPresets := len(presets.List())
+			uniqueImages := len(images)
+			duplicates := totalPresets - uniqueImages
+
+			fmt.Printf("Unique container images: %d (from %d presets, %d deduplicated)\n\n",
+				uniqueImages, totalPresets, duplicates)
+
+			for _, img := range images {
+				presetsUsing := imagePresets[img]
+				if verbose || len(presetsUsing) > 1 {
+					sort.Strings(presetsUsing)
+					fmt.Printf("  %s\n", img)
+					fmt.Printf("    └─ Used by: %s\n", strings.Join(presetsUsing, ", "))
+				} else {
+					fmt.Printf("  %s\n", img)
+				}
+			}
+
+			return nil
+		},
+	}
+}
+
+// presetScanTargetsCommand returns deduplicated list of images to scan (with updates resolved)
+func presetScanTargetsCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "scan-targets",
+		Usage: "Get deduplicated list of images to scan (checks for updates, returns new or current)",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "json",
+				Usage: "Output as JSON (required for CI)",
+				Value: true,
+			},
+		},
+		Action: func(c *cli.Context) error {
+			type scanTarget struct {
+				CurrentImage string   `json:"current_image"`
+				ScanImage    string   `json:"scan_image"`
+				IsUpdate     bool     `json:"is_update"`
+				Presets      []string `json:"presets"`
+				Error        string   `json:"error,omitempty"`
+			}
+
+			// Build map of current image -> presets using it
+			imagePresets := make(map[string][]string)
+			for _, name := range presets.List() {
+				preset, _ := presets.Get(name)
+				imagePresets[preset.Image] = append(imagePresets[preset.Image], name)
+			}
+
+			// Get sorted unique current images
+			currentImages := make([]string, 0, len(imagePresets))
+			for img := range imagePresets {
+				currentImages = append(currentImages, img)
+			}
+			sort.Strings(currentImages)
+
+			var targets []scanTarget
+
+			for _, currentImage := range currentImages {
+				presetsUsing := imagePresets[currentImage]
+				sort.Strings(presetsUsing)
+
+				target := scanTarget{
+					CurrentImage: currentImage,
+					ScanImage:    currentImage, // Default: scan current
+					IsUpdate:     false,
+					Presets:      presetsUsing,
+				}
+
+				// Check for update
+				imageName, currentTag := parseImageTag(currentImage)
+				latestTag, err := getLatestTag(imageName, currentTag)
+
+				if err != nil {
+					target.Error = err.Error()
+					// Still scan current image on error
+				} else if latestTag != currentTag && latestTag != "" {
+					// Update available - scan the new version
+					target.ScanImage = imageName + ":" + latestTag
+					target.IsUpdate = true
+				}
+
+				targets = append(targets, target)
+			}
+
+			encoder := json.NewEncoder(os.Stdout)
+			encoder.SetIndent("", "  ")
+			return encoder.Encode(targets)
+		},
+	}
+}
