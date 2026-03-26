@@ -291,7 +291,7 @@ func FormatList(registries []RegistryInfo) string {
 			username = fmt.Sprintf("%s (via %s)", username, r.CredsHelper)
 		}
 
-		sb.WriteString(fmt.Sprintf("%-35s %-20s %s\n", r.Name, status, username))
+		fmt.Fprintf(&sb, "%-35s %-20s %s\n", r.Name, status, username)
 	}
 
 	sb.WriteString("\n")
@@ -302,12 +302,12 @@ func FormatList(registries []RegistryInfo) string {
 func FormatStatus(info *RegistryInfo) string {
 	var sb strings.Builder
 	sb.WriteString("\n")
-	sb.WriteString(fmt.Sprintf("Registry: %s\n", info.Name))
+	fmt.Fprintf(&sb, "Registry: %s\n", info.Name)
 	sb.WriteString("─────────────────────────────────\n")
 
 	if info.Authenticated {
 		sb.WriteString("Status:   \033[32m✓ Authenticated\033[0m\n")
-		sb.WriteString(fmt.Sprintf("Username: %s\n", info.Username))
+		fmt.Fprintf(&sb, "Username: %s\n", info.Username)
 		if info.CredsHelper != "" {
 			sb.WriteString(fmt.Sprintf("Backend:  %s (credential helper)\n", info.CredsHelper))
 		}
