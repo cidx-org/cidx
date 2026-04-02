@@ -74,6 +74,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	RegisterExecutorSteps(ctx, testCtx)
 	RegisterPresetSteps(ctx, testCtx)
 	RegisterQuietSteps(ctx, testCtx)
+	RegisterDoctorSteps(ctx, testCtx)
 
 	// Hooks
 	ctx.Before(func(ctx context.Context, sc *godog.Scenario) (context.Context, error) {

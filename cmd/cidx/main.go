@@ -30,6 +30,7 @@ func main() {
 			branchCommand(),
 			registryCommand(),
 			vulnCommand(),
+			doctorCommand(),
 			demoCommand(),
 			aboutCommand(),
 		},
