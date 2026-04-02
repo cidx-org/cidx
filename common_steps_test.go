@@ -188,6 +188,12 @@ func (tc *TestContext) simulateCIDXCommand(cmdStr string) error {
 	// Check for flags
 	tc.CommandFlags = append(tc.CommandFlags, parts...)
 
+	// Handle cidx doctor separately
+	if len(parts) >= 2 && parts[0] == "cidx" && parts[1] == "doctor" {
+		tc.simulateDoctorIfNeeded()
+		return nil
+	}
+
 	// Determine what pipeline/phase is being run
 	pipelineName := ""
 	if len(parts) >= 3 && parts[0] == "cidx" && parts[1] == "run" {
