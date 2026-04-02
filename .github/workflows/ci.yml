@@ -7,15 +7,15 @@ on:
     branches: [main]
 
 jobs:
-  # Security: Scan for vulnerabilities and secrets
-  security:
-    name: Security
+  # Bootstrap: Build CIDX binary once, share across all jobs
+  bootstrap:
+    name: Bootstrap
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Full history for gitleaks
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -23,16 +23,42 @@ jobs:
           go-version: "1.23"
           cache: true
 
-      # Login to DHI (Docker Hardened Images) for hardened container images
+      - name: Build CIDX
+        run: go build -o bin/cidx ./cmd/cidx
+
+      - name: Upload CIDX binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: cidx-binary
+          path: bin/cidx
+          retention-days: 1
+
+  # Security: Scan for vulnerabilities and secrets
+  security:
+    name: Security
+    runs-on: ubuntu-latest
+    needs: [bootstrap]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history for gitleaks
+
+      - name: Download CIDX binary
+        uses: actions/download-artifact@v4
+        with:
+          name: cidx-binary
+          path: bin
+
+      - name: Make binary executable
+        run: chmod +x bin/cidx
+
       - name: Login to Docker Hardened Images
         uses: docker/login-action@v3
         with:
           registry: dhi.io
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build CIDX
-        run: go build -o bin/cidx ./cmd/cidx
 
       - name: Run security checks
         run: ./bin/cidx run security
@@ -41,18 +67,21 @@ jobs:
   code:
     name: Code Quality
     runs-on: ubuntu-latest
-    needs: [security]
+    needs: [bootstrap]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0 # Full history for commitizen
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - name: Download CIDX binary
+        uses: actions/download-artifact@v4
         with:
-          go-version: "1.23"
-          cache: true
+          name: cidx-binary
+          path: bin
+
+      - name: Make binary executable
+        run: chmod +x bin/cidx
 
       - name: Login to Docker Hardened Images
         uses: docker/login-action@v3
@@ -60,9 +89,6 @@ jobs:
           registry: dhi.io
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build CIDX
-        run: go build -o bin/cidx ./cmd/cidx
 
       - name: Run code quality checks
         run: ./bin/cidx run code
@@ -71,16 +97,19 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    needs: [security, code]
+    needs: [bootstrap]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - name: Download CIDX binary
+        uses: actions/download-artifact@v4
         with:
-          go-version: "1.23"
-          cache: true
+          name: cidx-binary
+          path: bin
+
+      - name: Make binary executable
+        run: chmod +x bin/cidx
 
       - name: Login to Docker Hardened Images
         uses: docker/login-action@v3
@@ -88,9 +117,6 @@ jobs:
           registry: dhi.io
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build CIDX
-        run: go build -o bin/cidx ./cmd/cidx
 
       - name: Run tests
         run: ./bin/cidx run test
@@ -99,17 +125,20 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: [test]
+    needs: [security, code, test]
     if: github.ref == 'refs/heads/main'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - name: Download CIDX binary
+        uses: actions/download-artifact@v4
         with:
-          go-version: "1.23"
-          cache: true
+          name: cidx-binary
+          path: bin
+
+      - name: Make binary executable
+        run: chmod +x bin/cidx
 
       - name: Login to Docker Hardened Images
         uses: docker/login-action@v3
@@ -117,9 +146,6 @@ jobs:
           registry: dhi.io
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build CIDX
-        run: go build -o bin/cidx ./cmd/cidx
 
       - name: Build final binary
         run: ./bin/cidx run build
