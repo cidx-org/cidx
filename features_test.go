@@ -16,16 +16,18 @@ const (
 	TestRepo      = TestRepoOwner + "/" + TestRepoName
 )
 
-// TestFeatures runs all BDD scenarios
+// TestFeatures runs BDD scenarios that don't require Docker (strict mode).
+// These are the living documentation -- if they fail, the spec is broken.
 func TestFeatures(t *testing.T) {
 	suite := godog.TestSuite{
 		ScenarioInitializer: InitializeScenario,
 		Options: &godog.Options{
 			Format:   getFormat(),
 			Paths:    []string{"features"},
+			Tags:     "~@docker-required",
 			TestingT: t,
 			Output:   colors.Colored(os.Stdout),
-			Strict:   false, // pending steps OK (e.g. Docker not available)
+			Strict:   true,
 			NoColors: false,
 		},
 	}
@@ -33,6 +35,29 @@ func TestFeatures(t *testing.T) {
 	status := suite.Run()
 	if status != 0 {
 		t.Fatalf("BDD scenarios failed with status %d", status)
+	}
+}
+
+// TestFeaturesDocker runs scenarios that require Docker daemon control.
+// These run in best-effort mode -- pending steps are acceptable when
+// the Docker environment cannot be fully controlled (e.g. in CI without DinD).
+func TestFeaturesDocker(t *testing.T) {
+	suite := godog.TestSuite{
+		ScenarioInitializer: InitializeScenario,
+		Options: &godog.Options{
+			Format:   getFormat(),
+			Paths:    []string{"features"},
+			Tags:     "@docker-required",
+			TestingT: t,
+			Output:   colors.Colored(os.Stdout),
+			Strict:   false,
+			NoColors: false,
+		},
+	}
+
+	status := suite.Run()
+	if status != 0 {
+		t.Fatalf("Docker-dependent BDD scenarios failed with status %d", status)
 	}
 }
 

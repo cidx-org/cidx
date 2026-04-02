@@ -14,6 +14,7 @@ Feature: Executor Backend Selection
       Then the backend should be "docker"
       And I should see "Backend: Docker (auto-detected)"
 
+    @docker-required
     Scenario: Podman is selected when Docker is unavailable
       Given Docker daemon is NOT running
       And Podman is available
@@ -21,6 +22,7 @@ Feature: Executor Backend Selection
       Then the backend should be "podman"
       And I should see "Backend: Podman (auto-detected)"
 
+    @docker-required
     Scenario: Error when no container runtime is available
       Given Docker daemon is NOT running
       And Podman is NOT available
@@ -37,12 +39,14 @@ Feature: Executor Backend Selection
       Then the backend should be "docker"
       And I should see "Backend: docker (forced)"
 
+    @docker-required
     Scenario: Force Podman backend
       Given Podman is available
       When I run "cidx run security --backend podman"
       Then the backend should be "podman"
       And I should see "Backend: podman (forced)"
 
+    @docker-required
     Scenario: Error when forcing unavailable backend
       Given Docker daemon is NOT running
       When I run "cidx run security --backend docker"
@@ -94,6 +98,7 @@ Feature: Executor Backend Selection
       And I should see "Would execute:"
       And no container should actually run
 
+    @docker-required
     Scenario: Dry-run works even when no runtime available
       Given Docker daemon is NOT running
       And Podman is NOT available

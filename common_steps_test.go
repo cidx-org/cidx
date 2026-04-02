@@ -47,7 +47,7 @@ func RegisterCommonSteps(ctx *godog.ScenarioContext, testCtx *TestContext) {
 	ctx.Then(`^I should see error message about (.+)$`, testCtx.shouldSeeErrorAbout)
 	ctx.Then(`^I should see message "([^"]*)"$`, testCtx.shouldSeeMessage)
 	ctx.Then(`^I should see message containing "([^"]*)"$`, testCtx.shouldSeeMessageContaining)
-	ctx.Then(`^I should see (.+) results$`, testCtx.shouldSeeResults)
+	ctx.Then(`^I should see (test|build|lint) results$`, testCtx.shouldSeeResults)
 	ctx.Then(`^I should see which (.+) failed$`, testCtx.shouldSeeWhichFailed)
 	ctx.Then(`^I should NOT see the standard output of the tool$`, testCtx.shouldNotSeeStdOutput)
 	ctx.Then(`^I should only see logs for failed tools$`, testCtx.shouldOnlySeeFailedLogs)
