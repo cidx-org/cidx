@@ -31,6 +31,7 @@ func main() {
 			registryCommand(),
 			vulnCommand(),
 			doctorCommand(),
+			generateCommand(),
 			demoCommand(),
 			aboutCommand(),
 		},
