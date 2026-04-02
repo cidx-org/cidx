@@ -12,47 +12,23 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/cidx-org/cidx/internal/tui"
 	"github.com/cidx-org/cidx/pkg/actions"
 	"github.com/cidx-org/cidx/pkg/config"
 	"github.com/cidx-org/cidx/pkg/remote"
 	"github.com/cidx-org/cidx/pkg/vcs"
 )
 
-// Release TUI styles
+// Release TUI styles - aliased from shared tui package
 var (
-	releaseTitleStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("39")).
-				Padding(0, 1)
-
-	releaseBoxStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("240")).
-			Padding(0, 1)
-
-	releaseActiveBoxStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color("39")).
-				Padding(0, 1)
-
-	releaseLabelStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("39")).
-				Bold(true)
-
-	releaseValueStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("255"))
-
-	releaseHelpStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("241")).
-				Padding(1, 0, 0, 0)
-
-	releaseSuccessStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("42")).
-				Bold(true)
-
-	releaseErrorStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("196")).
-				Bold(true)
+	releaseTitleStyle     = tui.Title
+	releaseBoxStyle       = tui.Box
+	releaseActiveBoxStyle = tui.ActiveBox
+	releaseLabelStyle     = tui.Label
+	releaseValueStyle     = tui.Value
+	releaseHelpStyle      = tui.Help
+	releaseSuccessStyle   = tui.SuccessBold
+	releaseErrorStyle     = tui.ErrorBold
 )
 
 // releaseMode determines tag vs release mode

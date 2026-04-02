@@ -9,48 +9,23 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/cidx-org/cidx/internal/tui"
 	"github.com/cidx-org/cidx/pkg/remote"
 	"github.com/cidx-org/cidx/pkg/remote/github"
 	"github.com/cidx-org/cidx/pkg/vcs"
 )
 
-// Artifact TUI styles
+// Artifact TUI styles - aliased from shared tui package
 var (
-	artifactTitleStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("39")).
-				Padding(0, 1)
-
-	artifactBoxStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color("240")).
-				Padding(0, 1)
-
-	artifactSelectedStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("57")).
-				Foreground(lipgloss.Color("255")).
-				Bold(true)
-
-	artifactNormalStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("255"))
-
-	artifactExpiredStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("241"))
-
-	artifactHeaderStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("39")).
-				Bold(true)
-
-	artifactStatsStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("42"))
-
-	artifactDeleteStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("196")).
-				Bold(true)
-
-	artifactHelpStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("241")).
-				Padding(1, 0, 0, 0)
+	artifactTitleStyle    = tui.Title
+	artifactBoxStyle      = tui.Box
+	artifactSelectedStyle = tui.ListSelected
+	artifactNormalStyle   = tui.Value
+	artifactExpiredStyle  = tui.Dim
+	artifactHeaderStyle   = tui.ListHeader
+	artifactStatsStyle    = tui.Success
+	artifactDeleteStyle   = tui.ErrorBold
+	artifactHelpStyle     = tui.Help
 )
 
 // Artifact display item
