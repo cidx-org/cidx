@@ -44,8 +44,7 @@ func presetAuditCommand() *cli.Command {
 			jsonOutput := c.Bool("json")
 
 			// Load known vulnerabilities
-			var knownVulns map[string][]Vulnerability // image -> vulns
-			knownVulns = make(map[string][]Vulnerability)
+			knownVulns := make(map[string][]Vulnerability) // image -> vulns
 
 			if vulns, err := loadVulnerabilities(vulnFile); err == nil {
 				for _, v := range vulns.Vulnerabilities {
