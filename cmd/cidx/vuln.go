@@ -736,6 +736,9 @@ func loadVulnerabilities(path string) (*VulnerabilityFile, error) {
 }
 
 func saveVulnerabilities(path string, vulns *VulnerabilityFile) (err error) {
+	// Deduplicate by (CVE, image) before saving
+	vulns.Vulnerabilities = deduplicateVulnerabilities(vulns.Vulnerabilities)
+
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("failed to create %s: %w", path, err)
@@ -784,4 +787,24 @@ func printVulnerability(v Vulnerability) {
 		fmt.Printf("  Refs:    %v\n", v.References)
 	}
 	fmt.Println()
+}
+
+// deduplicateVulnerabilities removes duplicate entries by (CVE, image) pair.
+// When duplicates exist, the last entry wins (most recently added).
+func deduplicateVulnerabilities(vulns []Vulnerability) []Vulnerability {
+	seen := make(map[string]int) // key -> index in result
+	var result []Vulnerability
+
+	for _, v := range vulns {
+		key := v.CVE + "|" + v.Image
+		if idx, exists := seen[key]; exists {
+			// Replace with newer entry
+			result[idx] = v
+		} else {
+			seen[key] = len(result)
+			result = append(result, v)
+		}
+	}
+
+	return result
 }
