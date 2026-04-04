@@ -28,7 +28,7 @@ CIDX exists to demonstrate what a well-run project looks like in practice -- not
 - **BDD-first development** -- If you can't write a Gherkin scenario for it, don't build it
 - **Trunk-based workflow** -- Short-lived branches, conventional commits, grouped releases
 - **AI-assisted development** -- A human pilots, Claude executes. Every feature is discussed before a single line is written
-- **Dogfooding** -- CIDX builds itself with its own pipeline
+- **Aggressive dogfooding** -- CIDX builds itself with its own pipeline AND we use every CIDX command in our daily workflow. If a command is missing, broken, or has bad UX, that becomes the next priority. We eat our own cooking -- `cidx branch pr`, `cidx action cpw`, `cidx doctor`, `cidx check drift` are all used for real, not just tested
 - **Minimal dependencies** -- Every import must justify its existence
 
 ## How We Work

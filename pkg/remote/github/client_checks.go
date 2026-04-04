@@ -67,9 +67,10 @@ func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remot
 			checks.InProgress++
 			checks.Pending++
 		case "completed":
-			if run.GetConclusion() == "success" {
+			switch run.GetConclusion() {
+			case "success", "skipped", "neutral":
 				checks.Success++
-			} else {
+			default:
 				checks.Failure++
 			}
 		default:
