@@ -25,6 +25,7 @@ func presetCommand() *cli.Command {
 			presetScanCommand(),
 			presetImagesCommand(),
 			presetScanTargetsCommand(),
+			presetAuditCommand(),
 		},
 	}
 }
