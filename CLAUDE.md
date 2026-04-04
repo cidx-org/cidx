@@ -69,11 +69,11 @@ Use `cidx action pr create`, `cidx action pr merge`, `cidx action release create
 **Never use `gh` CLI or raw `git` commands for PR/branch workflows.** Always use `go run ./cmd/cidx` (or the built binary). This is how we find bugs and UX issues.
 
 ```bash
-# PR lifecycle
-go run ./cmd/cidx action pr create "feat: description"
-go run ./cmd/cidx action cpw -m "commit message"     # commit + push + watch CI
+# PR lifecycle (top-level shortcuts)
+go run ./cmd/cidx pr create "feat: description"
+go run ./cmd/cidx cpw -m "commit message"             # commit + push + watch CI
 go run ./cmd/cidx branch pr -w                        # watch PR checks
-go run ./cmd/cidx action pr merge                     # merge current PR
+go run ./cmd/cidx pr merge                            # merge current PR
 
 # Diagnostics
 go run ./cmd/cidx doctor                              # environment check
