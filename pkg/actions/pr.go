@@ -506,9 +506,10 @@ func (a *PRAction) mergePR(ctx context.Context) error {
 
 		if update.Workflow.Status == "completed" {
 			fmt.Println() // New line after progress
-			if update.Workflow.Conclusion == "success" {
+			switch update.Workflow.Conclusion {
+			case "success", "skipped", "neutral":
 				log.Info("🎉 Post-merge workflow completed successfully!")
-			} else {
+			default:
 				log.Errorf("❌ Post-merge workflow failed: %s", update.Workflow.Conclusion)
 				return fmt.Errorf("post-merge workflow failed with conclusion: %s", update.Workflow.Conclusion)
 			}
@@ -528,9 +529,10 @@ func displayWorkflowProgress(workflow *remote.Workflow) {
 	case "in_progress":
 		status = "🔄"
 	case "completed":
-		if workflow.Conclusion == "success" {
+		switch workflow.Conclusion {
+		case "success", "skipped", "neutral":
 			status = "✅"
-		} else {
+		default:
 			status = "❌"
 		}
 	}
@@ -544,9 +546,10 @@ func displayWorkflowProgress(workflow *remote.Workflow) {
 		case "in_progress":
 			jobStatus = "🔄"
 		case "completed":
-			if job.Conclusion == "success" {
+			switch job.Conclusion {
+			case "success", "skipped", "neutral":
 				jobStatus = "✅"
-			} else {
+			default:
 				jobStatus = "❌"
 			}
 		}
@@ -574,9 +577,10 @@ func displayChecksStatus(checks *remote.PRChecks) {
 		for _, check := range checks.Checks {
 			checkIcon := "⏳"
 			if check.Status == "completed" {
-				if check.Conclusion == "success" {
+				switch check.Conclusion {
+				case "success", "skipped", "neutral":
 					checkIcon = "✅"
-				} else {
+				default:
 					checkIcon = "❌"
 				}
 			}

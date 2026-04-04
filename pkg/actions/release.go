@@ -254,12 +254,13 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 
 		if update.Workflow.Status == "completed" {
 			fmt.Println() // New line after progress
-			if update.Workflow.Conclusion == "success" {
+			switch update.Workflow.Conclusion {
+			case "success", "skipped", "neutral":
 				log.Infof("🎉 Release v%s completed successfully!", newVersion)
 				log.Infof("🔗 View release at: https://github.com/%s/releases/tag/v%s", a.getRepoPath(), newVersion)
 				// Cleanup prepared files after successful release
 				a.cleanupPreparedFiles(workDir, preparedVersion, hasPreparedNotes, hasPreparedVer)
-			} else {
+			default:
 				log.Errorf("❌ Release workflow failed: %s", update.Workflow.Conclusion)
 				return fmt.Errorf("release workflow failed with conclusion: %s", update.Workflow.Conclusion)
 			}

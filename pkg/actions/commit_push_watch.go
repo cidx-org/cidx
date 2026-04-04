@@ -88,9 +88,10 @@ func (a *CommitPushWatchAction) Execute(ctx context.Context) error {
 
 		if update.Workflow.Status == "completed" {
 			fmt.Println() // New line after progress
-			if update.Workflow.Conclusion == "success" {
+			switch update.Workflow.Conclusion {
+			case "success", "skipped", "neutral":
 				log.Info("🎉 Workflow completed successfully!")
-			} else {
+			default:
 				log.Errorf("❌ Workflow failed: %s", update.Workflow.Conclusion)
 				return fmt.Errorf("workflow failed with conclusion: %s", update.Workflow.Conclusion)
 			}
