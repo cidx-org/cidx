@@ -63,10 +63,12 @@ func (a *CommitPushWatchAction) Execute(ctx context.Context) error {
 	log.Info("⏳ Waiting for workflow to start...")
 	time.Sleep(5 * time.Second)
 
-	// 6. Get latest workflow
+	// 6. Get latest workflow (may not exist if no PR/CI trigger)
 	workflow, err := a.provider.GetLatestWorkflow(ctx, branch)
 	if err != nil {
-		return fmt.Errorf("failed to get workflow: %w", err)
+		log.Warn("⚠️  No CI workflow found for this branch")
+		log.Info("💡 Create a PR first: cidx pr create \"your title\"")
+		return nil
 	}
 
 	log.Infof("👀 Watching workflow %s...\n", workflow.ID)
