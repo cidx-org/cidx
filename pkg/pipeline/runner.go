@@ -401,6 +401,7 @@ func (r *Runner) RunTool(ctx context.Context, toolName string) error {
 		Env:         mergedPreset.Env,
 		ConfigFiles: mergedPreset.ConfigFiles,
 		Privileged:  mergedPreset.Privileged,
+		PullPolicy:  r.resolvePullPolicy(mergedPreset.PullPolicy),
 	}
 
 	// If execution mode forces dry-run (local safety), show what would be done
@@ -417,6 +418,18 @@ func (r *Runner) RunTool(ctx context.Context, toolName string) error {
 
 	// Execute
 	return exec.Run(ctx, containerConfig)
+}
+
+// resolvePullPolicy determines the effective pull policy.
+// If explicitly set on the preset, use it. Otherwise, default based on environment.
+func (r *Runner) resolvePullPolicy(presetPolicy string) string {
+	if presetPolicy != "" {
+		return presetPolicy
+	}
+	if r.env.IsCI {
+		return "always"
+	}
+	return "if-not-present"
 }
 
 // expandWorkspace replaces ${WORKSPACE} with the actual workspace path

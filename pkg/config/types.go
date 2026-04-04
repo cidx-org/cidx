@@ -222,7 +222,8 @@ type ContainerConfig struct {
 	Volumes     []string
 	Env         map[string]string
 	ConfigFiles []string
-	Privileged  bool // Requires root privileges
+	Privileged  bool   // Requires root privileges
+	PullPolicy  string // always, if-not-present, never
 }
 
 // Action represents an automated workflow configuration

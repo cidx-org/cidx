@@ -21,6 +21,7 @@ type Preset struct {
 	RequireCI     bool              `yaml:"require_ci" toml:"require_ci"`                     // Requires CI environment
 	LocalBehavior string            `yaml:"local_behavior" toml:"local_behavior"`             // draft, no-push, dry-run, disabled
 	Privileged    bool              `yaml:"privileged,omitempty" toml:"privileged,omitempty"` // Requires root privileges (skip user mapping)
+	PullPolicy    string            `yaml:"pull_policy,omitempty" toml:"pull_policy,omitempty"` // always, if-not-present, never (default: env-based)
 }
 
 // Option defines a configurable parameter for a preset
@@ -58,6 +59,10 @@ func (p *Preset) MergeWith(overrides map[string]any) *Preset {
 		for k, v := range env {
 			merged.Env[k] = v
 		}
+	}
+
+	if pullPolicy, ok := overrides["pull_policy"].(string); ok {
+		merged.PullPolicy = pullPolicy
 	}
 
 	// Merge options with preset options
