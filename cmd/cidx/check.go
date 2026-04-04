@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/cidx-org/cidx/pkg/config"
+	"github.com/cidx-org/cidx/pkg/drift"
 	"github.com/cidx-org/cidx/pkg/validator"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
@@ -15,6 +16,19 @@ var checkCommand = &cli.Command{
 	Name:  "check",
 	Usage: "Validate configuration and workflows",
 	Subcommands: []*cli.Command{
+		{
+			Name:  "drift",
+			Usage: "Compare cidx.toml with actual CI workflow and detect divergence",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:    "file",
+					Aliases: []string{"f"},
+					Usage:   "Path to CI workflow file",
+					Value:   ".github/workflows/ci.yml",
+				},
+			},
+			Action: checkDriftAction,
+		},
 		{
 			Name:      "workflow",
 			Usage:     "Validate that cidx.toml pipelines match GitHub Actions workflows",
@@ -110,4 +124,31 @@ func checkWorkflowAction(c *cli.Context) error {
 	}
 
 	return nil
+}
+
+func checkDriftAction(c *cli.Context) error {
+	cfg, err := config.Load("cidx.toml")
+	if err != nil {
+		return fmt.Errorf("failed to load cidx.toml: %w", err)
+	}
+
+	workflowFile := c.String("file")
+	if _, err := os.Stat(workflowFile); os.IsNotExist(err) {
+		return fmt.Errorf("workflow file not found: %s (use --file to specify path)", workflowFile)
+	}
+
+	result, err := drift.Compare(cfg, workflowFile)
+	if err != nil {
+		return err
+	}
+
+	fmt.Print(drift.Format(result))
+	fmt.Println()
+
+	if !result.HasDrift() {
+		fmt.Println("\033[32mNo drift detected.\033[0m")
+		return nil
+	}
+
+	return fmt.Errorf("%d difference(s) found", result.DiffCount())
 }

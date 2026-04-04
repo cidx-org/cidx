@@ -194,6 +194,12 @@ func (tc *TestContext) simulateCIDXCommand(cmdStr string) error {
 		return nil
 	}
 
+	// Handle cidx check drift separately
+	if len(parts) >= 3 && parts[0] == "cidx" && parts[1] == "check" && parts[2] == "drift" {
+		tc.simulateDriftIfNeeded()
+		return nil
+	}
+
 	// Handle cidx generate separately
 	if len(parts) >= 2 && parts[0] == "cidx" && parts[1] == "generate" {
 		if len(parts) >= 3 && parts[2] != "github" && parts[2] != "gitlab" {
