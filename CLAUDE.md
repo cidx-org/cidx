@@ -64,6 +64,25 @@ The combination of issue discussion + scenario specification + commit history gi
 
 Use `cidx action pr create`, `cidx action pr merge`, `cidx action release create` for the workflow.
 
+### Dogfooding: Use CIDX for Everything
+
+**Never use `gh` CLI or raw `git` commands for PR/branch workflows.** Always use `go run ./cmd/cidx` (or the built binary). This is how we find bugs and UX issues.
+
+```bash
+# PR lifecycle
+go run ./cmd/cidx action pr create "feat: description"
+go run ./cmd/cidx action cpw -m "commit message"     # commit + push + watch CI
+go run ./cmd/cidx branch pr -w                        # watch PR checks
+go run ./cmd/cidx action pr merge                     # merge current PR
+
+# Diagnostics
+go run ./cmd/cidx doctor                              # environment check
+go run ./cmd/cidx check drift                         # compare cidx.toml vs CI YAML
+go run ./cmd/cidx generate github                     # generate CI workflow
+```
+
+If a command is missing, broken, or has bad UX -- **that becomes the next priority**. We eat our own cooking.
+
 ### TDD/BDD Strategy
 
 **BDD (Gherkin + godog)** -- System-level behavior:
@@ -71,7 +90,8 @@ Use `cidx action pr create`, `cidx action pr merge`, `cidx action release create
 - Feature files in `features/` organized by domain (events, security, pipelines, presets, executor)
 - Step definitions in `*_steps_test.go` at project root
 - Simulation engine (no real Docker needed to run specs)
-- `Strict: false` -- Docker-dependent scenarios are pending, not failing
+- `Strict: true` for unit scenarios, `Strict: false` only for `@docker-required` scenarios
+- `TestFeatures` (strict, 57+ scenarios) and `TestFeaturesDocker` (best-effort, 5 scenarios)
 
 **Unit tests** -- Package-level correctness:
 
