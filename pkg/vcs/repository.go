@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
+	"strings"
 
 	"github.com/go-git/go-git/v5"
 )
@@ -50,7 +51,8 @@ func (r *Repository) Commit(message string) error {
 	return nil
 }
 
-// Push pushes commits to remote using git binary
+// Push pushes commits to remote using git binary.
+// Automatically sets upstream for new branches.
 func (r *Repository) Push() error {
 	w, err := r.repo.Worktree()
 	if err != nil {
@@ -59,14 +61,31 @@ func (r *Repository) Push() error {
 
 	workDir := w.Filesystem.Root()
 
-	// Push using git binary
+	// Try regular push first
 	pushCmd := exec.Command("git", "push")
 	pushCmd.Dir = workDir
-	if output, err := pushCmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to push: %w\n%s", err, output)
+	output, err := pushCmd.CombinedOutput()
+	if err == nil {
+		return nil
 	}
 
-	return nil
+	// If push failed due to no upstream, set it automatically
+	outStr := string(output)
+	if strings.Contains(outStr, "no upstream branch") || strings.Contains(outStr, "has no upstream") {
+		branch, branchErr := r.GetCurrentBranch()
+		if branchErr != nil {
+			return fmt.Errorf("failed to push: %w\n%s", err, output)
+		}
+
+		upstreamCmd := exec.Command("git", "push", "--set-upstream", "origin", branch)
+		upstreamCmd.Dir = workDir
+		if upOutput, upErr := upstreamCmd.CombinedOutput(); upErr != nil {
+			return fmt.Errorf("failed to push with upstream: %w\n%s", upErr, upOutput)
+		}
+		return nil
+	}
+
+	return fmt.Errorf("failed to push: %w\n%s", err, output)
 }
 
 // Pull pulls latest changes from remote using git binary
