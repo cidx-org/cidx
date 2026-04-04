@@ -43,8 +43,8 @@
 
 # Strict Version Pinning
 # Ensures all developers and CI use the exact same binary version.
-# Since we are developing CIDX itself, we require the "dev" version.
-required_version = "dev"
+# Disabled for CIDX itself: we build from source (dev) and release (tagged).
+# required_version = "dev"
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 🔄 RELEASE WORKFLOW CONFIGURATION
