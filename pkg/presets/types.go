@@ -22,6 +22,7 @@ type Preset struct {
 	LocalBehavior string            `yaml:"local_behavior" toml:"local_behavior"`             // draft, no-push, dry-run, disabled
 	Privileged    bool              `yaml:"privileged,omitempty" toml:"privileged,omitempty"` // Requires root privileges (skip user mapping)
 	PullPolicy    string            `yaml:"pull_policy,omitempty" toml:"pull_policy,omitempty"` // always, if-not-present, never (default: env-based)
+	Timeout       string            `yaml:"timeout,omitempty" toml:"timeout,omitempty"`         // duration string (e.g., "5m", "45m"), default: 30m
 }
 
 // Option defines a configurable parameter for a preset
@@ -63,6 +64,9 @@ func (p *Preset) MergeWith(overrides map[string]any) *Preset {
 
 	if pullPolicy, ok := overrides["pull_policy"].(string); ok {
 		merged.PullPolicy = pullPolicy
+	}
+	if timeout, ok := overrides["timeout"].(string); ok {
+		merged.Timeout = timeout
 	}
 
 	// Merge options with preset options
