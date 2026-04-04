@@ -24,6 +24,8 @@ func main() {
 			infoCommand(),  // Deprecated: use 'preset info'
 			validateCommand(),
 			initCommand(),
+			prCommand(),    // Top-level alias for 'action pr'
+			cpwCommand(),   // Top-level alias for 'action cpw'
 			actionCommand(),
 			workflowCommand(),
 			checkCommand,
