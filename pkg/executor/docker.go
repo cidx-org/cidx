@@ -80,10 +80,16 @@ func (e *DockerExecutor) Run(ctx context.Context, containerConfig *config.Contai
 		return nil
 	}
 
-	// Apply execution timeout
-	if e.timeout > 0 {
+	// Apply execution timeout (per-container override > global default)
+	timeout := e.timeout
+	if containerConfig.Timeout != "" {
+		if parsed, err := time.ParseDuration(containerConfig.Timeout); err == nil {
+			timeout = parsed
+		}
+	}
+	if timeout > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, e.timeout)
+		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
 
@@ -127,7 +133,7 @@ func (e *DockerExecutor) Run(ctx context.Context, containerConfig *config.Contai
 	case err := <-errCh:
 		if err != nil {
 			if ctx.Err() == context.DeadlineExceeded {
-				return fmt.Errorf("container %s timed out after %v", containerConfig.Name, e.timeout)
+				return fmt.Errorf("container %s timed out after %v", containerConfig.Name, timeout)
 			}
 			return fmt.Errorf("error waiting for container: %w", err)
 		}
@@ -140,7 +146,7 @@ func (e *DockerExecutor) Run(ctx context.Context, containerConfig *config.Contai
 			return fmt.Errorf("container exited with code %d", status.StatusCode)
 		}
 	case <-ctx.Done():
-		return fmt.Errorf("container %s timed out after %v", containerConfig.Name, e.timeout)
+		return fmt.Errorf("container %s timed out after %v", containerConfig.Name, timeout)
 	}
 
 	e.logger.Infof("  ✓ %s completed", containerConfig.Name)

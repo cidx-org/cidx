@@ -402,6 +402,7 @@ func (r *Runner) RunTool(ctx context.Context, toolName string) error {
 		ConfigFiles: mergedPreset.ConfigFiles,
 		Privileged:  mergedPreset.Privileged,
 		PullPolicy:  r.resolvePullPolicy(mergedPreset.PullPolicy),
+		Timeout:     mergedPreset.Timeout,
 	}
 
 	// If execution mode forces dry-run (local safety), show what would be done

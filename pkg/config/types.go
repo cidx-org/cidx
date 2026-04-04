@@ -224,6 +224,7 @@ type ContainerConfig struct {
 	ConfigFiles []string
 	Privileged  bool   // Requires root privileges
 	PullPolicy  string // always, if-not-present, never
+	Timeout     string // duration string (e.g., "5m", "45m"), empty = default 30m
 }
 
 // Action represents an automated workflow configuration
