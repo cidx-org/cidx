@@ -87,8 +87,8 @@ func (e *DockerExecutor) Run(ctx context.Context, containerConfig *config.Contai
 		defer cancel()
 	}
 
-	// Pull image if needed
-	if err := e.pullImage(ctx, containerConfig.Image); err != nil {
+	// Pull image based on policy
+	if err := e.pullImageWithPolicy(ctx, containerConfig.Image, containerConfig.PullPolicy); err != nil {
 		return fmt.Errorf("failed to pull image: %w", err)
 	}
 
@@ -167,6 +167,30 @@ func (e *DockerExecutor) streamLogsTo(ctx context.Context, containerID string, s
 
 	_, err = stdcopy.StdCopy(stdout, stderr, out)
 	return err
+}
+
+// pullImageWithPolicy pulls a Docker image respecting the pull policy.
+func (e *DockerExecutor) pullImageWithPolicy(ctx context.Context, imageName, policy string) error {
+	switch policy {
+	case "never":
+		e.logger.Debugf("Pull policy 'never': skipping pull for %s", imageName)
+		return nil
+	case "if-not-present":
+		if e.imageExistsLocally(ctx, imageName) {
+			e.logger.Debugf("Pull policy 'if-not-present': image %s exists locally, skipping pull", imageName)
+			return nil
+		}
+		e.logger.Debugf("Pull policy 'if-not-present': image %s not found locally, pulling", imageName)
+	default: // "always" or empty
+		e.logger.Debugf("Pull policy 'always': pulling %s", imageName)
+	}
+	return e.pullImage(ctx, imageName)
+}
+
+// imageExistsLocally checks if a Docker image exists in the local cache.
+func (e *DockerExecutor) imageExistsLocally(ctx context.Context, imageName string) bool {
+	_, err := e.client.ImageInspect(ctx, imageName)
+	return err == nil
 }
 
 // pullImage pulls a Docker image
