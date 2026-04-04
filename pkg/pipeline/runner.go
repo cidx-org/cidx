@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cidx-org/cidx/pkg/config"
 	"github.com/cidx-org/cidx/pkg/environment"
@@ -140,8 +141,20 @@ func (r *Runner) Run(ctx context.Context, target string) error {
 }
 
 // RunPipeline executes a named pipeline
+// phaseResult tracks the outcome of a single phase execution.
+type phaseResult struct {
+	Name       string
+	Duration   time.Duration
+	Containers []string
+	Passed     bool
+	Error      string
+}
+
 func (r *Runner) RunPipeline(ctx context.Context, name string, pipeline config.Pipeline) error {
 	r.logger.Infof("Running pipeline: %s", name)
+	pipelineStart := time.Now()
+
+	var results []phaseResult
 
 	for _, phaseName := range pipeline.Phases {
 		phase, exists := r.config.Phases[phaseName]
@@ -149,13 +162,66 @@ func (r *Runner) RunPipeline(ctx context.Context, name string, pipeline config.P
 			return fmt.Errorf("pipeline %s references unknown phase: %s", name, phaseName)
 		}
 
-		if err := r.RunPhase(ctx, phaseName, phase); err != nil {
+		phaseStart := time.Now()
+		err := r.RunPhase(ctx, phaseName, phase)
+		elapsed := time.Since(phaseStart)
+
+		result := phaseResult{
+			Name:       phaseName,
+			Duration:   elapsed,
+			Containers: phase.Containers,
+			Passed:     err == nil,
+		}
+		if err != nil {
+			result.Error = err.Error()
+		}
+		results = append(results, result)
+
+		if err != nil {
+			r.printPipelineSummary(name, results, time.Since(pipelineStart))
 			return fmt.Errorf("pipeline %s failed at phase %s: %w", name, phaseName, err)
 		}
 	}
 
-	r.logger.Infof("✓ Pipeline %s completed successfully", name)
+	r.printPipelineSummary(name, results, time.Since(pipelineStart))
 	return nil
+}
+
+// printPipelineSummary displays a summary table after pipeline execution.
+func (r *Runner) printPipelineSummary(name string, results []phaseResult, total time.Duration) {
+	r.logger.Infof("========================================")
+	r.logger.Infof("Pipeline: %s — completed in %s", name, formatDuration(total))
+	r.logger.Infof("========================================")
+
+	for _, res := range results {
+		icon := "✓"
+		if !res.Passed {
+			icon = "✗"
+		}
+
+		containers := strings.Join(res.Containers, " ✓, ")
+		if res.Passed && len(res.Containers) > 0 {
+			containers += " ✓"
+		}
+
+		r.logger.Infof("  %s %s (%s) — %s", icon, res.Name, formatDuration(res.Duration), containers)
+	}
+
+	r.logger.Infof("")
+}
+
+// formatDuration formats a duration as human-readable (e.g., "1m32s", "42s").
+func formatDuration(d time.Duration) string {
+	d = d.Round(time.Second)
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	m := int(d.Minutes())
+	s := int(d.Seconds()) % 60
+	if s == 0 {
+		return fmt.Sprintf("%dm", m)
+	}
+	return fmt.Sprintf("%dm%ds", m, s)
 }
 
 // RunAll executes all phases

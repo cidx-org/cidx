@@ -70,7 +70,12 @@ func Load(path string) (*Config, error) {
 		PR:              typed.PR,
 		Branch:          typed.Branch,
 		Provider:        typed.Provider,
-		Workspace:       os.Getenv("PWD"),
+	}
+
+	// Workspace: prefer os.Getwd() (reliable syscall) over PWD (shell variable, can be stale)
+	cfg.Workspace, _ = os.Getwd()
+	if cfg.Workspace == "" {
+		cfg.Workspace = os.Getenv("PWD")
 	}
 
 	if cfg.Pipelines == nil {
@@ -78,9 +83,6 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Actions == nil {
 		cfg.Actions = make(map[string]Action)
-	}
-	if cfg.Workspace == "" {
-		cfg.Workspace, _ = os.Getwd()
 	}
 
 	// Process nested [containers.<name>] override sections first
