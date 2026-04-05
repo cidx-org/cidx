@@ -28,6 +28,15 @@ func NewCommitPushWatch(repo *vcs.Repository, provider remote.Provider, message 
 
 // Execute runs the action: commit → push → watch
 func (a *CommitPushWatchAction) Execute(ctx context.Context) error {
+	// 0. Block direct push to main/master
+	branch, err := a.repo.GetCurrentBranch()
+	if err != nil {
+		return fmt.Errorf("failed to get current branch: %w", err)
+	}
+	if branch == "main" || branch == "master" {
+		return fmt.Errorf("refusing to push directly to %s -- create a feature branch first: cidx pr create \"your title\"", branch)
+	}
+
 	// 1. Check for changes
 	hasChanges, err := a.repo.HasChanges()
 	if err != nil {
@@ -53,11 +62,7 @@ func (a *CommitPushWatchAction) Execute(ctx context.Context) error {
 	}
 	log.Info("✓ Pushed to remote")
 
-	// 4. Get current branch
-	branch, err := a.repo.GetCurrentBranch()
-	if err != nil {
-		return fmt.Errorf("failed to get current branch: %w", err)
-	}
+	// 4. Branch already known from step 0
 
 	// 5. Wait for workflow to start
 	log.Info("⏳ Waiting for workflow to start...")
