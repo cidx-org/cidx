@@ -28,12 +28,13 @@ const DefaultTimeout = 30 * time.Minute
 
 // DockerExecutor executes tools using Docker
 type DockerExecutor struct {
-	client  *client.Client
-	logger  *logrus.Logger
-	dryRun  bool
-	verbose bool
-	quiet   bool
-	timeout time.Duration
+	client   *client.Client
+	logger   *logrus.Logger
+	dryRun   bool
+	verbose  bool
+	quiet    bool
+	timeout  time.Duration
+	rootless bool // Podman rootless: adds --userns=keep-id
 }
 
 // NewDockerExecutor creates a new Docker executor
@@ -408,6 +409,11 @@ func (e *DockerExecutor) createContainer(ctx context.Context, containerConfig *c
 	hostConfig := &container.HostConfig{
 		Binds:      binds,
 		AutoRemove: false, // We'll remove manually
+	}
+
+	// Podman rootless: map host UID into container to fix volume permissions
+	if e.rootless {
+		hostConfig.UsernsMode = "keep-id"
 	}
 
 	resp, err := e.client.ContainerCreate(ctx, dockerConfig, hostConfig, nil, nil, containerName)

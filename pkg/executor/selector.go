@@ -3,6 +3,7 @@ package executor
 import (
 	"context"
 	"errors"
+	"os"
 
 	"github.com/cidx-org/cidx/pkg/config"
 	"github.com/sirupsen/logrus"
@@ -185,6 +186,9 @@ func NewPodmanExecutor(dryRun, verbose, quiet bool) (*PodmanExecutor, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Podman rootless needs --userns=keep-id for volume permissions
+	inner.rootless = (os.Getuid() != 0)
 
 	return &PodmanExecutor{inner: inner}, nil
 }
