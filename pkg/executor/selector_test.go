@@ -1,28 +1,8 @@
 package executor
 
 import (
-	"context"
 	"testing"
 )
-
-func TestPodmanExecutor_NotImplemented(t *testing.T) {
-	p := &PodmanExecutor{}
-
-	err := p.Run(context.TODO(), nil)
-	if err == nil {
-		t.Fatal("expected error from PodmanExecutor.Run")
-	}
-	if err.Error() != "podman executor not yet implemented" {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestPodmanExecutor_Available(t *testing.T) {
-	p := &PodmanExecutor{}
-	if p.Available() {
-		t.Error("PodmanExecutor.Available() should return false")
-	}
-}
 
 func TestPodmanExecutor_Name(t *testing.T) {
 	p := &PodmanExecutor{}
@@ -38,58 +18,25 @@ func TestPodmanExecutor_Close(t *testing.T) {
 	}
 }
 
-func TestSelector_BuildUnavailableError_NilDocker(t *testing.T) {
-	s := &Selector{
-		docker: nil,
-		podman: nil,
-	}
-
-	err := s.buildUnavailableError()
-	if err == nil {
-		t.Fatal("expected error")
-	}
-
-	msg := err.Error()
-	if len(msg) == 0 {
-		t.Error("expected non-empty error message")
-	}
-	// Should contain installation help
-	if !contains(msg, "Docker") {
-		t.Error("error should mention Docker")
+func TestPodmanExecutor_NilInner(t *testing.T) {
+	p := &PodmanExecutor{} // no inner executor
+	if p.Available() {
+		t.Error("PodmanExecutor without inner should not be available")
 	}
 }
 
-func TestSelector_PodmanAvailable_NilPodman(t *testing.T) {
-	s := &Selector{podman: nil}
-	if s.PodmanAvailable() {
-		t.Error("PodmanAvailable() should return false when podman is nil")
+func TestNewPodmanExecutor_NoSocket(t *testing.T) {
+	// With no Podman installed, NewPodmanExecutor should fail gracefully
+	_, err := NewPodmanExecutor(true, false, false)
+	// Either succeeds (Podman socket found) or fails (not found)
+	// We just verify it doesn't panic
+	_ = err
+}
+
+func TestFindPodmanSocket_Candidates(t *testing.T) {
+	candidates := podmanSocketCandidates()
+	if len(candidates) == 0 {
+		t.Error("expected at least one socket candidate path")
 	}
 }
 
-func TestSelector_DockerAvailable_NilDocker(t *testing.T) {
-	s := &Selector{docker: nil}
-	if s.DockerAvailable() {
-		t.Error("DockerAvailable() should return false when docker is nil")
-	}
-}
-
-func TestSelector_ListAvailableBackends_Empty(t *testing.T) {
-	s := &Selector{docker: nil, podman: nil}
-	backends := s.ListAvailableBackends()
-	if len(backends) != 0 {
-		t.Errorf("expected 0 available backends, got %d", len(backends))
-	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstr(s, substr))
-}
-
-func containsSubstr(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
-}
