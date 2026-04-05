@@ -32,12 +32,15 @@ func NewSelector(dryRun, verbose, quiet bool) (*Selector, error) {
 		logger.Debugf("Docker executor unavailable: %v", dockerErr)
 	}
 
-	// TODO: Try to create Podman executor
-	// podman, podmanErr := NewPodmanExecutor(dryRun, verbose, quiet)
+	// Try to create Podman executor (may fail if Podman not installed)
+	podman, podmanErr := NewPodmanExecutor(dryRun, verbose, quiet)
+	if podmanErr != nil {
+		logger.Debugf("Podman executor unavailable: %v", podmanErr)
+	}
 
 	return &Selector{
-		docker:  docker,
-		podman:  nil, // Future: Podman support
+		docker: docker,
+		podman: podman,
 		logger:  logger,
 		dryRun:  dryRun,
 		verbose: verbose,
@@ -165,16 +168,46 @@ func (s *Selector) ListAvailableBackends() []BackendType {
 	return available
 }
 
-// PodmanExecutor is a placeholder for future Podman support
-// TODO: Implement PodmanExecutor with same interface as DockerExecutor
-type PodmanExecutor struct{}
-
-func (e *PodmanExecutor) Run(_ context.Context, _ *config.ContainerConfig) error {
-	return errors.New("podman executor not yet implemented")
+// PodmanExecutor wraps DockerExecutor connected to Podman's Docker-compatible socket.
+// Podman exposes a Docker-compatible API, so we reuse the Docker SDK.
+type PodmanExecutor struct {
+	inner *DockerExecutor
 }
-func (e *PodmanExecutor) Available() bool { return false }
-func (e *PodmanExecutor) Name() string    { return "podman" }
-func (e *PodmanExecutor) Close() error    { return nil }
+
+// NewPodmanExecutor creates a Podman executor via Docker-compatible socket.
+func NewPodmanExecutor(dryRun, verbose, quiet bool) (*PodmanExecutor, error) {
+	socketPath := findPodmanSocket()
+	if socketPath == "" {
+		return nil, errors.New("podman socket not found")
+	}
+
+	inner, err := newDockerExecutorWithHost("unix://"+socketPath, dryRun, verbose, quiet)
+	if err != nil {
+		return nil, err
+	}
+
+	return &PodmanExecutor{inner: inner}, nil
+}
+
+func (e *PodmanExecutor) Run(ctx context.Context, cfg *config.ContainerConfig) error {
+	return e.inner.Run(ctx, cfg)
+}
+
+func (e *PodmanExecutor) Available() bool {
+	if e.inner == nil {
+		return false
+	}
+	return e.inner.Available()
+}
+
+func (e *PodmanExecutor) Name() string { return "podman" }
+
+func (e *PodmanExecutor) Close() error {
+	if e.inner == nil {
+		return nil
+	}
+	return e.inner.Close()
+}
 
 // Ensure PodmanExecutor implements Executor interface
 var _ Executor = (*PodmanExecutor)(nil)

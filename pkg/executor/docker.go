@@ -60,6 +60,34 @@ func NewDockerExecutor(dryRun, verbose, quiet bool) (*DockerExecutor, error) {
 	}, nil
 }
 
+// newDockerExecutorWithHost creates a DockerExecutor connected to a specific host (socket).
+// Used by PodmanExecutor to connect to Podman's Docker-compatible API.
+func newDockerExecutorWithHost(host string, dryRun, verbose, quiet bool) (*DockerExecutor, error) {
+	cli, err := client.NewClientWithOpts(
+		client.WithHost(host),
+		client.WithAPIVersionNegotiation(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create client for %s: %w", host, err)
+	}
+
+	logger := logrus.New()
+	if verbose {
+		logger.SetLevel(logrus.DebugLevel)
+	} else {
+		logger.SetLevel(logrus.InfoLevel)
+	}
+
+	return &DockerExecutor{
+		client:  cli,
+		logger:  logger,
+		dryRun:  dryRun,
+		verbose: verbose,
+		quiet:   quiet,
+		timeout: DefaultTimeout,
+	}, nil
+}
+
 // SetTimeout sets the execution timeout for containers
 func (e *DockerExecutor) SetTimeout(d time.Duration) {
 	e.timeout = d
