@@ -100,6 +100,8 @@ If a command is missing, broken, or has bad UX -- **that becomes the next priori
 - Standard Go `*_test.go` files in each package
 - Focus on edge cases and error paths that BDD doesn't cover
 
+**Test playground**: `cidx-org/cidx-test-playground` on GitHub -- used for integration tests that need a real remote repo (PR creation, artifact management, workflow watching). Referenced in `features_test.go`.
+
 **The hierarchy**: BDD scenarios define WHAT the system does. Unit tests verify HOW individual pieces work. BDD comes first.
 
 ## Architecture
