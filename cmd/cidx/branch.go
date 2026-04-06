@@ -202,6 +202,11 @@ func branchPRCommand() *cli.Command {
 				Aliases: []string{"o"},
 				Usage:   "Open PR in browser",
 			},
+			&cli.BoolFlag{
+				Name:    "quiet",
+				Aliases: []string{"q"},
+				Usage:   "Minimal output (no spinner animation, CI-friendly)",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			// Get branch name (default to current)
@@ -245,7 +250,7 @@ func branchPRCommand() *cli.Command {
 
 			// Watch mode
 			if c.Bool("watch") {
-				return watchPRChecks(manager, branchName, info)
+				return watchPRChecks(manager, branchName, info, c.Bool("quiet"))
 			}
 
 			// Format and print output
@@ -258,7 +263,10 @@ func branchPRCommand() *cli.Command {
 }
 
 // watchPRChecks watches PR checks until they complete
-func watchPRChecks(manager *branch.Manager, branchName string, initialInfo *branch.PRInfo) error {
+func watchPRChecks(manager *branch.Manager, branchName string, initialInfo *branch.PRInfo, quiet bool) error {
+	if quiet {
+		return watchPRChecksQuiet(manager, branchName, initialInfo)
+	}
 	// ANSI codes for terminal control
 	const (
 		clearLine  = "\033[2K"
@@ -384,6 +392,52 @@ func watchPRChecks(manager *branch.Manager, branchName string, initialInfo *bran
 			}
 			fmt.Println()
 			return nil
+		}
+
+		<-pollTicker.C
+	}
+}
+
+// watchPRChecksQuiet polls CI status without spinner animation.
+// Prints only status changes and final result -- ideal for CI and token-efficient usage.
+func watchPRChecksQuiet(manager *branch.Manager, branchName string, initialInfo *branch.PRInfo) error {
+	fmt.Printf("#%d %s\n", initialInfo.Number, initialInfo.Title)
+	fmt.Printf("Watching %s...\n", branchName)
+
+	pollTicker := time.NewTicker(10 * time.Second)
+	defer pollTicker.Stop()
+
+	lastStatus := ""
+
+	for {
+		info, err := manager.GetPRInfo(branchName)
+		if err != nil {
+			return fmt.Errorf("failed to get PR info: %w", err)
+		}
+
+		if info.Checks != nil {
+			status := fmt.Sprintf("%d/%d", info.Checks.Success, info.Checks.Total)
+			if status != lastStatus {
+				fmt.Printf("  %d/%d checks passed", info.Checks.Success, info.Checks.Total)
+				if info.Checks.Pending > 0 {
+					fmt.Printf(" (%d pending)", info.Checks.Pending)
+				}
+				if info.Checks.Failure > 0 {
+					fmt.Printf(" (%d failed)", info.Checks.Failure)
+				}
+				fmt.Println()
+				lastStatus = status
+			}
+
+			if info.Checks.Pending == 0 {
+				fmt.Println()
+				if info.Checks.Status == "success" {
+					fmt.Println("All checks passed.")
+				} else {
+					fmt.Println("Some checks failed.")
+				}
+				return nil
+			}
 		}
 
 		<-pollTicker.C
