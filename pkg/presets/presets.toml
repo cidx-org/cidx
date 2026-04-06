@@ -95,7 +95,7 @@ command_flag = "--exit-code"
 [presets.gitleaks]
 name = "gitleaks"
 phase = "security"
-image = "zricethezav/gitleaks:v8.22.1"
+image = "zricethezav/gitleaks:v8.30.1"
 command = "git ."
 workdir = "/repo"
 volumes = ["${WORKSPACE}:/repo"]
@@ -108,7 +108,7 @@ config_files = [".gitleaks.toml"]
 [presets.commitlint]
 name = "commitlint"
 phase = "code"
-image = "commitlint/commitlint:20.1.0"
+image = "commitlint/commitlint:20.5.1"
 command = "commitlint --from ${FROM} --to ${TO}"
 workdir = "/app"
 volumes = [
@@ -134,7 +134,7 @@ TO = "HEAD"
 [presets.commitizen]
 name = "commitizen"
 phase = "code"
-image = "commitizen/commitizen:4.10.0"
+image = "commitizen/commitizen:4.13.9"
 command = "sh -c 'export GIT_CONFIG_GLOBAL=/tmp/.gitconfig && git config --global --add safe.directory /app && LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo HEAD~10) && cz check --rev-range ${LAST_TAG}..HEAD'"
 entrypoint = [""]
 workdir = "/app"
@@ -308,7 +308,7 @@ volumes = ["${WORKSPACE}:/work"]
 [presets.gosec]
 name = "gosec"
 phase = "security"
-image = "securego/gosec:2.22.10"
+image = "securego/gosec:2.24.6"
 command = "./..."
 workdir = "/app"
 volumes = ["${WORKSPACE}:/app"]
@@ -379,7 +379,7 @@ GOTOOLCHAIN = "auto"
 [presets.golangci-lint]
 name = "golangci-lint"
 phase = "code"
-image = "golangci/golangci-lint:v2.6.2"
+image = "golangci/golangci-lint:v2.11.4"
 command = "golangci-lint run --timeout 5m"
 workdir = "/app"
 volumes = ["${WORKSPACE}:/app"]
@@ -577,7 +577,7 @@ IMAGE_TAG = "latest"
 [presets.gh-release]
 name = "gh-release"
 phase = "release"
-image = "maniator/gh:v2.83.1"
+image = "maniator/gh:v2.89.0"
 entrypoint = [""]  # Override image entrypoint (gh) to allow shell commands
 # Smart command: uses prepared release notes if available (versioned filename), otherwise auto-generates
 command = "sh -c 'if [ -f .cidx/release-version ]; then VERSION=$(cat .cidx/release-version | tr -d \"\\n\"); NOTES_FILE=\".cidx/release-notes-v${VERSION}.md\"; if [ -f \"$NOTES_FILE\" ]; then echo \"Using prepared release notes: $NOTES_FILE\"; gh release create ${TAG} ${ARTIFACTS} --notes-file \"$NOTES_FILE\"; exit 0; fi; fi; echo \"Auto-generating release notes...\"; gh release create ${TAG} ${ARTIFACTS} --generate-notes'"
@@ -612,7 +612,7 @@ command_flag = "--notes-file"
 [presets.goreleaser]
 name = "goreleaser"
 phase = "release"
-image = "goreleaser/goreleaser:v2.12.7"
+image = "goreleaser/goreleaser:v2.15.2"
 command = "goreleaser release --clean"
 workdir = "/workspace"
 volumes = [
@@ -670,7 +670,7 @@ command_flag = "format"
 [presets.black]
 name = "black"
 phase = "code"
-image = "pyfound/black:24.10.0"
+image = "pyfound/black:26.3.1"
 command = "black --check ."
 workdir = "/src"
 volumes = ["${WORKSPACE}:/src"]
