@@ -73,7 +73,8 @@ Use `cidx action pr create`, `cidx action pr merge`, `cidx action release create
 # PR lifecycle (top-level shortcuts)
 go run ./cmd/cidx pr create "feat: description"
 go run ./cmd/cidx cpw -m "commit message"             # commit + push + watch CI
-go run ./cmd/cidx branch pr -w                        # watch PR checks
+go run ./cmd/cidx pr watch -q                         # watch PR checks (quiet)
+go run ./cmd/cidx pr status                           # show PR status
 go run ./cmd/cidx pr merge                            # merge current PR
 
 # Diagnostics
