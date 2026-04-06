@@ -61,6 +61,7 @@ The combination of issue discussion + scenario specification + commit history gi
 - All changes go through PRs with CI validation
 - Releases are grouped (3-5 PRs per release) and manually triggered
 - Tags = Releases (1:1 mapping)
+- **Changelog**: Must be updated at every release. Commitizen generates it from conventional commits. Verify CHANGELOG.md is current before tagging.
 
 Use `cidx action pr create`, `cidx action pr merge`, `cidx action release create` for the workflow.
 
