@@ -135,7 +135,8 @@ TO = "HEAD"
 name = "commitizen"
 phase = "code"
 image = "commitizen/commitizen:4.10.0"
-command = "check --rev-range ${FROM}..${TO}"
+command = "sh -c 'export GIT_CONFIG_GLOBAL=/tmp/.gitconfig && git config --global --add safe.directory /app && LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo HEAD~10) && cz check --rev-range ${LAST_TAG}..HEAD'"
+entrypoint = [""]
 workdir = "/app"
 volumes = [
     "${WORKSPACE}:/app",
@@ -146,22 +147,6 @@ config_files = [
     ".cz.json",
     "pyproject.toml",
 ]
-
-[presets.commitizen.env]
-FROM = "HEAD~10"
-TO = "HEAD"
-
-[presets.commitizen.options.from]
-type = "string"
-default = "HEAD~10"
-description = "Start commit range"
-env_var = "FROM"
-
-[presets.commitizen.options.to]
-type = "string"
-default = "HEAD"
-description = "End commit range"
-env_var = "TO"
 
 [presets.ansible-lint]
 name = "ansible-lint"

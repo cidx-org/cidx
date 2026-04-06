@@ -367,11 +367,13 @@ func (e *DockerExecutor) createContainer(ctx context.Context, containerConfig *c
 	// Parse command
 	// If custom entrypoint is set, keep command as single element
 	var cmdParts []string
-	if len(containerConfig.Entrypoint) > 0 {
+	// Empty entrypoint override ([""] to clear image default) should still parse command
+	hasRealEntrypoint := len(containerConfig.Entrypoint) > 0 && containerConfig.Entrypoint[0] != ""
+	if hasRealEntrypoint {
 		// With custom entrypoint, command should be a single element
 		cmdParts = []string{command}
 	} else {
-		// Without entrypoint, parse normally
+		// Without entrypoint (or empty override), parse normally
 		cmdParts = parseCommand(command)
 	}
 
