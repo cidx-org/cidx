@@ -5,8 +5,8 @@ import "github.com/urfave/cli/v2"
 // cpwCommand returns the commit-push-watch command definition.
 func cpwCommand() *cli.Command {
 	return &cli.Command{
-		Name:  "commit-push-watch",
-		Usage: "Commit changes, push, and watch remote workflow",
+		Name:    "commit-push-watch",
+		Usage:   "Commit changes, push, and watch remote workflow",
 		Aliases: []string{"cpw"},
 		Flags: []cli.Flag{
 			&cli.StringFlag{
@@ -79,6 +79,31 @@ func prCommand() *cli.Command {
 					},
 				},
 				Action: prMergeAction,
+			},
+			{
+				Name:      "status",
+				Usage:     "Show PR status for current branch",
+				ArgsUsage: "[branch]",
+				Action:    prStatusAction,
+			},
+			{
+				Name:      "watch",
+				Usage:     "Watch CI checks until they complete",
+				Aliases:   []string{"w"},
+				ArgsUsage: "[branch]",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:    "quiet",
+						Aliases: []string{"q"},
+						Usage:   "Minimal output (no spinner animation, CI-friendly)",
+					},
+				},
+				Action: prWatchAction,
+			},
+			{
+				Name:    "open",
+				Usage:   "Open PR in browser",
+				Action:  prOpenAction,
 			},
 			{
 				Name:    "tui",
