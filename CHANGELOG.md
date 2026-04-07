@@ -1,3 +1,23 @@
+## v1.4.0 (2026-04-07)
+
+### Feat
+
+- smart project detection in cidx init (#85)
+- add cidx generate gitlab command (#83)
+- add quiet mode to branch pr -w for minimal output (#79)
+- implement Podman support via Docker-compatible socket (#75)
+
+### Fix
+
+- commitizen scans from last tag and fix empty entrypoint parsing (#78)
+- block cpw from pushing directly to main/master (#77)
+- add userns keep-id for Podman rootless volume permissions
+- override gh-release entrypoint to allow shell commands (#74)
+
+### Refactor
+
+- move pr status/watch/open under cidx pr subcommand (#82)
+
 ## v1.3.1 (2026-04-06)
 
 ### Feat
