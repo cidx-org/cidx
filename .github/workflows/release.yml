@@ -5,7 +5,7 @@ on:
     tags: ["v*"]
 
 jobs:
-  # Build: Compile release binary with version
+  # Build: Cross-compile for all platforms
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -18,16 +18,34 @@ jobs:
         with:
           go-version: "1.23"
 
-      - name: Build release binary
+      - name: Build release binaries
         run: |
           VERSION=${GITHUB_REF_NAME#v}
-          go build -ldflags "-X main.Version=$VERSION" -o bin/cidx ./cmd/cidx
+          LDFLAGS="-X main.Version=$VERSION"
+          mkdir -p dist
 
-      - name: Upload binary
+          # Linux
+          GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/cidx-linux-amd64 ./cmd/cidx
+          GOOS=linux GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/cidx-linux-arm64 ./cmd/cidx
+
+          # macOS
+          GOOS=darwin GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/cidx-darwin-amd64 ./cmd/cidx
+          GOOS=darwin GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/cidx-darwin-arm64 ./cmd/cidx
+
+          # Windows
+          GOOS=windows GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/cidx-windows-amd64.exe ./cmd/cidx
+
+          # Default binary for backward compat
+          cp dist/cidx-linux-amd64 dist/cidx
+
+          # Checksums
+          cd dist && sha256sum cidx-* > checksums.txt
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: cidx-binary
-          path: bin/cidx
+          name: cidx-binaries
+          path: dist/
           retention-days: 7
 
   # Docker: Build and push container image
@@ -42,14 +60,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download binary
+      - name: Download binaries
         uses: actions/download-artifact@v4
         with:
-          name: cidx-binary
-          path: bin/
+          name: cidx-binaries
+          path: dist/
 
-      - name: Make binary executable
-        run: chmod +x bin/cidx
+      - name: Prepare binary
+        run: |
+          mkdir -p bin
+          cp dist/cidx-linux-amd64 bin/cidx
+          chmod +x bin/cidx
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -65,31 +86,31 @@ jobs:
           IMAGE_TAG: ${{ github.ref_name }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Release: Create GitHub Release with artifacts
+  # Release: Create GitHub Release with all binaries
   release:
     name: GitHub Release
     runs-on: ubuntu-latest
-    needs: [docker]
+    needs: [build, docker]
     permissions:
       contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download binary
+      - name: Download binaries
         uses: actions/download-artifact@v4
         with:
-          name: cidx-binary
-          path: bin/
-
-      - name: Make binary executable
-        run: chmod +x bin/cidx
-
-      - name: Configure gh CLI
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+          name: cidx-binaries
+          path: dist/
 
       - name: Create GitHub Release
-        run: ./bin/cidx run github-release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GIT_TAG: ${{ github.ref_name }}
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/cidx-linux-amd64
+            dist/cidx-linux-arm64
+            dist/cidx-darwin-amd64
+            dist/cidx-darwin-arm64
+            dist/cidx-windows-amd64.exe
+            dist/checksums.txt
