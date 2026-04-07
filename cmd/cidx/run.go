@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/cidx-org/cidx/pkg/config"
+	"github.com/cidx-org/cidx/pkg/environment"
 	"github.com/cidx-org/cidx/pkg/executor"
 	"github.com/cidx-org/cidx/pkg/pipeline"
 	"github.com/urfave/cli/v2"
@@ -62,6 +63,12 @@ Examples:
 			dryRun := c.Bool("dry-run")
 			verbose := c.Bool("verbose")
 			quiet := c.Bool("quiet")
+
+			// Auto-quiet in CI unless --verbose is explicitly set
+			if !quiet && !verbose && environment.Detect().IsCI {
+				quiet = true
+			}
+
 			backend := executor.ParseBackendType(c.String("backend"))
 			parallel := c.Bool("parallel")
 			concurrency := c.Int("concurrency")
