@@ -33,6 +33,18 @@ CIDX exists to demonstrate what a well-run project looks like in practice -- not
 
 ## How We Work
 
+### Product Guardrails
+
+Before any feature, check against [docs/GUARDRAILS.md](docs/GUARDRAILS.md). Key rules:
+
+1. **CIDX adapts to the project** -- never the other way around
+2. **No phase without real value** -- no theoretical completeness, no "looks mature"
+3. **Simplicity is a constraint** -- does it remove friction or add sophistication?
+4. **User stays in control** -- understandable, predictable, observable, overridable
+5. **Right level of abstraction** -- execution engine, not governance framework
+
+If a feature increases CIDX's control over projects, the default answer is **no**.
+
 ### The Golden Rule: Discussion Before Code
 
 Every feature follows this cycle:
