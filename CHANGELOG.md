@@ -1,3 +1,9 @@
+## v1.6.1 (2026-04-07)
+
+### Fix
+
+- multi-platform release binaries with checksums (#92)
+
 ## v1.6.0 (2026-04-07)
 
 ### Feat
