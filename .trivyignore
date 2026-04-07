@@ -1,0 +1,7 @@
+# Known vulnerabilities accepted for this project.
+# These are tracked in known-vulnerabilities.toml with justification.
+# Review periodically and remove when upstream fixes are available.
+
+# docker/docker SDK - CVE affects Docker Engine daemon (v29.3.1 fix),
+# not the Go SDK client we use. Our Docker Desktop is already patched.
+CVE-2026-34040
