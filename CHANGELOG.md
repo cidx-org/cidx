@@ -1,3 +1,13 @@
+## v1.6.0 (2026-04-07)
+
+### Feat
+
+- cidx init generates CI workflow alongside cidx.toml (#91)
+
+### Fix
+
+- add .trivyignore and handle empty commit range in commitizen (#89)
+
 ## v1.5.0 (2026-04-07)
 
 ### Feat
