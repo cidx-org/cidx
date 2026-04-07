@@ -63,9 +63,10 @@ func initCommand() *cli.Command {
 			fmt.Println("  cidx run --dry-run ci       # preview what would run")
 			fmt.Println("  cidx run ci                 # execute pipeline")
 
-			if detection.Remote == "github" {
+			switch detection.Remote {
+			case "github":
 				fmt.Println("  cidx generate github -o .github/workflows/cidx.yml")
-			} else if detection.Remote == "gitlab" {
+			case "gitlab":
 				fmt.Println("  cidx generate gitlab -o .gitlab-ci.yml")
 			}
 
