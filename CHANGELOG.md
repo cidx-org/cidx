@@ -1,3 +1,13 @@
+## v1.5.0 (2026-04-07)
+
+### Feat
+
+- auto-quiet mode in CI environments (#87)
+
+### Fix
+
+- resolve env references in command expansion (#88)
+
 ## v1.4.0 (2026-04-07)
 
 ### Feat
