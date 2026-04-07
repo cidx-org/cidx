@@ -488,11 +488,13 @@ func expandVolumes(volumes []string) []string {
 func expandCommand(command string, env map[string]string) string {
 	expanded := command
 	for k, v := range env {
+		// Resolve env references in values first (e.g., TAG="${GIT_TAG}" → TAG="v1.4.0")
+		resolvedValue := os.ExpandEnv(v)
 		placeholder := fmt.Sprintf("${%s}", k)
-		expanded = strings.ReplaceAll(expanded, placeholder, v)
+		expanded = strings.ReplaceAll(expanded, placeholder, resolvedValue)
 	}
 
-	// For shell commands (sh -c ...), don't expand environment variables
+	// For shell commands (sh -c ...), don't expand remaining env vars
 	// because they should be expanded inside the container shell
 	if strings.HasPrefix(strings.TrimSpace(command), "sh -c") {
 		return expanded
