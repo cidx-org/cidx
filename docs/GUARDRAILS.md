@@ -33,6 +33,7 @@ If an evolution turns CIDX into a prescriptive framework, that evolution must be
 A step should only exist if it addresses a concrete, experienced need.
 
 No phase should be introduced:
+
 - to complete a theoretical schema
 - to appear "mature"
 - to reflect an ideal abstract cycle
@@ -46,6 +47,7 @@ Simplicity is not a lack of ambition.
 It's a requirement.
 
 Every new feature must answer a simple question:
+
 - does it remove a real friction?
 - or does it add a layer of sophistication?
 
@@ -56,12 +58,14 @@ If the answer is ambiguous, the feature must be delayed or refused.
 CIDX must help, not take over.
 
 System behavior must remain:
+
 - understandable
 - predictable
 - observable
 - overridable
 
 The user must be able to:
+
 - see what will be executed
 - understand why
 - limit execution to what's necessary
@@ -72,6 +76,7 @@ The user must be able to:
 CIDX can abstract execution, context, useful orchestration.
 
 CIDX must not over-abstract:
+
 - team organization
 - governance
 - a single vision of delivery
@@ -142,6 +147,7 @@ Before adding a capability:
 ## Decision rule
 
 If an idea:
+
 - increases CIDX's control over projects
 - significantly increases complexity
 - imposes a cycle or structure
@@ -168,6 +174,7 @@ The burden of proof must remain on the side of complexity, not on the side of si
 DevOps is not about tooling for the sake of tooling.
 
 DevOps, here, means:
+
 - reducing silos
 - bringing responsibilities closer
 - making the flow more continuous
