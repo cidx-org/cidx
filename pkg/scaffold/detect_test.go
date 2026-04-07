@@ -9,8 +9,8 @@ import (
 
 func TestDetect_GoProject(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module test"), 0644)
-	os.MkdirAll(filepath.Join(dir, ".git"), 0755)
+	_ = os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module test"), 0644)
+	_ = os.MkdirAll(filepath.Join(dir, ".git"), 0755)
 
 	d := Detect(dir)
 
@@ -27,7 +27,7 @@ func TestDetect_GoProject(t *testing.T) {
 
 func TestDetect_PythonProject(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "pyproject.toml"), []byte(""), 0644)
+	_ = os.WriteFile(filepath.Join(dir, "pyproject.toml"), []byte(""), 0644)
 
 	d := Detect(dir)
 
@@ -38,7 +38,7 @@ func TestDetect_PythonProject(t *testing.T) {
 
 func TestDetect_RustProject(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte(""), 0644)
+	_ = os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte(""), 0644)
 
 	d := Detect(dir)
 
@@ -61,8 +61,8 @@ func TestDetect_NoProject(t *testing.T) {
 
 func TestDetect_MultiLanguage(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module test"), 0644)
-	os.WriteFile(filepath.Join(dir, "package.json"), []byte("{}"), 0644)
+	_ = os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module test"), 0644)
+	_ = os.WriteFile(filepath.Join(dir, "package.json"), []byte("{}"), 0644)
 
 	d := Detect(dir)
 
