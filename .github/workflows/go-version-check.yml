@@ -1,0 +1,66 @@
+name: Go Version Check
+
+on:
+  schedule:
+    - cron: "0 9 1 * *" # 1st of each month at 9am UTC
+  workflow_dispatch: # Manual trigger
+
+jobs:
+  check:
+    name: Check Go Version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for new Go version
+        id: check
+        run: |
+          # Get current version from go.mod
+          CURRENT=$(grep '^go ' go.mod | awk '{print $2}')
+          echo "current=$CURRENT"
+
+          # Get latest stable Go version
+          LATEST=$(curl -s 'https://go.dev/dl/?mode=json' | jq -r '.[0].version' | sed 's/go//')
+          echo "latest=$LATEST"
+
+          # Compare major.minor (ignore patch for go.mod)
+          CURRENT_MM=$(echo "$CURRENT" | cut -d. -f1,2)
+          LATEST_MM=$(echo "$LATEST" | cut -d. -f1,2)
+
+          echo "current_mm=$CURRENT_MM" >> $GITHUB_OUTPUT
+          echo "latest_mm=$LATEST_MM" >> $GITHUB_OUTPUT
+          echo "latest=$LATEST" >> $GITHUB_OUTPUT
+
+          if [ "$CURRENT_MM" != "$LATEST_MM" ]; then
+            echo "update=true" >> $GITHUB_OUTPUT
+            echo "New Go version available: $CURRENT -> $LATEST"
+          else
+            echo "update=false" >> $GITHUB_OUTPUT
+            echo "Go version is current: $CURRENT (latest: $LATEST)"
+          fi
+
+      - name: Update go.mod
+        if: steps.check.outputs.update == 'true'
+        run: |
+          go mod edit -go ${{ steps.check.outputs.latest_mm }}
+          go mod tidy
+
+      - name: Create PR
+        if: steps.check.outputs.update == 'true'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          commit-message: "chore(deps): update Go from ${{ steps.check.outputs.current_mm }} to ${{ steps.check.outputs.latest_mm }}"
+          title: "chore(deps): update Go to ${{ steps.check.outputs.latest_mm }}"
+          body: |
+            Go ${{ steps.check.outputs.latest }} is available.
+
+            This PR updates `go.mod` from Go ${{ steps.check.outputs.current_mm }} to ${{ steps.check.outputs.latest_mm }}.
+            All workflows use `go-version-file: go.mod` so they will pick up the new version automatically.
+
+            [Release notes](https://go.dev/doc/go${{ steps.check.outputs.latest_mm }})
+          branch: chore/go-version-update
+          labels: dependencies
