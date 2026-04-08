@@ -5,7 +5,8 @@ updates:
   - package-ecosystem: gomod
     directory: /
     schedule:
-      interval: daily
+      interval: weekly
+      day: monday
     commit-message:
       prefix: "chore(deps)"
     labels:
@@ -23,7 +24,8 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: daily
+      interval: weekly
+      day: monday
     commit-message:
       prefix: "ci(deps)"
     labels:
