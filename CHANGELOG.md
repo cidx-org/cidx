@@ -1,3 +1,10 @@
+## v1.6.2 (2026-04-08)
+
+### Fix
+
+- strip debug symbols from release binaries (-s -w) (#104)
+- remove unused version-bump container from cidx.toml (#94)
+
 ## v1.6.1 (2026-04-07)
 
 ### Fix
