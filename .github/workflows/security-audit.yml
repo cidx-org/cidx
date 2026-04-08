@@ -126,7 +126,7 @@ jobs:
         run: go build -o bin/cidx ./cmd/cidx
 
       - name: Download Trivy DB
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: trivy-db
           path: ~/.cache/trivy
@@ -232,7 +232,7 @@ jobs:
         run: go build -o bin/cidx ./cmd/cidx
 
       - name: Download Grype DB
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: grype-db
           path: ~/.cache/grype
@@ -355,7 +355,7 @@ jobs:
         run: go build -o bin/cidx ./cmd/cidx
 
       - name: Download all scan results
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           pattern: "{trivy,grype}-*"
