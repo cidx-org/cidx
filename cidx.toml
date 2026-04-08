@@ -302,21 +302,6 @@ containers = ["kaniko"]  # Build and push Docker images without Docker daemon
 # ──────────────────────────────────────────────────────────────────────────────
 # Version Phase: Semantic versioning and changelog (deprecated)
 # ──────────────────────────────────────────────────────────────────────────────
-# NOTE: This phase is unused. Use action 'release-create' instead for version bumping.
-[version]
-containers = ["version-bump"]
-
-[containers.version-bump]
-phase = "version"                           # Custom phase for version management
-image = "commitizen/commitizen:latest"      # Docker image for commitizen tool
-command = "cz bump --yes"                   # Command to run (auto-approve version bump)
-workdir = "/app"                            # Working directory inside container
-volumes = [                                 # Mount workspace and git history
-    "${WORKSPACE}:/app",                    # Project files
-    "${WORKSPACE}/.git:/app/.git",          # Git repository (needed for version bump)
-]
-
-# ──────────────────────────────────────────────────────────────────────────────
 # Release Phase: GitHub release creation
 # ──────────────────────────────────────────────────────────────────────────────
 [release]
