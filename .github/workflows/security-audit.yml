@@ -116,7 +116,7 @@ jobs:
 
       # Login to DHI for scanning hardened images
       - name: Login to Docker Hardened Images
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: dhi.io
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -222,7 +222,7 @@ jobs:
 
       # Login to DHI for scanning hardened images
       - name: Login to Docker Hardened Images
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: dhi.io
           username: ${{ secrets.DOCKERHUB_USERNAME }}
