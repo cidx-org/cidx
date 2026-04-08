@@ -21,7 +21,7 @@ jobs:
       - name: Build release binaries
         run: |
           VERSION=${GITHUB_REF_NAME#v}
-          LDFLAGS="-X main.Version=$VERSION"
+          LDFLAGS="-s -w -X main.Version=$VERSION"
           mkdir -p dist
 
           # Linux
