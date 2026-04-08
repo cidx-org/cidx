@@ -45,6 +45,18 @@ Before any feature, check against [docs/GUARDRAILS.md](docs/GUARDRAILS.md). Key 
 
 If a feature increases CIDX's control over projects, the default answer is **no**.
 
+### Scope: What CIDX Does and Doesn't Do
+
+CIDX is an **execution engine** for CI phases (security, code, test, build). It runs containers, manages presets, and provides workflow helpers.
+
+CIDX **does not** manage:
+
+- **Release publishing** -- GitHub/GitLab release workflows handle this natively with `softprops/action-gh-release` or equivalent. Cross-compile + asset attachment is 5 lines of shell, executed once per release. Adding a CIDX preset for this would add complexity for near-zero friction reduction (guardrail 3).
+- **Deployment** -- CIDX stops at build. Deployment is platform-specific and out of scope.
+- **Team governance** -- No mandatory phases, no enforced workflows, no compliance frameworks (guardrail 5).
+
+If a capability is better handled by the platform natively, CIDX should not duplicate it.
+
 ### The Golden Rule: Discussion Before Code
 
 Every feature follows this cycle:
