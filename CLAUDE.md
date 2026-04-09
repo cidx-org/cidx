@@ -7,7 +7,7 @@
 It does two things:
 
 1. **Portable CI/CD Runner** -- A single `cidx.toml` config runs identically on local, GitHub Actions, GitLab CI, and Jenkins. Declare container names, CIDX resolves images, volumes, commands, and environment from built-in presets.
-2. **Developer Workflow** -- Human-friendly commands for PR lifecycle, branch management, releases, and CI monitoring (`cidx action`, `cidx branch`, `cidx status`).
+2. **Developer Workflow** -- Human-friendly commands for PR lifecycle, branch management, releases, and CI monitoring (`cidx repo pr`, `cidx release`, `cidx status`).
 
 **This is not a product competing with Dagger or Earthly.** It's an opinionated tool built for its author's workflow, open-sourced as a reference implementation of a DevOps philosophy: convention over configuration, container-native execution, security by default.
 
@@ -28,14 +28,14 @@ CIDX exists to demonstrate what a well-run project looks like in practice -- not
 - **BDD-first development** -- If you can't write a Gherkin scenario for it, don't build it
 - **Trunk-based workflow** -- Short-lived branches, conventional commits, grouped releases
 - **AI-assisted development** -- A human pilots, Claude executes. Every feature is discussed before a single line is written
-- **Aggressive dogfooding** -- CIDX builds itself with its own pipeline AND we use every CIDX command in our daily workflow. If a command is missing, broken, or has bad UX, that becomes the next priority. We eat our own cooking -- `cidx branch pr`, `cidx action cpw`, `cidx doctor`, `cidx check drift` are all used for real, not just tested
+- **Aggressive dogfooding** -- CIDX builds itself with its own pipeline AND we use every CIDX command in our daily workflow. If a command is missing, broken, or has bad UX, that becomes the next priority. We eat our own cooking -- `cidx repo branch pr`, `cidx cpw`, `cidx doctor`, `cidx check drift` are all used for real, not just tested
 - **Minimal dependencies** -- Every import must justify its existence
 
 ## How We Work
 
 ### Product Guardrails
 
-Before any feature, check against [docs/GUARDRAILS.md](docs/GUARDRAILS.md). Key rules:
+Before any feature, check against [docs/GUARDRAILS.md](docs/GUARDRAILS.md) and [docs/PRODUCT_SCOPE.md](docs/PRODUCT_SCOPE.md). Key rules:
 
 1. **CIDX adapts to the project** -- never the other way around
 2. **No phase without real value** -- no theoretical completeness, no "looks mature"
@@ -87,24 +87,32 @@ The combination of issue discussion + scenario specification + commit history gi
 - Tags = Releases (1:1 mapping)
 - **Changelog**: Must be updated at every release. Commitizen generates it from conventional commits. Verify CHANGELOG.md is current before tagging.
 
-Use `cidx action pr create`, `cidx action pr merge`, `cidx action release create` for the workflow.
+Use `cidx pr create`, `cidx pr merge`, `cidx release create` for the workflow.
 
 ### Dogfooding: Use CIDX for Everything
 
 **Never use `gh` CLI or raw `git` commands for PR/branch workflows.** Always use `go run ./cmd/cidx` (or the built binary). This is how we find bugs and UX issues.
 
 ```bash
-# PR lifecycle (top-level shortcuts)
+# Core commands
+go run ./cmd/cidx init                                # detect project, generate config
+go run ./cmd/cidx run --dry-run ci                    # preview pipeline
+go run ./cmd/cidx run ci                              # execute full pipeline
+go run ./cmd/cidx generate github                     # generate CI workflow
+go run ./cmd/cidx doctor                              # environment check
+go run ./cmd/cidx check drift                         # compare cidx.toml vs CI YAML
+
+# PR lifecycle (hidden top-level aliases for convenience)
 go run ./cmd/cidx pr create "feat: description"
 go run ./cmd/cidx cpw -m "commit message"             # commit + push + watch CI
 go run ./cmd/cidx pr watch -q                         # watch PR checks (quiet)
 go run ./cmd/cidx pr status                           # show PR status
 go run ./cmd/cidx pr merge                            # merge current PR
 
-# Diagnostics
-go run ./cmd/cidx doctor                              # environment check
-go run ./cmd/cidx check drift                         # compare cidx.toml vs CI YAML
-go run ./cmd/cidx generate github                     # generate CI workflow
+# Full paths (also valid)
+go run ./cmd/cidx repo pr create "feat: description"
+go run ./cmd/cidx release create
+go run ./cmd/cidx security vuln list
 ```
 
 If a command is missing, broken, or has bad UX -- **that becomes the next priority**. We eat our own cooking.
@@ -147,6 +155,10 @@ pkg/
   vcs/           Version control operations
 
 cmd/cidx/        CLI entry point and command handlers (urfave/cli)
+  main.go        Command hierarchy: core top-level, secondary under namespaces
+  repo.go        cidx repo — PR, cpw, branch, workflow, artifact, cleanup
+  release_cmd.go cidx release — prepare, preview, create, commit, tag
+  security_cmd.go cidx security — vuln, registry
 features/        BDD scenarios (Gherkin)
 docs/            Project documentation
 ```
@@ -184,14 +196,14 @@ go vet ./...
 golangci-lint run
 
 # Run locally
-go run ./cmd/cidx list                # List containers
+go run ./cmd/cidx preset list         # List presets
 go run ./cmd/cidx run --dry-run ci    # Dry-run pipeline
 
 # Workflow (use cidx itself)
-cidx action pr create "feat: description"
-cidx action cpw -m "commit message"
-cidx action pr merge
-cidx action release create
+cidx pr create "feat: description"
+cidx cpw -m "commit message"
+cidx pr merge
+cidx release create
 cidx run ci                           # Full local CI
 ```
 

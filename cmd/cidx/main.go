@@ -13,30 +13,85 @@ var Version = "dev"
 func main() {
 	app := &cli.App{
 		Name:                   "cidx",
-		Usage:                  "CI with Declarative eXecution - Ultra-declarative DevSecOps pipeline runner",
+		Usage:                  "CI with Declarative eXecution - Integrate any project in two commands",
 		Version:                Version,
 		UseShortOptionHandling: true,
 		Commands: []*cli.Command{
-			statusCommand(),
-			runCommand(),
-			presetCommand(),
-			listCommand(),  // Deprecated: use 'preset list'
-			infoCommand(),  // Deprecated: use 'preset info'
-			validateCommand(),
+			// Core — the product story
 			initCommand(),
-			prCommand(),    // Top-level alias for 'action pr'
-			cpwCommand(),   // Top-level alias for 'action cpw'
-			actionCommand(),
-			workflowCommand(),
-			checkCommand,
-			branchCommand(),
-			registryCommand(),
-			vulnCommand(),
-			cleanupCommand(),
-			doctorCommand(),
+			runCommand(),
 			generateCommand(),
-			demoCommand(),
+			validateCommand(),
+			checkCommand,
+			doctorCommand(),
+			presetCommand(),
+			statusCommand(),
+
+			// Secondary — namespaced capabilities
+			repoCommand(),
+			releaseCommand(),
+			securityCommand(),
+
+			// Utility
+			cleanupCommand(),
 			aboutCommand(),
+
+			// Hidden aliases for dogfooding convenience
+			{
+				Name:   "pr",
+				Usage:  "Alias for 'repo pr'",
+				Hidden: true,
+				Action: func(c *cli.Context) error {
+					return c.App.Run(append([]string{c.App.Name, "repo", "pr"}, c.Args().Slice()...))
+				},
+				Subcommands: prCommand().Subcommands,
+			},
+			{
+				Name:   "cpw",
+				Usage:  "Alias for 'repo cpw'",
+				Hidden: true,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "message",
+						Aliases:  []string{"m"},
+						Usage:    "Commit message",
+						Required: true,
+					},
+				},
+				Action: commitPushWatchAction,
+			},
+
+			// Deprecated — will be removed
+			{
+				Name:   "action",
+				Usage:  "Deprecated: use 'repo', 'release', or 'security' instead",
+				Hidden: true,
+				Subcommands: []*cli.Command{
+					cpwCommand(),
+					prCommand(),
+					{
+						Name:        "tag",
+						Usage:       "Deprecated: use 'release tag' instead",
+						Subcommands: releaseTagCommand().Subcommands,
+					},
+					{
+						Name:        "release",
+						Usage:       "Deprecated: use 'release' instead",
+						Subcommands: releaseCommand().Subcommands,
+					},
+					{
+						Name:        "artifact",
+						Usage:       "Deprecated: use 'repo artifact' instead",
+						Subcommands: artifactCommand().Subcommands,
+					},
+				},
+			},
+			{
+				Name:   "demo",
+				Hidden: true,
+				Usage:  "Demo mode",
+				Subcommands: demoCommand().Subcommands,
+			},
 		},
 		Flags: []cli.Flag{
 			&cli.StringFlag{

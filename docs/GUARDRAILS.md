@@ -184,3 +184,9 @@ DevOps, here, means:
 
 CIDX does not exist to stage an ideal cycle.
 CIDX exists to help teams better execute reality.
+
+---
+
+## Scope
+
+For the product core definition, two-command integration promise, and CLI hierarchy principles, see [docs/PRODUCT_SCOPE.md](PRODUCT_SCOPE.md).
