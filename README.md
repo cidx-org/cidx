@@ -1,13 +1,11 @@
-# CIDX — One CI config for local and CI
+# CIDX — Integrate any project into CI in two commands
 
 [![CI](https://github.com/cidx-org/cidx/actions/workflows/ci.yml/badge.svg)](https://github.com/cidx-org/cidx/actions/workflows/ci.yml)
 [![Security Audit](https://github.com/cidx-org/cidx/actions/workflows/security-audit.yml/badge.svg)](https://github.com/cidx-org/cidx/actions/workflows/security-audit.yml)
 
-CIDX is a container-first CI runner. One `cidx.toml`, same checks locally and in CI.
+CIDX detects your existing project, generates a CI config, and runs the same checks locally and in CI. Two commands, one `cidx.toml`, containers handle the rest.
 
-Everything runs in containers (Docker or Podman). Nothing is installed on your machine, your workspace stays clean, and 40+ built-in presets handle common tools out of the box.
-
-CIDX is dogfooded on this repository: CIDX builds CIDX.
+Everything runs in Docker or Podman — nothing is installed on your machine. 40+ built-in presets cover common security, code quality, test, and build tools out of the box.
 
 ## Quick Start
 
