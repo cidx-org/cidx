@@ -40,15 +40,15 @@ If a feature does not make one of these paths clearer, faster, or safer — it d
 
 These capabilities define what CIDX is.
 
-| Command | Role |
-|---------|------|
-| `init` | Detect project, generate config |
-| `run` | Execute phases, tools, pipelines |
-| `generate` | Produce CI workflow from config |
-| `validate` | Verify config correctness |
-| `doctor` | Diagnose environment readiness |
-| `preset` | Inspect and manage built-in container definitions |
-| `status` / TUI | Unified project state view |
+| Command        | Role                                              |
+| -------------- | ------------------------------------------------- |
+| `init`         | Detect project, generate config                   |
+| `run`          | Execute phases, tools, pipelines                  |
+| `generate`     | Produce CI workflow from config                   |
+| `validate`     | Verify config correctness                         |
+| `doctor`       | Diagnose environment readiness                    |
+| `preset`       | Inspect and manage built-in container definitions |
+| `status` / TUI | Unified project state view                        |
 
 Supporting concepts that are part of the core:
 
@@ -64,19 +64,20 @@ Supporting concepts that are part of the core:
 
 These exist, are maintained, and are dogfooded daily — but they do not define the product's identity.
 
-| Capability | Purpose |
-|------------|---------|
-| PR helpers (`pr`, `cpw`) | Dogfooding workflow, find CIDX bugs through daily use |
-| Release helpers (`release`, `tag`) | Orchestrate semantic versioning and changelogs |
-| Branch management (`branch`) | List, filter, clean up branches |
-| Workflow watching (`workflow`) | Monitor CI runs in real time |
-| Artifact management (`artifact`) | Inspect and clean GitHub Actions artifacts |
-| Vulnerability workflows (`vuln`) | Exception management for security scanners |
-| Registry utilities (`registry`) | Docker registry auth and status |
+| Capability                         | Purpose                                               |
+| ---------------------------------- | ----------------------------------------------------- |
+| PR helpers (`pr`, `cpw`)           | Dogfooding workflow, find CIDX bugs through daily use |
+| Release helpers (`release`, `tag`) | Orchestrate semantic versioning and changelogs        |
+| Branch management (`branch`)       | List, filter, clean up branches                       |
+| Workflow watching (`workflow`)     | Monitor CI runs in real time                          |
+| Artifact management (`artifact`)   | Inspect and clean GitHub Actions artifacts            |
+| Vulnerability workflows (`vuln`)   | Exception management for security scanners            |
+| Registry utilities (`registry`)    | Docker registry auth and status                       |
 
 These are useful. They are real. They solve real friction.
 
 But they answer different questions than the core:
+
 - How do I manage my PRs better?
 - How do I pilot my releases?
 - How do I track my CI runs?
@@ -129,6 +130,7 @@ Multiple standalone TUIs (merge, release, artifact) create parallel product iden
 CIDX is an integration engine for existing projects.
 
 CIDX is not:
+
 - a DevOps suite
 - a repo management platform
 - a full delivery cockpit
