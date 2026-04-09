@@ -11,26 +11,24 @@ CIDX is dogfooded on this repository: CIDX builds CIDX.
 
 ## Quick Start
 
+Two paths, two commands each.
+
+**Run locally:**
+
 ```bash
-# Install
-go install github.com/cidx-org/cidx/cmd/cidx@latest
-
-# Check your environment
-cidx doctor
-
-# Initialize (auto-detects Go/Python/Rust/Node.js/Ansible)
-cidx init
-
-# Generate CI workflow
-cidx generate github -o .github/workflows/cidx.yml
-# or: cidx generate gitlab -o .gitlab-ci.yml
-
-# Preview and run
-cidx run --dry-run ci
-cidx run ci
+cidx init        # Detect project, generate cidx.toml
+cidx run ci      # Execute the full pipeline in containers
 ```
 
-That's it. `cidx init` detects your project type, picks the right presets, and generates a `cidx.toml`. `cidx generate` produces the CI platform file. Three commands to a working pipeline.
+**Plug into CI:**
+
+```bash
+cidx init                                              # Detect project, generate cidx.toml
+cidx generate github -o .github/workflows/cidx.yml    # Generate CI workflow
+# or: cidx generate gitlab -o .gitlab-ci.yml
+```
+
+`cidx init` detects your project type (Go, Python, Rust, Node.js, Ansible), picks the right presets, and generates a `cidx.toml`. Same config, same checks, locally and in CI.
 
 ## Example configs
 
@@ -91,82 +89,52 @@ cidx.toml          Built-in Presets       Custom Presets
 
 You declare **what** to run. CIDX resolves **how** — images, commands, volumes, environment, timeouts, pull policy.
 
-## Commands
-
-### Running pipelines
+## Core Commands
 
 ```bash
-cidx run security              # Run a phase
+cidx init                      # Detect project, generate config
+cidx run ci                    # Execute a pipeline
+cidx run security              # Run a single phase
 cidx run trivy                 # Run a single tool
-cidx run ci                    # Run a named pipeline
-cidx run --parallel security   # Parallel execution (local)
-cidx run --quiet ci            # Show logs only on failure
 cidx run --dry-run ci          # Preview without executing
-cidx run --backend podman ci   # Force Podman backend
-```
-
-### PR lifecycle
-
-```bash
-cidx pr create "feat: description"   # Create branch + draft PR
-cidx cpw -m "commit message"        # Commit, push, watch CI
-cidx pr watch -q                     # Watch CI checks (quiet)
-cidx pr status                       # Show PR info
-cidx pr ready                        # Mark ready for review
-cidx pr merge                        # Squash merge + cleanup
-cidx pr open                         # Open in browser
-```
-
-### Diagnostics
-
-```bash
-cidx doctor                    # Validate environment
-cidx check drift               # Compare cidx.toml vs CI workflow
+cidx run --parallel security   # Parallel execution (local)
+cidx generate github           # Generate GitHub Actions workflow
+cidx generate gitlab           # Generate GitLab CI config
 cidx validate                  # Validate config file
-```
-
-### Presets
-
-```bash
+cidx check drift               # Compare cidx.toml vs CI workflow
+cidx doctor                    # Validate environment
 cidx preset list               # List all 40+ presets by phase
 cidx preset info trivy         # Show preset details
-cidx preset search security    # Search presets
-cidx preset check-updates      # Check for newer image versions
-cidx preset audit              # CVE + update compliance report
-cidx preset scan               # Scan images for vulnerabilities
-```
-
-### CI generation
-
-```bash
-cidx generate github           # Generate GitHub Actions workflow
-cidx generate gitlab           # Generate GitLab CI configuration
-cidx generate github -o .github/workflows/cidx.yml  # Write to file
-```
-
-### Branch management
-
-```bash
-cidx branch list               # All branches with status
-cidx branch list --stale       # Inactive > 30 days
-cidx branch cleanup            # Dry-run cleanup
-cidx branch cleanup -x         # Delete merged branches
-```
-
-### Releases
-
-```bash
-cidx action tag prepare        # Generate version and message
-cidx action tag create         # Create and push tag
-cidx action release create     # Bump version, tag, push, release
-```
-
-### Maintenance
-
-```bash
-cidx cleanup                   # Remove stopped cidx containers
 cidx status                    # Interactive TUI dashboard
 ```
+
+## Workflow Helpers
+
+CIDX also ships developer workflow commands, dogfooded daily on this repo. These are secondary to the core integration engine but useful for the full dev cycle.
+
+```bash
+# PR lifecycle (cidx repo pr)
+cidx repo pr create "feat: description"   # Create branch + draft PR
+cidx repo cpw -m "commit message"         # Commit, push, watch CI
+cidx repo pr watch -q                     # Watch CI checks (quiet)
+cidx repo pr merge                        # Squash merge + cleanup
+cidx repo branch list --stale             # Find stale branches
+cidx repo branch cleanup -x              # Delete merged branches
+
+# Releases (cidx release)
+cidx release tag prepare                  # Generate version and message
+cidx release tag create                   # Create and push tag
+cidx release create                       # Full release workflow
+
+# Security (cidx security)
+cidx security vuln list                   # List vulnerability exceptions
+cidx security registry check              # Verify DHI access
+
+# Maintenance
+cidx cleanup                              # Remove stopped containers
+```
+
+> **Shortcuts**: `cidx pr` and `cidx cpw` work as aliases for `cidx repo pr` and `cidx repo cpw`.
 
 ## Configuration
 
@@ -208,8 +176,8 @@ Presets default to [Docker Hardened Images](https://dhi.io) where available — 
 DHI requires Docker Hub credentials. In CI, set `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`.
 
 ```bash
-cidx registry check    # Verify DHI access
-cidx registry login    # Authenticate
+cidx security registry check    # Verify DHI access
+cidx security registry login    # Authenticate
 ```
 
 ## Documentation
