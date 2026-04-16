@@ -39,6 +39,9 @@ go.work.sum
 Thumbs.db
 .claude/settings.local.json
 
+# Internal notes
+.cidx/ideas/
+
 #AI
 .serena
 .claude

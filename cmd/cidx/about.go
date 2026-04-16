@@ -29,11 +29,6 @@ func printAbout() {
   Created by: Arcker (Yoan Roblet)
               https://github.com/arcker
 
-  Built with: Claude (Anthropic)
-              This project was developed with AI assistance.
-              The vision, architecture decisions, and direction
-              are human-driven; the implementation was collaborative.
-
 ─────────────────────────────────────────────────────────────────
 
   What is CIDX?
