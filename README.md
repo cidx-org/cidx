@@ -7,6 +7,18 @@ CIDX detects your existing project, generates a CI config, and runs the same che
 
 Everything runs in Docker or Podman — nothing is installed on your machine. 40+ built-in presets cover common security, code quality, test, and build tools out of the box.
 
+## Installation
+
+Install with Go (latest):
+
+```bash
+go install github.com/cidx-org/cidx/cmd/cidx@latest
+```
+
+Or download a release binary from [Releases](https://github.com/cidx-org/cidx/releases).
+
+For other methods, see [docs/getting-started/installation.md](docs/getting-started/installation.md).
+
 ## Quick Start
 
 Two paths, two commands each.
@@ -194,4 +206,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-MIT
+[MIT](LICENSE)
