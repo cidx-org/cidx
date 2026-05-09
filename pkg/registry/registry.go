@@ -309,11 +309,11 @@ func FormatStatus(info *RegistryInfo) string {
 		sb.WriteString("Status:   \033[32m✓ Authenticated\033[0m\n")
 		fmt.Fprintf(&sb, "Username: %s\n", info.Username)
 		if info.CredsHelper != "" {
-			sb.WriteString(fmt.Sprintf("Backend:  %s (credential helper)\n", info.CredsHelper))
+			fmt.Fprintf(&sb, "Backend:  %s (credential helper)\n", info.CredsHelper)
 		}
 	} else {
 		sb.WriteString("Status:   \033[31m✗ Not authenticated\033[0m\n")
-		sb.WriteString(fmt.Sprintf("\nTo authenticate:\n  cidx registry login %s\n", info.Name))
+		fmt.Fprintf(&sb, "\nTo authenticate:\n  cidx registry login %s\n", info.Name)
 	}
 
 	sb.WriteString("\n")
@@ -329,8 +329,8 @@ func FormatDHICheck(info *RegistryInfo) string {
 
 	if info.Authenticated {
 		sb.WriteString("\033[32m✓ DHI is ready!\033[0m\n\n")
-		sb.WriteString(fmt.Sprintf("  Registry: %s\n", DHIRegistry))
-		sb.WriteString(fmt.Sprintf("  Username: %s\n", info.Username))
+		fmt.Fprintf(&sb, "  Registry: %s\n", DHIRegistry)
+		fmt.Fprintf(&sb, "  Username: %s\n", info.Username)
 		sb.WriteString("\n  You can now pull hardened images:\n")
 		sb.WriteString("    docker pull dhi.io/trivy:0.68\n")
 		sb.WriteString("    cidx run trivy\n")

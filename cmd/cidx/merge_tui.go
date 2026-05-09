@@ -557,7 +557,7 @@ func (m *mergeModel) updateCommitMessage() {
 		if len(m.prDetails.Commits) > 0 {
 			body.WriteString("Commits:\n")
 			for _, c := range m.prDetails.Commits {
-				body.WriteString(fmt.Sprintf("* %s %s\n", c.SHA, c.Message))
+				fmt.Fprintf(&body, "* %s %s\n", c.SHA, c.Message)
 			}
 		}
 		m.commitBody.SetValue(body.String())
@@ -790,7 +790,7 @@ func (m mergeModel) View() string {
 			statusBox.WriteString("\n")
 			for _, line := range strings.Split(m.postMergeStatus, "\n") {
 				if line != "" {
-					statusBox.WriteString(fmt.Sprintf("  %s\n", line))
+					fmt.Fprintf(&statusBox, "  %s\n", line)
 				}
 			}
 			b.WriteString(mergeBoxStyle.Width(boxWidth).Render(statusBox.String()))

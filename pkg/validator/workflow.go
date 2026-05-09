@@ -295,29 +295,29 @@ func FormatResult(result *ValidationResult) string {
 	var sb strings.Builder
 
 	if result.Success {
-		sb.WriteString(fmt.Sprintf("✅ Pipeline '%s' ↔ Workflow %s\n", result.Pipeline, filepath.Base(result.WorkflowFile)))
-		sb.WriteString(fmt.Sprintf("   Both execute phases: [%s]\n", strings.Join(result.LocalOrder, ", ")))
+		fmt.Fprintf(&sb, "✅ Pipeline '%s' ↔ Workflow %s\n", result.Pipeline, filepath.Base(result.WorkflowFile))
+		fmt.Fprintf(&sb, "   Both execute phases: [%s]\n", strings.Join(result.LocalOrder, ", "))
 		sb.WriteString("   Status: In sync ✓\n")
 	} else {
-		sb.WriteString(fmt.Sprintf("⚠️  Pipeline '%s' ↔ Workflow %s\n", result.Pipeline, filepath.Base(result.WorkflowFile)))
+		fmt.Fprintf(&sb, "⚠️  Pipeline '%s' ↔ Workflow %s\n", result.Pipeline, filepath.Base(result.WorkflowFile))
 		sb.WriteString("   Status: Out of sync ✗\n\n")
 
 		// Show what's in each
-		sb.WriteString(fmt.Sprintf("   📄 cidx.toml [pipelines.%s]:\n", result.Pipeline))
-		sb.WriteString(fmt.Sprintf("      phases = [%s]\n\n", strings.Join(result.LocalOrder, ", ")))
+		fmt.Fprintf(&sb, "   📄 cidx.toml [pipelines.%s]:\n", result.Pipeline)
+		fmt.Fprintf(&sb, "      phases = [%s]\n\n", strings.Join(result.LocalOrder, ", "))
 
-		sb.WriteString(fmt.Sprintf("   🔧 GitHub Actions [%s]:\n", filepath.Base(result.WorkflowFile)))
-		sb.WriteString(fmt.Sprintf("      executes = [%s]\n\n", strings.Join(result.GitHubOrder, ", ")))
+		fmt.Fprintf(&sb, "   🔧 GitHub Actions [%s]:\n", filepath.Base(result.WorkflowFile))
+		fmt.Fprintf(&sb, "      executes = [%s]\n\n", strings.Join(result.GitHubOrder, ", "))
 
 		// Show differences
 		sb.WriteString("   Differences:\n")
 
 		if len(result.MissingInGH) > 0 {
-			sb.WriteString(fmt.Sprintf("      • Missing in GitHub workflow: %s\n", strings.Join(result.MissingInGH, ", ")))
+			fmt.Fprintf(&sb, "      • Missing in GitHub workflow: %s\n", strings.Join(result.MissingInGH, ", "))
 		}
 
 		if len(result.MissingInLocal) > 0 {
-			sb.WriteString(fmt.Sprintf("      • Missing in cidx.toml pipeline: %s\n", strings.Join(result.MissingInLocal, ", ")))
+			fmt.Fprintf(&sb, "      • Missing in cidx.toml pipeline: %s\n", strings.Join(result.MissingInLocal, ", "))
 		}
 
 		if result.OrderMismatch {

@@ -173,7 +173,7 @@ func (a *TagPrepareAction) generateTagMessage(version string) string {
 	tag := a.tagConfig.FormatTag(version)
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Release %s\n\n", tag))
+	fmt.Fprintf(&sb, "Release %s\n\n", tag)
 
 	// Get commit summary since last tag
 	lastTag := a.getLastTag()
@@ -208,7 +208,7 @@ func (a *TagPrepareAction) getCommitSummary(tag string) string {
 	var sb strings.Builder
 	for _, line := range lines {
 		if line != "" {
-			sb.WriteString(fmt.Sprintf("- %s\n", line))
+			fmt.Fprintf(&sb, "- %s\n", line)
 		}
 	}
 	return sb.String()
