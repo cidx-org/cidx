@@ -23,7 +23,7 @@ It does two things:
 
 ### This Project is a Showcase
 
-CIDX exists to demonstrate what a well-run project looks like in practice -- not the bullshit version with 47 badges and empty abstractions, but the real version:
+CIDX exists to demonstrate what a well-run project looks like in practice -- not the cargo-culted version with 47 badges and empty abstractions, but the real version:
 
 - **BDD-first development** -- If you can't write a Gherkin scenario for it, don't build it
 - **Trunk-based workflow** -- Short-lived branches, conventional commits, grouped releases
