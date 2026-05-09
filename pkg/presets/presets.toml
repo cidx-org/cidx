@@ -135,7 +135,7 @@ TO = "HEAD"
 name = "commitizen"
 phase = "code"
 image = "commitizen/commitizen:4.13.10"
-command = "sh -c 'export GIT_CONFIG_GLOBAL=/tmp/.gitconfig && git config --global --add safe.directory /app && LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo HEAD~10) && COMMITS=$(git rev-list ${LAST_TAG}..HEAD --count 2>/dev/null || echo 0) && if [ \"$COMMITS\" = \"0\" ]; then echo \"No commits to validate\"; exit 0; fi && cz check --rev-range ${LAST_TAG}..HEAD'"
+command = "sh -c 'export GIT_CONFIG_GLOBAL=/tmp/.gitconfig && git config --global --add safe.directory /app && BASE=$(git merge-base HEAD origin/main 2>/dev/null || git describe --tags --abbrev=0 2>/dev/null || echo HEAD~10) && COMMITS=$(git rev-list ${BASE}..HEAD --count 2>/dev/null || echo 0) && if [ \"$COMMITS\" = \"0\" ]; then echo \"No commits to validate\"; exit 0; fi && cz check --rev-range ${BASE}..HEAD'"
 entrypoint = [""]
 workdir = "/app"
 volumes = [
