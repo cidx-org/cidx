@@ -60,6 +60,15 @@ func main() {
 				},
 				Action: commitPushWatchAction,
 			},
+			{
+				Name:   "workflow",
+				Usage:  "Alias for 'repo workflow'",
+				Hidden: true,
+				Action: func(c *cli.Context) error {
+					return c.App.Run(append([]string{c.App.Name, "repo", "workflow"}, c.Args().Slice()...))
+				},
+				Subcommands: workflowCommand().Subcommands,
+			},
 
 			// Deprecated — will be removed
 			{
@@ -87,9 +96,9 @@ func main() {
 				},
 			},
 			{
-				Name:   "demo",
-				Hidden: true,
-				Usage:  "Demo mode",
+				Name:        "demo",
+				Hidden:      true,
+				Usage:       "Demo mode",
 				Subcommands: demoCommand().Subcommands,
 			},
 		},
