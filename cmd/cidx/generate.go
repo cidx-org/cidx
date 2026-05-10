@@ -49,7 +49,16 @@ func generateGitHubAction(c *cli.Context) error {
 		return fmt.Errorf("failed to load cidx.toml: %w", err)
 	}
 
-	output, err := generate.GitHub(cfg)
+	// Auto-detect cidx-repo vs. external project. cidx repo dogfoods its own
+	// build (`go build`); every other project installs the published binary
+	// (`go install`). See pkg/generate/github.go for the bootstrap variants.
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to resolve current directory: %w", err)
+	}
+	opts := generate.GitHubOptions{SelfBuild: generate.IsCidxRepo(cwd)}
+
+	output, err := generate.GitHubWithOptions(cfg, opts)
 	if err != nil {
 		return err
 	}

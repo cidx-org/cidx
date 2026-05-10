@@ -176,7 +176,16 @@ func generateCIWorkflow(detection *scaffold.Detection, force bool) (string, erro
 	switch detection.Remote {
 	case "github":
 		ciPath = ".github/workflows/cidx.yml"
-		output, err = generate.GitHub(cfg)
+		// Auto-detect cidx-repo vs. external project so the bootstrap step
+		// either dogfoods (`go build`) or installs the published binary
+		// (`go install`). See pkg/generate/github.go.
+		cwd, cwdErr := os.Getwd()
+		if cwdErr != nil {
+			return "", fmt.Errorf("failed to resolve current directory: %w", cwdErr)
+		}
+		output, err = generate.GitHubWithOptions(cfg, generate.GitHubOptions{
+			SelfBuild: generate.IsCidxRepo(cwd),
+		})
 	case "gitlab":
 		ciPath = ".gitlab-ci.yml"
 		output, err = generate.GitLab(cfg)
