@@ -816,34 +816,27 @@ command_flag = "--repository"
 
 # Rustfmt: Official Rust code formatter
 # Included in official Rust image
+# Public image: docker.io/library/rust (RUSTUP_HOME=/usr/local/rustup,
+# CARGO_HOME=/usr/local/cargo come pre-set; toolchain pre-installed).
 [presets.rustfmt]
 name = "rustfmt"
 phase = "code"
-image = "dhi.io/rust:1.83-alpine3.21"
-hardened = true
+image = "rust:1.83-alpine3.21"
 command = "cargo fmt -- --check"
 workdir = "/src"
 volumes = ["${WORKSPACE}:/src"]
 config_files = ["rustfmt.toml", ".rustfmt.toml"]
-
-[presets.rustfmt.env]
-CARGO_HOME = "/tmp/cargo"
 
 # Clippy: Official Rust linter
 # The most comprehensive Rust linter
 [presets.clippy]
 name = "clippy"
 phase = "code"
-image = "dhi.io/rust:1.83-alpine3.21"
-hardened = true
+image = "rust:1.83-alpine3.21"
 command = "sh -c 'rustup component add clippy && cargo clippy -- -D warnings'"
 workdir = "/src"
 volumes = ["${WORKSPACE}:/src"]
 config_files = ["clippy.toml", ".clippy.toml"]
-
-[presets.clippy.env]
-CARGO_HOME = "/tmp/cargo"
-RUSTUP_HOME = "/tmp/rustup"
 
 [presets.clippy.options.pedantic]
 type = "bool"
@@ -856,14 +849,10 @@ command_flag = "-W clippy::pedantic"
 [presets.cargo-audit]
 name = "cargo-audit"
 phase = "security"
-image = "dhi.io/rust:1.83-alpine3.21"
-hardened = true
+image = "rust:1.83-alpine3.21"
 command = "sh -c 'cargo install cargo-audit && cargo audit'"
 workdir = "/src"
 volumes = ["${WORKSPACE}:/src"]
-
-[presets.cargo-audit.env]
-CARGO_HOME = "/tmp/cargo"
 
 [presets.cargo-audit.options.deny]
 type = "bool"
@@ -876,14 +865,12 @@ command_flag = "--deny warnings"
 [presets.cargo-test]
 name = "cargo-test"
 phase = "test"
-image = "dhi.io/rust:1.83-alpine3.21"
-hardened = true
+image = "rust:1.83-alpine3.21"
 command = "cargo test"
 workdir = "/src"
 volumes = ["${WORKSPACE}:/src"]
 
 [presets.cargo-test.env]
-CARGO_HOME = "/tmp/cargo"
 RUST_BACKTRACE = "1"
 
 [presets.cargo-test.options.release]
@@ -903,14 +890,10 @@ command_flag = "--all-features"
 [presets.cargo-build]
 name = "cargo-build"
 phase = "build"
-image = "dhi.io/rust:1.83-alpine3.21"
-hardened = true
+image = "rust:1.83-alpine3.21"
 command = "cargo build --release"
 workdir = "/src"
 volumes = ["${WORKSPACE}:/src"]
-
-[presets.cargo-build.env]
-CARGO_HOME = "/tmp/cargo"
 
 [presets.cargo-build.options.target]
 type = "string"
@@ -923,15 +906,13 @@ command_flag = "--target"
 [presets.cargo-publish]
 name = "cargo-publish"
 phase = "release"
-image = "dhi.io/rust:1.83-alpine3.21"
-hardened = true
+image = "rust:1.83-alpine3.21"
 command = "cargo publish"
 workdir = "/src"
 volumes = ["${WORKSPACE}:/src"]
 require_ci = true
 
 [presets.cargo-publish.env]
-CARGO_HOME = "/tmp/cargo"
 CARGO_REGISTRY_TOKEN = "${CARGO_REGISTRY_TOKEN}"
 
 [presets.cargo-publish.options.dry_run]
