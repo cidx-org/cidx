@@ -33,6 +33,48 @@ func (c *Client) GetLatestWorkflow(ctx context.Context, branch string) (*remote.
 	return c.convertWorkflow(ctx, runs.WorkflowRuns[0])
 }
 
+// GetLatestRunForBranch returns the most recent workflow run on a branch across
+// all workflows in the repository. Unlike GetLatestWorkflow, it is not scoped to
+// a specific workflow filename, so it works for repositories that don't use
+// cidx-generated workflows. Used by `cidx workflow watch` to support watching
+// runs on non-PR branches (issue #125).
+func (c *Client) GetLatestRunForBranch(ctx context.Context, branch string) (*remote.Workflow, error) {
+	runs, _, err := c.client.Actions.ListRepositoryWorkflowRuns(
+		ctx,
+		c.owner,
+		c.repo,
+		&github.ListWorkflowRunsOptions{
+			Branch:      branch,
+			ListOptions: github.ListOptions{PerPage: 1},
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list workflow runs: %w", err)
+	}
+
+	if len(runs.WorkflowRuns) == 0 {
+		return nil, fmt.Errorf("no workflow runs found for branch %s", branch)
+	}
+
+	return c.convertWorkflow(ctx, runs.WorkflowRuns[0])
+}
+
+// GetWorkflowRun returns a workflow run by its ID. Used by `cidx workflow watch
+// --run <id>` to watch a specific run.
+func (c *Client) GetWorkflowRun(ctx context.Context, runID string) (*remote.Workflow, error) {
+	id, err := strconv.ParseInt(runID, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid workflow run ID %q: %w", runID, err)
+	}
+
+	run, _, err := c.client.Actions.GetWorkflowRunByID(ctx, c.owner, c.repo, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch workflow run %s: %w", runID, err)
+	}
+
+	return c.convertWorkflow(ctx, run)
+}
+
 // WatchWorkflow streams updates for a running workflow
 func (c *Client) WatchWorkflow(ctx context.Context, workflowID string) (<-chan remote.WorkflowUpdate, error) {
 	updates := make(chan remote.WorkflowUpdate, 1)

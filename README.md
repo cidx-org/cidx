@@ -131,6 +131,11 @@ cidx repo pr merge                        # Squash merge + cleanup
 cidx repo branch list --stale             # Find stale branches
 cidx repo branch cleanup -x              # Delete merged branches
 
+# Workflow runs (no PR required, e.g. direct push to main)
+cidx repo workflow watch                  # Watch latest run on current branch
+cidx repo workflow watch --branch main    # Watch latest run on main
+cidx repo workflow watch <run-id>         # Watch a specific run by ID
+
 # Releases (cidx release)
 cidx release tag prepare                  # Generate version and message
 cidx release tag create                   # Create and push tag
@@ -144,7 +149,7 @@ cidx security registry check              # Verify DHI access
 cidx cleanup                              # Remove stopped containers
 ```
 
-> **Shortcuts**: `cidx pr` and `cidx cpw` work as aliases for `cidx repo pr` and `cidx repo cpw`.
+> **Shortcuts**: `cidx pr`, `cidx cpw`, and `cidx workflow` work as aliases for `cidx repo pr`, `cidx repo cpw`, and `cidx repo workflow`.
 
 ## Configuration
 

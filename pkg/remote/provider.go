@@ -10,6 +10,14 @@ type Provider interface {
 	// GetLatestWorkflow returns the most recent workflow run for a branch
 	GetLatestWorkflow(ctx context.Context, branch string) (*Workflow, error)
 
+	// GetLatestRunForBranch returns the most recent workflow run on a branch
+	// across all workflows in the repository, regardless of workflow file name.
+	// Useful for watching runs on non-PR branches (e.g., direct pushes to main).
+	GetLatestRunForBranch(ctx context.Context, branch string) (*Workflow, error)
+
+	// GetWorkflowRun returns a workflow run by its provider-specific ID.
+	GetWorkflowRun(ctx context.Context, runID string) (*Workflow, error)
+
 	// WatchWorkflow streams updates for a running workflow
 	WatchWorkflow(ctx context.Context, workflowID string) (<-chan WorkflowUpdate, error)
 

@@ -84,6 +84,30 @@ func GetToken(hostname string) (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
+// GetLatestRunForBranch returns the most recent pipeline for the given branch.
+// On GitLab, all pipelines on a branch share the same .gitlab-ci.yml, so this
+// is equivalent to GetLatestWorkflow.
+func (c *Client) GetLatestRunForBranch(ctx context.Context, branch string) (*remote.Workflow, error) {
+	return c.GetLatestWorkflow(ctx, branch)
+}
+
+// GetWorkflowRun returns a pipeline by its ID.
+func (c *Client) GetWorkflowRun(ctx context.Context, runID string) (*remote.Workflow, error) {
+	pipelineID := mustAtoi64(runID)
+	pipeline, _, err := c.client.Pipelines.GetPipeline(c.projectID, pipelineID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch pipeline %s: %w", runID, err)
+	}
+
+	return &remote.Workflow{
+		ID:         fmt.Sprintf("%d", pipeline.ID),
+		Status:     mapPipelineStatus(pipeline.Status),
+		Conclusion: mapPipelineConclusion(pipeline.Status),
+		URL:        pipeline.WebURL,
+		Jobs:       []remote.Job{},
+	}, nil
+}
+
 // GetLatestWorkflow returns the latest pipeline for the given branch
 func (c *Client) GetLatestWorkflow(ctx context.Context, branch string) (*remote.Workflow, error) {
 	pipelines, _, err := c.client.Pipelines.ListProjectPipelines(c.projectID, &gitlab.ListProjectPipelinesOptions{
