@@ -108,7 +108,7 @@ config_files = [".gitleaks.toml"]
 [presets.commitlint]
 name = "commitlint"
 phase = "code"
-image = "commitlint/commitlint:20.5.1"
+image = "commitlint/commitlint:21.0.0"
 command = "commitlint --from ${FROM} --to ${TO}"
 workdir = "/app"
 volumes = [
@@ -134,8 +134,8 @@ TO = "HEAD"
 [presets.commitizen]
 name = "commitizen"
 phase = "code"
-image = "commitizen/commitizen:4.13.10"
-command = "sh -c 'export GIT_CONFIG_GLOBAL=/tmp/.gitconfig && git config --global --add safe.directory /app && LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo HEAD~10) && COMMITS=$(git rev-list ${LAST_TAG}..HEAD --count 2>/dev/null || echo 0) && if [ \"$COMMITS\" = \"0\" ]; then echo \"No commits to validate\"; exit 0; fi && cz check --rev-range ${LAST_TAG}..HEAD'"
+image = "commitizen/commitizen:4.15.1"
+command = "sh -c 'export GIT_CONFIG_GLOBAL=/tmp/.gitconfig && git config --global --add safe.directory /app && BASE=$(git merge-base HEAD origin/main 2>/dev/null || git describe --tags --abbrev=0 2>/dev/null || echo HEAD~10) && COMMITS=$(git rev-list ${BASE}..HEAD --count 2>/dev/null || echo 0) && if [ \"$COMMITS\" = \"0\" ]; then echo \"No commits to validate\"; exit 0; fi && cz check --rev-range ${BASE}..HEAD'"
 entrypoint = [""]
 workdir = "/app"
 volumes = [
@@ -379,7 +379,7 @@ GOTOOLCHAIN = "auto"
 [presets.golangci-lint]
 name = "golangci-lint"
 phase = "code"
-image = "golangci/golangci-lint:v2.11.4"
+image = "golangci/golangci-lint:v2.12.2"
 command = "golangci-lint run --timeout 5m"
 workdir = "/app"
 volumes = ["${WORKSPACE}:/app"]
@@ -577,7 +577,7 @@ IMAGE_TAG = "latest"
 [presets.gh-release]
 name = "gh-release"
 phase = "release"
-image = "maniator/gh:v2.89.0"
+image = "maniator/gh:v2.92.0"
 entrypoint = [""]  # Override image entrypoint (gh) to allow shell commands
 # Smart command: uses prepared release notes if available (versioned filename), otherwise auto-generates
 command = "sh -c 'if [ -f .cidx/release-version ]; then VERSION=$(cat .cidx/release-version | tr -d \"\\n\"); NOTES_FILE=\".cidx/release-notes-v${VERSION}.md\"; if [ -f \"$NOTES_FILE\" ]; then echo \"Using prepared release notes: $NOTES_FILE\"; gh release create ${TAG} ${ARTIFACTS} --notes-file \"$NOTES_FILE\"; exit 0; fi; fi; echo \"Auto-generating release notes...\"; gh release create ${TAG} ${ARTIFACTS} --generate-notes'"
@@ -612,7 +612,7 @@ command_flag = "--notes-file"
 [presets.goreleaser]
 name = "goreleaser"
 phase = "release"
-image = "goreleaser/goreleaser:v2.15.2"
+image = "goreleaser/goreleaser:v2.15.4"
 command = "goreleaser release --clean"
 workdir = "/workspace"
 volumes = [
@@ -816,34 +816,27 @@ command_flag = "--repository"
 
 # Rustfmt: Official Rust code formatter
 # Included in official Rust image
+# Public image: docker.io/library/rust (RUSTUP_HOME=/usr/local/rustup,
+# CARGO_HOME=/usr/local/cargo come pre-set; toolchain pre-installed).
 [presets.rustfmt]
 name = "rustfmt"
 phase = "code"
-image = "dhi.io/rust:1.83-alpine3.21"
-hardened = true
+image = "rust:1.95.0"
 command = "cargo fmt -- --check"
 workdir = "/src"
 volumes = ["${WORKSPACE}:/src"]
 config_files = ["rustfmt.toml", ".rustfmt.toml"]
-
-[presets.rustfmt.env]
-CARGO_HOME = "/tmp/cargo"
 
 # Clippy: Official Rust linter
 # The most comprehensive Rust linter
 [presets.clippy]
 name = "clippy"
 phase = "code"
-image = "dhi.io/rust:1.83-alpine3.21"
-hardened = true
+image = "rust:1.95.0"
 command = "sh -c 'rustup component add clippy && cargo clippy -- -D warnings'"
 workdir = "/src"
 volumes = ["${WORKSPACE}:/src"]
 config_files = ["clippy.toml", ".clippy.toml"]
-
-[presets.clippy.env]
-CARGO_HOME = "/tmp/cargo"
-RUSTUP_HOME = "/tmp/rustup"
 
 [presets.clippy.options.pedantic]
 type = "bool"
@@ -856,14 +849,10 @@ command_flag = "-W clippy::pedantic"
 [presets.cargo-audit]
 name = "cargo-audit"
 phase = "security"
-image = "dhi.io/rust:1.83-alpine3.21"
-hardened = true
+image = "rust:1.95.0"
 command = "sh -c 'cargo install cargo-audit && cargo audit'"
 workdir = "/src"
 volumes = ["${WORKSPACE}:/src"]
-
-[presets.cargo-audit.env]
-CARGO_HOME = "/tmp/cargo"
 
 [presets.cargo-audit.options.deny]
 type = "bool"
@@ -876,14 +865,12 @@ command_flag = "--deny warnings"
 [presets.cargo-test]
 name = "cargo-test"
 phase = "test"
-image = "dhi.io/rust:1.83-alpine3.21"
-hardened = true
+image = "rust:1.95.0"
 command = "cargo test"
 workdir = "/src"
 volumes = ["${WORKSPACE}:/src"]
 
 [presets.cargo-test.env]
-CARGO_HOME = "/tmp/cargo"
 RUST_BACKTRACE = "1"
 
 [presets.cargo-test.options.release]
@@ -903,14 +890,10 @@ command_flag = "--all-features"
 [presets.cargo-build]
 name = "cargo-build"
 phase = "build"
-image = "dhi.io/rust:1.83-alpine3.21"
-hardened = true
+image = "rust:1.95.0"
 command = "cargo build --release"
 workdir = "/src"
 volumes = ["${WORKSPACE}:/src"]
-
-[presets.cargo-build.env]
-CARGO_HOME = "/tmp/cargo"
 
 [presets.cargo-build.options.target]
 type = "string"
@@ -923,15 +906,13 @@ command_flag = "--target"
 [presets.cargo-publish]
 name = "cargo-publish"
 phase = "release"
-image = "dhi.io/rust:1.83-alpine3.21"
-hardened = true
+image = "rust:1.95.0"
 command = "cargo publish"
 workdir = "/src"
 volumes = ["${WORKSPACE}:/src"]
 require_ci = true
 
 [presets.cargo-publish.env]
-CARGO_HOME = "/tmp/cargo"
 CARGO_REGISTRY_TOKEN = "${CARGO_REGISTRY_TOKEN}"
 
 [presets.cargo-publish.options.dry_run]

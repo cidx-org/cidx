@@ -225,7 +225,7 @@ func (m releaseModel) generateTagMessage(version, lastTag string) string {
 	tag := m.tagConfig.FormatTag(version)
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Release %s\n\n", tag))
+	fmt.Fprintf(&sb, "Release %s\n\n", tag)
 
 	// Get commit summary since last tag
 	if lastTag != "(none)" {
@@ -257,7 +257,7 @@ func (m releaseModel) getCommitSummary(tag string) string {
 	var sb strings.Builder
 	for _, line := range lines {
 		if line != "" {
-			sb.WriteString(fmt.Sprintf("- %s\n", line))
+			fmt.Fprintf(&sb, "- %s\n", line)
 		}
 	}
 	return sb.String()
@@ -335,7 +335,7 @@ func parseCommits(output string) []actions.CommitInfo {
 func (m releaseModel) generateReleaseNotes(version string, commits []actions.CommitInfo) string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("# Release v%s\n\n", version))
+	fmt.Fprintf(&sb, "# Release v%s\n\n", version)
 
 	// Group commits by type
 	groups := map[string][]actions.CommitInfo{
@@ -371,13 +371,13 @@ func (m releaseModel) generateReleaseNotes(version string, commits []actions.Com
 			continue
 		}
 
-		sb.WriteString(fmt.Sprintf("\n%s\n\n", headers[typ]))
+		fmt.Fprintf(&sb, "\n%s\n\n", headers[typ])
 		for _, c := range groups[typ] {
 			scope := ""
 			if c.Scope != "" {
 				scope = fmt.Sprintf("**%s:** ", c.Scope)
 			}
-			sb.WriteString(fmt.Sprintf("- %s%s\n", scope, c.Subject))
+			fmt.Fprintf(&sb, "- %s%s\n", scope, c.Subject)
 		}
 	}
 

@@ -1,6 +1,8 @@
 package generate
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -182,5 +184,179 @@ func TestGitHub_FetchDepth(t *testing.T) {
 	// Just verify the output is valid and contains fetch-depth somewhere
 	if !strings.Contains(output, "fetch-depth: 0") {
 		t.Error("expected fetch-depth: 0 for security phase")
+	}
+}
+
+// TestGitHub_DefaultIsExternal locks in the contract that the bare GitHub(cfg)
+// entrypoint emits the external-project bootstrap (`go install`), not the
+// cidx-repo bootstrap (`go build`). This is the safe default for the broad
+// audience: every project that runs `cidx generate github` from outside the
+// cidx repo gets a workflow that bootstraps without source-tree assumptions
+// (regression for cidx-org/cidx#124).
+func TestGitHub_DefaultIsExternal(t *testing.T) {
+	cfg := &config.Config{
+		Pipelines: map[string]config.Pipeline{
+			"ci": {Phases: []string{"test"}},
+		},
+	}
+
+	output, err := GitHub(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(output, "go install github.com/cidx-org/cidx/cmd/cidx@latest") {
+		t.Error("default bootstrap should use `go install`, got:\n" + output)
+	}
+	if strings.Contains(output, "go build -o bin/cidx ./cmd/cidx") {
+		t.Error("default bootstrap must not assume cmd/cidx/ source tree:\n" + output)
+	}
+	if !strings.Contains(output, "Install CIDX") {
+		t.Error("expected step name 'Install CIDX' for external bootstrap")
+	}
+	// The downstream artifact contract (bin/cidx) must hold across both modes
+	// so phase jobs don't have to branch on bootstrap mode.
+	if !strings.Contains(output, "path: bin/cidx") {
+		t.Error("artifact upload path bin/cidx must be preserved")
+	}
+}
+
+// TestGitHubWithOptions_SelfBuild verifies the cidx-repo dogfood path: when
+// SelfBuild is true the bootstrap builds from local source. This keeps cidx's
+// own CI testing the binary it just changed, which is the only reason to keep
+// the build path at all.
+func TestGitHubWithOptions_SelfBuild(t *testing.T) {
+	cfg := &config.Config{
+		Pipelines: map[string]config.Pipeline{
+			"ci": {Phases: []string{"test"}},
+		},
+	}
+
+	output, err := GitHubWithOptions(cfg, GitHubOptions{SelfBuild: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(output, "go build -o bin/cidx ./cmd/cidx") {
+		t.Error("self-build bootstrap should use `go build`, got:\n" + output)
+	}
+	if strings.Contains(output, "go install") {
+		t.Error("self-build bootstrap must not contain `go install`:\n" + output)
+	}
+	if !strings.Contains(output, "Build CIDX") {
+		t.Error("expected step name 'Build CIDX' for self-build bootstrap")
+	}
+}
+
+// TestGitHubWithOptions_External is the explicit-options counterpart to
+// TestGitHub_DefaultIsExternal: the zero-value GitHubOptions must produce the
+// same output as the legacy GitHub(cfg) entrypoint.
+func TestGitHubWithOptions_External(t *testing.T) {
+	cfg := &config.Config{
+		Pipelines: map[string]config.Pipeline{
+			"ci": {Phases: []string{"test"}},
+		},
+	}
+
+	withOpts, err := GitHubWithOptions(cfg, GitHubOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	plain, err := GitHub(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if withOpts != plain {
+		t.Errorf("GitHub(cfg) and GitHubWithOptions(cfg, GitHubOptions{}) must match\nplain:\n%s\nopts:\n%s", plain, withOpts)
+	}
+}
+
+// TestIsCidxRepo verifies the auto-detection used by the CLI to pick the
+// bootstrap mode. Two prongs (cmd/cidx/main.go AND go.mod module path) prevent
+// false positives from any unrelated project that happens to have a cmd/cidx
+// directory.
+func TestIsCidxRepo(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(t *testing.T, dir string)
+		want  bool
+	}{
+		{
+			name: "cidx repo (both markers)",
+			setup: func(t *testing.T, dir string) {
+				t.Helper()
+				cmdDir := filepath.Join(dir, "cmd", "cidx")
+				if err := os.MkdirAll(cmdDir, 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(cmdDir, "main.go"), []byte("package main\n"), 0644); err != nil {
+					t.Fatal(err)
+				}
+				gomod := "module github.com/cidx-org/cidx\n\ngo 1.23\n"
+				if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(gomod), 0644); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: true,
+		},
+		{
+			name: "external project — no cmd/cidx",
+			setup: func(t *testing.T, dir string) {
+				t.Helper()
+				gomod := "module example.com/external\n\ngo 1.23\n"
+				if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(gomod), 0644); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: false,
+		},
+		{
+			name: "false positive guard — cmd/cidx/main.go but different module",
+			setup: func(t *testing.T, dir string) {
+				t.Helper()
+				cmdDir := filepath.Join(dir, "cmd", "cidx")
+				if err := os.MkdirAll(cmdDir, 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(cmdDir, "main.go"), []byte("package main\n"), 0644); err != nil {
+					t.Fatal(err)
+				}
+				gomod := "module example.com/something/cmd/cidx\n\ngo 1.23\n"
+				if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(gomod), 0644); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: false,
+		},
+		{
+			name: "missing go.mod",
+			setup: func(t *testing.T, dir string) {
+				t.Helper()
+				cmdDir := filepath.Join(dir, "cmd", "cidx")
+				if err := os.MkdirAll(cmdDir, 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(cmdDir, "main.go"), []byte("package main\n"), 0644); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: false,
+		},
+		{
+			name:  "empty dir",
+			setup: func(t *testing.T, dir string) { t.Helper() },
+			want:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			tt.setup(t, dir)
+			if got := IsCidxRepo(dir); got != tt.want {
+				t.Errorf("IsCidxRepo(%q) = %v, want %v", dir, got, tt.want)
+			}
+		})
 	}
 }

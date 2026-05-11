@@ -269,26 +269,26 @@ func Format(result *Result) string {
 
 	// Phases table
 	b.WriteString("Phases:\n")
-	b.WriteString(fmt.Sprintf("  %-15s %-10s %-10s %s\n", "Phase", "cidx.toml", "CI", "Status"))
-	b.WriteString(fmt.Sprintf("  %-15s %-10s %-10s %s\n", "─────", "─────────", "──", "──────"))
+	fmt.Fprintf(&b, "  %-15s %-10s %-10s %s\n", "Phase", "cidx.toml", "CI", "Status")
+	fmt.Fprintf(&b, "  %-15s %-10s %-10s %s\n", "─────", "─────────", "──", "──────")
 
 	for _, p := range result.Phases {
 		cidx := icon(p.CIDX)
 		ci := icon(p.CI)
 		status := formatStatus(p.Status)
-		b.WriteString(fmt.Sprintf("  %-15s %-10s %-10s %s\n", p.Name, cidx, ci, status))
+		fmt.Fprintf(&b, "  %-15s %-10s %-10s %s\n", p.Name, cidx, ci, status)
 	}
 
 	// Triggers table
 	b.WriteString("\nTriggers:\n")
-	b.WriteString(fmt.Sprintf("  %-18s %-10s %-10s %s\n", "Event", "cidx.toml", "CI", "Status"))
-	b.WriteString(fmt.Sprintf("  %-18s %-10s %-10s %s\n", "─────", "─────────", "──", "──────"))
+	fmt.Fprintf(&b, "  %-18s %-10s %-10s %s\n", "Event", "cidx.toml", "CI", "Status")
+	fmt.Fprintf(&b, "  %-18s %-10s %-10s %s\n", "─────", "─────────", "──", "──────")
 
 	for _, t := range result.Triggers {
 		cidx := icon(t.CIDX)
 		ci := icon(t.CI)
 		status := formatStatus(Status(t.Status))
-		b.WriteString(fmt.Sprintf("  %-18s %-10s %-10s %s\n", t.Event, cidx, ci, status))
+		fmt.Fprintf(&b, "  %-18s %-10s %-10s %s\n", t.Event, cidx, ci, status)
 	}
 
 	return b.String()
