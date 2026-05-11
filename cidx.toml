@@ -1,491 +1,84 @@
-# ╔═══════════════════════════════════════════════════════════════════════════╗
-# ║                     CIDX Configuration (Dogfooding!)                      ║
-# ╚═══════════════════════════════════════════════════════════════════════════╝
+# cidx — dogfooded config (used by `cidx run ci`, `cidx run docker`, ...).
 #
-# Project Workflow: Trunk-Based Development with Manual Releases
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#
-# 📝 Daily Development (Pull Requests)
-# ────────────────────────────────────────
-#   1. Create feature branch & draft PR:  cidx action pr create "feat: title"
-#   2. Implement feature & commit:        git commit -m "feat: ..." && git push
-#   3. Mark PR ready for review:          cidx action pr ready
-#   4. Merge to main:                     cidx action pr merge
-#   ➡️  Result: Code merged to main, NO TAG created
-#
-# 🚀 Release Workflow (Manual, Grouped PRs)
-# ────────────────────────────────────────
-#   After 3-5 PRs merged to main, create a release:
-#
-#   cidx action release create
-#
-#   ➡️  Result:
-#      - Analyzes commits since last tag
-#      - Bumps version (PATCH/MINOR/MAJOR based on conventional commits)
-#      - Creates version bump commit
-#      - Creates and pushes git tag (e.g., v1.1.1)
-#      - Triggers GitHub Release workflow
-#      - Publishes release with binary + Docker image
-#
-# 📊 Pipeline Strategy
-# ────────────────────────────────────────
-#   • PR pipeline:      security + code + test (no build)
-#   • Main pipeline:    security + code + test + build
-#   • Release pipeline: full pipeline + docker + github release
-#
-# 🎯 Key Principle: Tags = Releases (1:1 mapping)
-# ────────────────────────────────────────
-#   • PRs do NOT create tags
-#   • Releases are triggered MANUALLY via action
-#   • One tag = One release = Grouped set of features/fixes
-#
-# Workspace: Current directory (auto-detected)
+# This is the minimal, functional config for building cidx itself.
+# For the full catalog of options, defaults, and worked examples, see:
+#   examples/cidx-complete.toml      (every option, every section, fully commented)
+#   examples/cidx.toml               (minimal starter)
+#   examples/cidx-advanced.toml      (small custom config)
 
-# Strict Version Pinning
-# Ensures all developers and CI use the exact same binary version.
-# Disabled for CIDX itself: we build from source (dev) and release (tagged).
-# required_version = "dev"
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 🔄 RELEASE WORKFLOW CONFIGURATION
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#
-# Configure how releases are created and validated.
-# This section controls the behavior of release commands:
-#   - cidx action release prepare
-#   - cidx action release preview
-#   - cidx action release commit
-#   - cidx action release create
-#
-# WORKFLOW PATTERNS:
-# ──────────────────────────────────────────────────────────────────────────────
-#
-# 1. TRUNK-BASED DEVELOPMENT (this project)
-#    - Releases can be created from any branch
-#    - Quick iteration, continuous deployment style
-#    - Set: allow_release_from_any_branch = true
-#
-# 2. PROTECTED MAIN BRANCH (default)
-#    - Releases only from main/master branch
-#    - Enforces PR review before release
-#    - Workflow: prepare → commit → PR → merge → release create on main
-#    - Set: allow_release_from_any_branch = false (default)
-#
-# 3. STRICT REVIEW PROCESS
-#    - Requires manual preparation of release notes
-#    - Forces human review of changelog before release
-#    - Set: require_prepare = true
-#
-# 4. GITFLOW / RELEASE BRANCHES
-#    - Set main_branch to your release branch (e.g., "release", "develop")
-#    - Combine with allow_release_from_any_branch = false
-#
+# ─── release & tag workflow (used by `cidx action release`, `cidx action tag`) ───
 [release_workflow]
-# Main branch name where releases are typically created
-# Default: "main" (also accepts "master" as equivalent)
 main_branch = "main"
-
-# Allow creating releases from any branch (trunk-based development)
-# When false: releases can only be created from main_branch
-# When true: releases can be created from any branch (current project setting)
-# Default: false
 allow_release_from_any_branch = true
 
-# Require running 'release prepare' before 'release create'
-# When true: forces manual review of release notes before releasing
-# When false: allows direct release with auto-generated notes
-# Default: false
-require_prepare = false
-
-# Automatically cleanup .cidx/release-* files after successful release
-# When true: removes prepared notes and version files after release
-# When false: keeps files for reference
-# Default: true
-auto_cleanup = true
-
-# Editor command for editing release notes (used by 'release prepare')
-# If empty, falls back to: $EDITOR → $VISUAL → vim → nano → vi → code
-# Examples: "code --wait", "vim", "nano", "subl -w"
-# editor = "code --wait"
-
-# Custom template for release notes (optional)
-# Path to a markdown template file, or leave empty for default template
-# notes_template = ".github/RELEASE_TEMPLATE.md"
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 🏷️  TAG WORKFLOW CONFIGURATION
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#
-# Configure how git tags are created and managed.
-# This section controls the behavior of tag commands:
-#   - cidx action tag prepare   (prepare version and message for review)
-#   - cidx action tag preview   (preview what will happen)
-#   - cidx action tag create    (create and optionally push tag)
-#   - cidx action tag delete    (delete tags locally and/or remotely)
-#   - cidx action tag list      (list tags with filtering)
-#
-# TAG vs RELEASE:
-# ──────────────────────────────────────────────────────────────────────────────
-# Tags and releases can be managed independently or together:
-#
-# 1. COMBINED (this project - default)
-#    - Tags trigger release workflows automatically
-#    - Use 'cidx action release create' which handles both
-#    - Set: linked_to_release = true
-#
-# 2. INDEPENDENT
-#    - Tags are just git markers, releases are separate
-#    - Use 'cidx action tag create' for tags only
-#    - Use 'cidx action release create' for releases only
-#    - Set: linked_to_release = false
-#
-# VERSION DETERMINATION:
-# ──────────────────────────────────────────────────────────────────────────────
-# 1. AUTOMATIC (commitizen)
-#    - Analyzes conventional commits to determine bump type
-#    - MAJOR for breaking changes, MINOR for features, PATCH for fixes
-#    - Set: use_commitizen = true
-#
-# 2. MANUAL
-#    - Increments patch version from last tag
-#    - Edit .cidx/tag-version file to customize
-#    - Set: use_commitizen = false
-#
 [tag_workflow]
-# Tag prefix (prepended to version number)
-# Examples: "v" → v1.2.3, "" → 1.2.3, "release-" → release-1.2.3
-# Default: "v"
 prefix = "v"
-
-# Regex pattern for valid tag names (optional)
-# If empty, accepts any semver-compatible tag with prefix
-# Example: "^v\\d+\\.\\d+\\.\\d+(-[a-z]+\\.\\d+)?$" for v1.2.3 or v1.2.3-beta.1
-# pattern = ""
-
-# Use commitizen to determine next version from conventional commits
-# When true: runs "cz bump --dry-run" to analyze commits
-# When false: increments patch version from last tag
-# Default: true
 use_commitizen = true
-
-# Automatically push tags to remote after creation
-# When true: git push origin <tag> is executed automatically
-# When false: tags are created locally only, push manually
-# Default: true
 auto_push = true
-
-# Sign tags with GPG (requires configured GPG key)
-# When true: creates signed tags with -s flag
-# When false: creates unsigned tags
-# Default: false
-sign_tags = false
-
-# Require annotated tags with message
-# When true: creates annotated tags with -a -m flags (recommended)
-# When false: allows lightweight tags (just a pointer)
-# Default: true
 require_annotated = true
-
-# Protected tag patterns (cannot be deleted without --force)
-# Uses glob patterns to match tag names
-# Examples: ["v1.*", "release-*", "production"]
-# Default: [] (no protection)
 protected_tags = ["v1.*"]
-
-# Link tags to release workflow
-# When true: pushing a tag should trigger release pipeline
-# When false: tags are independent from releases
-# Default: true
 linked_to_release = true
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 📦 CONTAINERS CONFIGURATION
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#
-# Containers are organized by phase (security, code, test, build, docker, release).
-# Each phase can contain multiple containers that run sequentially within that phase.
-#
-# 🔑 KEY CONCEPT: Configuration vs Presets
-# ─────────────────────────────────────────────────────────────────────────────
-# When you write: containers = ["gitleaks"]
-#
-# 1. CIDX looks up "gitleaks" in its BUILT-IN PRESETS (embedded in the binary)
-#    - Preset defines: Docker image, command, volumes, env vars, options
-#    - Presets are in: pkg/presets/registry.go (compiled into cidx binary)
-#    - Example preset for gitleaks:
-#      {
-#        Name: "gitleaks",
-#        Image: "ghcr.io/gitleaks/gitleaks:latest",
-#        Command: "detect --source /scan --verbose --no-git",
-#        Volumes: ["${WORKSPACE}:/scan"],
-#        Phase: "security"
-#      }
-#
-# 2. CIDX merges preset with YOUR OVERRIDES (if any)
-#    - You only override what you need (e.g., severity, exit_code)
-#    - Everything else comes from the preset
-#
-# 3. CIDX executes the container using Docker
-#    - Pulls image (if needed)
-#    - Creates container with preset + override config
-#    - Runs command and streams output
-#
-# Result: You write 1 line, CIDX handles all the Docker complexity.
-#
-# To see available presets:  cidx list
-# To see preset details:     cidx info gitleaks
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Security Phase: Vulnerability scanning and secret detection
-# ──────────────────────────────────────────────────────────────────────────────
+# ─── phases ───
 [security]
-containers = ["trivy", "gitleaks"]  # List of security containers to run in this phase
+containers = ["trivy", "gitleaks"]
 
-# Trivy: Container and filesystem vulnerability scanner
-# Override: Only report HIGH and CRITICAL vulnerabilities
-[containers.trivy]
-severity = "HIGH,CRITICAL"  # Filter by severity (UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL)
-exit_code = 0               # Exit code on findings (0 = don't fail build yet, 1 = fail)
-
-# Gitleaks: Scan git history for secrets and credentials
-# Uses CIDX built-in preset (no overrides needed)
-# Preset provides: image, command, volumes automatically
-# You just enabled it by adding "gitleaks" to the containers list above
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Code Quality Phase: Linting, formatting, and commit validation
-# ──────────────────────────────────────────────────────────────────────────────
 [code]
-containers = ["prettier", "golangci-lint", "commitizen", "shellcheck"]  # Code quality containers
+containers = ["prettier", "golangci-lint", "commitizen", "shellcheck"]
 
-# Prettier: Auto-format code (Markdown, YAML, JSON, etc.)
-[containers.prettier]
-write = true  # Auto-fix formatting issues (true = write changes, false = check only)
-
-# GolangCI-Lint: Go linter aggregator
-# Uses CIDX default configuration (.golangci.yml in project root)
-
-# Commitizen: Validate commit messages follow conventional commits
-# Configuration in .cz.toml (version management, changelog)
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Testing Phase: Unit tests, integration tests, BDD scenarios
-# ──────────────────────────────────────────────────────────────────────────────
 [test]
-containers = ["go-test"]  # Run Go unit tests with coverage
-# TODO: Re-enable godog when all BDD scenarios are implemented
-# containers = ["go-test", "godog"]  # Add BDD testing with Godog
+containers = ["go-test"]
 
-# Go Test: Run tests with race detection and coverage
-# Uses CIDX default configuration (./... with -race -cover flags)
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Build Phase: Compile binaries and package artifacts
-# ──────────────────────────────────────────────────────────────────────────────
 [build]
-containers = ["go-build"]  # Compile Go binary
+containers = ["go-build"]
 
-# Go Build: Compile binary with version injection
-# Automatically injects version from VERSION file via -ldflags
-# Output: bin/cidx
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Docker Phase: Container image build and push
-# ──────────────────────────────────────────────────────────────────────────────
 [docker]
-containers = ["kaniko"]  # Build and push Docker images without Docker daemon
+containers = ["kaniko"]
 
-# Kaniko: Build container images in CI/CD without privileged mode
-# Reads Dockerfile, builds image, pushes to registry (GHCR)
-# Configuration: Uses default Dockerfile in project root
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Version Phase: Semantic versioning and changelog (deprecated)
-# ──────────────────────────────────────────────────────────────────────────────
-# Release Phase: GitHub release creation
-# ──────────────────────────────────────────────────────────────────────────────
 [release]
-containers = ["gh-release"]  # Create GitHub release with artifacts
+containers = ["gh-release"]
 
-# GitHub Release: Create release from git tag with binaries and changelog
-# Requires GH_TOKEN environment variable
-# Uploads artifacts from build phase to GitHub Releases
+# ─── container overrides ───
+[containers.trivy]
+severity = "HIGH,CRITICAL"
+exit_code = 0
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Custom Containers (without preset): Define your own containers
-# ──────────────────────────────────────────────────────────────────────────────
-# If you need a container that doesn't have a built-in preset, define it manually:
-#
-# [containers.my-custom-scanner]
-# phase = "security"                    # Which phase to run in
-# image = "mycompany/scanner:latest"    # Docker image to use
-# command = "scan --path /workspace"    # Command to execute in container
-# workdir = "/workspace"                # Working directory in container
-# volumes = ["${WORKSPACE}:/workspace"] # Volume mounts
-# env = { API_KEY = "${SCANNER_KEY}" }  # Environment variables
-#
-# Then enable it in a phase:
-# [security]
-# containers = ["trivy", "gitleaks", "my-custom-scanner"]
-#
-# Difference:
-# - Built-in preset (gitleaks):  Just name it, CIDX knows everything else
-# - Custom container:            You define image, command, volumes, env yourself
+[containers.prettier]
+write = true
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 🚀 PIPELINES
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#
-# Pipelines define sequences of phases to execute, mirroring your CI/CD workflows
-# (GitHub Actions, GitLab CI, Jenkins, etc.). Each pipeline maps to a specific
-# CI/CD event or local workflow.
-#
-# Purpose: Run the SAME checks locally that will run in your CI/CD platform.
-# This ensures "what works locally, works in CI" and catches issues early.
-#
-# Usage:
-#   cidx run <pipeline-name>      # Run locally to simulate CI/CD
-#   cidx run ci                   # Simulate GitHub Actions CI workflow
-#   cidx run --dry-run release    # Preview what would run in release pipeline
-#
-# In CI/CD platforms, these pipelines are triggered automatically:
-#   - GitHub Actions: .github/workflows/ci.yml calls "cidx run ci"
-#   - GitLab CI: .gitlab-ci.yml stages map to pipelines
-#   - Jenkins: Jenkinsfile stages execute cidx pipelines
-
-# ──────────────────────────────────────────────────────────────────────────────
-# CI Pipeline: Continuous Integration (runs on every commit)
-# ──────────────────────────────────────────────────────────────────────────────
-# Maps to: .github/workflows/ci.yml
-# Trigger: Every push to any branch
-# Purpose: Validate code quality and functionality before merge
+# ─── pipelines ───
 [pipelines.ci]
-phases = ["security", "code", "test", "build"]  # Full validation + build binary
+phases = ["security", "code", "test", "build"]
 description = "Full CI pipeline for all commits"
 
-# ──────────────────────────────────────────────────────────────────────────────
-# PR Pipeline: Pull Request validation (lighter than CI)
-# ──────────────────────────────────────────────────────────────────────────────
-# Maps to: .github/workflows/pr.yml (or ci.yml with conditional steps)
-# Trigger: Pull request opened/updated
-# Purpose: Fast feedback on PRs without building artifacts
 [pipelines.pr]
-phases = ["security", "code", "test"]  # Validation only, no build (faster)
+phases = ["security", "code", "test"]
 description = "Pull request validation (no build artifacts)"
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Main Pipeline: Main branch post-merge checks
-# ──────────────────────────────────────────────────────────────────────────────
-# Maps to: .github/workflows/ci.yml (when merged to main)
-# Trigger: Push to main branch after PR merge
-# Purpose: Final validation and build artifacts for main branch
 [pipelines.main]
-phases = ["security", "code", "test", "build"]  # Same as CI (builds artifacts)
+phases = ["security", "code", "test", "build"]
 description = "Main branch pipeline (builds artifacts)"
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Release Pipeline: Full release workflow (triggered by git tags)
-# ──────────────────────────────────────────────────────────────────────────────
-# Maps to: .github/workflows/release.yml
-# Trigger: Git tag pushed (e.g., v1.2.3)
-# Purpose: Full validation + build + publish release artifacts
 [pipelines.release]
-phases = ["security", "code", "test", "build", "docker", "release"]  # Complete workflow
-description = "Complete release pipeline (CI only)"
+phases = ["security", "code", "test", "build", "docker", "release"]
+description = "Complete release pipeline"
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Publish Pipeline: Artifact publishing only (part of release workflow)
-# ──────────────────────────────────────────────────────────────────────────────
-# Maps to: Final steps in .github/workflows/release.yml
-# Trigger: After successful release pipeline
-# Purpose: Publish binaries and Docker images to registries
-[pipelines.publish]
-phases = ["release", "docker"]  # Just publishing steps
-description = "Publish artifacts to registries (GitHub Releases + GHCR)"
-
-# ──────────────────────────────────────────────────────────────────────────────
-# GitHub Release Pipeline: Create GitHub release only
-# ──────────────────────────────────────────────────────────────────────────────
-# Maps to: Final job in .github/workflows/release.yml
-# Trigger: After all CI jobs pass (security, code, test, build, docker)
-# Purpose: Create GitHub release with artifacts (no re-validation)
-[pipelines.github-release]
-phases = ["release"]  # Only create the release
-description = "Create GitHub release (skips already-validated phases)"
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Quick Pipeline: Fast local validation (development)
-# ──────────────────────────────────────────────────────────────────────────────
-# Maps to: Local development workflow (no CI/CD equivalent)
-# Trigger: Manual, during development (cidx run quick)
-# Purpose: Fast feedback while coding (skip slow security/test phases)
-[pipelines.quick]
-phases = ["code"]  # Just linting and formatting
-description = "Quick code quality check"
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Pre-push Pipeline: Local pre-push git hook
-# ──────────────────────────────────────────────────────────────────────────────
-# Maps to: .git/hooks/pre-push (local git hook)
-# Trigger: Before git push (via git hook)
-# Purpose: Prevent pushing broken code (runs locally before push)
-[pipelines.pre-push]
-phases = ["security", "code", "test"]  # Everything except build
-description = "Local validation before pushing"
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# ⚡ ACTIONS
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#
-# Actions are automated workflows that go beyond simple tool execution.
-# They orchestrate complex multi-step processes (version bumping, PR management, etc.).
-#
-# Unlike pipelines (which run tools), actions interact with external systems:
-#   - Git operations (commit, tag, push)
-#   - GitHub API (create PRs, releases)
-#   - Workflow orchestration (trigger CI/CD pipelines)
-#
-# Usage:
-#   cidx action <action-name>         # Execute an action
-#   cidx action pr create "feat: ..."  # Create PR with draft
-#   cidx action release create        # Bump version and create release
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Release Create Action: Automated semantic versioning and release
-# ──────────────────────────────────────────────────────────────────────────────
-# Purpose: Analyze commits, bump version, create tag, trigger release workflow
-# Workflow:
-#   1. Analyze commits since last tag (using conventional commits)
-#   2. Determine version bump (PATCH/MINOR/MAJOR)
-#   3. Update VERSION and .cz.toml files
-#   4. Create version bump commit
-#   5. Create and push git tag (e.g., v1.2.3)
-#   6. Trigger GitHub Release workflow
-#   7. Watch workflow execution
-#
-# Usage: cidx action release create
+# ─── release-create action (commitizen-based version bump + tag + push) ───
 [actions.release-create]
-description = "Create new release with version bump"  # Action description
-
-# Container configuration for commitizen
-image = "commitizen/commitizen:latest"  # Docker image with commitizen tool
-command = "bump --yes --no-verify"      # Auto-approve bump, skip git hooks
-workdir = "/app"                        # Working directory in container
-
-# Volume mounts: Share workspace and git history with container
+description = "Create new release with version bump"
+image = "commitizen/commitizen:latest"
+command = "bump --yes --no-verify"
+workdir = "/app"
 volumes = [
-    "${WORKSPACE}:/app",           # Project files (for VERSION, .cz.toml updates)
-    "${WORKSPACE}/.git:/app/.git", # Git repository (for commit, tag creation)
+    "${WORKSPACE}:/app",
+    "${WORKSPACE}/.git:/app/.git",
 ]
+auto_push = true
+push_tags = true
+watch_workflow = true
 
-# Automation flags: What to do after version bump
-auto_push = true       # Automatically push version bump commit to remote
-push_tags = true       # Automatically push git tag to remote (triggers release workflow)
-watch_workflow = true  # Watch GitHub Actions workflow execution after push
-
-# Git configuration: Allow container to access git repository
 [actions.release-create.env]
-GIT_CONFIG_GLOBAL = "/tmp/.gitconfig"  # Custom git config location
-GIT_CONFIG_COUNT = "1"                 # Number of git config entries
-GIT_CONFIG_KEY_0 = "safe.directory"    # Config key: mark directory as safe
-GIT_CONFIG_VALUE_0 = "/app"            # Config value: allow access to /app
+GIT_CONFIG_GLOBAL = "/tmp/.gitconfig"
+GIT_CONFIG_COUNT = "1"
+GIT_CONFIG_KEY_0 = "safe.directory"
+GIT_CONFIG_VALUE_0 = "/app"
