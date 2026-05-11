@@ -133,6 +133,14 @@ func (e *DockerExecutor) Run(ctx context.Context, containerConfig *config.Contai
 		return fmt.Errorf("failed to get or create container: %w", err)
 	}
 
+	// Capture a "since" cutoff BEFORE starting the container so that
+	// reused-container runs don't replay log output from previous executions
+	// (cidx-org/cidx#127: phantom golangci-lint violations citing pre-edit
+	// source lines were actually log replay from a previous run, not stale
+	// analyser cache). Subtract one second to absorb clock skew between the
+	// cidx process clock and the Docker daemon clock.
+	logsSince := time.Now().Add(-time.Second)
+
 	// Start container
 	e.logger.Debugf("Starting container: %s", containerName)
 	if err := e.client.ContainerStart(ctx, containerID, container.StartOptions{}); err != nil {
@@ -152,7 +160,7 @@ func (e *DockerExecutor) Run(ctx context.Context, containerConfig *config.Contai
 		stderr = os.Stderr
 	}
 
-	if err := e.streamLogsTo(ctx, containerID, stdout, stderr); err != nil {
+	if err := e.streamLogsTo(ctx, containerID, stdout, stderr, logsSince); err != nil {
 		return fmt.Errorf("failed to stream logs: %w", err)
 	}
 
@@ -182,12 +190,19 @@ func (e *DockerExecutor) Run(ctx context.Context, containerConfig *config.Contai
 	return nil
 }
 
-// streamLogsTo streams container logs to provided writers
-func (e *DockerExecutor) streamLogsTo(ctx context.Context, containerID string, stdout, stderr io.Writer) error {
+// streamLogsTo streams container logs to provided writers, starting from the
+// given "since" cutoff so that reused-container runs don't replay log output
+// from previous executions of the same container (cidx-org/cidx#127).
+func (e *DockerExecutor) streamLogsTo(ctx context.Context, containerID string, stdout, stderr io.Writer, since time.Time) error {
 	options := container.LogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 		Follow:     true,
+		// Docker's "Since" accepts a Unix timestamp in seconds, optionally
+		// with .nanoseconds. We always pass a non-zero cutoff: for fresh
+		// containers it's harmless; for reused containers it trims replay
+		// of prior-execution logs.
+		Since: fmt.Sprintf("%d.%09d", since.Unix(), since.Nanosecond()),
 	}
 
 	out, err := e.client.ContainerLogs(ctx, containerID, options)
