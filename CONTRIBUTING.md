@@ -10,17 +10,16 @@ CIDX uses **trunk-based development** with **manual releases**.
 
 ```bash
 # 1. Create feature branch with draft PR
-cidx action pr create "feat: add new feature"
+cidx pr create "feat: add new feature"
 
 # 2. Implement and commit using conventional commits
-git commit -m "feat: implement feature"
-git push
+cidx cpw -m "feat: implement feature"
 
 # 3. Mark PR ready for review when done
-cidx action pr ready
+cidx pr ready
 
 # 4. Merge to main (no tag created)
-cidx action pr merge
+cidx pr merge
 ```
 
 ### 🚀 Creating Releases
@@ -28,7 +27,7 @@ cidx action pr merge
 After merging 3-5 PRs to main, create a release:
 
 ```bash
-cidx action release create
+cidx release create
 ```
 
 This automatically:
@@ -76,7 +75,7 @@ BREAKING CHANGE: API endpoints now require authentication
 
 ### Prerequisites
 
-- Go 1.21+
+- Go 1.25+
 - Docker (for running containers)
 - Git
 

@@ -72,6 +72,14 @@ severity = "HIGH,CRITICAL"
 exit_code = 1
 ```
 
+`env` overrides are merged **per key**: entries in `[containers.<name>].env` replace the preset's value for the same key, and preset keys you don't mention are preserved. For example, given a preset with `env = { RUSTUP_HOME = "/tmp/rustup", CARGO_HOME = "/tmp/cargo" }`:
+
+```toml
+[containers.clippy]
+env = { RUSTUP_HOME = "/usr/local/rustup" }
+# Effective env: RUSTUP_HOME=/usr/local/rustup, CARGO_HOME=/tmp/cargo
+```
+
 #### Defining Custom Tools
 
 If you need a tool that does not have a built-in preset, define it in `presets.toml` rather than directly in `cidx.toml`.

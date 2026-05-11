@@ -7,6 +7,18 @@ CIDX detects your existing project, generates a CI config, and runs the same che
 
 Everything runs in Docker or Podman — nothing is installed on your machine. 40+ built-in presets cover common security, code quality, test, and build tools out of the box.
 
+## Installation
+
+Install with Go (latest):
+
+```bash
+go install github.com/cidx-org/cidx/cmd/cidx@latest
+```
+
+Or download a release binary from [Releases](https://github.com/cidx-org/cidx/releases).
+
+For other methods, see [docs/getting-started/installation.md](docs/getting-started/installation.md).
+
 ## Quick Start
 
 Two paths, two commands each.
@@ -119,6 +131,11 @@ cidx repo pr merge                        # Squash merge + cleanup
 cidx repo branch list --stale             # Find stale branches
 cidx repo branch cleanup -x              # Delete merged branches
 
+# Workflow runs (no PR required, e.g. direct push to main)
+cidx repo workflow watch                  # Watch latest run on current branch
+cidx repo workflow watch --branch main    # Watch latest run on main
+cidx repo workflow watch <run-id>         # Watch a specific run by ID
+
 # Releases (cidx release)
 cidx release tag prepare                  # Generate version and message
 cidx release tag create                   # Create and push tag
@@ -132,7 +149,7 @@ cidx security registry check              # Verify DHI access
 cidx cleanup                              # Remove stopped containers
 ```
 
-> **Shortcuts**: `cidx pr` and `cidx cpw` work as aliases for `cidx repo pr` and `cidx repo cpw`.
+> **Shortcuts**: `cidx pr`, `cidx cpw`, and `cidx workflow` work as aliases for `cidx repo pr`, `cidx repo cpw`, and `cidx repo workflow`.
 
 ## Configuration
 
@@ -194,4 +211,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-MIT
+[MIT](LICENSE)

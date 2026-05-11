@@ -165,7 +165,7 @@ func formatTable(result *ListResult) string {
 	}
 
 	// Header
-	sb.WriteString(fmt.Sprintf("\n%s%-*s %-*s %-*s %-*s %-*s %-*s %-*s",
+	fmt.Fprintf(&sb, "\n%s%-*s %-*s %-*s %-*s %-*s %-*s %-*s",
 		colorBold,
 		widths.marker, "",
 		widths.branch, "BRANCH",
@@ -174,11 +174,11 @@ func formatTable(result *ListResult) string {
 		widths.local, "LOCAL",
 		widths.remote, "REMOTE",
 		widths.author, "LAST AUTHOR",
-	))
+	)
 	if widths.subject > 0 {
-		sb.WriteString(fmt.Sprintf(" %-*s", widths.subject, "SUBJECT"))
+		fmt.Fprintf(&sb, " %-*s", widths.subject, "SUBJECT")
 	}
-	sb.WriteString(fmt.Sprintf("%s\n", colorReset))
+	fmt.Fprintf(&sb, "%s\n", colorReset)
 	sb.WriteString(strings.Repeat("─", tableWidth) + "\n")
 
 	// Branches
@@ -196,18 +196,18 @@ func formatTable(result *ListResult) string {
 
 	// Warning if no GitHub token
 	if !result.HasGitHubToken {
-		sb.WriteString(fmt.Sprintf("\n%s⚠ No GitHub token: PR info unavailable (set GITHUB_TOKEN or run 'gh auth login')%s\n",
-			colorYellow, colorReset))
+		fmt.Fprintf(&sb, "\n%s⚠ No GitHub token: PR info unavailable (set GITHUB_TOKEN or run 'gh auth login')%s\n",
+			colorYellow, colorReset)
 	}
 
 	// Suggestions
 	if result.Summary.Merged > 0 {
-		sb.WriteString(fmt.Sprintf("\n%sTip: Run 'cidx branch cleanup' to remove %d merged branch(es)%s\n",
-			colorDim, result.Summary.Merged, colorReset))
+		fmt.Fprintf(&sb, "\n%sTip: Run 'cidx branch cleanup' to remove %d merged branch(es)%s\n",
+			colorDim, result.Summary.Merged, colorReset)
 	}
 	if result.Summary.Stale > 0 {
-		sb.WriteString(fmt.Sprintf("%sTip: Run 'cidx branch stale' to see %d stale branch(es)%s\n",
-			colorDim, result.Summary.Stale, colorReset))
+		fmt.Fprintf(&sb, "%sTip: Run 'cidx branch stale' to see %d stale branch(es)%s\n",
+			colorDim, result.Summary.Stale, colorReset)
 	}
 
 	return sb.String()
@@ -376,15 +376,15 @@ func formatSummary(s Summary) string {
 func formatLegend() string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("%sLocation:%s [L]=local [R]=remote [B]=both  %s*%s=current    ", colorDim, colorReset, colorCyan, colorReset))
-	sb.WriteString(fmt.Sprintf("%sStatus:%s %sactive%s %sstale%s %smerged%s %sprotected%s %sorphan%s\n",
+	fmt.Fprintf(&sb, "%sLocation:%s [L]=local [R]=remote [B]=both  %s*%s=current    ", colorDim, colorReset, colorCyan, colorReset)
+	fmt.Fprintf(&sb, "%sStatus:%s %sactive%s %sstale%s %smerged%s %sprotected%s %sorphan%s\n",
 		colorDim, colorReset,
 		colorGreen, colorReset,
 		colorYellow, colorReset,
 		colorCyan, colorReset,
 		colorBlue, colorReset,
 		colorRed, colorReset,
-	))
+	)
 
 	return sb.String()
 }
@@ -408,7 +408,7 @@ func FormatCleanup(result *CleanupResult, dryRun bool) string {
 	var sb strings.Builder
 
 	if dryRun {
-		sb.WriteString(fmt.Sprintf("\n%s=== DRY RUN ===%s\n", colorYellow, colorReset))
+		fmt.Fprintf(&sb, "\n%s=== DRY RUN ===%s\n", colorYellow, colorReset)
 		sb.WriteString("The following branches would be deleted:\n\n")
 	} else {
 		sb.WriteString("\n")
@@ -422,33 +422,33 @@ func FormatCleanup(result *CleanupResult, dryRun bool) string {
 	// Show deleted branches
 	if len(result.Deleted) > 0 {
 		if dryRun {
-			sb.WriteString(fmt.Sprintf("%sBranches to delete:%s\n", colorBold, colorReset))
+			fmt.Fprintf(&sb, "%sBranches to delete:%s\n", colorBold, colorReset)
 		} else {
-			sb.WriteString(fmt.Sprintf("%sDeleted branches:%s\n", colorBold, colorReset))
+			fmt.Fprintf(&sb, "%sDeleted branches:%s\n", colorBold, colorReset)
 		}
 
 		for _, d := range result.Deleted {
 			statusColor := getStatusColor(d.Status)
 			locationStr := formatDeleteLocation(d)
-			sb.WriteString(fmt.Sprintf("  %s✓%s %s %s[%s]%s %s\n",
+			fmt.Fprintf(&sb, "  %s✓%s %s %s[%s]%s %s\n",
 				colorGreen, colorReset,
 				d.Name,
 				statusColor, d.Status, colorReset,
 				locationStr,
-			))
+			)
 		}
 		sb.WriteString("\n")
 	}
 
 	// Show skipped branches
 	if len(result.Skipped) > 0 {
-		sb.WriteString(fmt.Sprintf("%sSkipped branches:%s\n", colorBold, colorReset))
+		fmt.Fprintf(&sb, "%sSkipped branches:%s\n", colorBold, colorReset)
 		for _, s := range result.Skipped {
-			sb.WriteString(fmt.Sprintf("  %s⊘%s %s %s(%s)%s\n",
+			fmt.Fprintf(&sb, "  %s⊘%s %s %s(%s)%s\n",
 				colorDim, colorReset,
 				s.Name,
 				colorDim, s.Reason, colorReset,
-			))
+			)
 		}
 		sb.WriteString("\n")
 	}
@@ -456,27 +456,27 @@ func FormatCleanup(result *CleanupResult, dryRun bool) string {
 	// Summary
 	sb.WriteString(strings.Repeat("─", 40) + "\n")
 	if dryRun {
-		sb.WriteString(fmt.Sprintf("Would delete: %s%d branch(es)%s",
-			colorBold, result.TotalDeleted, colorReset))
+		fmt.Fprintf(&sb, "Would delete: %s%d branch(es)%s",
+			colorBold, result.TotalDeleted, colorReset)
 	} else {
-		sb.WriteString(fmt.Sprintf("Deleted: %s%d branch(es)%s",
-			colorGreen, result.TotalDeleted, colorReset))
+		fmt.Fprintf(&sb, "Deleted: %s%d branch(es)%s",
+			colorGreen, result.TotalDeleted, colorReset)
 	}
 
 	if result.LocalDeleted > 0 || result.RemoteDeleted > 0 {
-		sb.WriteString(fmt.Sprintf(" (%d local, %d remote)", result.LocalDeleted, result.RemoteDeleted))
+		fmt.Fprintf(&sb, " (%d local, %d remote)", result.LocalDeleted, result.RemoteDeleted)
 	}
 	sb.WriteString("\n")
 
 	if len(result.Skipped) > 0 {
-		sb.WriteString(fmt.Sprintf("Skipped: %s%d branch(es)%s\n",
-			colorYellow, len(result.Skipped), colorReset))
+		fmt.Fprintf(&sb, "Skipped: %s%d branch(es)%s\n",
+			colorYellow, len(result.Skipped), colorReset)
 	}
 
 	// Show hint to execute when in dry-run mode
 	if dryRun && result.TotalDeleted > 0 {
-		sb.WriteString(fmt.Sprintf("\n%sRun with --execute (-x) to actually delete these branches%s\n",
-			colorDim, colorReset))
+		fmt.Fprintf(&sb, "\n%sRun with --execute (-x) to actually delete these branches%s\n",
+			colorDim, colorReset)
 	}
 
 	return sb.String()
@@ -487,8 +487,8 @@ func FormatPRInfo(info *PRInfo) string {
 	var sb strings.Builder
 
 	// Header
-	sb.WriteString(fmt.Sprintf("\n%s#%d%s %s\n", colorBold, info.Number, colorReset, info.Title))
-	sb.WriteString(fmt.Sprintf("%s%s%s\n\n", colorDim, info.URL, colorReset))
+	fmt.Fprintf(&sb, "\n%s#%d%s %s\n", colorBold, info.Number, colorReset, info.Title)
+	fmt.Fprintf(&sb, "%s%s%s\n\n", colorDim, info.URL, colorReset)
 
 	// Status line
 	statusColor := colorGreen
@@ -508,11 +508,11 @@ func FormatPRInfo(info *PRInfo) string {
 		statusIcon = "✗"
 		statusText = "Closed"
 	}
-	sb.WriteString(fmt.Sprintf("  %sStatus:%s     %s%s %s%s\n", colorDim, colorReset, statusColor, statusIcon, statusText, colorReset))
+	fmt.Fprintf(&sb, "  %sStatus:%s     %s%s %s%s\n", colorDim, colorReset, statusColor, statusIcon, statusText, colorReset)
 
 	// Branch info
-	sb.WriteString(fmt.Sprintf("  %sBranch:%s     %s → %s\n", colorDim, colorReset, info.BranchName, info.BaseBranch))
-	sb.WriteString(fmt.Sprintf("  %sAuthor:%s     %s\n", colorDim, colorReset, info.AuthorLogin))
+	fmt.Fprintf(&sb, "  %sBranch:%s     %s → %s\n", colorDim, colorReset, info.BranchName, info.BaseBranch)
+	fmt.Fprintf(&sb, "  %sAuthor:%s     %s\n", colorDim, colorReset, info.AuthorLogin)
 
 	// Checks
 	if info.Checks != nil && info.Checks.Total > 0 {
@@ -526,14 +526,14 @@ func FormatPRInfo(info *PRInfo) string {
 			checksColor = colorYellow
 			checksIcon = "●"
 		}
-		sb.WriteString(fmt.Sprintf("  %sChecks:%s     %s%s %d/%d passed%s",
+		fmt.Fprintf(&sb, "  %sChecks:%s     %s%s %d/%d passed%s",
 			colorDim, colorReset,
-			checksColor, checksIcon, info.Checks.Success, info.Checks.Total, colorReset))
+			checksColor, checksIcon, info.Checks.Success, info.Checks.Total, colorReset)
 		if info.Checks.Pending > 0 {
-			sb.WriteString(fmt.Sprintf(" (%d pending)", info.Checks.Pending))
+			fmt.Fprintf(&sb, " (%d pending)", info.Checks.Pending)
 		}
 		if info.Checks.Failure > 0 {
-			sb.WriteString(fmt.Sprintf(" (%d failed)", info.Checks.Failure))
+			fmt.Fprintf(&sb, " (%d failed)", info.Checks.Failure)
 		}
 		sb.WriteString("\n")
 	}
@@ -551,9 +551,9 @@ func FormatPRInfo(info *PRInfo) string {
 			reviewParts = append(reviewParts, fmt.Sprintf("%d pending", info.Reviews.Pending))
 		}
 		if len(reviewParts) > 0 {
-			sb.WriteString(fmt.Sprintf("  %sReviews:%s    %s\n", colorDim, colorReset, strings.Join(reviewParts, ", ")))
+			fmt.Fprintf(&sb, "  %sReviews:%s    %s\n", colorDim, colorReset, strings.Join(reviewParts, ", "))
 		} else {
-			sb.WriteString(fmt.Sprintf("  %sReviews:%s    No reviews yet\n", colorDim, colorReset))
+			fmt.Fprintf(&sb, "  %sReviews:%s    No reviews yet\n", colorDim, colorReset)
 		}
 	}
 
@@ -567,7 +567,7 @@ func FormatPRInfo(info *PRInfo) string {
 			mergeColor = colorRed
 			mergeText = "Has conflicts"
 		}
-		sb.WriteString(fmt.Sprintf("  %sMergeable:%s  %s%s %s%s\n", colorDim, colorReset, mergeColor, mergeIcon, mergeText, colorReset))
+		fmt.Fprintf(&sb, "  %sMergeable:%s  %s%s %s%s\n", colorDim, colorReset, mergeColor, mergeIcon, mergeText, colorReset)
 	}
 
 	sb.WriteString("\n")

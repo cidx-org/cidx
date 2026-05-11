@@ -3,13 +3,39 @@ package generate
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/cidx-org/cidx/pkg/config"
 )
 
+// cidxModulePath is the canonical Go import path for cidx itself.
+// It is used both as the install target (`go install <cidxModulePath>/cmd/cidx@latest`)
+// and as the marker that identifies cidx's own repo when reading go.mod.
+const cidxModulePath = "github.com/cidx-org/cidx"
+
+// GitHubOptions controls how the GitHub Actions workflow is generated.
+type GitHubOptions struct {
+	// SelfBuild emits the cidx-repo bootstrap (`go build -o bin/cidx ./cmd/cidx`).
+	// When false (the default for external projects), the bootstrap installs
+	// cidx via `go install <module>/cmd/cidx@latest`.
+	SelfBuild bool
+}
+
 // GitHub generates a GitHub Actions workflow YAML from the CIDX config.
+//
+// This entrypoint targets external projects: the bootstrap installs cidx via
+// `go install` rather than building from source. Callers that need the
+// cidx-repo bootstrap should use GitHubWithOptions with SelfBuild=true.
 func GitHub(cfg *config.Config) (string, error) {
+	return GitHubWithOptions(cfg, GitHubOptions{})
+}
+
+// GitHubWithOptions generates a GitHub Actions workflow YAML with explicit
+// generation options. Use this when you need to control the bootstrap mode
+// (self-build vs. go-install) directly.
+func GitHubWithOptions(cfg *config.Config, opts GitHubOptions) (string, error) {
 	if len(cfg.Pipelines) == 0 {
 		return "", fmt.Errorf("no pipelines defined in cidx.toml")
 	}
@@ -28,7 +54,7 @@ func GitHub(cfg *config.Config) (string, error) {
 	b.WriteString("\njobs:\n")
 
 	// Bootstrap job -- build once, share binary
-	writeBootstrapJob(&b)
+	writeBootstrapJob(&b, opts.SelfBuild)
 
 	// Determine which phases appear across all pipelines
 	phases := collectPhases(cfg.Pipelines)
@@ -80,8 +106,15 @@ func writeTriggers(b *strings.Builder, pipelines map[string]config.Pipeline) {
 	}
 }
 
-// writeBootstrapJob writes the bootstrap job that builds the CIDX binary.
-func writeBootstrapJob(b *strings.Builder) {
+// writeBootstrapJob writes the bootstrap job that produces the CIDX binary.
+//
+// When selfBuild is true, the job builds from local source (`go build -o
+// bin/cidx ./cmd/cidx`) — this is the cidx repo's own dogfooded path.
+//
+// When selfBuild is false (default for external projects), the job installs
+// the published cidx binary via `go install` and copies it to bin/cidx so
+// downstream phase jobs can consume the same artifact path either way.
+func writeBootstrapJob(b *strings.Builder, selfBuild bool) {
 	b.WriteString("  bootstrap:\n")
 	b.WriteString("    name: Bootstrap\n")
 	b.WriteString("    runs-on: ubuntu-latest\n")
@@ -93,13 +126,47 @@ func writeBootstrapJob(b *strings.Builder) {
 	b.WriteString("        with:\n")
 	b.WriteString("          go-version: \"1.23\"\n")
 	b.WriteString("          cache: true\n")
-	b.WriteString("      - name: Build CIDX\n")
-	b.WriteString("        run: go build -o bin/cidx ./cmd/cidx\n")
+	if selfBuild {
+		b.WriteString("      - name: Build CIDX\n")
+		b.WriteString("        run: go build -o bin/cidx ./cmd/cidx\n")
+	} else {
+		b.WriteString("      - name: Install CIDX\n")
+		b.WriteString("        run: |\n")
+		b.WriteString("          mkdir -p bin\n")
+		fmt.Fprintf(b, "          go install %s/cmd/cidx@latest\n", cidxModulePath)
+		b.WriteString("          cp \"$(go env GOPATH)/bin/cidx\" bin/cidx\n")
+	}
 	b.WriteString("      - uses: actions/upload-artifact@v4\n")
 	b.WriteString("        with:\n")
 	b.WriteString("          name: cidx-binary\n")
 	b.WriteString("          path: bin/cidx\n")
 	b.WriteString("          retention-days: 1\n\n")
+}
+
+// IsCidxRepo reports whether dir is the cidx repository itself.
+//
+// The check has two prongs to avoid false positives from any project that
+// happens to have a cmd/cidx/ directory:
+//  1. cmd/cidx/main.go must exist
+//  2. go.mod's module declaration must equal the canonical cidx module path
+//
+// Returns false on any I/O error or missing marker — external project semantics
+// are the safe default.
+func IsCidxRepo(dir string) bool {
+	if _, err := os.Stat(filepath.Join(dir, "cmd", "cidx", "main.go")); err != nil {
+		return false
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	if err != nil {
+		return false
+	}
+	want := "module " + cidxModulePath
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(line) == want {
+			return true
+		}
+	}
+	return false
 }
 
 // writePhaseJob writes a single phase job that downloads the binary and runs the phase.

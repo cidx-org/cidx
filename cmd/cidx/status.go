@@ -240,14 +240,14 @@ func (m statusModel) renderGitHubSection() string {
 
 	icon := "🔐"
 	if m.info.GitHubLoggedIn {
-		content.WriteString(fmt.Sprintf("%s GitHub: %s  %s\n",
+		fmt.Fprintf(&content, "%s GitHub: %s  %s\n",
 			icon,
 			valueStyle.Render(m.info.GitHubUser),
-			successStyle.Render("✓ authenticated")))
+			successStyle.Render("✓ authenticated"))
 	} else {
-		content.WriteString(fmt.Sprintf("%s GitHub: %s\n",
+		fmt.Fprintf(&content, "%s GitHub: %s\n",
 			icon,
-			warningStyle.Render("not logged in (run: gh auth login)")))
+			warningStyle.Render("not logged in (run: gh auth login)"))
 	}
 
 	return boxStyle.Render(content.String())
@@ -257,7 +257,7 @@ func (m statusModel) renderGitSection() string {
 	var content strings.Builder
 
 	// Branch
-	content.WriteString(fmt.Sprintf("🌿 Branch: %s\n", valueStyle.Render(m.info.Branch)))
+	fmt.Fprintf(&content, "🌿 Branch: %s\n", valueStyle.Render(m.info.Branch))
 
 	// Commits ahead/behind
 	aheadBehind := ""
@@ -273,7 +273,7 @@ func (m statusModel) renderGitSection() string {
 	if aheadBehind == "" {
 		aheadBehind = dimStyle.Render("up to date")
 	}
-	content.WriteString(fmt.Sprintf("📊 Commits: %s\n", aheadBehind))
+	fmt.Fprintf(&content, "📊 Commits: %s\n", aheadBehind)
 
 	// Changes
 	if m.info.HasChanges {
@@ -287,9 +287,9 @@ func (m statusModel) renderGitSection() string {
 		if m.info.Untracked > 0 {
 			changes = append(changes, dimStyle.Render(fmt.Sprintf("%d untracked", m.info.Untracked)))
 		}
-		content.WriteString(fmt.Sprintf("📝 Changes: %s", strings.Join(changes, ", ")))
+		fmt.Fprintf(&content, "📝 Changes: %s", strings.Join(changes, ", "))
 	} else {
-		content.WriteString(fmt.Sprintf("📝 Changes: %s", dimStyle.Render("clean")))
+		fmt.Fprintf(&content, "📝 Changes: %s", dimStyle.Render("clean"))
 	}
 
 	return boxStyle.Render(content.String())
@@ -320,11 +320,11 @@ func (m statusModel) renderPRSection() string {
 		watchIndicator = warningStyle.Render(fmt.Sprintf(" 👀 %s (%s)", modeLabel, formatDuration(elapsed)))
 	}
 
-	content.WriteString(fmt.Sprintf("🔀 PR #%d: %s  [%s]%s\n",
+	fmt.Fprintf(&content, "🔀 PR #%d: %s  [%s]%s\n",
 		m.info.PRNumber,
 		valueStyle.Render(m.info.PRTitle),
 		prStatus,
-		watchIndicator))
+		watchIndicator)
 
 	// CI checks with GitHub-style progress bar
 	if len(m.info.CIChecks) > 0 {
@@ -369,7 +369,7 @@ func (m statusModel) renderPRSection() string {
 			summary = successStyle.Render("all passed")
 		}
 
-		content.WriteString(fmt.Sprintf("   %s %d/%d checks • %s\n", bar, passed, total, summary))
+		fmt.Fprintf(&content, "   %s %d/%d checks • %s\n", bar, passed, total, summary)
 
 		// Individual checks in compact format
 		content.WriteString("   ")
@@ -394,7 +394,7 @@ func (m statusModel) renderPRSection() string {
 				name = name[:11] + "…"
 			}
 
-			content.WriteString(fmt.Sprintf("%s %s", rendered, name))
+			fmt.Fprintf(&content, "%s %s", rendered, name)
 			if i < len(m.info.CIChecks)-1 {
 				content.WriteString(dimStyle.Render(" │ "))
 			}
@@ -419,19 +419,19 @@ func (m statusModel) renderProjectSection() string {
 	if m.info.Environment != nil {
 		envName = m.info.Environment.String()
 	}
-	content.WriteString(fmt.Sprintf("%s  Environment: %s\n", envIcon, envStyle.Render(envName)))
+	fmt.Fprintf(&content, "%s  Environment: %s\n", envIcon, envStyle.Render(envName))
 
 	// Project name and path
-	content.WriteString(fmt.Sprintf("📁 Project: %s\n", valueStyle.Render(m.info.ProjectName)))
+	fmt.Fprintf(&content, "📁 Project: %s\n", valueStyle.Render(m.info.ProjectName))
 
 	// Config status
 	if m.info.ConfigExists {
-		content.WriteString(fmt.Sprintf("📋 Config: %s  %s",
+		fmt.Fprintf(&content, "📋 Config: %s  %s",
 			valueStyle.Render("cidx.toml"),
-			successStyle.Render("✓")))
+			successStyle.Render("✓"))
 	} else {
-		content.WriteString(fmt.Sprintf("📋 Config: %s",
-			dimStyle.Render("not found (run: cidx init)")))
+		fmt.Fprintf(&content, "📋 Config: %s",
+			dimStyle.Render("not found (run: cidx init)"))
 	}
 
 	return boxStyle.Render(content.String())

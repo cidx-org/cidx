@@ -605,9 +605,9 @@ func generateGrypeIgnore(vulns []Vulnerability) string {
 	sb.WriteString("ignore:\n")
 	for _, v := range vulns {
 		// Grype can use CVE or GHSA identifiers - add all aliases
-		sb.WriteString(fmt.Sprintf("  - vulnerability: %s\n", v.CVE))
+		fmt.Fprintf(&sb, "  - vulnerability: %s\n", v.CVE)
 		for _, alias := range v.Aliases {
-			sb.WriteString(fmt.Sprintf("  - vulnerability: %s\n", alias))
+			fmt.Fprintf(&sb, "  - vulnerability: %s\n", alias)
 		}
 	}
 	return sb.String()
