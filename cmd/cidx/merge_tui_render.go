@@ -30,48 +30,48 @@ func (m mergeModel) renderTreeView(width int) string {
 			if issue.State == "closed" {
 				issueIcon = "🟣"
 			}
-			b.WriteString(fmt.Sprintf("%s Issue #%d\n", issueIcon, issue.Number))
+			fmt.Fprintf(&b, "%s Issue #%d\n", issueIcon, issue.Number)
 
 			// Issue details
-			b.WriteString(fmt.Sprintf("%s %s\n", treeVert, mergeLabelStyle.Render(issue.Title)))
+			fmt.Fprintf(&b, "%s %s\n", treeVert, mergeLabelStyle.Render(issue.Title))
 
 			// Issue body (truncated)
 			if issue.Body != "" {
 				bodyPreview := truncateStr(strings.ReplaceAll(issue.Body, "\n", " "), 60)
-				b.WriteString(fmt.Sprintf("%s %s\n", treeVert, mergeDimStyle.Render(bodyPreview)))
+				fmt.Fprintf(&b, "%s %s\n", treeVert, mergeDimStyle.Render(bodyPreview))
 			}
 
 			// Issue metadata
 			if len(issue.Labels) > 0 {
 				labelsStr := strings.Join(issue.Labels, ", ")
-				b.WriteString(fmt.Sprintf("%s 🏷 %s\n", treeVert, mergeDimStyle.Render(labelsStr)))
+				fmt.Fprintf(&b, "%s 🏷 %s\n", treeVert, mergeDimStyle.Render(labelsStr))
 			}
 			if issue.Author != "" {
-				b.WriteString(fmt.Sprintf("%s 👤 @%s\n", treeVert, mergeDimStyle.Render(issue.Author)))
+				fmt.Fprintf(&b, "%s 👤 @%s\n", treeVert, mergeDimStyle.Render(issue.Author))
 			}
 
 			// PR as child of issue
-			b.WriteString(fmt.Sprintf("%s\n", treeVert))
-			b.WriteString(fmt.Sprintf("%s 🔀 PR #%d\n", treeLast, m.prDetails.Number))
+			fmt.Fprintf(&b, "%s\n", treeVert)
+			fmt.Fprintf(&b, "%s 🔀 PR #%d\n", treeLast, m.prDetails.Number)
 
 			// PR details (indented under the issue)
 			prIndent := treeSpace
-			b.WriteString(fmt.Sprintf("%s%s %s\n", prIndent, treeBranch, mergeLabelStyle.Render(m.prDetails.Title)))
+			fmt.Fprintf(&b, "%s%s %s\n", prIndent, treeBranch, mergeLabelStyle.Render(m.prDetails.Title))
 
 			// Branch info
 			branchLine := fmt.Sprintf("%s → %s", m.prDetails.HeadBranch, m.prDetails.BaseBranch)
-			b.WriteString(fmt.Sprintf("%s%s 🌿 %s\n", prIndent, treeVert, mergeDimStyle.Render(branchLine)))
+			fmt.Fprintf(&b, "%s%s 🌿 %s\n", prIndent, treeVert, mergeDimStyle.Render(branchLine))
 
 			// Stats
 			statsLine := fmt.Sprintf("+%d -%d • %d files", m.prDetails.Additions, m.prDetails.Deletions, m.prDetails.ChangedFiles)
-			b.WriteString(fmt.Sprintf("%s%s 📊 %s\n", prIndent, treeVert, mergeDimStyle.Render(statsLine)))
+			fmt.Fprintf(&b, "%s%s 📊 %s\n", prIndent, treeVert, mergeDimStyle.Render(statsLine))
 
 			// Author
-			b.WriteString(fmt.Sprintf("%s%s 👤 @%s\n", prIndent, treeVert, mergeDimStyle.Render(m.prDetails.Author)))
+			fmt.Fprintf(&b, "%s%s 👤 @%s\n", prIndent, treeVert, mergeDimStyle.Render(m.prDetails.Author))
 
 			// Reviews
 			if len(m.prDetails.Reviewers) > 0 {
-				b.WriteString(fmt.Sprintf("%s%s 👥 Reviews:\n", prIndent, treeVert))
+				fmt.Fprintf(&b, "%s%s 👥 Reviews:\n", prIndent, treeVert)
 				for j, reviewer := range m.prDetails.Reviewers {
 					prefix := treeVert + treeVert
 					if j == len(m.prDetails.Reviewers)-1 {
@@ -90,18 +90,18 @@ func (m mergeModel) renderTreeView(width int) string {
 						reviewStyle = mergeReviewPendingStyle
 					}
 					reviewLine := fmt.Sprintf("%s @%s (%s)", reviewIcon, reviewer.Login, reviewer.State)
-					b.WriteString(fmt.Sprintf("%s%s    %s\n", prIndent, prefix, reviewStyle.Render(reviewLine)))
+					fmt.Fprintf(&b, "%s%s    %s\n", prIndent, prefix, reviewStyle.Render(reviewLine))
 				}
 			}
 
 			// Commits
 			if len(m.prDetails.Commits) > 0 {
-				b.WriteString(fmt.Sprintf("%s%s 📝 Commits (%d):\n", prIndent, treeVert, len(m.prDetails.Commits)))
+				fmt.Fprintf(&b, "%s%s 📝 Commits (%d):\n", prIndent, treeVert, len(m.prDetails.Commits))
 				// Show last 3 commits
 				start := 0
 				if len(m.prDetails.Commits) > 3 {
 					start = len(m.prDetails.Commits) - 3
-					b.WriteString(fmt.Sprintf("%s%s    %s\n", prIndent, treeVert, mergeDimStyle.Render(fmt.Sprintf("... %d earlier commits", start))))
+					fmt.Fprintf(&b, "%s%s    %s\n", prIndent, treeVert, mergeDimStyle.Render(fmt.Sprintf("... %d earlier commits", start)))
 				}
 				for j := start; j < len(m.prDetails.Commits); j++ {
 					c := m.prDetails.Commits[j]
@@ -111,15 +111,15 @@ func (m mergeModel) renderTreeView(width int) string {
 						prefix = treeSpace
 					}
 					commitLine := fmt.Sprintf("%s %s", c.SHA[:7], truncateStr(c.Message, 40))
-					b.WriteString(fmt.Sprintf("%s%s    %s\n", prIndent, prefix, mergeDimStyle.Render(commitLine)))
+					fmt.Fprintf(&b, "%s%s    %s\n", prIndent, prefix, mergeDimStyle.Render(commitLine))
 				}
 			}
 
 			// Mergeable status
 			if m.prDetails.Mergeable {
-				b.WriteString(fmt.Sprintf("%s%s %s\n", prIndent, treeLast, mergeSuccessStyle.Render("✓ Ready to merge")))
+				fmt.Fprintf(&b, "%s%s %s\n", prIndent, treeLast, mergeSuccessStyle.Render("✓ Ready to merge"))
 			} else {
-				b.WriteString(fmt.Sprintf("%s%s %s\n", prIndent, treeLast, mergeWarningStyle.Render("⚠ Not mergeable")))
+				fmt.Fprintf(&b, "%s%s %s\n", prIndent, treeLast, mergeWarningStyle.Render("⚠ Not mergeable"))
 			}
 
 			// Add separator between multiple issues
@@ -129,29 +129,29 @@ func (m mergeModel) renderTreeView(width int) string {
 		}
 	} else {
 		// No linked issues - show PR only
-		b.WriteString(fmt.Sprintf("🔀 PR #%d\n", m.prDetails.Number))
-		b.WriteString(fmt.Sprintf("%s %s\n", treeBranch, mergeLabelStyle.Render(m.prDetails.Title)))
+		fmt.Fprintf(&b, "🔀 PR #%d\n", m.prDetails.Number)
+		fmt.Fprintf(&b, "%s %s\n", treeBranch, mergeLabelStyle.Render(m.prDetails.Title))
 
 		// Branch info
 		branchLine := fmt.Sprintf("%s → %s", m.prDetails.HeadBranch, m.prDetails.BaseBranch)
-		b.WriteString(fmt.Sprintf("%s 🌿 %s\n", treeVert, mergeDimStyle.Render(branchLine)))
+		fmt.Fprintf(&b, "%s 🌿 %s\n", treeVert, mergeDimStyle.Render(branchLine))
 
 		// Stats
 		statsLine := fmt.Sprintf("+%d -%d • %d files", m.prDetails.Additions, m.prDetails.Deletions, m.prDetails.ChangedFiles)
-		b.WriteString(fmt.Sprintf("%s 📊 %s\n", treeVert, mergeDimStyle.Render(statsLine)))
+		fmt.Fprintf(&b, "%s 📊 %s\n", treeVert, mergeDimStyle.Render(statsLine))
 
 		// Author
-		b.WriteString(fmt.Sprintf("%s 👤 @%s\n", treeVert, mergeDimStyle.Render(m.prDetails.Author)))
+		fmt.Fprintf(&b, "%s 👤 @%s\n", treeVert, mergeDimStyle.Render(m.prDetails.Author))
 
 		// Labels
 		if len(m.prDetails.Labels) > 0 {
 			labelsLine := strings.Join(m.prDetails.Labels, ", ")
-			b.WriteString(fmt.Sprintf("%s 🏷 %s\n", treeVert, mergeDimStyle.Render(labelsLine)))
+			fmt.Fprintf(&b, "%s 🏷 %s\n", treeVert, mergeDimStyle.Render(labelsLine))
 		}
 
 		// Reviews
 		if len(m.prDetails.Reviewers) > 0 {
-			b.WriteString(fmt.Sprintf("%s 👥 Reviews:\n", treeVert))
+			fmt.Fprintf(&b, "%s 👥 Reviews:\n", treeVert)
 			for i, reviewer := range m.prDetails.Reviewers {
 				prefix := treeVert
 				if i == len(m.prDetails.Reviewers)-1 {
@@ -170,30 +170,30 @@ func (m mergeModel) renderTreeView(width int) string {
 					reviewStyle = mergeReviewPendingStyle
 				}
 				reviewLine := fmt.Sprintf("%s @%s (%s)", reviewIcon, reviewer.Login, reviewer.State)
-				b.WriteString(fmt.Sprintf("%s    %s\n", prefix, reviewStyle.Render(reviewLine)))
+				fmt.Fprintf(&b, "%s    %s\n", prefix, reviewStyle.Render(reviewLine))
 			}
 		}
 
 		// Commits
 		if len(m.prDetails.Commits) > 0 {
-			b.WriteString(fmt.Sprintf("%s 📝 Commits (%d):\n", treeVert, len(m.prDetails.Commits)))
+			fmt.Fprintf(&b, "%s 📝 Commits (%d):\n", treeVert, len(m.prDetails.Commits))
 			start := 0
 			if len(m.prDetails.Commits) > 3 {
 				start = len(m.prDetails.Commits) - 3
-				b.WriteString(fmt.Sprintf("%s    %s\n", treeVert, mergeDimStyle.Render(fmt.Sprintf("... %d earlier commits", start))))
+				fmt.Fprintf(&b, "%s    %s\n", treeVert, mergeDimStyle.Render(fmt.Sprintf("... %d earlier commits", start)))
 			}
 			for j := start; j < len(m.prDetails.Commits); j++ {
 				c := m.prDetails.Commits[j]
 				commitLine := fmt.Sprintf("%s %s", c.SHA[:7], truncateStr(c.Message, 40))
-				b.WriteString(fmt.Sprintf("%s    %s\n", treeVert, mergeDimStyle.Render(commitLine)))
+				fmt.Fprintf(&b, "%s    %s\n", treeVert, mergeDimStyle.Render(commitLine))
 			}
 		}
 
 		// Mergeable status
 		if m.prDetails.Mergeable {
-			b.WriteString(fmt.Sprintf("%s %s\n", treeLast, mergeSuccessStyle.Render("✓ Ready to merge")))
+			fmt.Fprintf(&b, "%s %s\n", treeLast, mergeSuccessStyle.Render("✓ Ready to merge"))
 		} else {
-			b.WriteString(fmt.Sprintf("%s %s\n", treeLast, mergeWarningStyle.Render("⚠ Not mergeable")))
+			fmt.Fprintf(&b, "%s %s\n", treeLast, mergeWarningStyle.Render("⚠ Not mergeable"))
 		}
 	}
 
@@ -446,7 +446,7 @@ func (m mergeModel) renderProgressBarWithChecks(checks *remote.PRChecks, width i
 
 	// Percentage
 	percentage := (completed * 100) / total
-	bar.WriteString(fmt.Sprintf(" %d%%", percentage))
+	fmt.Fprintf(&bar, " %d%%", percentage)
 
 	return bar.String()
 }
@@ -458,9 +458,9 @@ func (m mergeModel) renderConfirmation() string {
 	b.WriteString(mergeWarningStyle.Render("  ⚠ Confirm Merge"))
 	b.WriteString("\n\n")
 
-	b.WriteString(fmt.Sprintf("  You are about to merge PR #%d into %s\n",
-		m.prNumber, m.prDetails.BaseBranch))
-	b.WriteString(fmt.Sprintf("  Method: %s\n", mergeMethods[m.mergeMethod]))
+	fmt.Fprintf(&b, "  You are about to merge PR #%d into %s\n",
+		m.prNumber, m.prDetails.BaseBranch)
+	fmt.Fprintf(&b, "  Method: %s\n", mergeMethods[m.mergeMethod])
 	b.WriteString("\n")
 
 	// Show what will happen after merge
@@ -478,7 +478,7 @@ func (m mergeModel) renderConfirmation() string {
 	if len(postActions) > 0 {
 		b.WriteString("  After merge:\n")
 		for _, action := range postActions {
-			b.WriteString(fmt.Sprintf("    • %s\n", action))
+			fmt.Fprintf(&b, "    • %s\n", action)
 		}
 		b.WriteString("\n")
 	}
