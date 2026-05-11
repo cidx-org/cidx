@@ -205,6 +205,12 @@ cidx security registry login    # Authenticate
 - [Philosophy](docs/core-concepts/philosophy.md)
 - [Development Notes](CLAUDE.md)
 
+### Example configs
+
+- [`examples/cidx.toml`](examples/cidx.toml) — minimal starter (run security + code)
+- [`examples/cidx-advanced.toml`](examples/cidx-advanced.toml) — small custom config with overrides
+- [`examples/cidx-complete.toml`](examples/cidx-complete.toml) — full catalog: every section, every option, every default rendered explicit with pedagogical comments. Cherry-pick from here.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
