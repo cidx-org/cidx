@@ -1,3 +1,25 @@
+## v1.7.0 (2026-05-11)
+
+### Feat
+
+- **workflow**: add `cidx workflow watch` for non-PR branches (#125) (#132)
+- init --diff/--update + public release sanitization (#120)
+
+### Fix
+
+- **executor**: trim replay of previous-run logs on reused containers (#127) (#134)
+- **generate-github**: emit go install for external projects (#124) (#131)
+- **presets**: per-key env override for [containers.X] in cidx.toml (#130)
+- **presets**: use public Docker Hub for Rust + drop hardcoded toolchain env (#129)
+- **infra**: commitizen preset scope + QF1012 sweep (#126)
+- optional DHI login for Dependabot PRs (#107)
+- align Go version in CI/release workflows with go.mod (#106)
+
+### Refactor
+
+- **cidx.toml**: extract complete catalog to examples/cidx-complete.toml (#135)
+- reorganize CLI hierarchy around product core
+
 ## v1.6.2 (2026-04-08)
 
 ### Fix
