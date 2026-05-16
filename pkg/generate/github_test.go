@@ -360,3 +360,45 @@ func TestIsCidxRepo(t *testing.T) {
 		})
 	}
 }
+
+// TestGitHub_NoDeprecatedActionVersions asserts the generator does not emit
+// action versions that GitHub has flagged as deprecated. Major versions v4
+// and v5 of checkout / setup-go / upload-artifact / download-artifact run
+// on Node.js 20, which GitHub forces off June 2, 2026 and removes
+// September 16, 2026.
+//
+// Bumping cidx's own .github/workflows/ is not enough — the template that
+// downstream projects regenerate via `cidx generate github` must also stay
+// current, or every downstream CI emits deprecation annotations on each run.
+//
+// When GitHub announces another deprecation cycle, add the affected major
+// versions to `deprecated`.
+func TestGitHub_NoDeprecatedActionVersions(t *testing.T) {
+	cfg := &config.Config{
+		Pipelines: map[string]config.Pipeline{
+			"ci": {Phases: []string{"security", "code", "test", "build"}},
+		},
+	}
+
+	output, err := GitHub(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	deprecated := []string{"@v4", "@v5"}
+	actions := []string{
+		"actions/checkout",
+		"actions/setup-go",
+		"actions/upload-artifact",
+		"actions/download-artifact",
+	}
+
+	for _, action := range actions {
+		for _, ver := range deprecated {
+			needle := action + ver
+			if strings.Contains(output, needle) {
+				t.Errorf("generated workflow pins %q — Node 20 deprecated, forced off June 2, 2026", needle)
+			}
+		}
+	}
+}

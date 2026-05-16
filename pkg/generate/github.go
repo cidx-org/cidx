@@ -119,12 +119,12 @@ func writeBootstrapJob(b *strings.Builder, selfBuild bool) {
 	b.WriteString("    name: Bootstrap\n")
 	b.WriteString("    runs-on: ubuntu-latest\n")
 	b.WriteString("    steps:\n")
-	b.WriteString("      - uses: actions/checkout@v4\n")
+	b.WriteString("      - uses: actions/checkout@v6\n")
 	b.WriteString("        with:\n")
 	b.WriteString("          fetch-depth: 0\n")
-	b.WriteString("      - uses: actions/setup-go@v5\n")
+	b.WriteString("      - uses: actions/setup-go@v6\n")
 	b.WriteString("        with:\n")
-	b.WriteString("          go-version: \"1.23\"\n")
+	b.WriteString("          go-version: \"1.26\"\n")
 	b.WriteString("          cache: true\n")
 	if selfBuild {
 		b.WriteString("      - name: Build CIDX\n")
@@ -136,7 +136,7 @@ func writeBootstrapJob(b *strings.Builder, selfBuild bool) {
 		fmt.Fprintf(b, "          go install %s/cmd/cidx@latest\n", cidxModulePath)
 		b.WriteString("          cp \"$(go env GOPATH)/bin/cidx\" bin/cidx\n")
 	}
-	b.WriteString("      - uses: actions/upload-artifact@v4\n")
+	b.WriteString("      - uses: actions/upload-artifact@v7\n")
 	b.WriteString("        with:\n")
 	b.WriteString("          name: cidx-binary\n")
 	b.WriteString("          path: bin/cidx\n")
@@ -179,7 +179,7 @@ func writePhaseJob(b *strings.Builder, phase string) {
 	b.WriteString("    runs-on: ubuntu-latest\n")
 	b.WriteString("    needs: [bootstrap]\n")
 	b.WriteString("    steps:\n")
-	b.WriteString("      - uses: actions/checkout@v4\n")
+	b.WriteString("      - uses: actions/checkout@v6\n")
 
 	// Some phases need full history
 	if phase == "security" || phase == "code" {
@@ -187,7 +187,7 @@ func writePhaseJob(b *strings.Builder, phase string) {
 		b.WriteString("          fetch-depth: 0\n")
 	}
 
-	b.WriteString("      - uses: actions/download-artifact@v4\n")
+	b.WriteString("      - uses: actions/download-artifact@v8\n")
 	b.WriteString("        with:\n")
 	b.WriteString("          name: cidx-binary\n")
 	b.WriteString("          path: bin\n")
