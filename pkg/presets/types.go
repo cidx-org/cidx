@@ -18,9 +18,9 @@ type Preset struct {
 	Env           map[string]string `yaml:"env" toml:"env"`
 	ConfigFiles   []string          `yaml:"config_files" toml:"config_files"`
 	Options       map[string]Option `yaml:"options" toml:"options"`
-	RequireCI     bool              `yaml:"require_ci" toml:"require_ci"`                     // Requires CI environment
-	LocalBehavior string            `yaml:"local_behavior" toml:"local_behavior"`             // draft, no-push, dry-run, disabled
-	Privileged    bool              `yaml:"privileged,omitempty" toml:"privileged,omitempty"` // Requires root privileges (skip user mapping)
+	RequireCI     bool              `yaml:"require_ci" toml:"require_ci"`                       // Requires CI environment
+	LocalBehavior string            `yaml:"local_behavior" toml:"local_behavior"`               // draft, no-push, dry-run, disabled
+	Privileged    bool              `yaml:"privileged,omitempty" toml:"privileged,omitempty"`   // Requires root privileges (skip user mapping)
 	PullPolicy    string            `yaml:"pull_policy,omitempty" toml:"pull_policy,omitempty"` // always, if-not-present, never (default: env-based)
 	Timeout       string            `yaml:"timeout,omitempty" toml:"timeout,omitempty"`         // duration string (e.g., "5m", "45m"), default: 30m
 }
@@ -44,14 +44,22 @@ func (p *Preset) MergeWith(overrides map[string]any) *Preset {
 	if command, ok := overrides["command"].(string); ok {
 		merged.Command = command
 	}
-	if entrypoint, ok := overrides["entrypoint"].([]string); ok {
-		merged.Entrypoint = entrypoint
+	// Entrypoint and volumes arrive as []any when decoded from TOML through
+	// a map[string]any pass (which is how cidx.toml [containers.X] sections
+	// reach this function). The previous []string type assertion silently
+	// dropped them — see #143. Accept both shapes via normalizeStringSlice.
+	if entrypointRaw, hasEntrypoint := overrides["entrypoint"]; hasEntrypoint {
+		if entrypoint, ok := normalizeStringSliceOverride(entrypointRaw); ok {
+			merged.Entrypoint = entrypoint
+		}
 	}
 	if workdir, ok := overrides["workdir"].(string); ok {
 		merged.Workdir = workdir
 	}
-	if volumes, ok := overrides["volumes"].([]string); ok {
-		merged.Volumes = volumes
+	if volumesRaw, hasVolumes := overrides["volumes"]; hasVolumes {
+		if volumes, ok := normalizeStringSliceOverride(volumesRaw); ok {
+			merged.Volumes = volumes
+		}
 	}
 	// Merge per-key env overrides from cidx.toml.
 	// TOML decoding through map[string]any yields map[string]any for nested
@@ -109,6 +117,93 @@ func applyOption(preset *Preset, name string, opt Option, value any) Preset {
 	}
 
 	return p
+}
+
+// normalizeStringSliceOverride coerces a TOML-decoded array value into []string.
+// TOML decoding through map[string]any yields []any for arrays, not []string,
+// so we accept both shapes. Non-string elements are skipped silently; if any
+// element is unconvertible the whole slice is rejected (returns false) so the
+// caller can preserve the preset's default rather than emit a half-built list.
+func normalizeStringSliceOverride(v any) ([]string, bool) {
+	switch s := v.(type) {
+	case []string:
+		return s, true
+	case []any:
+		out := make([]string, 0, len(s))
+		for _, item := range s {
+			str, ok := item.(string)
+			if !ok {
+				return nil, false
+			}
+			out = append(out, str)
+		}
+		return out, true
+	default:
+		return nil, false
+	}
+}
+
+// PresetFromOverrides constructs a Preset from a custom container declaration
+// in cidx.toml. A declaration is a `[containers.NAME]` section that has an
+// `image` field present — that signals a brand-new container, not an override
+// of a known preset. The returned Preset is filled from the overrides map;
+// fields absent from the map keep their zero value.
+//
+// This implements the user-facing contract documented in
+// examples/cidx-complete.toml (custom containers section) and closes #142.
+func PresetFromOverrides(name string, overrides map[string]any) Preset {
+	p := Preset{Name: name}
+
+	if phase, ok := overrides["phase"].(string); ok {
+		p.Phase = phase
+	}
+	if image, ok := overrides["image"].(string); ok {
+		p.Image = image
+	}
+	if command, ok := overrides["command"].(string); ok {
+		p.Command = command
+	}
+	if entrypointRaw, ok := overrides["entrypoint"]; ok {
+		if entrypoint, ok := normalizeStringSliceOverride(entrypointRaw); ok {
+			p.Entrypoint = entrypoint
+		}
+	}
+	if workdir, ok := overrides["workdir"].(string); ok {
+		p.Workdir = workdir
+	}
+	if volumesRaw, ok := overrides["volumes"]; ok {
+		if volumes, ok := normalizeStringSliceOverride(volumesRaw); ok {
+			p.Volumes = volumes
+		}
+	}
+	if envRaw, ok := overrides["env"]; ok {
+		if env, ok := normalizeEnvOverride(envRaw); ok {
+			p.Env = env
+		}
+	}
+	if privileged, ok := overrides["privileged"].(bool); ok {
+		p.Privileged = privileged
+	}
+	if pullPolicy, ok := overrides["pull_policy"].(string); ok {
+		p.PullPolicy = pullPolicy
+	}
+	if timeout, ok := overrides["timeout"].(string); ok {
+		p.Timeout = timeout
+	}
+
+	return p
+}
+
+// IsCustomDeclaration reports whether the given override section declares a
+// brand-new container (image field present) rather than overriding an
+// existing preset. Used by validator and runner to decide between
+// preset-override semantics and custom-container semantics.
+func IsCustomDeclaration(overrides map[string]any) bool {
+	if overrides == nil {
+		return false
+	}
+	image, ok := overrides["image"].(string)
+	return ok && image != ""
 }
 
 // normalizeEnvOverride coerces an env override value into map[string]string.

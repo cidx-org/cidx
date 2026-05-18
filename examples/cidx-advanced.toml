@@ -23,3 +23,15 @@ exit_code = 1
 
 [containers.prettier]
 write = true
+
+# Custom container declaration: when [containers.NAME] has an `image` field
+# and NAME is not a built-in preset, CIDX treats it as a brand-new container
+# rather than an override. All preset fields (phase, image, command, workdir,
+# volumes, entrypoint, env, pull_policy, timeout) can be set inline.
+[containers.pytest-custom]
+phase = "test"
+image = "python:3.12-slim"
+command = "pytest tests/integration"
+workdir = "/app"
+volumes = ["${WORKSPACE}:/app"]
+env = { PYTHONDONTWRITEBYTECODE = "1" }

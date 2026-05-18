@@ -358,10 +358,25 @@ func (r *Runner) runPhaseParallel(ctx context.Context, phaseName string, phase c
 
 // RunTool executes a single tool
 func (r *Runner) RunTool(ctx context.Context, toolName string) error {
-	// Get preset
+	// Resolve the override section once — we need it for both code paths
+	// below (custom declaration vs. preset override).
+	var overrides map[string]any
+	if r.config.Overrides != nil {
+		overrides = r.config.Overrides[toolName]
+	}
+
+	// Get preset. If no built-in preset matches, fall back to a custom
+	// container declaration from [containers.NAME] (must have an `image`
+	// field). See #142.
 	preset, err := presets.Get(toolName)
 	if err != nil {
-		return err
+		if !presets.IsCustomDeclaration(overrides) {
+			return fmt.Errorf("container %q is not a built-in preset and has no [containers.%s] declaration with an `image` field", toolName, toolName)
+		}
+		preset = presets.PresetFromOverrides(toolName, overrides)
+		// Custom containers skip the preset-merge step below — the declaration
+		// IS the full definition. Clear `overrides` so MergeWith is a no-op.
+		overrides = nil
 	}
 
 	// Validate preset against environment and get execution mode
@@ -377,12 +392,6 @@ func (r *Runner) RunTool(ctx context.Context, toolName string) error {
 
 	// Apply execution mode modifications to preset
 	preset = environment.ApplyExecutionMode(preset, execMode)
-
-	// Merge with user overrides
-	var overrides map[string]any
-	if r.config.Overrides != nil {
-		overrides = r.config.Overrides[toolName]
-	}
 
 	mergedPreset := preset.MergeWith(overrides)
 
