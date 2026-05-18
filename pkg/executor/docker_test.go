@@ -1,18 +1,20 @@
 package executor
 
 import (
+	"strings"
 	"testing"
 )
 
 func TestConfigHash_Deterministic(t *testing.T) {
 	image := "alpine:latest"
 	command := "echo hello"
+	workdir := "/workspace"
 	entrypoint := []string{"sh", "-c"}
 	volumes := []string{"/src:/app"}
 	env := map[string]string{"FOO": "bar", "BAZ": "qux"}
 
-	h1 := configHash(image, command, entrypoint, volumes, env)
-	h2 := configHash(image, command, entrypoint, volumes, env)
+	h1 := configHash(image, command, workdir, entrypoint, volumes, env)
+	h2 := configHash(image, command, workdir, entrypoint, volumes, env)
 
 	if h1 != h2 {
 		t.Errorf("configHash not deterministic: %s != %s", h1, h2)
@@ -20,26 +22,28 @@ func TestConfigHash_Deterministic(t *testing.T) {
 }
 
 func TestConfigHash_DifferentInputs(t *testing.T) {
-	base := configHash("alpine:latest", "echo", nil, nil, nil)
+	base := configHash("alpine:latest", "echo", "", nil, nil, nil)
 
 	tests := []struct {
 		name       string
 		image      string
 		command    string
+		workdir    string
 		entrypoint []string
 		volumes    []string
 		env        map[string]string
 	}{
-		{"different image", "ubuntu:latest", "echo", nil, nil, nil},
-		{"different command", "alpine:latest", "ls", nil, nil, nil},
-		{"different entrypoint", "alpine:latest", "echo", []string{"sh", "-c"}, nil, nil},
-		{"with volumes", "alpine:latest", "echo", nil, []string{"/a:/b"}, nil},
-		{"with env", "alpine:latest", "echo", nil, nil, map[string]string{"K": "V"}},
+		{"different image", "ubuntu:latest", "echo", "", nil, nil, nil},
+		{"different command", "alpine:latest", "ls", "", nil, nil, nil},
+		{"different workdir", "alpine:latest", "echo", "/scan", nil, nil, nil},
+		{"different entrypoint", "alpine:latest", "echo", "", []string{"sh", "-c"}, nil, nil},
+		{"with volumes", "alpine:latest", "echo", "", nil, []string{"/a:/b"}, nil},
+		{"with env", "alpine:latest", "echo", "", nil, nil, map[string]string{"K": "V"}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := configHash(tt.image, tt.command, tt.entrypoint, tt.volumes, tt.env)
+			h := configHash(tt.image, tt.command, tt.workdir, tt.entrypoint, tt.volumes, tt.env)
 			if h == base {
 				t.Errorf("expected different hash for %s, got same: %s", tt.name, h)
 			}
@@ -51,18 +55,104 @@ func TestConfigHash_EnvSorting(t *testing.T) {
 	env1 := map[string]string{"A": "1", "B": "2", "C": "3"}
 	env2 := map[string]string{"C": "3", "A": "1", "B": "2"}
 
-	h1 := configHash("img", "cmd", nil, nil, env1)
-	h2 := configHash("img", "cmd", nil, nil, env2)
+	h1 := configHash("img", "cmd", "", nil, nil, env1)
+	h2 := configHash("img", "cmd", "", nil, nil, env2)
 
 	if h1 != h2 {
 		t.Errorf("configHash should be order-independent for env: %s != %s", h1, h2)
 	}
 }
 
+func TestConfigHash_VolumeOrderMatters(t *testing.T) {
+	// Volume order changes Docker's mount precedence — treat as a config change.
+	h1 := configHash("img", "cmd", "", nil, []string{"/a:/x", "/b:/y"}, nil)
+	h2 := configHash("img", "cmd", "", nil, []string{"/b:/y", "/a:/x"}, nil)
+
+	if h1 == h2 {
+		t.Errorf("configHash should differ when volume order changes: %s == %s", h1, h2)
+	}
+}
+
+func TestConfigHash_VolumeWhitespaceNormalized(t *testing.T) {
+	// Cosmetic whitespace in cidx.toml volume strings shouldn't trigger a recreate.
+	h1 := configHash("img", "cmd", "", nil, []string{"/a:/x"}, nil)
+	h2 := configHash("img", "cmd", "", nil, []string{"  /a:/x  "}, nil)
+
+	if h1 != h2 {
+		t.Errorf("configHash should ignore surrounding whitespace on volumes: %s != %s", h1, h2)
+	}
+}
+
 func TestConfigHash_Length(t *testing.T) {
-	h := configHash("img", "cmd", nil, nil, nil)
+	h := configHash("img", "cmd", "", nil, nil, nil)
 	if len(h) != 16 {
 		t.Errorf("expected hash length 16, got %d", len(h))
+	}
+}
+
+func TestDecideRecreate(t *testing.T) {
+	tests := []struct {
+		name         string
+		existingHash string
+		newHash      string
+		noReuse      string
+		wantReason   bool // true if a recreate reason should be returned
+		wantContains string
+	}{
+		{
+			name:         "matching hash, no override → reuse",
+			existingHash: "abc123",
+			newHash:      "abc123",
+			noReuse:      "",
+			wantReason:   false,
+		},
+		{
+			name:         "hash mismatch → recreate",
+			existingHash: "abc123",
+			newHash:      "def456",
+			noReuse:      "",
+			wantReason:   true,
+			wantContains: "config changed",
+		},
+		{
+			name:         "missing label (pre-#144 container) → recreate",
+			existingHash: "",
+			newHash:      "def456",
+			noReuse:      "",
+			wantReason:   true,
+			wantContains: "no cidx.config_hash label",
+		},
+		{
+			name:         "CIDX_NO_REUSE=1 → recreate even if hashes match",
+			existingHash: "abc123",
+			newHash:      "abc123",
+			noReuse:      "1",
+			wantReason:   true,
+			wantContains: "CIDX_NO_REUSE",
+		},
+		{
+			name:         "CIDX_NO_REUSE takes priority over missing label",
+			existingHash: "",
+			newHash:      "def456",
+			noReuse:      "true",
+			wantReason:   true,
+			wantContains: "CIDX_NO_REUSE",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := decideRecreate(tt.existingHash, tt.newHash, tt.noReuse)
+			if tt.wantReason && got == "" {
+				t.Errorf("expected a recreate reason, got empty string")
+			}
+			if !tt.wantReason && got != "" {
+				t.Errorf("expected reuse (empty reason), got: %q", got)
+			}
+			if tt.wantContains != "" && !strings.Contains(got, tt.wantContains) {
+				t.Errorf("reason = %q, expected to contain %q", got, tt.wantContains)
+			}
+		})
 	}
 }
 

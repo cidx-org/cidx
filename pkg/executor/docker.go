@@ -26,6 +26,16 @@ import (
 // DefaultTimeout is the default timeout for container execution (30 minutes)
 const DefaultTimeout = 30 * time.Minute
 
+// Version is the cidx build version stamped onto every created container as
+// the `cidx.version` label. Set from cmd/cidx/main.go on startup so the
+// executor package stays free of import cycles. Defaults to "dev".
+var Version = "dev"
+
+// noReuseEnv, when set to a non-empty value, forces every cidx_<tool>
+// container to be recreated on every run. Useful as an escape hatch for
+// debugging or for users who want strict immutability semantics.
+const noReuseEnv = "CIDX_NO_REUSE"
+
 // DockerExecutor executes tools using Docker
 type DockerExecutor struct {
 	client   *client.Client
@@ -338,14 +348,16 @@ func (e *DockerExecutor) getOrCreateContainer(ctx context.Context, containerConf
 		return "", "", fmt.Errorf("failed to list containers: %w", err)
 	}
 
-	// If container exists, check if configuration has changed
+	// If container exists, decide reuse vs recreate
 	if len(containers) > 0 {
 		existingContainer := containers[0]
-		newHash := configHash(containerConfig.Image, command, containerConfig.Entrypoint, volumes, containerConfig.Env)
+		newHash := configHash(containerConfig.Image, command, containerConfig.Workdir, containerConfig.Entrypoint, volumes, containerConfig.Env)
 		existingHash := existingContainer.Labels["cidx.config_hash"]
 
-		if existingHash != "" && existingHash != newHash {
-			e.logger.Infof("  🔄 Configuration changed for %s, recreating container", containerConfig.Name)
+		recreateReason := decideRecreate(existingHash, newHash, os.Getenv(noReuseEnv))
+
+		if recreateReason != "" {
+			e.logger.Infof("  🔄 Recreating container %s — %s", containerName, recreateReason)
 
 			// Remove old container
 			if err := e.client.ContainerRemove(ctx, existingContainer.ID, container.RemoveOptions{Force: true}); err != nil {
@@ -356,7 +368,7 @@ func (e *DockerExecutor) getOrCreateContainer(ctx context.Context, containerConf
 			return e.createContainer(ctx, containerConfig, volumes, command)
 		}
 
-		e.logger.Debugf("♻ Reusing container %s (preserves cache)", containerName)
+		e.logger.Debugf("♻ Reusing container %s (preserves cache, config hash %s)", containerName, existingHash)
 		return existingContainer.ID, containerName, nil
 	}
 
@@ -409,7 +421,8 @@ func (e *DockerExecutor) createContainer(ctx context.Context, containerConfig *c
 			"cidx.tool":        containerConfig.Name,
 			"cidx.phase":       containerConfig.Phase,
 			"cidx.image":       containerConfig.Image,
-			"cidx.config_hash": configHash(containerConfig.Image, command, containerConfig.Entrypoint, volumes, containerConfig.Env),
+			"cidx.version":     Version,
+			"cidx.config_hash": configHash(containerConfig.Image, command, containerConfig.Workdir, containerConfig.Entrypoint, volumes, containerConfig.Env),
 		},
 	}
 
@@ -518,22 +531,78 @@ func expandCommand(command string, env map[string]string) string {
 	return os.ExpandEnv(expanded)
 }
 
-// configHash creates a short hash of the container configuration for change detection
-func configHash(image, command string, entrypoint, volumes []string, env map[string]string) string {
+// decideRecreate returns a non-empty human-readable reason when an existing
+// `cidx_<tool>` container must be removed and recreated instead of reused.
+// Returns "" when the container is safe to reuse.
+//
+// Decision signals, in priority order:
+//  1. noReuseValue != "" — user-forced recreate via CIDX_NO_REUSE env var
+//     (escape hatch for debugging or strict immutability)
+//  2. existingHash == "" — container was created by a cidx version that
+//     didn't write the `cidx.config_hash` label (pre-#144). We can't prove
+//     it's current, so treat as stale.
+//  3. existingHash != newHash — cidx.toml's behavior-affecting fields
+//     changed since the container was created.
+//
+// Extracted from getOrCreateContainer so the policy is unit-testable without
+// a live Docker daemon.
+func decideRecreate(existingHash, newHash, noReuseValue string) string {
+	switch {
+	case noReuseValue != "":
+		return noReuseEnv + " set"
+	case existingHash == "":
+		return "no cidx.config_hash label (pre-#144 container)"
+	case existingHash != newHash:
+		return "cidx.toml config changed"
+	default:
+		return ""
+	}
+}
+
+// configHash creates a short, stable hash of the behavior-affecting container
+// configuration. Used to detect stale `cidx_<tool>` containers when cidx.toml
+// changes between runs (issue #144).
+//
+// Hash input shape (NUL-separated, in this exact order):
+//
+//	image \x00 command \x00 workdir \x00
+//	entrypoint[0] \x00 entrypoint[1] \x00 ... \x00
+//	volumes[0] \x00 volumes[1] \x00 ... \x00     (trimmed per element; order preserved)
+//	envKey1=envVal1 \x00 envKey2=envVal2 \x00 ... \x00  (env keys sorted ascending)
+//
+// Properties:
+//   - Deterministic: same inputs always produce the same hash.
+//   - Env-order-independent: map iteration order doesn't affect the result.
+//   - Volume-order-sensitive on purpose: re-ordering binds changes Docker's
+//     mount precedence, so we treat that as a config change.
+//   - Cheap: SHA-256 truncated to 16 hex chars (64 bits) — collision-resistant
+//     enough for "did the user's config change" detection.
+//
+// Fields intentionally excluded from the hash:
+//   - PullPolicy, Privileged, Timeout — these affect execution behavior but
+//     not container state; a change should not force a recreate (the next Run
+//     just uses the new policy).
+//   - Phase, Name — identity, not config.
+//   - Comments / whitespace in cidx.toml — by design, only behavior-affecting
+//     fields are hashed.
+func configHash(image, command, workdir string, entrypoint, volumes []string, env map[string]string) string {
 	h := sha256.New()
 	h.Write([]byte(image))
 	h.Write([]byte("\x00"))
 	h.Write([]byte(command))
+	h.Write([]byte("\x00"))
+	h.Write([]byte(workdir))
 	h.Write([]byte("\x00"))
 	for _, part := range entrypoint {
 		h.Write([]byte(part))
 		h.Write([]byte("\x00"))
 	}
 	for _, v := range volumes {
-		h.Write([]byte(v))
+		// Trim per-element whitespace to normalize cosmetic edits in cidx.toml.
+		h.Write([]byte(strings.TrimSpace(v)))
 		h.Write([]byte("\x00"))
 	}
-	// Sort env keys for deterministic hashing
+	// Sort env keys so map iteration order doesn't perturb the hash.
 	envKeys := make([]string, 0, len(env))
 	for k := range env {
 		envKeys = append(envKeys, k)
