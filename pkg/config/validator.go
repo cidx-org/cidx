@@ -34,12 +34,19 @@ func Validate(cfg *Config) ValidationResult {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("phase '%s' has no containers", phaseName))
 		}
 
-		// Validate each container exists
+		// Validate each container exists. A container is valid if it is either:
+		//   (a) a built-in preset name (presets.Exists), or
+		//   (b) a custom declaration in [containers.NAME] that has an `image` field
+		//       — see #142 and examples/cidx-complete.toml.
 		for _, containerName := range phase.Containers {
-			if !presets.Exists(containerName) {
-				result.Errors = append(result.Errors, fmt.Sprintf("unknown container: %s in phase '%s'", containerName, phaseName))
-				result.Valid = false
+			if presets.Exists(containerName) {
+				continue
 			}
+			if presets.IsCustomDeclaration(cfg.Overrides[containerName]) {
+				continue
+			}
+			result.Errors = append(result.Errors, fmt.Sprintf("unknown container: %s in phase '%s' (no matching preset and no [containers.%s] declaration with an `image` field)", containerName, phaseName, containerName))
+			result.Valid = false
 		}
 	}
 
