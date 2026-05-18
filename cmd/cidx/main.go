@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/cidx-org/cidx/pkg/executor"
 	"github.com/urfave/cli/v2"
 )
 
@@ -11,6 +12,10 @@ import (
 var Version = "dev"
 
 func main() {
+	// Propagate the build version to the executor package so created
+	// containers carry the `cidx.version` label (issue #144).
+	executor.Version = Version
+
 	app := &cli.App{
 		Name:                   "cidx",
 		Usage:                  "CI with Declarative eXecution - Integrate any project in two commands",

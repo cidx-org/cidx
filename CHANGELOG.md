@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Fix
+
+- **executor**: detect stale container config via SHA-256 label hash; recreate `cidx_<tool>` containers when cidx.toml's behavior-affecting fields (image, command, workdir, entrypoint, volumes, env) change between runs. Containers from pre-#144 cidx versions (no `cidx.config_hash` label) are also treated as stale. `CIDX_NO_REUSE=1` forces recreate. Also writes a `cidx.version` label on every created container. (#144)
+
 ## v1.7.0 (2026-05-11)
 
 ### Feat
