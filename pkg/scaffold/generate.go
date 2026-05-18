@@ -6,76 +6,102 @@ import (
 )
 
 // GenerateTOML produces a cidx.toml from detection results.
+//
+// For single-language detections the generated config mirrors that language's
+// recommended containers. For multi-language detections (fullstack monorepos:
+// Python backend + Node frontend, etc.) containers are aggregated across all
+// detected languages with order-preserving dedup, so a project gets the
+// linters, scanners, and test runners of every stack it actually uses.
 func GenerateTOML(d *Detection) string {
 	if len(d.Languages) == 0 {
 		return defaultConfig()
 	}
 
-	lang := d.Languages[0] // primary language
+	primary := d.Languages[0]
+
+	// Aggregate per-phase containers across all detected languages.
+	security := mergeContainers(d.Languages, func(l Language) []string { return l.Security })
+	code := mergeContainers(d.Languages, func(l Language) []string { return l.Code })
+	test := mergeContainers(d.Languages, func(l Language) []string { return l.Test })
+	build := mergeContainers(d.Languages, func(l Language) []string { return l.Build })
 
 	var b strings.Builder
 
 	b.WriteString("# CIDX Configuration\n")
-	fmt.Fprintf(&b,"# Auto-detected: %s project", lang.Name)
+	fmt.Fprintf(&b, "# Auto-detected: %s project", primary.Name)
 	if len(d.Languages) > 1 {
 		names := make([]string, len(d.Languages))
 		for i, l := range d.Languages {
 			names[i] = l.Name
 		}
-		fmt.Fprintf(&b," (also: %s)", strings.Join(names[1:], ", "))
+		fmt.Fprintf(&b, " (also: %s)", strings.Join(names[1:], ", "))
 	}
 	b.WriteString("\n#\n")
 	b.WriteString("# Edit to match your needs. Run 'cidx preset list' for all available tools.\n")
 	b.WriteString("# Run 'cidx validate' to check, 'cidx run ci' to execute.\n\n")
 
-	// Security phase
-	if len(lang.Security) > 0 {
+	if len(security) > 0 {
 		b.WriteString("[security]\n")
-		fmt.Fprintf(&b,"containers = [%s]\n\n", quotedList(lang.Security))
+		fmt.Fprintf(&b, "containers = [%s]\n\n", quotedList(security))
 	}
-
-	// Code phase
-	if len(lang.Code) > 0 {
+	if len(code) > 0 {
 		b.WriteString("[code]\n")
-		fmt.Fprintf(&b,"containers = [%s]\n\n", quotedList(lang.Code))
+		fmt.Fprintf(&b, "containers = [%s]\n\n", quotedList(code))
 	}
-
-	// Test phase
-	if len(lang.Test) > 0 {
+	if len(test) > 0 {
 		b.WriteString("[test]\n")
-		fmt.Fprintf(&b,"containers = [%s]\n\n", quotedList(lang.Test))
+		fmt.Fprintf(&b, "containers = [%s]\n\n", quotedList(test))
 	}
-
-	// Build phase
-	if len(lang.Build) > 0 {
+	if len(build) > 0 {
 		b.WriteString("[build]\n")
-		fmt.Fprintf(&b,"containers = [%s]\n\n", quotedList(lang.Build))
+		fmt.Fprintf(&b, "containers = [%s]\n\n", quotedList(build))
 	}
 
-	// Pipelines
+	// Pipelines reference whichever phases ended up populated.
+	phases := collectPhases(security, code, test, build)
+
 	b.WriteString("[pipelines.ci]\n")
-	phases := collectPhasesFromLang(lang)
-	fmt.Fprintf(&b,"phases = [%s]\n\n", quotedList(phases))
+	fmt.Fprintf(&b, "phases = [%s]\n\n", quotedList(phases))
 
 	b.WriteString("[pipelines.pr]\n")
 	prPhases := filterPhases(phases, "build") // PR skips build
-	fmt.Fprintf(&b,"phases = [%s]\n", quotedList(prPhases))
+	fmt.Fprintf(&b, "phases = [%s]\n", quotedList(prPhases))
 
 	return b.String()
 }
 
-func collectPhasesFromLang(lang Language) []string {
+// mergeContainers walks the language list in order and accumulates the
+// per-phase container slice (returned by sel), preserving first-seen order and
+// dropping duplicates. The first language's containers therefore lead the
+// resulting list — keeping single-language output identical to the pre-merge
+// behavior.
+func mergeContainers(langs []Language, sel func(Language) []string) []string {
+	var out []string
+	seen := make(map[string]bool)
+	for _, l := range langs {
+		for _, c := range sel(l) {
+			if seen[c] {
+				continue
+			}
+			seen[c] = true
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func collectPhases(security, code, test, build []string) []string {
 	var phases []string
-	if len(lang.Security) > 0 {
+	if len(security) > 0 {
 		phases = append(phases, "security")
 	}
-	if len(lang.Code) > 0 {
+	if len(code) > 0 {
 		phases = append(phases, "code")
 	}
-	if len(lang.Test) > 0 {
+	if len(test) > 0 {
 		phases = append(phases, "test")
 	}
-	if len(lang.Build) > 0 {
+	if len(build) > 0 {
 		phases = append(phases, "build")
 	}
 	return phases
