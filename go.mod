@@ -10,7 +10,7 @@ require (
 	github.com/cli/go-gh/v2 v2.13.0
 	github.com/cucumber/godog v0.15.1
 	github.com/docker/docker v28.5.2+incompatible
-	github.com/go-git/go-git/v5 v5.19.0
+	github.com/go-git/go-git/v5 v5.19.1
 	github.com/google/go-github/v76 v76.0.0
 	github.com/sirupsen/logrus v1.9.4
 	github.com/urfave/cli/v2 v2.27.7
