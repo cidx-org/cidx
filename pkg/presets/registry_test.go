@@ -1,6 +1,7 @@
 package presets
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -160,6 +161,34 @@ func TestListByPhase(t *testing.T) {
 				if !found {
 					t.Errorf("ListByPhase(%q) missing expected tool %q", tt.phase, expected)
 				}
+			}
+		})
+	}
+}
+
+// TestRustupComponentPresetsInstallComponent ensures presets that depend on
+// non-default rustup components (rustfmt, clippy) install them in their
+// Command line. The official `rust:1.95.0` image does not ship rustfmt or
+// clippy by default, so the preset command must `rustup component add` them
+// before invoking cargo. Regression guard for issue #150.
+func TestRustupComponentPresetsInstallComponent(t *testing.T) {
+	cases := []struct {
+		preset    string
+		component string
+	}{
+		{"rustfmt", "rustup component add rustfmt"},
+		{"clippy", "rustup component add clippy"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.preset, func(t *testing.T) {
+			preset, err := Get(tc.preset)
+			if err != nil {
+				t.Fatalf("Get(%q) unexpected error: %v", tc.preset, err)
+			}
+			if !strings.Contains(preset.Command, tc.component) {
+				t.Errorf("preset %q Command = %q, expected to contain %q",
+					tc.preset, preset.Command, tc.component)
 			}
 		})
 	}
