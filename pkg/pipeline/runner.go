@@ -398,6 +398,14 @@ func (r *Runner) RunTool(ctx context.Context, toolName string) error {
 	// Expand ${WORKSPACE} in volumes
 	volumes := r.expandWorkspace(mergedPreset.Volumes)
 
+	// Guardrail (#151): if the resolved workdir is not the mount point of any
+	// volume, the container will start in a directory that does not exist or
+	// has no project files. The tool then runs against an empty path and emits
+	// confusing "no files found" errors. Fail fast with an actionable message.
+	if err := checkWorkdirCoveredByVolumes(mergedPreset.Workdir, volumes); err != nil {
+		return fmt.Errorf("preset %q: %w", toolName, err)
+	}
+
 	// Convert to ContainerConfig
 	containerConfig := &config.ContainerConfig{
 		Name:        mergedPreset.Name,
@@ -440,6 +448,51 @@ func (r *Runner) resolvePullPolicy(presetPolicy string) string {
 		return "always"
 	}
 	return "if-not-present"
+}
+
+// checkWorkdirCoveredByVolumes verifies the resolved workdir lies inside one
+// of the volume mount targets. A mismatch is the most common silent-failure
+// mode reported by consumers (#151): override workdir to "/src/sub" while the
+// preset still mounts at "/work", and the tool runs against a non-existent
+// directory. We refuse to execute and tell the user exactly what to do.
+//
+// Volumes are in "host:target[:opts]" form after ${WORKSPACE} expansion.
+// Empty workdir or empty volumes list short-circuits to nil — those are
+// fine (no bind = no expectation).
+func checkWorkdirCoveredByVolumes(workdir string, volumes []string) error {
+	if workdir == "" || len(volumes) == 0 {
+		return nil
+	}
+	for _, vol := range volumes {
+		parts := strings.Split(vol, ":")
+		if len(parts) < 2 {
+			continue
+		}
+		target := parts[1]
+		if target == "" {
+			continue
+		}
+		if workdir == target || strings.HasPrefix(workdir, target+"/") {
+			return nil
+		}
+	}
+	// Build a helpful error: list the actual mount targets the user can
+	// pick from, and remind them they can override `volumes` to match
+	// their custom workdir.
+	mounts := make([]string, 0, len(volumes))
+	for _, vol := range volumes {
+		parts := strings.Split(vol, ":")
+		if len(parts) >= 2 && parts[1] != "" {
+			mounts = append(mounts, parts[1])
+		}
+	}
+	return fmt.Errorf(
+		"workdir %q is not inside any mounted volume (mounts: %s); "+
+			"either set workdir to a path under one of these mounts, "+
+			"or override `volumes` so the workdir is covered",
+		workdir,
+		strings.Join(mounts, ", "),
+	)
 }
 
 // expandWorkspace replaces ${WORKSPACE} with the actual workspace path

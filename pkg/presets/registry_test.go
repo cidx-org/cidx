@@ -7,9 +7,9 @@ import (
 
 func TestGet(t *testing.T) {
 	tests := []struct {
-		name      string
+		name       string
 		presetName string
-		wantErr   bool
+		wantErr    bool
 	}{
 		{
 			name:       "existing preset - trivy",
@@ -216,6 +216,48 @@ func TestGroupByPhase(t *testing.T) {
 			if preset.Phase != phase {
 				t.Errorf("GroupByPhase() tool %q has phase %q but grouped in %q", tool, preset.Phase, phase)
 			}
+		}
+	}
+}
+
+// TestAllPresetsUseUnifiedMountPath locks down the #151 contract: every
+// built-in preset mounts the workspace at /work, and workdir is covered
+// by at least one volume target. New presets that drift from this break
+// the predictability promise users rely on when writing overrides.
+func TestAllPresetsUseUnifiedMountPath(t *testing.T) {
+	const unifiedMount = "/work"
+
+	for _, name := range List() {
+		preset, err := Get(name)
+		if err != nil {
+			t.Fatalf("Get(%q): %v", name, err)
+		}
+
+		// 1. workdir must start with /work (allowing /work/sub for future
+		//    subdir-scoped presets if any are added).
+		if preset.Workdir != unifiedMount && !strings.HasPrefix(preset.Workdir, unifiedMount+"/") {
+			t.Errorf("preset %q: workdir = %q, want %q or a subpath",
+				name, preset.Workdir, unifiedMount)
+		}
+
+		// 2. At least one volume target must be /work (or cover the workdir).
+		//    Volumes are in "host:target[:opts]" form; ${WORKSPACE} is the
+		//    host side and is left unexpanded at registry-load time.
+		coversWorkdir := false
+		for _, vol := range preset.Volumes {
+			parts := strings.Split(vol, ":")
+			if len(parts) < 2 {
+				continue
+			}
+			target := parts[1]
+			if target == preset.Workdir || strings.HasPrefix(preset.Workdir, target+"/") {
+				coversWorkdir = true
+				break
+			}
+		}
+		if !coversWorkdir && len(preset.Volumes) > 0 {
+			t.Errorf("preset %q: no volume target covers workdir %q (volumes: %v)",
+				name, preset.Workdir, preset.Volumes)
 		}
 	}
 }

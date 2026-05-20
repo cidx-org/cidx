@@ -321,10 +321,16 @@ containers = ["gh-release"]  # Create GitHub release with artifacts
 # [containers.my-custom-scanner]
 # phase = "security"                    # Which phase to run in
 # image = "mycompany/scanner:latest"    # Docker image to use
-# command = "scan --path /workspace"    # Command to execute in container
-# workdir = "/workspace"                # Working directory in container
-# volumes = ["${WORKSPACE}:/workspace"] # Volume mounts
+# command = "scan --path /work"         # Command to execute in container
+# workdir = "/work"                     # Working directory in container
+# volumes = ["${WORKSPACE}:/work"]      # Volume mounts (keep workdir under a target)
 # env = { API_KEY = "${SCANNER_KEY}" }  # Environment variables
+#
+# Mount contract (since #151): built-in presets all use /work as the
+# workspace mount target. If you override `workdir`, keep it under one
+# of the volume targets — CIDX refuses to start a container whose
+# workdir is not covered by any mount, to prevent silent "no files
+# found" failures.
 #
 # Then enable it in a phase:
 # [security]
