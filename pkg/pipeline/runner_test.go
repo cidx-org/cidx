@@ -110,3 +110,74 @@ func TestExpandWorkspace(t *testing.T) {
 		})
 	}
 }
+
+// TestCheckWorkdirCoveredByVolumes locks down the #151 runtime guardrail:
+// silent "no files found" failures from a workdir that isn't bind-mounted
+// must surface as a clear, actionable error before the container starts.
+func TestCheckWorkdirCoveredByVolumes(t *testing.T) {
+	tests := []struct {
+		name    string
+		workdir string
+		volumes []string
+		wantErr bool
+	}{
+		{
+			name:    "workdir matches volume target exactly",
+			workdir: "/work",
+			volumes: []string{"/home/user/project:/work"},
+			wantErr: false,
+		},
+		{
+			name:    "workdir is a subdir of volume target (monorepo case)",
+			workdir: "/work/client-react",
+			volumes: []string{"/home/user/project:/work"},
+			wantErr: false,
+		},
+		{
+			name:    "consumer repro: workdir override without matching volume",
+			workdir: "/src/client-react",
+			volumes: []string{"/home/user/project:/work"},
+			wantErr: true,
+		},
+		{
+			name:    "user remounted to match custom workdir",
+			workdir: "/src/client-react",
+			volumes: []string{"/home/user/project/client-react:/src/client-react"},
+			wantErr: false,
+		},
+		{
+			name:    "workdir covered by one of multiple mounts",
+			workdir: "/work/.git",
+			volumes: []string{"/home/user/project:/work", "/home/user/project/.git:/work/.git"},
+			wantErr: false,
+		},
+		{
+			name:    "empty workdir is fine",
+			workdir: "",
+			volumes: []string{"/home/user/project:/work"},
+			wantErr: false,
+		},
+		{
+			name:    "no volumes at all is fine (host network style)",
+			workdir: "/anywhere",
+			volumes: nil,
+			wantErr: false,
+		},
+		{
+			name:    "volume with mount options (ro) still parses",
+			workdir: "/kaniko/.docker",
+			volumes: []string{"/home/user/.docker:/kaniko/.docker:ro"},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := checkWorkdirCoveredByVolumes(tt.workdir, tt.volumes)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("checkWorkdirCoveredByVolumes(%q, %v) error = %v, wantErr %v",
+					tt.workdir, tt.volumes, err, tt.wantErr)
+			}
+		})
+	}
+}

@@ -24,6 +24,22 @@ exit_code = 1
 [containers.prettier]
 write = true
 
+# Mount contract:
+# All built-in presets mount the workspace at /work (unified since #151).
+# If you override `workdir`, keep it under the volume mount target — or
+# override `volumes` to match. CIDX refuses to run when workdir falls
+# outside every mounted target (silent "no files found" was the previous
+# behavior).
+#
+# Monorepo example: scope prettier to a subdirectory.
+# [containers.prettier]
+# workdir = "/work/client-react"          # under /work, OK
+#
+# Or remount at a custom path:
+# [containers.prettier]
+# workdir = "/src/client-react"
+# volumes = ["${WORKSPACE}/client-react:/src/client-react"]
+
 # Custom container declaration: when [containers.NAME] has an `image` field
 # and NAME is not a built-in preset, CIDX treats it as a brand-new container
 # rather than an override. All preset fields (phase, image, command, workdir,
@@ -32,6 +48,6 @@ write = true
 phase = "test"
 image = "python:3.12-slim"
 command = "pytest tests/integration"
-workdir = "/app"
-volumes = ["${WORKSPACE}:/app"]
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 env = { PYTHONDONTWRITEBYTECODE = "1" }

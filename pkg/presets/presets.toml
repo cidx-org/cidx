@@ -71,9 +71,9 @@ name = "trivy"
 phase = "security"
 image = "dhi.io/trivy:0.68"
 hardened = true
-command = "fs /scan"
-workdir = "/scan"
-volumes = ["${WORKSPACE}:/scan"]
+command = "fs /work"
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 
 [presets.trivy.env]
 TRIVY_CACHE_DIR = "/tmp/trivy-cache"
@@ -97,8 +97,8 @@ name = "gitleaks"
 phase = "security"
 image = "zricethezav/gitleaks:v8.30.1"
 command = "git ."
-workdir = "/repo"
-volumes = ["${WORKSPACE}:/repo"]
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 config_files = [".gitleaks.toml"]
 
 # Commitlint: Validate commit messages follow conventional commits
@@ -110,10 +110,10 @@ name = "commitlint"
 phase = "code"
 image = "commitlint/commitlint:21.0.0"
 command = "commitlint --from ${FROM} --to ${TO}"
-workdir = "/app"
+workdir = "/work"
 volumes = [
-    "${WORKSPACE}:/app",
-    "${WORKSPACE}/.git:/app/.git",
+    "${WORKSPACE}:/work",
+    "${WORKSPACE}/.git:/work/.git",
 ]
 config_files = [
     ".commitlintrc.json",
@@ -135,12 +135,12 @@ TO = "HEAD"
 name = "commitizen"
 phase = "code"
 image = "commitizen/commitizen:4.15.1"
-command = "sh -c 'export GIT_CONFIG_GLOBAL=/tmp/.gitconfig && git config --global --add safe.directory /app && BASE=$(git merge-base HEAD origin/main 2>/dev/null || git describe --tags --abbrev=0 2>/dev/null || echo HEAD~10) && COMMITS=$(git rev-list ${BASE}..HEAD --count 2>/dev/null || echo 0) && if [ \"$COMMITS\" = \"0\" ]; then echo \"No commits to validate\"; exit 0; fi && cz check --rev-range ${BASE}..HEAD'"
+command = "sh -c 'export GIT_CONFIG_GLOBAL=/tmp/.gitconfig && git config --global --add safe.directory /work && BASE=$(git merge-base HEAD origin/main 2>/dev/null || git describe --tags --abbrev=0 2>/dev/null || echo HEAD~10) && COMMITS=$(git rev-list ${BASE}..HEAD --count 2>/dev/null || echo 0) && if [ \"$COMMITS\" = \"0\" ]; then echo \"No commits to validate\"; exit 0; fi && cz check --rev-range ${BASE}..HEAD'"
 entrypoint = [""]
-workdir = "/app"
+workdir = "/work"
 volumes = [
-    "${WORKSPACE}:/app",
-    "${WORKSPACE}/.git:/app/.git",
+    "${WORKSPACE}:/work",
+    "${WORKSPACE}/.git:/work/.git",
 ]
 config_files = [
     ".cz.toml",
@@ -310,8 +310,8 @@ name = "gosec"
 phase = "security"
 image = "securego/gosec:2.24.6"
 command = "./..."
-workdir = "/app"
-volumes = ["${WORKSPACE}:/app"]
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 
 [presets.gosec.env]
 HOME = "/tmp"
@@ -344,8 +344,8 @@ phase = "security"
 image = "dhi.io/golang:1.23-alpine3.21-dev"
 hardened = true
 command = "sh -c 'go install golang.org/x/vuln/cmd/govulncheck@latest && PATH=$PATH:/tmp/go/bin govulncheck ./...'"
-workdir = "/app"
-volumes = ["${WORKSPACE}:/app"]
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 
 [presets.govulncheck.env]
 HOME = "/tmp"
@@ -365,8 +365,8 @@ phase = "code"
 image = "dhi.io/golang:1.23-alpine3.21-dev"
 hardened = true
 command = "sh -c 'cp go.mod go.mod.bak && cp go.sum go.sum.bak && go mod tidy && diff go.mod go.mod.bak && diff go.sum go.sum.bak && echo \"go.mod is tidy\"'"
-workdir = "/app"
-volumes = ["${WORKSPACE}:/app"]
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 
 [presets.go-mod-tidy.env]
 HOME = "/tmp"
@@ -381,8 +381,8 @@ name = "golangci-lint"
 phase = "code"
 image = "golangci/golangci-lint:v2.12.2"
 command = "golangci-lint run --timeout 5m"
-workdir = "/app"
-volumes = ["${WORKSPACE}:/app"]
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 config_files = [".golangci.yml", ".golangci.yaml", ".golangci.toml", ".golangci.json"]
 
 [presets.golangci-lint.env]
@@ -417,8 +417,8 @@ phase = "code"
 image = "dhi.io/golang:1.23-alpine3.21-dev"
 hardened = true
 command = "gofmt -l ."
-workdir = "/app"
-volumes = ["${WORKSPACE}:/app"]
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 
 [presets.gofmt.env]
 GOTOOLCHAIN = "auto"
@@ -433,8 +433,8 @@ phase = "test"
 image = "dhi.io/golang:1.23-alpine3.21-dev"
 hardened = true
 command = "go test -v ./pkg/... ./cmd/..."
-workdir = "/app"
-volumes = ["${WORKSPACE}:/app"]
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 
 [presets.go-test.env]
 HOME = "/tmp"
@@ -461,8 +461,8 @@ phase = "test"
 image = "dhi.io/golang:1.23-alpine3.21-dev"
 hardened = true
 command = "go test -v ./features_test.go"
-workdir = "/app"
-volumes = ["${WORKSPACE}:/app"]
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 
 [presets.godog.env]
 HOME = "/tmp"
@@ -494,8 +494,8 @@ phase = "build"
 image = "dhi.io/golang:1.23-alpine3.21-dev"
 hardened = true
 command = "sh -c 'VERSION=$(cat VERSION 2>/dev/null || echo dev); go build -ldflags \"-X main.Version=${VERSION} ${LDFLAGS}\" -o bin/cidx ./cmd/cidx'"
-workdir = "/app"
-volumes = ["${WORKSPACE}:/app"]
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 
 [presets.go-build.env]
 HOME = "/tmp"
@@ -519,10 +519,10 @@ env_var = "LDFLAGS"
 name = "kaniko"
 phase = "docker"
 image = "gcr.io/kaniko-project/executor:v1.24.0"
-command = "--context=/workspace --dockerfile=Dockerfile --destination=${IMAGE_NAME}:${IMAGE_TAG} --cache=true"
-workdir = "/workspace"
+command = "--context=/work --dockerfile=Dockerfile --destination=${IMAGE_NAME}:${IMAGE_TAG} --cache=true"
+workdir = "/work"
 volumes = [
-    "${WORKSPACE}:/workspace",
+    "${WORKSPACE}:/work",
     "${HOME}/.docker:/kaniko/.docker:ro",
 ]
 require_ci = false
@@ -557,9 +557,9 @@ phase = "docker"
 image = "dhi.io/docker:27-cli"
 hardened = true
 command = "sh -c 'docker buildx build --platform linux/amd64,linux/arm64 -t ${IMAGE_NAME}:${IMAGE_TAG} --push .'"
-workdir = "/workspace"
+workdir = "/work"
 volumes = [
-    "${WORKSPACE}:/workspace",
+    "${WORKSPACE}:/work",
     "/var/run/docker.sock:/var/run/docker.sock",
 ]
 require_ci = false
@@ -581,8 +581,8 @@ image = "maniator/gh:v2.92.0"
 entrypoint = [""]  # Override image entrypoint (gh) to allow shell commands
 # Smart command: uses prepared release notes if available (versioned filename), otherwise auto-generates
 command = "sh -c 'if [ -f .cidx/release-version ]; then VERSION=$(cat .cidx/release-version | tr -d \"\\n\"); NOTES_FILE=\".cidx/release-notes-v${VERSION}.md\"; if [ -f \"$NOTES_FILE\" ]; then echo \"Using prepared release notes: $NOTES_FILE\"; gh release create ${TAG} ${ARTIFACTS} --notes-file \"$NOTES_FILE\"; exit 0; fi; fi; echo \"Auto-generating release notes...\"; gh release create ${TAG} ${ARTIFACTS} --generate-notes'"
-workdir = "/workspace"
-volumes = ["${WORKSPACE}:/workspace"]
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 require_ci = false
 local_behavior = "draft"
 
@@ -614,9 +614,9 @@ name = "goreleaser"
 phase = "release"
 image = "goreleaser/goreleaser:v2.15.4"
 command = "goreleaser release --clean"
-workdir = "/workspace"
+workdir = "/work"
 volumes = [
-    "${WORKSPACE}:/workspace",
+    "${WORKSPACE}:/work",
     "/var/run/docker.sock:/var/run/docker.sock",
 ]
 require_ci = false
@@ -649,8 +649,8 @@ name = "ruff"
 phase = "code"
 image = "ghcr.io/astral-sh/ruff:0.8.2"
 command = "check ."
-workdir = "/src"
-volumes = ["${WORKSPACE}:/src"]
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 config_files = ["ruff.toml", "pyproject.toml", ".ruff.toml"]
 
 [presets.ruff.options.fix]
@@ -672,8 +672,8 @@ name = "black"
 phase = "code"
 image = "pyfound/black:26.3.1"
 command = "black --check ."
-workdir = "/src"
-volumes = ["${WORKSPACE}:/src"]
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 config_files = ["pyproject.toml", ".black.toml"]
 
 [presets.black.options.diff]
@@ -690,8 +690,8 @@ phase = "code"
 image = "dhi.io/python:3.13-alpine3.21"
 hardened = true
 command = "sh -c 'pip install --quiet mypy && mypy .'"
-workdir = "/src"
-volumes = ["${WORKSPACE}:/src"]
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 config_files = ["mypy.ini", "pyproject.toml", ".mypy.ini", "setup.cfg"]
 
 [presets.mypy.env]
@@ -711,8 +711,8 @@ phase = "security"
 image = "dhi.io/python:3.13-alpine3.21"
 hardened = true
 command = "sh -c 'pip install --quiet bandit && bandit -r .'"
-workdir = "/src"
-volumes = ["${WORKSPACE}:/src"]
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 config_files = [".bandit", "bandit.yaml", "pyproject.toml"]
 
 [presets.bandit.options.severity]
@@ -735,8 +735,8 @@ phase = "security"
 image = "dhi.io/python:3.13-alpine3.21"
 hardened = true
 command = "sh -c 'pip install --quiet pip-audit && pip-audit'"
-workdir = "/src"
-volumes = ["${WORKSPACE}:/src"]
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 
 [presets.pip-audit.options.strict]
 type = "bool"
@@ -758,8 +758,8 @@ phase = "test"
 image = "dhi.io/python:3.13-alpine3.21"
 hardened = true
 command = "sh -c 'pip install --quiet pytest pytest-cov && pytest'"
-workdir = "/src"
-volumes = ["${WORKSPACE}:/src"]
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 config_files = ["pytest.ini", "pyproject.toml", "setup.cfg", "tox.ini"]
 
 [presets.pytest.options.verbose]
@@ -781,8 +781,8 @@ phase = "build"
 image = "dhi.io/python:3.13-alpine3.21"
 hardened = true
 command = "sh -c 'pip install --quiet build && python -m build'"
-workdir = "/src"
-volumes = ["${WORKSPACE}:/src"]
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 config_files = ["pyproject.toml", "setup.py", "setup.cfg"]
 
 [presets.python-build.env]
@@ -796,8 +796,8 @@ phase = "release"
 image = "dhi.io/python:3.13-alpine3.21"
 hardened = true
 command = "sh -c 'pip install --quiet twine && twine upload dist/*'"
-workdir = "/src"
-volumes = ["${WORKSPACE}:/src"]
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 require_ci = true
 
 [presets.twine.env]
@@ -823,8 +823,8 @@ name = "rustfmt"
 phase = "code"
 image = "rust:1.95.0"
 command = "sh -c 'rustup component add rustfmt && cargo fmt -- --check'"
-workdir = "/src"
-volumes = ["${WORKSPACE}:/src"]
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 config_files = ["rustfmt.toml", ".rustfmt.toml"]
 
 # Clippy: Official Rust linter
@@ -834,8 +834,8 @@ name = "clippy"
 phase = "code"
 image = "rust:1.95.0"
 command = "sh -c 'rustup component add clippy && cargo clippy -- -D warnings'"
-workdir = "/src"
-volumes = ["${WORKSPACE}:/src"]
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 config_files = ["clippy.toml", ".clippy.toml"]
 
 [presets.clippy.options.pedantic]
@@ -851,8 +851,8 @@ name = "cargo-audit"
 phase = "security"
 image = "rust:1.95.0"
 command = "sh -c 'cargo install cargo-audit && cargo audit'"
-workdir = "/src"
-volumes = ["${WORKSPACE}:/src"]
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 
 [presets.cargo-audit.options.deny]
 type = "bool"
@@ -867,8 +867,8 @@ name = "cargo-test"
 phase = "test"
 image = "rust:1.95.0"
 command = "cargo test"
-workdir = "/src"
-volumes = ["${WORKSPACE}:/src"]
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 
 [presets.cargo-test.env]
 RUST_BACKTRACE = "1"
@@ -892,8 +892,8 @@ name = "cargo-build"
 phase = "build"
 image = "rust:1.95.0"
 command = "cargo build --release"
-workdir = "/src"
-volumes = ["${WORKSPACE}:/src"]
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 
 [presets.cargo-build.options.target]
 type = "string"
@@ -908,8 +908,8 @@ name = "cargo-publish"
 phase = "release"
 image = "rust:1.95.0"
 command = "cargo publish"
-workdir = "/src"
-volumes = ["${WORKSPACE}:/src"]
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 require_ci = true
 
 [presets.cargo-publish.env]

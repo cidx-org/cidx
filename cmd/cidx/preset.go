@@ -117,6 +117,12 @@ func presetInfoCommand() *cli.Command {
 					fmt.Printf("  - %s\n", vol)
 				}
 				fmt.Println()
+				// #151: surface the mount contract explicitly so users
+				// who override `workdir` know they must keep it under
+				// the mount target (or override `volumes` too).
+				fmt.Printf("Mount contract: workdir must be inside one of the volume mount targets.\n")
+				fmt.Printf("                Override `volumes` if you change `workdir` to a different root.\n")
+				fmt.Println()
 			}
 
 			if len(preset.Env) > 0 {
