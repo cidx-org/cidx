@@ -108,7 +108,7 @@ config_files = [".gitleaks.toml"]
 [presets.commitlint]
 name = "commitlint"
 phase = "code"
-image = "commitlint/commitlint:21.0.0"
+image = "commitlint/commitlint:21.0.1"
 command = "commitlint --from ${FROM} --to ${TO}"
 workdir = "/work"
 volumes = [
@@ -612,7 +612,7 @@ command_flag = "--notes-file"
 [presets.goreleaser]
 name = "goreleaser"
 phase = "release"
-image = "goreleaser/goreleaser:v2.15.4"
+image = "goreleaser/goreleaser:v2.16.0"
 command = "goreleaser release --clean"
 workdir = "/work"
 volumes = [
@@ -670,7 +670,7 @@ command_flag = "format"
 [presets.black]
 name = "black"
 phase = "code"
-image = "pyfound/black:26.3.1"
+image = "pyfound/black:26.5.1"
 command = "black --check ."
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
