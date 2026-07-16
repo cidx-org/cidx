@@ -920,3 +920,14 @@ type = "bool"
 default = false
 description = "Perform a dry run"
 command_flag = "--dry-run"
+
+# Probatum: Test-oriented check runner (https://github.com/probatum-org/probatum)
+# Runs the repo's probatum.yaml: service boot + readiness, HTTP checks, log
+# windows, with owned teardown. Verdict: exit 0 pass, 1 failed, 2 couldn't run.
+[presets.probatum]
+name = "probatum"
+phase = "test"
+image = "ghcr.io/probatum-org/probatum:0.1.0"
+command = "run"
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]

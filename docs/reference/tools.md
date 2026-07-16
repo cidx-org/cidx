@@ -20,6 +20,7 @@ Built-in tools available in CIDX.
 ## Test Phase
 
 - **go-test**: Go unit testing
+- **probatum**: Test-oriented check runner — service boot, HTTP, log checks (probatum-org/probatum)
 - **godog**: BDD framework for Go
 - **molecule**: Ansible testing
 
