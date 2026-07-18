@@ -338,8 +338,10 @@ func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remot
 	}, nil
 }
 
-// WaitForChecksToStart waits for pipeline to be created on the MR
-func (c *Client) WaitForChecksToStart(ctx context.Context, prNumber int, timeout time.Duration) (headSHA string, checks *remote.PRChecks, err error) {
+// WaitForChecksToStart waits for pipeline to be created on the MR.
+// When expectedSHA is set, it also waits for the MR head to reach that
+// commit, so a pipeline for a previous commit is never returned (issue #167).
+func (c *Client) WaitForChecksToStart(ctx context.Context, prNumber int, expectedSHA string, timeout time.Duration) (headSHA string, checks *remote.PRChecks, err error) {
 	deadline := time.Now().Add(timeout)
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
@@ -356,6 +358,11 @@ func (c *Client) WaitForChecksToStart(ctx context.Context, prNumber int, timeout
 			mr, _, err := c.client.MergeRequests.GetMergeRequest(c.projectID, int64(prNumber), nil)
 			if err != nil {
 				return "", nil, fmt.Errorf("failed to get merge request: %w", err)
+			}
+
+			if expectedSHA != "" && mr.SHA != expectedSHA {
+				// MR head has not caught up with the pushed commit yet
+				continue
 			}
 
 			if mr.HeadPipeline != nil {

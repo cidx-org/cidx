@@ -18,10 +18,11 @@ type cpwFakeProvider struct {
 	prNumber int
 	prErr    error
 
-	waitSHA     string
-	waitChecks  *remote.PRChecks
-	waitErr     error
-	waitTimeout time.Duration // records the timeout cpw asked for
+	waitSHA         string
+	waitChecks      *remote.PRChecks
+	waitErr         error
+	waitTimeout     time.Duration // records the timeout cpw asked for
+	waitExpectedSHA string        // records the expected SHA cpw pinned
 
 	checksUpdates []remote.PRChecksUpdate
 	checksErr     error
@@ -35,7 +36,8 @@ func (f *cpwFakeProvider) GetPullRequestByBranch(_ context.Context, _ string) (i
 	return f.prNumber, "https://example.test/pr", nil
 }
 
-func (f *cpwFakeProvider) WaitForChecksToStart(_ context.Context, _ int, timeout time.Duration) (string, *remote.PRChecks, error) {
+func (f *cpwFakeProvider) WaitForChecksToStart(_ context.Context, _ int, expectedSHA string, timeout time.Duration) (string, *remote.PRChecks, error) {
+	f.waitExpectedSHA = expectedSHA
 	f.waitTimeout = timeout
 	return f.waitSHA, f.waitChecks, f.waitErr
 }
@@ -67,7 +69,7 @@ func TestCPWWatchCI_NoPRIsNotAnError(t *testing.T) {
 	// we assert the watch was never started.
 	provider := &cpwFakeProvider{prErr: errors.New("no PR found for branch")}
 
-	if err := newCPWAction(provider).watchCI(context.Background(), "feat/x"); err != nil {
+	if err := newCPWAction(provider).watchCI(context.Background(), "feat/x", "abc1234def"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if provider.watchCalled {
@@ -87,7 +89,7 @@ func TestCPWWatchCI_PRExistsButNoChecksWithinTimeout(t *testing.T) {
 		waitErr:    errors.New("no CI checks found after 1m0s"),
 	}
 
-	if err := newCPWAction(provider).watchCI(context.Background(), "feat/x"); err != nil {
+	if err := newCPWAction(provider).watchCI(context.Background(), "feat/x", "abc1234def"); err != nil {
 		t.Fatalf("expected graceful exit when CI never starts, got: %v", err)
 	}
 	if provider.watchCalled {
@@ -104,7 +106,7 @@ func TestCPWWatchCI_WaitErrorIsPropagated(t *testing.T) {
 		waitErr:  errors.New("API blew up"),
 	}
 
-	err := newCPWAction(provider).watchCI(context.Background(), "feat/x")
+	err := newCPWAction(provider).watchCI(context.Background(), "feat/x", "abc1234def")
 	if err == nil || !strings.Contains(err.Error(), "API blew up") {
 		t.Fatalf("expected wrapped wait error, got: %v", err)
 	}
@@ -119,11 +121,14 @@ func TestCPWWatchCI_ChecksAlreadyCompletedSuccess(t *testing.T) {
 		},
 	}
 
-	if err := newCPWAction(provider).watchCI(context.Background(), "feat/x"); err != nil {
+	if err := newCPWAction(provider).watchCI(context.Background(), "feat/x", "abc1234def"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if provider.watchCalled {
 		t.Error("expected no watch when checks already completed")
+	}
+	if provider.waitExpectedSHA != "abc1234def" {
+		t.Errorf("expected cpw to pin the wait to the pushed SHA, got %q", provider.waitExpectedSHA)
 	}
 }
 
@@ -136,7 +141,7 @@ func TestCPWWatchCI_ChecksAlreadyCompletedFailure(t *testing.T) {
 		},
 	}
 
-	err := newCPWAction(provider).watchCI(context.Background(), "feat/x")
+	err := newCPWAction(provider).watchCI(context.Background(), "feat/x", "abc1234def")
 	if err == nil || !strings.Contains(err.Error(), "checks failed") {
 		t.Fatalf("expected checks-failed error, got: %v", err)
 	}
@@ -156,7 +161,7 @@ func TestCPWWatchCI_WatchesPendingChecksToCompletion(t *testing.T) {
 		},
 	}
 
-	if err := newCPWAction(provider).watchCI(context.Background(), "feat/x"); err != nil {
+	if err := newCPWAction(provider).watchCI(context.Background(), "feat/x", "abc1234def"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !provider.watchCalled {
@@ -177,7 +182,7 @@ func TestCPWWatchCI_FailureDuringWatchReturnsError(t *testing.T) {
 		},
 	}
 
-	err := newCPWAction(provider).watchCI(context.Background(), "feat/x")
+	err := newCPWAction(provider).watchCI(context.Background(), "feat/x", "abc1234def")
 	if err == nil || !strings.Contains(err.Error(), "1/2 checks failed") {
 		t.Fatalf("expected failure summary in error, got: %v", err)
 	}
@@ -195,7 +200,7 @@ func TestCPWWatchCI_HeadSHAChangeAborts(t *testing.T) {
 		},
 	}
 
-	err := newCPWAction(provider).watchCI(context.Background(), "feat/x")
+	err := newCPWAction(provider).watchCI(context.Background(), "feat/x", "abc1234def")
 	if err == nil || !strings.Contains(err.Error(), "HEAD SHA changed") {
 		t.Fatalf("expected HEAD SHA change error, got: %v", err)
 	}
@@ -213,7 +218,7 @@ func TestCPWWatchCI_StreamEndsWhilePendingIsAnError(t *testing.T) {
 		checksUpdates: nil, // stream closes immediately
 	}
 
-	err := newCPWAction(provider).watchCI(context.Background(), "feat/x")
+	err := newCPWAction(provider).watchCI(context.Background(), "feat/x", "abc1234def")
 	if err == nil || !strings.Contains(err.Error(), "stopped watching") {
 		t.Fatalf("expected 'stopped watching' error, got: %v", err)
 	}
@@ -231,7 +236,7 @@ func TestCPWWatchCI_StreamErrorIsPropagated(t *testing.T) {
 		},
 	}
 
-	err := newCPWAction(provider).watchCI(context.Background(), "feat/x")
+	err := newCPWAction(provider).watchCI(context.Background(), "feat/x", "abc1234def")
 	if err == nil || !strings.Contains(err.Error(), "stream blew up") {
 		t.Fatalf("expected stream error, got: %v", err)
 	}

@@ -67,19 +67,26 @@ func (a *CommitPushWatchAction) Execute(ctx context.Context) error {
 	}
 	log.Info("✓ Pushed to remote")
 
-	// 4. Watch CI for the pushed commit
-	return a.watchCI(ctx, branch)
+	// 4. Watch CI for the commit we just pushed. The local HEAD SHA is the
+	// source of truth: resolving the head from the provider API right after
+	// the push can return the previous commit (replication lag).
+	pushedSHA, err := a.repo.GetHeadSHA()
+	if err != nil {
+		return fmt.Errorf("failed to get pushed commit SHA: %w", err)
+	}
+
+	return a.watchCI(ctx, branch, pushedSHA)
 }
 
 // watchCI finds the PR for branch, waits for CI checks to start on the
 // pushed commit, then streams check updates until completion.
 //
 // It reuses the same provider wait logic as `pr merge`
-// (WaitForChecksToStart), which polls until checks appear for the current
-// head SHA. This replaces the old single workflow lookup after a fixed 5s
-// sleep, which gave up before GitHub Actions had created the run and then
-// suggested creating a PR that already existed (issue #167).
-func (a *CommitPushWatchAction) watchCI(ctx context.Context, branch string) error {
+// (WaitForChecksToStart), pinned to the pushed commit SHA. This replaces
+// the old single workflow lookup after a fixed 5s sleep, which gave up
+// before GitHub Actions had created the run and then suggested creating a
+// PR that already existed (issue #167).
+func (a *CommitPushWatchAction) watchCI(ctx context.Context, branch, pushedSHA string) error {
 	prNumber, prURL, err := a.provider.GetPullRequestByBranch(ctx, branch)
 	if err != nil {
 		log.Warn("⚠️  No PR found for this branch")
@@ -88,7 +95,7 @@ func (a *CommitPushWatchAction) watchCI(ctx context.Context, branch string) erro
 	}
 
 	log.Infof("⏳ Waiting for CI to start on PR #%d...", prNumber)
-	headSHA, checks, err := a.provider.WaitForChecksToStart(ctx, prNumber, a.ciStartTimeout)
+	headSHA, checks, err := a.provider.WaitForChecksToStart(ctx, prNumber, pushedSHA, a.ciStartTimeout)
 	if err != nil {
 		if checks != nil && checks.TotalCount == 0 {
 			log.Warnf("⚠️  PR #%d exists but no CI checks started within %s", prNumber, a.ciStartTimeout)

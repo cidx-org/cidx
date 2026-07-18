@@ -166,6 +166,16 @@ func (r *Repository) GetCurrentBranch() (string, error) {
 	return branchName, nil
 }
 
+// GetHeadSHA returns the commit SHA of the current HEAD
+func (r *Repository) GetHeadSHA() (string, error) {
+	head, err := r.repo.Head()
+	if err != nil {
+		return "", fmt.Errorf("failed to get HEAD: %w", err)
+	}
+
+	return head.Hash().String(), nil
+}
+
 // HasChanges checks if there are uncommitted changes (modified or staged files only, ignoring untracked)
 func (r *Repository) HasChanges() (bool, error) {
 	w, err := r.repo.Worktree()
