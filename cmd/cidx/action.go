@@ -44,6 +44,13 @@ func prReadyAction(c *cli.Context) error {
 	})
 }
 
+func prEditAction(c *cli.Context) error {
+	return withRepoAndProvider(func(repo *vcs.Repository, provider remote.Provider) error {
+		action := actions.NewPREdit(repo, provider, c.String("title"), c.String("body"))
+		return action.Execute(context.Background())
+	})
+}
+
 func prMergeAction(c *cli.Context) error {
 	return withRepoAndProvider(func(repo *vcs.Repository, provider remote.Provider) error {
 		action := actions.NewPRMerge(repo, provider, c.String("method"), c.Bool("watch"), c.Bool("skip-checks"), c.Bool("dry-run"))
