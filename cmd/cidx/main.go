@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/cidx-org/cidx/pkg/executor"
+	"github.com/cidx-org/cidx/pkg/generate"
 	"github.com/urfave/cli/v2"
 )
 
@@ -15,6 +16,10 @@ func main() {
 	// Propagate the build version to the executor package so created
 	// containers carry the `cidx.version` label (issue #144).
 	executor.Version = Version
+
+	// Propagate the build version to the generate package so generated
+	// workflows pin the bootstrap to the generating release (issue #163).
+	generate.Version = Version
 
 	app := &cli.App{
 		Name:                   "cidx",
