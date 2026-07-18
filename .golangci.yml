@@ -1,0 +1,9 @@
+version: "2"
+
+# Linters: intentionally no `linters` section — golangci-lint v2 defaults apply
+# (errcheck, govet, ineffassign, staticcheck, unused), same as before this file existed.
+
+# Formatters run as part of `golangci-lint run`: gofmt drift now fails CI (#171).
+formatters:
+  enable:
+    - gofmt
