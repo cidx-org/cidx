@@ -5,29 +5,55 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/cidx-org/cidx/pkg/config"
 )
 
 // cidxModulePath is the canonical Go import path for cidx itself.
-// It is used both as the install target (`go install <cidxModulePath>/cmd/cidx@latest`)
+// It is used both as the install target (`go install <cidxModulePath>/cmd/cidx@<version>`)
 // and as the marker that identifies cidx's own repo when reading go.mod.
 const cidxModulePath = "github.com/cidx-org/cidx"
+
+// Version is the cidx build version, propagated from main at startup (same
+// pattern as executor.Version). Release builds inject it via ldflags
+// (`-X main.Version=1.7.0`); dev builds keep the "dev" default.
+//
+// It determines the bootstrap pin in generated workflows: a workflow generated
+// by a released cidx installs that exact release in CI, so local and CI runs
+// use the same presets (issue #163).
+var Version = "dev"
+
+// releaseVersionRe matches stable release versions ("1.7.0", "v1.7.0").
+// Pre-release identifiers (e.g. nightly builds "1.7.0-nightly.20260101.abc123")
+// do not correspond to installable tags and must fall back to @latest.
+var releaseVersionRe = regexp.MustCompile(`^v?\d+\.\d+\.\d+$`)
+
+// BootstrapVersion returns the `go install` version suffix used by generated
+// workflows: "v<X.Y.Z>" when the running cidx is a release build, "latest"
+// otherwise (dev or nightly builds, which have no installable tag).
+func BootstrapVersion() string {
+	if releaseVersionRe.MatchString(Version) {
+		return "v" + strings.TrimPrefix(Version, "v")
+	}
+	return "latest"
+}
 
 // GitHubOptions controls how the GitHub Actions workflow is generated.
 type GitHubOptions struct {
 	// SelfBuild emits the cidx-repo bootstrap (`go build -o bin/cidx ./cmd/cidx`).
 	// When false (the default for external projects), the bootstrap installs
-	// cidx via `go install <module>/cmd/cidx@latest`.
+	// cidx via `go install <module>/cmd/cidx@<BootstrapVersion()>`.
 	SelfBuild bool
 }
 
 // GitHub generates a GitHub Actions workflow YAML from the CIDX config.
 //
 // This entrypoint targets external projects: the bootstrap installs cidx via
-// `go install` rather than building from source. Callers that need the
-// cidx-repo bootstrap should use GitHubWithOptions with SelfBuild=true.
+// `go install`, pinned to the generating cidx's release version when known
+// (see BootstrapVersion). Callers that need the cidx-repo bootstrap should
+// use GitHubWithOptions with SelfBuild=true.
 func GitHub(cfg *config.Config) (string, error) {
 	return GitHubWithOptions(cfg, GitHubOptions{})
 }
@@ -113,7 +139,10 @@ func writeTriggers(b *strings.Builder, pipelines map[string]config.Pipeline) {
 //
 // When selfBuild is false (default for external projects), the job installs
 // the published cidx binary via `go install` and copies it to bin/cidx so
-// downstream phase jobs can consume the same artifact path either way.
+// downstream phase jobs can consume the same artifact path either way. The
+// install is pinned to the generating binary's release version so local and
+// CI runs share the same presets (issue #163); dev builds fall back to
+// @latest because they have no installable tag.
 func writeBootstrapJob(b *strings.Builder, selfBuild bool) {
 	b.WriteString("  bootstrap:\n")
 	b.WriteString("    name: Bootstrap\n")
@@ -133,7 +162,7 @@ func writeBootstrapJob(b *strings.Builder, selfBuild bool) {
 		b.WriteString("      - name: Install CIDX\n")
 		b.WriteString("        run: |\n")
 		b.WriteString("          mkdir -p bin\n")
-		fmt.Fprintf(b, "          go install %s/cmd/cidx@latest\n", cidxModulePath)
+		fmt.Fprintf(b, "          go install %s/cmd/cidx@%s\n", cidxModulePath, BootstrapVersion())
 		b.WriteString("          cp \"$(go env GOPATH)/bin/cidx\" bin/cidx\n")
 	}
 	b.WriteString("      - uses: actions/upload-artifact@v7\n")
