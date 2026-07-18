@@ -68,15 +68,15 @@ type mergeModel struct {
 	editingBody bool // whether we're editing body vs title
 
 	// UI state
-	focus            mergeFocus
-	actionCursor     int
-	loading          bool
-	loadingMsg       string
-	spinner          spinner.Model
-	err              error
-	success          string
-	width            int
-	height           int
+	focus                mergeFocus
+	actionCursor         int
+	loading              bool
+	loadingMsg           string
+	spinner              spinner.Model
+	err                  error
+	success              string
+	width                int
+	height               int
 	showConfirmation     bool   // Show merge confirmation dialog
 	showQuitConfirmation bool   // Show quit confirmation after merge complete
 	postMergeStatus      string // Status message for post-merge operations
@@ -88,9 +88,9 @@ type mergeModel struct {
 	showErrorLogs bool   // Whether to show expanded error logs
 
 	// Post-merge pipeline monitoring
-	merged            bool               // PR has been merged
-	mainPipelineCheck *remote.PRChecks   // Pipeline status on main after merge
-	pipelineComplete  bool               // All pipelines finished
+	merged            bool             // PR has been merged
+	mainPipelineCheck *remote.PRChecks // Pipeline status on main after merge
+	pipelineComplete  bool             // All pipelines finished
 }
 
 // Messages

@@ -118,9 +118,9 @@ func prCommand() *cli.Command {
 				Action: prWatchAction,
 			},
 			{
-				Name:    "open",
-				Usage:   "Open PR in browser",
-				Action:  prOpenAction,
+				Name:   "open",
+				Usage:  "Open PR in browser",
+				Action: prOpenAction,
 			},
 			{
 				Name:    "tui",

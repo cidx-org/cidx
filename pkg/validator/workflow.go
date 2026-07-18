@@ -12,10 +12,10 @@ import (
 
 // WorkflowDefinition represents a GitHub Actions workflow
 type WorkflowDefinition struct {
-	Name   string            // Workflow name (e.g., "ci", "release")
-	File   string            // Workflow file path
-	Jobs   map[string]Job    // Jobs defined in the workflow
-	Phases []string          // Extracted phases from "cidx run <phase>" commands
+	Name   string         // Workflow name (e.g., "ci", "release")
+	File   string         // Workflow file path
+	Jobs   map[string]Job // Jobs defined in the workflow
+	Phases []string       // Extracted phases from "cidx run <phase>" commands
 }
 
 // Job represents a GitHub Actions job
@@ -45,14 +45,14 @@ type ValidationResult struct {
 
 // WorkflowYAML represents the structure of a GitHub Actions workflow file
 type WorkflowYAML struct {
-	Name string                    `yaml:"name"`
+	Name string                     `yaml:"name"`
 	Jobs map[string]WorkflowJobYAML `yaml:"jobs"`
 }
 
 // WorkflowJobYAML represents a job in the workflow YAML
 type WorkflowJobYAML struct {
-	Name  string              `yaml:"name"`
-	Needs interface{}         `yaml:"needs"` // Can be string or []string
+	Name  string             `yaml:"name"`
+	Needs interface{}        `yaml:"needs"` // Can be string or []string
 	Steps []WorkflowStepYAML `yaml:"steps"`
 }
 

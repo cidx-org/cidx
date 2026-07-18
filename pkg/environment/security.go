@@ -18,10 +18,10 @@ const (
 
 // ExecutionMode determines how a preset should be executed
 type ExecutionMode struct {
-	Allowed    bool   // Can this preset run in current environment?
-	Mode       string // Execution mode (production, draft, no-push, dry-run)
-	Reason     string // Why this mode was chosen
-	IsDryRun   bool   // Force dry-run mode
+	Allowed    bool              // Can this preset run in current environment?
+	Mode       string            // Execution mode (production, draft, no-push, dry-run)
+	Reason     string            // Why this mode was chosen
+	IsDryRun   bool              // Force dry-run mode
 	EnvChanges map[string]string // Environment variable overrides
 }
 

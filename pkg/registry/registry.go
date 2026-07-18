@@ -29,10 +29,10 @@ type AuthEntry struct {
 
 // RegistryInfo contains information about a configured registry
 type RegistryInfo struct {
-	Name         string
+	Name          string
 	Authenticated bool
-	Username     string
-	CredsHelper  string // e.g., "desktop", "pass", "secretservice"
+	Username      string
+	CredsHelper   string // e.g., "desktop", "pass", "secretservice"
 }
 
 // Manager handles registry operations

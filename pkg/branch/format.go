@@ -23,7 +23,6 @@ const (
 	colorWhite  = "\033[37m"
 )
 
-
 // Column configuration
 type columnWidths struct {
 	marker  int // Fixed: 4

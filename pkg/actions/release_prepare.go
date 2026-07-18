@@ -19,10 +19,10 @@ import (
 
 // ReleasePrepareAction prepares release notes for human review
 type ReleasePrepareAction struct {
-	repo       *vcs.Repository
-	provider   remote.Provider
+	repo          *vcs.Repository
+	provider      remote.Provider
 	releaseConfig config.ReleaseConfig
-	dryRun     bool
+	dryRun        bool
 }
 
 // ReleaseNotesFilePattern is the pattern for release notes files

@@ -51,7 +51,7 @@ type artifactModel struct {
 	stats          *remote.ArtifactStats
 	sortBy         string // "date", "size", "name"
 	sortDesc       bool
-	filterExp      bool // show only expired
+	filterExp      bool   // show only expired
 	deleteProgress string // current artifact being deleted
 }
 
