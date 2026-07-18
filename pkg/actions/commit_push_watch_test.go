@@ -10,19 +10,22 @@ import (
 	"github.com/cidx-org/cidx/pkg/remote"
 )
 
-// cpwFakeProvider extends fakeProvider with call-count-aware workflow lookup
-// and a configurable PR-by-branch answer, to exercise the cpw retry loop.
+// cpwFakeProvider extends fakeProvider with configurable PR lookup, checks
+// wait, and checks watch behavior, to exercise the cpw CI watch flow.
 type cpwFakeProvider struct {
 	fakeProvider
-	latestFn func(call int) (*remote.Workflow, error)
-	calls    int
+
 	prNumber int
 	prErr    error
-}
 
-func (f *cpwFakeProvider) GetLatestWorkflow(_ context.Context, _ string) (*remote.Workflow, error) {
-	f.calls++
-	return f.latestFn(f.calls)
+	waitSHA     string
+	waitChecks  *remote.PRChecks
+	waitErr     error
+	waitTimeout time.Duration // records the timeout cpw asked for
+
+	checksUpdates []remote.PRChecksUpdate
+	checksErr     error
+	watchCalled   bool
 }
 
 func (f *cpwFakeProvider) GetPullRequestByBranch(_ context.Context, _ string) (int, string, error) {
@@ -32,130 +35,204 @@ func (f *cpwFakeProvider) GetPullRequestByBranch(_ context.Context, _ string) (i
 	return f.prNumber, "https://example.test/pr", nil
 }
 
-// newCPWAction builds an action wired for unit tests: no repo (the retry and
-// hint logic never touch it), instant sleeps recorded into slept.
-func newCPWAction(provider remote.Provider, timeout time.Duration, slept *[]time.Duration) *CommitPushWatchAction {
+func (f *cpwFakeProvider) WaitForChecksToStart(_ context.Context, _ int, timeout time.Duration) (string, *remote.PRChecks, error) {
+	f.waitTimeout = timeout
+	return f.waitSHA, f.waitChecks, f.waitErr
+}
+
+func (f *cpwFakeProvider) WatchPullRequestChecks(_ context.Context, _ int) (<-chan remote.PRChecksUpdate, error) {
+	f.watchCalled = true
+	if f.checksErr != nil {
+		return nil, f.checksErr
+	}
+	ch := make(chan remote.PRChecksUpdate, len(f.checksUpdates))
+	for _, u := range f.checksUpdates {
+		ch <- u
+	}
+	close(ch)
+	return ch, nil
+}
+
+func newCPWAction(provider remote.Provider) *CommitPushWatchAction {
 	return &CommitPushWatchAction{
 		provider:       provider,
-		ciStartTimeout: timeout,
-		sleepFn: func(d time.Duration) {
-			*slept = append(*slept, d)
-		},
+		ciStartTimeout: defaultCIStartTimeout,
 	}
 }
 
-func TestCPWWaitForWorkflow_RetriesUntilRunAppears(t *testing.T) {
-	found := &remote.Workflow{ID: "42", Status: "in_progress", URL: "https://example.test/runs/42"}
-	provider := &cpwFakeProvider{
-		latestFn: func(call int) (*remote.Workflow, error) {
-			if call < 4 {
-				return nil, errors.New("no workflow runs found")
-			}
-			return found, nil
-		},
-	}
+func TestCPWWatchCI_NoPRIsNotAnError(t *testing.T) {
+	// Without a PR there is nothing to watch: cpw explains and exits cleanly.
+	// The fake panics on WaitForChecksToStart only via explicit stubs, so a
+	// zero-value waitChecks would be returned if cpw wrongly proceeded; instead
+	// we assert the watch was never started.
+	provider := &cpwFakeProvider{prErr: errors.New("no PR found for branch")}
 
-	var slept []time.Duration
-	action := newCPWAction(provider, 60*time.Second, &slept)
-
-	workflow, err := action.waitForWorkflow(context.Background(), "feat/x")
-	if err != nil {
+	if err := newCPWAction(provider).watchCI(context.Background(), "feat/x"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if workflow.ID != "42" {
-		t.Errorf("expected workflow 42, got %s", workflow.ID)
+	if provider.watchCalled {
+		t.Error("expected no checks watch without a PR")
 	}
-	if provider.calls != 4 {
-		t.Errorf("expected 4 lookup attempts, got %d", provider.calls)
-	}
-
-	// Backoff: 3s, then x1.5 capped at 10s.
-	want := []time.Duration{3 * time.Second, 4500 * time.Millisecond, 6750 * time.Millisecond, 10 * time.Second}
-	if len(slept) != len(want) {
-		t.Fatalf("expected %d sleeps, got %d: %v", len(want), len(slept), slept)
-	}
-	for i, d := range want {
-		if slept[i] != d {
-			t.Errorf("sleep %d: expected %s, got %s", i, d, slept[i])
-		}
+	if provider.waitTimeout != 0 {
+		t.Error("expected WaitForChecksToStart not to be called without a PR")
 	}
 }
 
-func TestCPWWaitForWorkflow_GivesUpAfterTimeout(t *testing.T) {
-	lookupErr := errors.New("no workflow runs found")
+func TestCPWWatchCI_PRExistsButNoChecksWithinTimeout(t *testing.T) {
+	// WaitForChecksToStart timed out with zero checks: cpw must not fail, and
+	// must not pretend the PR is missing (issue #167).
 	provider := &cpwFakeProvider{
-		latestFn: func(int) (*remote.Workflow, error) { return nil, lookupErr },
+		prNumber:   172,
+		waitChecks: &remote.PRChecks{TotalCount: 0},
+		waitErr:    errors.New("no CI checks found after 1m0s"),
 	}
 
-	var slept []time.Duration
-	action := newCPWAction(provider, 60*time.Second, &slept)
-
-	_, err := action.waitForWorkflow(context.Background(), "feat/x")
-	if !errors.Is(err, lookupErr) {
-		t.Fatalf("expected last lookup error, got: %v", err)
+	if err := newCPWAction(provider).watchCI(context.Background(), "feat/x"); err != nil {
+		t.Fatalf("expected graceful exit when CI never starts, got: %v", err)
 	}
-
-	var total time.Duration
-	for _, d := range slept {
-		total += d
+	if provider.watchCalled {
+		t.Error("expected no checks watch when no checks started")
 	}
-	if total < 60*time.Second {
-		t.Errorf("expected cumulative wait >= 60s before giving up, got %s over %d attempts", total, provider.calls)
-	}
-	if provider.calls < 5 {
-		t.Errorf("expected several retry attempts over the timeout window, got %d", provider.calls)
+	if provider.waitTimeout != defaultCIStartTimeout {
+		t.Errorf("expected cpw to wait %s for CI to start, got %s", defaultCIStartTimeout, provider.waitTimeout)
 	}
 }
 
-func TestCPWWaitForWorkflow_ContextCancelled(t *testing.T) {
+func TestCPWWatchCI_WaitErrorIsPropagated(t *testing.T) {
 	provider := &cpwFakeProvider{
-		latestFn: func(int) (*remote.Workflow, error) { return nil, errors.New("should not be called") },
+		prNumber: 172,
+		waitErr:  errors.New("API blew up"),
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	var slept []time.Duration
-	action := newCPWAction(provider, 60*time.Second, &slept)
-
-	_, err := action.waitForWorkflow(ctx, "feat/x")
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("expected context.Canceled, got: %v", err)
-	}
-	if provider.calls != 0 {
-		t.Errorf("expected no lookup after cancellation, got %d", provider.calls)
+	err := newCPWAction(provider).watchCI(context.Background(), "feat/x")
+	if err == nil || !strings.Contains(err.Error(), "API blew up") {
+		t.Fatalf("expected wrapped wait error, got: %v", err)
 	}
 }
 
-func TestCPWNoWorkflowHint_PRExists(t *testing.T) {
-	provider := &cpwFakeProvider{prNumber: 172}
-
-	var slept []time.Duration
-	action := newCPWAction(provider, 60*time.Second, &slept)
-
-	warning, hint := action.noWorkflowHint(context.Background(), "feat/x")
-	if !strings.Contains(warning, "PR #172") {
-		t.Errorf("expected warning to mention the existing PR, got: %q", warning)
+func TestCPWWatchCI_ChecksAlreadyCompletedSuccess(t *testing.T) {
+	provider := &cpwFakeProvider{
+		prNumber: 172,
+		waitSHA:  "abc1234def",
+		waitChecks: &remote.PRChecks{
+			TotalCount: 2, Success: 2, Status: "success", HeadSHA: "abc1234def",
+		},
 	}
-	if strings.Contains(hint, "Create a PR") {
-		t.Errorf("hint must not suggest creating a PR that already exists, got: %q", hint)
+
+	if err := newCPWAction(provider).watchCI(context.Background(), "feat/x"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(hint, "pr watch") {
-		t.Errorf("expected hint to point at pr watch, got: %q", hint)
+	if provider.watchCalled {
+		t.Error("expected no watch when checks already completed")
 	}
 }
 
-func TestCPWNoWorkflowHint_NoPR(t *testing.T) {
-	provider := &cpwFakeProvider{prErr: errors.New("no PR found")}
-
-	var slept []time.Duration
-	action := newCPWAction(provider, 60*time.Second, &slept)
-
-	warning, hint := action.noWorkflowHint(context.Background(), "feat/x")
-	if !strings.Contains(warning, "No CI workflow found") {
-		t.Errorf("expected 'No CI workflow found' warning, got: %q", warning)
+func TestCPWWatchCI_ChecksAlreadyCompletedFailure(t *testing.T) {
+	provider := &cpwFakeProvider{
+		prNumber: 172,
+		waitSHA:  "abc1234def",
+		waitChecks: &remote.PRChecks{
+			TotalCount: 2, Success: 1, Failure: 1, Status: "failure", HeadSHA: "abc1234def",
+		},
 	}
-	if !strings.Contains(hint, "Create a PR first") {
-		t.Errorf("expected 'Create a PR first' hint, got: %q", hint)
+
+	err := newCPWAction(provider).watchCI(context.Background(), "feat/x")
+	if err == nil || !strings.Contains(err.Error(), "checks failed") {
+		t.Fatalf("expected checks-failed error, got: %v", err)
+	}
+}
+
+func TestCPWWatchCI_WatchesPendingChecksToCompletion(t *testing.T) {
+	sha := "abc1234def"
+	provider := &cpwFakeProvider{
+		prNumber: 172,
+		waitSHA:  sha,
+		waitChecks: &remote.PRChecks{
+			TotalCount: 2, Pending: 2, Status: "pending", HeadSHA: sha,
+		},
+		checksUpdates: []remote.PRChecksUpdate{
+			{Checks: &remote.PRChecks{TotalCount: 2, Success: 1, Pending: 1, Status: "pending", HeadSHA: sha}},
+			{Checks: &remote.PRChecks{TotalCount: 2, Success: 2, Pending: 0, Status: "success", HeadSHA: sha}},
+		},
+	}
+
+	if err := newCPWAction(provider).watchCI(context.Background(), "feat/x"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !provider.watchCalled {
+		t.Error("expected pending checks to be watched")
+	}
+}
+
+func TestCPWWatchCI_FailureDuringWatchReturnsError(t *testing.T) {
+	sha := "abc1234def"
+	provider := &cpwFakeProvider{
+		prNumber: 172,
+		waitSHA:  sha,
+		waitChecks: &remote.PRChecks{
+			TotalCount: 2, Pending: 2, Status: "pending", HeadSHA: sha,
+		},
+		checksUpdates: []remote.PRChecksUpdate{
+			{Checks: &remote.PRChecks{TotalCount: 2, Success: 1, Failure: 1, Pending: 0, Status: "failure", HeadSHA: sha}},
+		},
+	}
+
+	err := newCPWAction(provider).watchCI(context.Background(), "feat/x")
+	if err == nil || !strings.Contains(err.Error(), "1/2 checks failed") {
+		t.Fatalf("expected failure summary in error, got: %v", err)
+	}
+}
+
+func TestCPWWatchCI_HeadSHAChangeAborts(t *testing.T) {
+	provider := &cpwFakeProvider{
+		prNumber: 172,
+		waitSHA:  "abc1234def",
+		waitChecks: &remote.PRChecks{
+			TotalCount: 1, Pending: 1, Status: "pending", HeadSHA: "abc1234def",
+		},
+		checksUpdates: []remote.PRChecksUpdate{
+			{Checks: &remote.PRChecks{TotalCount: 1, Pending: 1, Status: "pending", HeadSHA: "other000sha"}},
+		},
+	}
+
+	err := newCPWAction(provider).watchCI(context.Background(), "feat/x")
+	if err == nil || !strings.Contains(err.Error(), "HEAD SHA changed") {
+		t.Fatalf("expected HEAD SHA change error, got: %v", err)
+	}
+}
+
+func TestCPWWatchCI_StreamEndsWhilePendingIsAnError(t *testing.T) {
+	// The update stream closing before checks complete (e.g. cancelled
+	// context) must not be reported as success.
+	provider := &cpwFakeProvider{
+		prNumber: 172,
+		waitSHA:  "abc1234def",
+		waitChecks: &remote.PRChecks{
+			TotalCount: 1, Pending: 1, Status: "pending", HeadSHA: "abc1234def",
+		},
+		checksUpdates: nil, // stream closes immediately
+	}
+
+	err := newCPWAction(provider).watchCI(context.Background(), "feat/x")
+	if err == nil || !strings.Contains(err.Error(), "stopped watching") {
+		t.Fatalf("expected 'stopped watching' error, got: %v", err)
+	}
+}
+
+func TestCPWWatchCI_StreamErrorIsPropagated(t *testing.T) {
+	provider := &cpwFakeProvider{
+		prNumber: 172,
+		waitSHA:  "abc1234def",
+		waitChecks: &remote.PRChecks{
+			TotalCount: 1, Pending: 1, Status: "pending", HeadSHA: "abc1234def",
+		},
+		checksUpdates: []remote.PRChecksUpdate{
+			{Error: errors.New("stream blew up")},
+		},
+	}
+
+	err := newCPWAction(provider).watchCI(context.Background(), "feat/x")
+	if err == nil || !strings.Contains(err.Error(), "stream blew up") {
+		t.Fatalf("expected stream error, got: %v", err)
 	}
 }

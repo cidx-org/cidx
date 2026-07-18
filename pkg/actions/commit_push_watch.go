@@ -10,17 +10,15 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// CommitPushWatchAction orchestrates commit, push, and workflow watching
+// CommitPushWatchAction orchestrates commit, push, and CI watching
 type CommitPushWatchAction struct {
 	repo     *vcs.Repository
 	provider remote.Provider
 	message  string
 
-	// ciStartTimeout bounds how long we poll for a CI workflow run to appear
-	// after the push (issue #167). Overridable in tests.
+	// ciStartTimeout bounds how long we wait for CI checks to appear after
+	// the push (issue #167). Overridable in tests.
 	ciStartTimeout time.Duration
-	// sleepFn overrides time.Sleep in tests. Nil means real sleep.
-	sleepFn func(time.Duration)
 }
 
 // NewCommitPushWatch creates a new commit-push-watch action
@@ -69,101 +67,82 @@ func (a *CommitPushWatchAction) Execute(ctx context.Context) error {
 	}
 	log.Info("✓ Pushed to remote")
 
-	// 4. Branch already known from step 0
+	// 4. Watch CI for the pushed commit
+	return a.watchCI(ctx, branch)
+}
 
-	// 5. Wait for the CI workflow run to appear. GitHub Actions typically
-	// takes 5-30s to trigger a run after a push, so poll with backoff
-	// instead of giving up after a single lookup (issue #167).
-	log.Info("⏳ Waiting for workflow to start...")
-	workflow, err := a.waitForWorkflow(ctx, branch)
+// watchCI finds the PR for branch, waits for CI checks to start on the
+// pushed commit, then streams check updates until completion.
+//
+// It reuses the same provider wait logic as `pr merge`
+// (WaitForChecksToStart), which polls until checks appear for the current
+// head SHA. This replaces the old single workflow lookup after a fixed 5s
+// sleep, which gave up before GitHub Actions had created the run and then
+// suggested creating a PR that already existed (issue #167).
+func (a *CommitPushWatchAction) watchCI(ctx context.Context, branch string) error {
+	prNumber, prURL, err := a.provider.GetPullRequestByBranch(ctx, branch)
 	if err != nil {
-		warning, hint := a.noWorkflowHint(ctx, branch)
-		log.Warnf("⚠️  %s", warning)
-		log.Infof("💡 %s", hint)
+		log.Warn("⚠️  No PR found for this branch")
+		log.Info("💡 Create a PR first: cidx pr create \"your title\"")
 		return nil
 	}
 
-	log.Infof("👀 Watching workflow %s...\n", workflow.ID)
-	log.Infof("🔗 %s\n", workflow.URL)
-
-	// 6. Watch workflow
-	updates, err := a.provider.WatchWorkflow(ctx, workflow.ID)
+	log.Infof("⏳ Waiting for CI to start on PR #%d...", prNumber)
+	headSHA, checks, err := a.provider.WaitForChecksToStart(ctx, prNumber, a.ciStartTimeout)
 	if err != nil {
-		return fmt.Errorf("failed to watch workflow: %w", err)
+		if checks != nil && checks.TotalCount == 0 {
+			log.Warnf("⚠️  PR #%d exists but no CI checks started within %s", prNumber, a.ciStartTimeout)
+			log.Info("💡 Watch them once they start: cidx pr watch -q")
+			return nil
+		}
+		return fmt.Errorf("failed waiting for CI to start: %w", err)
 	}
 
-	// 7. Display updates
-	for update := range updates {
-		if update.Error != nil {
-			return update.Error
+	shortSHA := headSHA
+	if len(shortSHA) > 7 {
+		shortSHA = shortSHA[:7]
+	}
+	log.Infof("📍 Watching CI for commit %s", shortSHA)
+	log.Infof("🔗 %s", prURL)
+
+	displayChecksStatus(checks)
+
+	// If checks are still running, stream updates until they complete
+	if checks.Pending > 0 {
+		updates, err := a.provider.WatchPullRequestChecks(ctx, prNumber)
+		if err != nil {
+			return fmt.Errorf("failed to watch PR checks: %w", err)
 		}
 
-		DisplayWorkflowStatus(update.Workflow)
-
-		if update.Workflow.Status == "completed" {
-			fmt.Println() // New line after progress
-			switch update.Workflow.Conclusion {
-			case "success", "skipped", "neutral":
-				log.Info("🎉 Workflow completed successfully!")
-			default:
-				log.Errorf("❌ Workflow failed: %s", update.Workflow.Conclusion)
-				return fmt.Errorf("workflow failed with conclusion: %s", update.Workflow.Conclusion)
+		for update := range updates {
+			if update.Error != nil {
+				return update.Error
 			}
-			break
+
+			// Verify we're still watching the same commit
+			if update.Checks.HeadSHA != headSHA {
+				log.Warn("⚠️  HEAD SHA changed during check - new commits were pushed")
+				return fmt.Errorf("HEAD SHA changed during CI check - please retry")
+			}
+
+			displayChecksStatus(update.Checks)
+
+			checks = update.Checks
+			if checks.Pending == 0 {
+				break
+			}
+		}
+
+		if checks.Pending > 0 {
+			return fmt.Errorf("stopped watching before checks completed")
 		}
 	}
 
+	if checks.Failure > 0 {
+		log.Errorf("❌ %d/%d checks failed", checks.Failure, checks.TotalCount)
+		return fmt.Errorf("PR checks failed: %d/%d checks failed", checks.Failure, checks.TotalCount)
+	}
+
+	log.Info("🎉 All checks passed!")
 	return nil
-}
-
-// waitForWorkflow polls for the latest CI workflow run on branch, retrying
-// with backoff until ciStartTimeout of cumulative wait has elapsed. Returns
-// the last lookup error if no run appeared in time.
-func (a *CommitPushWatchAction) waitForWorkflow(ctx context.Context, branch string) (*remote.Workflow, error) {
-	const maxDelay = 10 * time.Second
-
-	delay := 3 * time.Second
-	elapsed := time.Duration(0)
-	for {
-		a.sleep(delay)
-		elapsed += delay
-
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-
-		workflow, err := a.provider.GetLatestWorkflow(ctx, branch)
-		if err == nil {
-			return workflow, nil
-		}
-		if elapsed >= a.ciStartTimeout {
-			return nil, err
-		}
-
-		delay = delay * 3 / 2
-		if delay > maxDelay {
-			delay = maxDelay
-		}
-	}
-}
-
-// noWorkflowHint returns an honest explanation for a missing workflow run:
-// "no PR" and "PR exists but CI has not started" are different situations
-// and must not share the same hint (issue #167).
-func (a *CommitPushWatchAction) noWorkflowHint(ctx context.Context, branch string) (warning, hint string) {
-	if prNumber, _, err := a.provider.GetPullRequestByBranch(ctx, branch); err == nil {
-		return fmt.Sprintf("PR #%d exists but no CI workflow started within %s", prNumber, a.ciStartTimeout),
-			"Watch it once it starts: cidx pr watch -q"
-	}
-	return "No CI workflow found for this branch",
-		"Create a PR first: cidx pr create \"your title\""
-}
-
-// sleep waits for d, honoring the test seam when set.
-func (a *CommitPushWatchAction) sleep(d time.Duration) {
-	if a.sleepFn != nil {
-		a.sleepFn(d)
-		return
-	}
-	time.Sleep(d)
 }
