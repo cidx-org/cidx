@@ -1,19 +1,18 @@
-## [Unreleased]
+## v2.1.0 (2026-07-18)
 
 ### Feat
 
-- **presets**: add probatum preset (test phase) (#160)
-- **actions**: add `cidx pr edit` to update the current branch's PR title/body — titles are no longer frozen at `pr create` time, so a diagnosis that changes mid-investigation can be reflected before the squash-merge reuses the title as the commit message (#169, #176)
+- **actions**: add pr edit to update PR title/body (#176)
+- add probatum preset (test phase) (#160)
 
 ### Fix
 
-- **presets**: use the prebuilt cargo-audit release binary in the `cargo-audit` preset — `cargo install cargo-audit` compiled the tool from source on every pipeline run (minutes of build time, and compilation could fail for reasons unrelated to the audited project). The preset now downloads the pinned v0.22.2 binary from RustSec's GitHub releases (seconds, `$(uname -m)` covers x86_64 and aarch64) and runs `cargo audit` as before. (#161, #164)
-- **executor**: look up registry-specific credentials (e.g. the `dhi.io` key written by `cidx registry login dhi.io`) instead of only Docker Hub's, and retry once anonymously when a registry rejects the attached credentials — previously the very login command suggested by the error message could not fix the failure (#162, #165)
-- **generate**: pin the bootstrapped cidx in generated workflows to the generating version (`go install ...@vX.Y.Z`), falling back to `@latest` with a warning on dev builds — the same commit can no longer be green locally and red in CI because of preset drift (#163, #166)
-- **actions**: `cpw` reuses the PR-checks wait path with the freshly pushed HEAD SHA pinned, instead of a single hardcoded workflow-file lookup after a fixed 5s sleep — no more spurious "No CI workflow found / Create a PR first" while GitHub Actions is still starting (#167, #172)
-- **actions**: derive the PR branch prefix from the conventional-commit type (`fix:` → `fix/...`), and point `pr create` hints at `cidx cpw`/`cidx pr ready` instead of raw git and the deprecated `cidx action` (#168, #173)
-- **drift**: resolve the workflow file (`cidx.yml`, then `ci.yml`) through one shared helper instead of hardcoding divergent names in `check drift` and `GetLatestWorkflow` — freshly generated projects no longer need `--file`, and workflow lookups work on repos whose workflow is `ci.yml` (#170, #177)
-- **infra**: gofmt sweep (20 files) and enforcement — new `.golangci.yml` enables the gofmt formatter so CI fails on formatting drift (#171, #179)
+- **drift**: resolve workflow file instead of hardcoding names (#177)
+- **actions**: derive branch prefix from commit type, fix next-steps hints (#173)
+- **actions**: cpw waits for CI workflow to start (#172)
+- **generate**: pin bootstrapped cidx to generating version (#166)
+- **executor**: fall back to anonymous pull when registry rejects credentials (#165)
+- **presets**: use prebuilt cargo-audit binary (#164)
 
 ## v2.0.0 (2026-05-20)
 
