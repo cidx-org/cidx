@@ -291,9 +291,9 @@ func presetScanCommand() *cli.Command {
 				Value:   "all",
 			},
 			&cli.StringFlag{
-				Name:    "severity",
-				Usage:   "Minimum severity to report: LOW, MEDIUM, HIGH, CRITICAL",
-				Value:   "HIGH",
+				Name:  "severity",
+				Usage: "Minimum severity to report: LOW, MEDIUM, HIGH, CRITICAL",
+				Value: "HIGH",
 			},
 			&cli.BoolFlag{
 				Name:  "json",

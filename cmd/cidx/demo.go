@@ -38,12 +38,12 @@ func demoSpinnerCommand() *cli.Command {
 
 func runSpinnerDemo(durationSec int) error {
 	const (
-		clearLine  = "\033[2K"
-		moveUp     = "\033[1A"
-		hideCursor = "\033[?25l"
-		showCursor = "\033[?25h"
+		clearLine   = "\033[2K"
+		moveUp      = "\033[1A"
+		hideCursor  = "\033[?25l"
+		showCursor  = "\033[?25h"
 		colorYellow = "\033[33m"
-		colorReset = "\033[0m"
+		colorReset  = "\033[0m"
 	)
 
 	// Snake/chenillard - head with trailing tail

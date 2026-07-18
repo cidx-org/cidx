@@ -131,10 +131,10 @@ type PRReviewsInfo struct {
 
 // CleanupOptions configures the cleanup operation
 type CleanupOptions struct {
-	DryRun       bool   // Show what would be deleted without actually deleting
-	IncludeStale bool   // Also delete stale branches
-	IncludeOrphan bool  // Also delete orphan branches
-	Force        bool   // Force delete even if not fully merged
+	DryRun        bool // Show what would be deleted without actually deleting
+	IncludeStale  bool // Also delete stale branches
+	IncludeOrphan bool // Also delete orphan branches
+	Force         bool // Force delete even if not fully merged
 }
 
 // CleanupResult contains the result of a cleanup operation

@@ -23,16 +23,16 @@ const (
 // PhaseDiff represents a phase comparison result.
 type PhaseDiff struct {
 	Name   string
-	CIDX   bool   // present in cidx.toml
-	CI     bool   // present in CI workflow
+	CIDX   bool // present in cidx.toml
+	CI     bool // present in CI workflow
 	Status Status
 }
 
 // TriggerDiff represents a trigger comparison result.
 type TriggerDiff struct {
 	Event  string
-	CIDX   bool   // expected from cidx.toml pipeline names
-	CI     bool   // present in CI workflow
+	CIDX   bool // expected from cidx.toml pipeline names
+	CI     bool // present in CI workflow
 	Status Status
 }
 
@@ -101,8 +101,8 @@ func CompareFromData(cfg *config.Config, workflowData []byte) (*Result, error) {
 
 // githubWorkflow is a minimal representation of a GitHub Actions workflow.
 type githubWorkflow struct {
-	On   workflowTriggers          `yaml:"on"`
-	Jobs map[string]workflowJob    `yaml:"jobs"`
+	On   workflowTriggers       `yaml:"on"`
+	Jobs map[string]workflowJob `yaml:"jobs"`
 }
 
 type workflowTriggers struct {

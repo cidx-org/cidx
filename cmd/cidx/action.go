@@ -186,4 +186,3 @@ func artifactTUIAction(c *cli.Context) error {
 
 	return runArtifactTUI(ghClient)
 }
-

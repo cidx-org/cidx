@@ -510,11 +510,11 @@ func loadStatus() tea.Msg {
 
 // ghPRResponse represents the JSON response from gh pr view
 type ghPRResponse struct {
-	Number             int              `json:"number"`
-	Title              string           `json:"title"`
-	State              string           `json:"state"`
-	URL                string           `json:"url"`
-	StatusCheckRollup  []ghCheckStatus  `json:"statusCheckRollup"`
+	Number            int             `json:"number"`
+	Title             string          `json:"title"`
+	State             string          `json:"state"`
+	URL               string          `json:"url"`
+	StatusCheckRollup []ghCheckStatus `json:"statusCheckRollup"`
 }
 
 // ghCheckStatus represents a CI check in the gh pr view response

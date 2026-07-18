@@ -40,8 +40,8 @@ func NewSelector(dryRun, verbose, quiet bool) (*Selector, error) {
 	}
 
 	return &Selector{
-		docker: docker,
-		podman: podman,
+		docker:  docker,
+		podman:  podman,
 		logger:  logger,
 		dryRun:  dryRun,
 		verbose: verbose,

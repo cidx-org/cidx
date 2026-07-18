@@ -10,17 +10,17 @@ type ProviderConfig struct {
 
 // Config represents the complete CIDX configuration
 type Config struct {
-	RequiredVersion string                     // Minimum or exact version required
-	Phases          map[string]Phase           // Phases with containers (e.g., security, code, test)
-	Pipelines       map[string]Pipeline        // Named pipelines (e.g., ci)
-	Actions         map[string]Action          // Named actions (e.g., release-create)
-	Branch          BranchConfig               // Branch management settings
-	Release         ReleaseConfig              // Release workflow settings
-	Tag             TagConfig                  // Tag workflow settings
-	PR              PRConfig                   // PR workflow settings
-	Provider        ProviderConfig             // Git provider settings
-	Overrides       map[string]map[string]any  // Container override sections
-	Workspace       string                     // Auto-detected or from env
+	RequiredVersion string                    // Minimum or exact version required
+	Phases          map[string]Phase          // Phases with containers (e.g., security, code, test)
+	Pipelines       map[string]Pipeline       // Named pipelines (e.g., ci)
+	Actions         map[string]Action         // Named actions (e.g., release-create)
+	Branch          BranchConfig              // Branch management settings
+	Release         ReleaseConfig             // Release workflow settings
+	Tag             TagConfig                 // Tag workflow settings
+	PR              PRConfig                  // PR workflow settings
+	Provider        ProviderConfig            // Git provider settings
+	Overrides       map[string]map[string]any // Container override sections
+	Workspace       string                    // Auto-detected or from env
 }
 
 // BranchConfig defines branch management settings

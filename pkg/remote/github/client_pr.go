@@ -140,6 +140,7 @@ func (c *Client) ListPullRequests(ctx context.Context, state string) ([]*github.
 
 	return prs, nil
 }
+
 // GetPullRequestDetails returns comprehensive PR details for TUI display
 func (c *Client) GetPullRequestDetails(ctx context.Context, prNumber int) (*remote.PullRequestDetails, error) {
 	// Get PR details

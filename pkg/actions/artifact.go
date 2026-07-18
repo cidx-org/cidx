@@ -186,11 +186,11 @@ func (a *ArtifactStatsAction) Execute(ctx context.Context) error {
 
 // ArtifactCleanupAction deletes artifacts
 type ArtifactCleanupAction struct {
-	provider   remote.Provider
-	deleteAll  bool
-	expired    bool
-	olderThan  int
-	dryRun     bool
+	provider  remote.Provider
+	deleteAll bool
+	expired   bool
+	olderThan int
+	dryRun    bool
 }
 
 // NewArtifactCleanup creates a new artifact cleanup action

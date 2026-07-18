@@ -50,12 +50,12 @@ const (
 
 // Release TUI model
 type releaseModel struct {
-	mode         releaseMode
-	repo         *vcs.Repository
-	provider     remote.Provider
-	tagConfig    config.TagConfig
+	mode          releaseMode
+	repo          *vcs.Repository
+	provider      remote.Provider
+	tagConfig     config.TagConfig
 	releaseConfig config.ReleaseConfig
-	workDir      string
+	workDir       string
 
 	// State
 	version      textinput.Model
@@ -69,11 +69,11 @@ type releaseModel struct {
 	commits      []actions.CommitInfo
 
 	// UI state
-	loading    bool
-	err        error
-	success    string
-	width      int
-	height     int
+	loading bool
+	err     error
+	success string
+	width   int
+	height  int
 }
 
 // Actions available

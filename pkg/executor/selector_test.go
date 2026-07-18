@@ -39,4 +39,3 @@ func TestFindPodmanSocket_Candidates(t *testing.T) {
 		t.Error("expected at least one socket candidate path")
 	}
 }
-
