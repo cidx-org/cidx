@@ -1,12 +1,30 @@
 ## [Unreleased]
 
+## v2.1.0 (2026-07-18)
+
+### Feat
+
+- **presets**: add probatum preset (test phase) (#160)
+- **actions**: add `cidx pr edit` to update the current branch's PR title/body — titles are no longer frozen at `pr create` time, so a diagnosis that changes mid-investigation can be reflected before the squash-merge reuses the title as the commit message (#169, #176)
+
+### Fix
+
+- **presets**: use the prebuilt cargo-audit release binary in the `cargo-audit` preset — `cargo install cargo-audit` compiled the tool from source on every pipeline run (minutes of build time, and compilation could fail for reasons unrelated to the audited project). The preset now downloads the pinned v0.22.2 binary from RustSec's GitHub releases (seconds, `$(uname -m)` covers x86_64 and aarch64) and runs `cargo audit` as before. (#161, #164)
+- **executor**: look up registry-specific credentials (e.g. the `dhi.io` key written by `cidx registry login dhi.io`) instead of only Docker Hub's, and retry once anonymously when a registry rejects the attached credentials — previously the very login command suggested by the error message could not fix the failure (#162, #165)
+- **generate**: pin the bootstrapped cidx in generated workflows to the generating version (`go install ...@vX.Y.Z`), falling back to `@latest` with a warning on dev builds — the same commit can no longer be green locally and red in CI because of preset drift (#163, #166)
+- **actions**: `cpw` reuses the PR-checks wait path with the freshly pushed HEAD SHA pinned, instead of a single hardcoded workflow-file lookup after a fixed 5s sleep — no more spurious "No CI workflow found / Create a PR first" while GitHub Actions is still starting (#167, #172)
+- **actions**: derive the PR branch prefix from the conventional-commit type (`fix:` → `fix/...`), and point `pr create` hints at `cidx cpw`/`cidx pr ready` instead of raw git and the deprecated `cidx action` (#168, #173)
+- **drift**: resolve the workflow file (`cidx.yml`, then `ci.yml`) through one shared helper instead of hardcoding divergent names in `check drift` and `GetLatestWorkflow` — freshly generated projects no longer need `--file`, and workflow lookups work on repos whose workflow is `ci.yml` (#170, #177)
+- **infra**: gofmt sweep (20 files) and enforcement — new `.golangci.yml` enables the gofmt formatter so CI fails on formatting drift (#171, #179)
+
+## v2.0.0 (2026-05-20)
+
 ### Feat
 
 - **init**: detect fullstack monorepo layouts (Python `backend/` + Node `frontend/`, `apps/*`, `services/*`, `packages/*`) — `cidx init` now walks immediate subdirectories in addition to the repo root and aggregates per-phase containers across all detected stacks, eliminating the "No language detected" fallback on real fullstack projects (#145)
 
 ### Fix
 
-- **presets**: use the prebuilt cargo-audit release binary in the `cargo-audit` preset — `cargo install cargo-audit` compiled the tool from source on every pipeline run (minutes of build time, and compilation could fail for reasons unrelated to the audited project). The preset now downloads the pinned v0.22.2 binary from RustSec's GitHub releases (seconds, `$(uname -m)` covers x86_64 and aarch64) and runs `cargo audit` as before. (#161)
 - **presets**: install rustfmt component in `rustfmt` preset — `rust:1.95.0` does not ship rustfmt by default, so `cargo fmt --check` failed immediately on first run. Now runs `sh -c 'rustup component add rustfmt && cargo fmt -- --check'`, matching the existing `clippy` preset pattern. (#150)
 - **presets**: unify built-in mount paths at `/work` across all 40+ presets — previously `/src`, `/work`, `/scan`, `/repo`, `/app`, `/workspace` were used inconsistently, breaking the override mental model in monorepos. A `[containers.prettier] workdir = "/src/client-react"` override silently failed because the preset still mounted at `/work`. The runner now refuses to start a container whose workdir is not covered by any volume mount target and reports the available targets in the error. `cidx preset info` documents the mount contract explicitly. **Breaking change** for any cidx.toml that pins `workdir` to one of the legacy paths without also setting `volumes`; migrate by either dropping the override (defaults work) or by overriding `volumes` so the workdir is covered. (#151)
 - **executor**: detect stale container config via SHA-256 label hash; recreate `cidx_<tool>` containers when cidx.toml's behavior-affecting fields (image, command, workdir, entrypoint, volumes, env) change between runs. Containers from pre-#144 cidx versions (no `cidx.config_hash` label) are also treated as stale. `CIDX_NO_REUSE=1` forces recreate. Also writes a `cidx.version` label on every created container. (#144)
