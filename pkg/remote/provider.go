@@ -33,6 +33,10 @@ type Provider interface {
 	// MergePullRequest merges a pull request
 	MergePullRequest(ctx context.Context, prNumber int, method string) error
 
+	// UpdatePullRequest updates the title and/or body of a pull request.
+	// Empty strings leave the corresponding field unchanged.
+	UpdatePullRequest(ctx context.Context, prNumber int, title, body string) error
+
 	// GetPullRequestChecks returns the status of all checks/workflows for a PR
 	GetPullRequestChecks(ctx context.Context, prNumber int) (*PRChecks, error)
 

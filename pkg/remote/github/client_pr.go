@@ -88,6 +88,26 @@ func (c *Client) MergePullRequest(ctx context.Context, prNumber int, method stri
 
 	return nil
 }
+
+// UpdatePullRequest updates the title and/or body of a pull request.
+// Empty strings leave the corresponding field unchanged.
+func (c *Client) UpdatePullRequest(ctx context.Context, prNumber int, title, body string) error {
+	update := &github.PullRequest{}
+	if title != "" {
+		update.Title = github.Ptr(title)
+	}
+	if body != "" {
+		update.Body = github.Ptr(body)
+	}
+
+	_, _, err := c.client.PullRequests.Edit(ctx, c.owner, c.repo, prNumber, update)
+	if err != nil {
+		return fmt.Errorf("failed to update pull request: %w", err)
+	}
+
+	return nil
+}
+
 // GetPullRequest returns a single pull request by number
 func (c *Client) GetPullRequest(ctx context.Context, prNumber int) (*github.PullRequest, error) {
 	pr, _, err := c.client.PullRequests.Get(ctx, c.owner, c.repo, prNumber)

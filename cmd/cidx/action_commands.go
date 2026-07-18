@@ -55,6 +55,23 @@ func prCommand() *cli.Command {
 				Action: prReadyAction,
 			},
 			{
+				Name:  "edit",
+				Usage: "Update title and/or body of the current branch's PR",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "title",
+						Aliases: []string{"t"},
+						Usage:   "New PR title",
+					},
+					&cli.StringFlag{
+						Name:    "body",
+						Aliases: []string{"b"},
+						Usage:   "New PR body",
+					},
+				},
+				Action: prEditAction,
+			},
+			{
 				Name:  "merge",
 				Usage: "Merge the current PR and optionally watch post-merge workflow",
 				Flags: []cli.Flag{

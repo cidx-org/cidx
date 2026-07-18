@@ -71,6 +71,9 @@ func (f *fakeProvider) GetPullRequestByBranch(_ context.Context, _ string) (int,
 func (f *fakeProvider) MergePullRequest(_ context.Context, _ int, _ string) error {
 	panic("not implemented in fake")
 }
+func (f *fakeProvider) UpdatePullRequest(_ context.Context, _ int, _, _ string) error {
+	panic("not implemented in fake")
+}
 func (f *fakeProvider) GetPullRequestChecks(_ context.Context, _ int) (*remote.PRChecks, error) {
 	panic("not implemented in fake")
 }

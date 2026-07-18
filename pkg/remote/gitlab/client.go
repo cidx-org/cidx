@@ -271,6 +271,35 @@ func (c *Client) MergePullRequest(ctx context.Context, prNumber int, method stri
 	return nil
 }
 
+// UpdatePullRequest updates the title and/or description of a merge request.
+// Empty strings leave the corresponding field unchanged. The "Draft: " title
+// prefix is preserved so retitling a draft MR does not mark it ready.
+func (c *Client) UpdatePullRequest(ctx context.Context, prNumber int, title, body string) error {
+	opts := &gitlab.UpdateMergeRequestOptions{}
+
+	if title != "" {
+		mr, _, err := c.client.MergeRequests.GetMergeRequest(c.projectID, int64(prNumber), nil)
+		if err != nil {
+			return fmt.Errorf("failed to get merge request: %w", err)
+		}
+		if strings.HasPrefix(mr.Title, "Draft: ") && !strings.HasPrefix(title, "Draft: ") {
+			title = "Draft: " + title
+		}
+		opts.Title = gitlab.Ptr(title)
+	}
+
+	if body != "" {
+		opts.Description = gitlab.Ptr(body)
+	}
+
+	_, _, err := c.client.MergeRequests.UpdateMergeRequest(c.projectID, int64(prNumber), opts)
+	if err != nil {
+		return fmt.Errorf("failed to update merge request: %w", err)
+	}
+
+	return nil
+}
+
 // GetPullRequestChecks returns pipeline status for an MR
 func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remote.PRChecks, error) {
 	// Get MR to find associated pipeline
