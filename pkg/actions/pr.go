@@ -374,7 +374,7 @@ func (a *PRAction) mergePR(ctx context.Context) error {
 		log.Info("🔍 Waiting for CI to start and checking PR status...")
 
 		// Wait for CI to start - this ensures we check the correct commit's CI
-		headSHA, checks, err := a.provider.WaitForChecksToStart(ctx, prNumber, defaultCIStartTimeout)
+		headSHA, checks, err := a.provider.WaitForChecksToStart(ctx, prNumber, "", defaultCIStartTimeout)
 		if err != nil {
 			// Check if it's a "no CI configured" error
 			if checks != nil && checks.TotalCount == 0 {

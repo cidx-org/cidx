@@ -36,10 +36,13 @@ type Provider interface {
 	// GetPullRequestChecks returns the status of all checks/workflows for a PR
 	GetPullRequestChecks(ctx context.Context, prNumber int) (*PRChecks, error)
 
-	// WaitForChecksToStart waits for CI checks to start for a PR
-	// Returns the HEAD SHA being checked and the initial checks status
-	// This ensures we don't check stale results from previous commits
-	WaitForChecksToStart(ctx context.Context, prNumber int, timeout time.Duration) (headSHA string, checks *PRChecks, err error)
+	// WaitForChecksToStart waits for CI checks to start for a PR.
+	// expectedSHA pins the commit whose checks are awaited (e.g. the commit
+	// just pushed); when empty, the PR's current head is resolved from the
+	// provider API. Right after a push that API read can lag behind the true
+	// head, so callers that know the pushed SHA must pass it (issue #167).
+	// Returns the HEAD SHA being checked and the initial checks status.
+	WaitForChecksToStart(ctx context.Context, prNumber int, expectedSHA string, timeout time.Duration) (headSHA string, checks *PRChecks, err error)
 
 	// WatchPullRequestChecks streams updates for PR checks until all complete
 	WatchPullRequestChecks(ctx context.Context, prNumber int) (<-chan PRChecksUpdate, error)

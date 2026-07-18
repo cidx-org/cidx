@@ -117,14 +117,17 @@ func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remot
 
 // WaitForChecksToStart waits for CI checks to start for a PR
 // This solves the race condition where CI hasn't started yet when we query
-func (c *Client) WaitForChecksToStart(ctx context.Context, prNumber int, timeout time.Duration) (string, *remote.PRChecks, error) {
-	// Get PR details to get the head SHA we're waiting for
-	pr, _, err := c.client.PullRequests.Get(ctx, c.owner, c.repo, prNumber)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to get pull request: %w", err)
+func (c *Client) WaitForChecksToStart(ctx context.Context, prNumber int, expectedSHA string, timeout time.Duration) (string, *remote.PRChecks, error) {
+	if expectedSHA == "" {
+		// Resolve the head SHA from the API. Right after a push this read
+		// can lag behind the true head; callers that know the SHA they
+		// pushed should pass it explicitly (issue #167).
+		pr, _, err := c.client.PullRequests.Get(ctx, c.owner, c.repo, prNumber)
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to get pull request: %w", err)
+		}
+		expectedSHA = pr.GetHead().GetSHA()
 	}
-
-	expectedSHA := pr.GetHead().GetSHA()
 
 	// Create timeout context
 	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)

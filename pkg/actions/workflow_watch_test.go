@@ -74,7 +74,7 @@ func (f *fakeProvider) MergePullRequest(_ context.Context, _ int, _ string) erro
 func (f *fakeProvider) GetPullRequestChecks(_ context.Context, _ int) (*remote.PRChecks, error) {
 	panic("not implemented in fake")
 }
-func (f *fakeProvider) WaitForChecksToStart(_ context.Context, _ int, _ time.Duration) (string, *remote.PRChecks, error) {
+func (f *fakeProvider) WaitForChecksToStart(_ context.Context, _ int, _ string, _ time.Duration) (string, *remote.PRChecks, error) {
 	panic("not implemented in fake")
 }
 func (f *fakeProvider) WatchPullRequestChecks(_ context.Context, _ int) (<-chan remote.PRChecksUpdate, error) {
