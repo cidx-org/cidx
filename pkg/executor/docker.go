@@ -45,6 +45,9 @@ type DockerExecutor struct {
 	quiet    bool
 	timeout  time.Duration
 	rootless bool // Podman rootless: adds --userns=keep-id
+
+	// pullFn overrides client.ImagePull in tests. Nil means use the real client.
+	pullFn func(ctx context.Context, ref string, opts image.PullOptions) (io.ReadCloser, error)
 }
 
 // NewDockerExecutor creates a new Docker executor
@@ -255,15 +258,26 @@ func (e *DockerExecutor) imageExistsLocally(ctx context.Context, imageName strin
 
 // pullImage pulls a Docker image
 func (e *DockerExecutor) pullImage(ctx context.Context, imageName string) error {
+	return e.pullImageWithAuth(ctx, imageName, e.getAuthForImage(imageName))
+}
+
+// pullImageWithAuth pulls a Docker image, attaching authStr as the RegistryAuth
+// header when non-empty. If the registry rejects those credentials, it retries
+// once anonymously: `docker pull` only sends credentials stored for the target
+// registry and succeeds anonymously when the registry allows it, while cidx may
+// attach Docker Hub credentials to a dhi.io pull that the registry rejects
+// (issue #162). Auth is only reported as required when the anonymous attempt
+// fails too.
+func (e *DockerExecutor) pullImageWithAuth(ctx context.Context, imageName, authStr string) error {
 	e.logger.Debugf("Pulling image: %s", imageName)
 
-	// Get authentication for the registry
-	pullOpts := image.PullOptions{}
-	if authStr := e.getAuthForImage(imageName); authStr != "" {
-		pullOpts.RegistryAuth = authStr
-	}
+	pullOpts := image.PullOptions{RegistryAuth: authStr}
 
-	out, err := e.client.ImagePull(ctx, imageName, pullOpts)
+	out, err := e.imagePull(ctx, imageName, pullOpts)
+	if err != nil && authStr != "" && isUnauthorizedError(err) {
+		e.logger.Debugf("Authenticated pull of %s rejected (%v), retrying anonymously", imageName, err)
+		out, err = e.imagePull(ctx, imageName, image.PullOptions{})
+	}
 	if err != nil {
 		// Check for authentication errors and provide helpful suggestions
 		if isUnauthorizedError(err) {
@@ -297,20 +311,27 @@ func (e *DockerExecutor) pullImage(ctx context.Context, imageName string) error 
 	return nil
 }
 
+// imagePull dispatches to the test seam when set, the real client otherwise.
+func (e *DockerExecutor) imagePull(ctx context.Context, ref string, opts image.PullOptions) (io.ReadCloser, error) {
+	if e.pullFn != nil {
+		return e.pullFn(ctx, ref, opts)
+	}
+	return e.client.ImagePull(ctx, ref, opts)
+}
+
 // getAuthForImage returns the base64-encoded auth config for an image's registry
 func (e *DockerExecutor) getAuthForImage(imageName string) string {
 	reg := extractRegistry(imageName)
 	regManager := registry.NewManager()
 
-	var creds *registry.Credentials
+	// Look up credentials stored for the registry itself first — the same
+	// lookup `docker pull` performs, and where `docker login <registry>` /
+	// `cidx registry login <registry>` stores them (issue #162).
+	creds := regManager.GetRegistryCredentials(reg)
 
-	// For DHI, use Docker Hub credentials
-	if reg == registry.DHIRegistry {
+	// For DHI, fall back to Docker Hub credentials (DHI accepts them)
+	if creds == nil && reg == registry.DHIRegistry {
 		creds = regManager.GetDockerHubCredentials()
-	} else {
-		// Try to get credentials for this specific registry
-		// For now, we only handle DHI specially
-		return ""
 	}
 
 	if creds == nil {
