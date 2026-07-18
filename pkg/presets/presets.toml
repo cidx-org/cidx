@@ -845,12 +845,15 @@ description = "Enable pedantic lints"
 command_flag = "-W clippy::pedantic"
 
 # Cargo Audit: Scan Rust dependencies for known vulnerabilities
-# Official RustSec tool
+# Official RustSec tool. Downloads the prebuilt release binary (seconds)
+# instead of `cargo install` (compiles from source for minutes and can fail
+# for reasons unrelated to the audited project — see #161). RustSec ships
+# x86_64 and aarch64 linux-gnu assets, so $(uname -m) covers both.
 [presets.cargo-audit]
 name = "cargo-audit"
 phase = "security"
 image = "rust:1.95.0"
-command = "sh -c 'cargo install cargo-audit && cargo audit'"
+command = "sh -c 'curl -sSfL https://github.com/rustsec/rustsec/releases/download/cargo-audit/v0.22.2/cargo-audit-$(uname -m)-unknown-linux-gnu-v0.22.2.tgz | tar xz --strip-components=1 -C /usr/local/bin && cargo audit'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
 

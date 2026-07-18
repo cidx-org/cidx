@@ -194,6 +194,30 @@ func TestRustupComponentPresetsInstallComponent(t *testing.T) {
 	}
 }
 
+// TestCargoAuditUsesPrebuiltBinary ensures the cargo-audit preset never
+// compiles the tool at runtime. `cargo install cargo-audit` built from source
+// on every pipeline run (minutes of compilation, and it can fail for reasons
+// unrelated to the audited project). The preset must download the pinned
+// prebuilt release binary instead. Regression guard for issue #161.
+func TestCargoAuditUsesPrebuiltBinary(t *testing.T) {
+	preset, err := Get("cargo-audit")
+	if err != nil {
+		t.Fatalf("Get(%q) unexpected error: %v", "cargo-audit", err)
+	}
+	if strings.Contains(preset.Command, "cargo install") {
+		t.Errorf("preset %q Command = %q, must not compile cargo-audit at runtime via `cargo install`",
+			"cargo-audit", preset.Command)
+	}
+	if !strings.Contains(preset.Command, "https://github.com/rustsec/rustsec/releases/download/cargo-audit/v") {
+		t.Errorf("preset %q Command = %q, expected a pinned prebuilt binary download from RustSec releases",
+			"cargo-audit", preset.Command)
+	}
+	if !strings.Contains(preset.Command, "cargo audit") {
+		t.Errorf("preset %q Command = %q, expected to run `cargo audit`",
+			"cargo-audit", preset.Command)
+	}
+}
+
 func TestGroupByPhase(t *testing.T) {
 	grouped := GroupByPhase()
 
