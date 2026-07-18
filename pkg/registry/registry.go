@@ -235,8 +235,11 @@ func (m *Manager) getCredsFromHelper(helper, registry string) *Credentials {
 	return &creds
 }
 
-// GetDockerHubCredentials returns Docker Hub credentials if available
-func (m *Manager) GetDockerHubCredentials() *Credentials {
+// GetRegistryCredentials returns the credentials stored for a registry, using
+// the same lookup `docker pull` performs: the credential helper first, then
+// the auths entry in config.json. This is where `docker login <registry>`
+// (and `cidx registry login <registry>`) stores credentials.
+func (m *Manager) GetRegistryCredentials(registryName string) *Credentials {
 	config, err := m.loadConfig()
 	if err != nil {
 		return nil
@@ -244,13 +247,13 @@ func (m *Manager) GetDockerHubCredentials() *Credentials {
 
 	// Check credential helper first
 	if config.CredsStore != "" {
-		if creds := m.getCredsFromHelper(config.CredsStore, DockerHubRegistry); creds != nil {
+		if creds := m.getCredsFromHelper(config.CredsStore, registryName); creds != nil {
 			return creds
 		}
 	}
 
 	// Check direct auth in config
-	if auth, ok := config.Auths[DockerHubRegistry]; ok && auth.Auth != "" {
+	if auth, ok := config.Auths[registryName]; ok && auth.Auth != "" {
 		decoded, err := base64.StdEncoding.DecodeString(auth.Auth)
 		if err == nil {
 			parts := strings.SplitN(string(decoded), ":", 2)
@@ -264,6 +267,11 @@ func (m *Manager) GetDockerHubCredentials() *Credentials {
 	}
 
 	return nil
+}
+
+// GetDockerHubCredentials returns Docker Hub credentials if available
+func (m *Manager) GetDockerHubCredentials() *Credentials {
+	return m.GetRegistryCredentials(DockerHubRegistry)
 }
 
 // FormatList formats the registry list for display

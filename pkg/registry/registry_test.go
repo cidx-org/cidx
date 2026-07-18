@@ -2,6 +2,7 @@ package registry
 
 import (
 	"encoding/base64"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -285,5 +286,62 @@ func TestIsDHIReady_NoConfig(t *testing.T) {
 	m := &Manager{configPath: filepath.Join(t.TempDir(), "nonexistent.json")}
 	if m.IsDHIReady() {
 		t.Error("expected false when no config exists")
+	}
+}
+
+// Regression tests for issue #162: cidx must look up credentials stored for
+// the target registry itself (the key `docker login <registry>` writes and
+// `docker pull` reads), not only Docker Hub's.
+func TestGetRegistryCredentials_FromAuths(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+
+	// base64("arcker:secret123")
+	auth := base64.StdEncoding.EncodeToString([]byte("arcker:secret123"))
+	content := fmt.Sprintf(`{"auths": {"dhi.io": {"auth": %q}}}`, auth)
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := &Manager{configPath: configPath}
+	creds := m.GetRegistryCredentials("dhi.io")
+	if creds == nil {
+		t.Fatal("expected credentials for dhi.io, got nil")
+	}
+	if creds.Username != "arcker" || creds.Secret != "secret123" {
+		t.Errorf("got %q/%q, want arcker/secret123", creds.Username, creds.Secret)
+	}
+}
+
+func TestGetRegistryCredentials_NotFound(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{"auths": {}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := &Manager{configPath: configPath}
+	if creds := m.GetRegistryCredentials("dhi.io"); creds != nil {
+		t.Errorf("expected nil for unconfigured registry, got %+v", creds)
+	}
+}
+
+func TestGetDockerHubCredentials_FromAuths(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+
+	auth := base64.StdEncoding.EncodeToString([]byte("hubuser:hubpass"))
+	content := fmt.Sprintf(`{"auths": {%q: {"auth": %q}}}`, DockerHubRegistry, auth)
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := &Manager{configPath: configPath}
+	creds := m.GetDockerHubCredentials()
+	if creds == nil {
+		t.Fatal("expected Docker Hub credentials, got nil")
+	}
+	if creds.Username != "hubuser" || creds.Secret != "hubpass" {
+		t.Errorf("got %q/%q, want hubuser/hubpass", creds.Username, creds.Secret)
 	}
 }

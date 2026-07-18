@@ -1,8 +1,14 @@
 package executor
 
 import (
+	"context"
+	"errors"
+	"io"
 	"strings"
 	"testing"
+
+	"github.com/docker/docker/api/types/image"
+	"github.com/sirupsen/logrus"
 )
 
 func TestConfigHash_Deterministic(t *testing.T) {
@@ -337,4 +343,111 @@ func TestExtractRegistry(t *testing.T) {
 			}
 		})
 	}
+}
+
+// newPullTestExecutor returns a DockerExecutor whose ImagePull calls are
+// recorded and answered by the given script of results. Each entry in results
+// is consumed in order; the RegistryAuth of every call is appended to *calls.
+func newPullTestExecutor(t *testing.T, calls *[]string, results []error) *DockerExecutor {
+	t.Helper()
+	logger := logrus.New()
+	logger.SetOutput(io.Discard)
+	return &DockerExecutor{
+		logger: logger,
+		pullFn: func(_ context.Context, _ string, opts image.PullOptions) (io.ReadCloser, error) {
+			i := len(*calls)
+			*calls = append(*calls, opts.RegistryAuth)
+			if i >= len(results) {
+				t.Fatalf("unexpected ImagePull call #%d", i+1)
+			}
+			if err := results[i]; err != nil {
+				return nil, err
+			}
+			return io.NopCloser(strings.NewReader("")), nil
+		},
+	}
+}
+
+// Regression test for issue #162: cidx attaches Docker Hub credentials to
+// dhi.io pulls that `docker pull` would never send. When the registry rejects
+// them, cidx must fall back to an anonymous pull instead of failing.
+func TestPullImageWithAuth_AnonymousFallback(t *testing.T) {
+	unauthorized := errString("Error response from daemon: unauthorized: authentication required")
+
+	t.Run("rejected credentials fall back to anonymous pull", func(t *testing.T) {
+		var calls []string
+		e := newPullTestExecutor(t, &calls, []error{unauthorized, nil})
+
+		err := e.pullImageWithAuth(context.Background(), "dhi.io/trivy:0.68", "someauth")
+		if err != nil {
+			t.Fatalf("expected anonymous fallback to succeed, got: %v", err)
+		}
+		if len(calls) != 2 {
+			t.Fatalf("expected 2 pull attempts, got %d", len(calls))
+		}
+		if calls[0] != "someauth" {
+			t.Errorf("first attempt should use credentials, got RegistryAuth=%q", calls[0])
+		}
+		if calls[1] != "" {
+			t.Errorf("fallback attempt should be anonymous, got RegistryAuth=%q", calls[1])
+		}
+	})
+
+	t.Run("anonymous pull also rejected returns AuthError", func(t *testing.T) {
+		var calls []string
+		e := newPullTestExecutor(t, &calls, []error{unauthorized, unauthorized})
+
+		err := e.pullImageWithAuth(context.Background(), "dhi.io/trivy:0.68", "someauth")
+		var authErr *AuthError
+		if !errors.As(err, &authErr) {
+			t.Fatalf("expected *AuthError, got: %v", err)
+		}
+		if authErr.Registry != "dhi.io" {
+			t.Errorf("AuthError.Registry = %q, want %q", authErr.Registry, "dhi.io")
+		}
+		if len(calls) != 2 {
+			t.Fatalf("expected 2 pull attempts, got %d", len(calls))
+		}
+	})
+
+	t.Run("unauthorized without credentials returns AuthError without retry", func(t *testing.T) {
+		var calls []string
+		e := newPullTestExecutor(t, &calls, []error{unauthorized})
+
+		err := e.pullImageWithAuth(context.Background(), "dhi.io/trivy:0.68", "")
+		var authErr *AuthError
+		if !errors.As(err, &authErr) {
+			t.Fatalf("expected *AuthError, got: %v", err)
+		}
+		if len(calls) != 1 {
+			t.Fatalf("expected 1 pull attempt (no retry without credentials), got %d", len(calls))
+		}
+	})
+
+	t.Run("non-auth error is returned as-is without retry", func(t *testing.T) {
+		var calls []string
+		netErr := errString("Error response from daemon: dial tcp: lookup dhi.io: no such host")
+		e := newPullTestExecutor(t, &calls, []error{netErr})
+
+		err := e.pullImageWithAuth(context.Background(), "dhi.io/trivy:0.68", "someauth")
+		if !errors.Is(err, netErr) {
+			t.Fatalf("expected original error, got: %v", err)
+		}
+		if len(calls) != 1 {
+			t.Fatalf("expected 1 pull attempt, got %d", len(calls))
+		}
+	})
+
+	t.Run("successful authenticated pull does not retry", func(t *testing.T) {
+		var calls []string
+		e := newPullTestExecutor(t, &calls, []error{nil})
+
+		err := e.pullImageWithAuth(context.Background(), "dhi.io/trivy:0.68", "someauth")
+		if err != nil {
+			t.Fatalf("expected success, got: %v", err)
+		}
+		if len(calls) != 1 {
+			t.Fatalf("expected 1 pull attempt, got %d", len(calls))
+		}
+	})
 }
