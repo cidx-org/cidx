@@ -7,6 +7,7 @@ import (
 
 	"github.com/cidx-org/cidx/pkg/config"
 	"github.com/cidx-org/cidx/pkg/drift"
+	"github.com/cidx-org/cidx/pkg/remote"
 	"github.com/cidx-org/cidx/pkg/validator"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
@@ -21,10 +22,10 @@ var checkCommand = &cli.Command{
 			Usage: "Compare cidx.toml with actual CI workflow and detect divergence",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
-					Name:    "file",
-					Aliases: []string{"f"},
-					Usage:   "Path to CI workflow file",
-					Value:   ".github/workflows/ci.yml",
+					Name:        "file",
+					Aliases:     []string{"f"},
+					Usage:       "Path to CI workflow file",
+					DefaultText: "auto-detect: cidx.yml, ci.yml",
 				},
 			},
 			Action: checkDriftAction,
@@ -132,8 +133,15 @@ func checkDriftAction(c *cli.Context) error {
 		return fmt.Errorf("failed to load cidx.toml: %w", err)
 	}
 
+	// Explicit --file wins; otherwise probe the candidate workflow names
+	// (cidx.yml as written by generate/init, then ci.yml) — issue #170.
 	workflowFile := c.String("file")
-	if _, err := os.Stat(workflowFile); os.IsNotExist(err) {
+	if workflowFile == "" {
+		workflowFile, err = remote.ResolveWorkflowFile(remote.GitHubWorkflowDir)
+		if err != nil {
+			return fmt.Errorf("%w — use --file to specify the workflow path", err)
+		}
+	} else if _, err := os.Stat(workflowFile); os.IsNotExist(err) {
 		return fmt.Errorf("workflow file not found: %s (use --file to specify path)", workflowFile)
 	}
 

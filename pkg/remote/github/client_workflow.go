@@ -3,34 +3,65 @@ package github
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cidx-org/cidx/pkg/remote"
 	"github.com/google/go-github/v76/github"
 )
 
-// GetLatestWorkflow returns the most recent workflow run for a branch
+// listRunsFunc lists the workflow runs of a single workflow file, with the
+// branch filter already bound. It exists as a seam so latestRunFromCandidates
+// can be unit-tested without a real GitHub client.
+type listRunsFunc func(ctx context.Context, workflowFile string) (*github.WorkflowRuns, *github.Response, error)
+
+// GetLatestWorkflow returns the most recent workflow run for a branch.
+// The workflow filename is not hardcoded: the candidate names from
+// remote.CandidateWorkflowFiles are probed in preference order, so both
+// generated projects (cidx.yml) and repos with a conventional ci.yml work
+// without configuration (issue #170).
 func (c *Client) GetLatestWorkflow(ctx context.Context, branch string) (*remote.Workflow, error) {
-	runs, _, err := c.client.Actions.ListWorkflowRunsByFileName(
-		ctx,
-		c.owner,
-		c.repo,
-		"cidx.yml",
-		&github.ListWorkflowRunsOptions{
-			Branch:      branch,
-			ListOptions: github.ListOptions{PerPage: 1},
-		},
-	)
+	run, err := latestRunFromCandidates(ctx, branch, func(ctx context.Context, workflowFile string) (*github.WorkflowRuns, *github.Response, error) {
+		return c.client.Actions.ListWorkflowRunsByFileName(
+			ctx,
+			c.owner,
+			c.repo,
+			workflowFile,
+			&github.ListWorkflowRunsOptions{
+				Branch:      branch,
+				ListOptions: github.ListOptions{PerPage: 1},
+			},
+		)
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to list workflows: %w", err)
+		return nil, err
 	}
 
-	if len(runs.WorkflowRuns) == 0 {
-		return nil, fmt.Errorf("no workflow runs found for branch %s", branch)
+	return c.convertWorkflow(ctx, run)
+}
+
+// latestRunFromCandidates probes remote.CandidateWorkflowFiles in preference
+// order and returns the latest run of the first workflow that has one for the
+// branch. A 404 (workflow file absent from the repo) or an empty run list
+// falls through to the next candidate; any other API error aborts.
+func latestRunFromCandidates(ctx context.Context, branch string, list listRunsFunc) (*github.WorkflowRun, error) {
+	for _, file := range remote.CandidateWorkflowFiles {
+		runs, resp, err := list(ctx, file)
+		if err != nil {
+			if resp != nil && resp.StatusCode == http.StatusNotFound {
+				continue
+			}
+			return nil, fmt.Errorf("failed to list workflow runs for %s: %w", file, err)
+		}
+		if runs == nil || len(runs.WorkflowRuns) == 0 {
+			continue
+		}
+		return runs.WorkflowRuns[0], nil
 	}
 
-	return c.convertWorkflow(ctx, runs.WorkflowRuns[0])
+	return nil, fmt.Errorf("no workflow runs found for branch %s (tried %s)", branch, strings.Join(remote.CandidateWorkflowFiles, ", "))
 }
 
 // GetLatestRunForBranch returns the most recent workflow run on a branch across
