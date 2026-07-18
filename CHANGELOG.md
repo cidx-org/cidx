@@ -1,7 +1,5 @@
 ## [Unreleased]
 
-## v2.1.0 (2026-07-18)
-
 ### Feat
 
 - **presets**: add probatum preset (test phase) (#160)
