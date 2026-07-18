@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 
@@ -97,7 +98,7 @@ func (a *PRAction) createPR(ctx context.Context) error {
 			// Branch already has a PR
 			log.Warnf("⚠️  Branch '%s' already has PR #%d", currentBranch, existingPR)
 			log.Infof("🔗 %s", existingURL)
-			return fmt.Errorf("branch '%s' already has an associated PR. Use 'cidx action pr ready' to mark it ready", currentBranch)
+			return fmt.Errorf("branch '%s' already has an associated PR. Use 'cidx pr ready' to mark it ready", currentBranch)
 		}
 
 		// Branch exists but has no PR - reuse it
@@ -119,7 +120,7 @@ func (a *PRAction) createPR(ctx context.Context) error {
 		log.Infof("📋 Creating branch from issue #%s", a.issueNum)
 	} else {
 		// Convert title to branch name: "Add Auth System" -> "feat/add-auth-system"
-		branchName = a.titleToBranchName(a.title)
+		branchName = titleToBranchName(a.title)
 		log.Infof("🌿 Creating branch: %s", branchName)
 	}
 
@@ -183,12 +184,7 @@ func (a *PRAction) createPR(ctx context.Context) error {
 
 	log.Info("✅ Draft PR created successfully!")
 	log.Infof("🔗 %s", prURL)
-	log.Info("")
-	log.Info("📌 Next steps:")
-	log.Info("   1. Make your changes")
-	log.Info("   2. git add . && git commit -m 'feat: your changes'")
-	log.Info("   3. git push (your commits will be added to the PR)")
-	log.Info("   4. When ready: cidx action pr ready")
+	printPRNextSteps()
 
 	return nil
 }
@@ -273,12 +269,7 @@ func (a *PRAction) createPRForExistingBranch(ctx context.Context, branchName str
 
 	log.Info("✅ Draft PR created successfully!")
 	log.Infof("🔗 %s", prURL)
-	log.Info("")
-	log.Info("📌 Next steps:")
-	log.Info("   1. Make your changes")
-	log.Info("   2. git add . && git commit -m 'feat: your changes'")
-	log.Info("   3. git push (your commits will be added to the PR)")
-	log.Info("   4. When ready: cidx action pr ready")
+	printPRNextSteps()
 
 	return nil
 }
@@ -602,18 +593,49 @@ func displayChecksStatus(checks *remote.PRChecks) {
 	}
 }
 
-// titleToBranchName converts a PR title to a branch name
-func (a *PRAction) titleToBranchName(title string) string {
-	// Convert to lowercase
-	name := strings.ToLower(title)
+// prNextSteps is the guidance printed after a draft PR is created.
+// It must only suggest cidx commands (dogfooding), never raw git or deprecated aliases.
+var prNextSteps = []string{
+	"1. Make your changes",
+	`2. Commit + push + watch CI: cidx cpw -m "type: your changes"`,
+	"3. When ready: cidx pr ready",
+}
+
+// printPRNextSteps prints the post-creation guidance
+func printPRNextSteps() {
+	log.Info("")
+	log.Info("📌 Next steps:")
+	for _, step := range prNextSteps {
+		log.Info("   " + step)
+	}
+}
+
+// conventionalTypeRe matches a conventional-commit header "type(scope)!: description"
+// for the types used in this repo.
+var conventionalTypeRe = regexp.MustCompile(`^(feat|fix|chore|docs|refactor|test|ci|perf|build)(\([^)]*\))?!?:\s*(.+)$`)
+
+// titleToBranchName converts a PR title to a branch name, deriving the prefix
+// from the conventional-commit type: "fix(generate): pin bootstrapped cidx"
+// -> "fix/generate-pin-bootstrapped-cidx". Titles without a recognizable type
+// fall back to feat/: "Add Auth System" -> "feat/add-auth-system".
+func titleToBranchName(title string) string {
+	prefix := "feat"
+	rest := strings.ToLower(strings.TrimSpace(title))
+
+	// Strip the conventional-commit type from the slug so it becomes the
+	// branch prefix instead (no fix/fix-... duplication)
+	if m := conventionalTypeRe.FindStringSubmatch(rest); m != nil {
+		prefix = m[1]
+		rest = strings.TrimSpace(m[2] + " " + m[3])
+	}
 
 	// Replace spaces and special chars with hyphens
-	name = strings.Map(func(r rune) rune {
+	name := strings.Map(func(r rune) rune {
 		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
 			return r
 		}
 		return '-'
-	}, name)
+	}, rest)
 
 	// Remove consecutive hyphens
 	for strings.Contains(name, "--") {
@@ -623,9 +645,7 @@ func (a *PRAction) titleToBranchName(title string) string {
 	// Trim hyphens
 	name = strings.Trim(name, "-")
 
-	// Add feat/ prefix (default type)
-	// User can manually change branch name if needed
-	return fmt.Sprintf("feat/%s", name)
+	return fmt.Sprintf("%s/%s", prefix, name)
 }
 
 // generatePRBody generates the PR body based on conventional commits
