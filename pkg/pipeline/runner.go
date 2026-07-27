@@ -127,8 +127,10 @@ func (r *Runner) Run(ctx context.Context, target string) error {
 		return r.RunPhase(ctx, target, phase)
 	}
 
-	// Check if target is a tool
-	if presets.Exists(target) {
+	// Check if target is a tool: a built-in preset, or a container declared
+	// only through [containers.NAME] with an `image` field (#216). Both are
+	// resolved by RunTool, which already knows the custom-declaration path.
+	if presets.Exists(target) || presets.IsCustomDeclaration(r.config.Overrides[target]) {
 		return r.RunTool(ctx, target)
 	}
 
@@ -137,7 +139,7 @@ func (r *Runner) Run(ctx context.Context, target string) error {
 		return r.RunAll(ctx)
 	}
 
-	return fmt.Errorf("unknown target: %s (not a phase, tool, or pipeline)", target)
+	return fmt.Errorf("unknown target: %s (not a pipeline, phase, preset, or [containers.%s] declaration)", target, target)
 }
 
 // RunPipeline executes a named pipeline

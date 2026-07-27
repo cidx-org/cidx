@@ -511,3 +511,42 @@ func TestGitHub_NoDeprecatedActionVersions(t *testing.T) {
 		}
 	}
 }
+
+// TestGitHub_Hardening covers #207: the generated workflow must restrict the
+// GITHUB_TOKEN to read and must not leave it in the git config of jobs that
+// run third-party container images against the workspace.
+func TestGitHub_Hardening(t *testing.T) {
+	cfg := &config.Config{
+		Pipelines: map[string]config.Pipeline{
+			// Mixes fetch-depth phases (security, code) with plain ones.
+			"ci": {Phases: []string{"security", "code", "test", "build"}},
+		},
+	}
+
+	output, err := GitHub(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Workflow-level, exactly once: no generated job writes to the repo.
+	if got := strings.Count(output, "\npermissions:\n  contents: read\n"); got != 1 {
+		t.Errorf("expected one workflow-level `permissions: contents: read`, found %d in:\n%s", got, output)
+	}
+	if strings.Index(output, "\npermissions:") > strings.Index(output, "\njobs:") {
+		t.Error("permissions block must precede jobs to apply workflow-wide:\n" + output)
+	}
+
+	// Every checkout (bootstrap + one per phase) drops the token.
+	checkouts := strings.Count(output, "uses: actions/checkout@v6")
+	if checkouts != 5 {
+		t.Fatalf("expected 5 checkout steps (bootstrap + 4 phases), got %d", checkouts)
+	}
+	if got := strings.Count(output, "persist-credentials: false"); got != checkouts {
+		t.Errorf("expected persist-credentials: false on all %d checkouts, found %d in:\n%s", checkouts, got, output)
+	}
+
+	// Hardening must not cost the phases that need full history.
+	if got := strings.Count(output, "fetch-depth: 0"); got != 3 {
+		t.Errorf("expected fetch-depth: 0 on bootstrap + security + code, found %d", got)
+	}
+}

@@ -77,6 +77,12 @@ func GitHubWithOptions(cfg *config.Config, opts GitHubOptions) (string, error) {
 	b.WriteString("name: CIDX CI\n\n")
 	writeTriggers(&b, cfg.Pipelines)
 
+	// Least-privilege token (#207). Generated jobs only check out the repo and
+	// run containers — nothing writes back — so read is the whole need. A job
+	// that ever needs more should widen it at the job level, not here.
+	b.WriteString("\npermissions:\n")
+	b.WriteString("  contents: read\n")
+
 	b.WriteString("\njobs:\n")
 
 	// Bootstrap job -- build once, share binary
@@ -151,6 +157,7 @@ func writeBootstrapJob(b *strings.Builder, selfBuild bool) {
 	b.WriteString("      - uses: actions/checkout@v6\n")
 	b.WriteString("        with:\n")
 	b.WriteString("          fetch-depth: 0\n")
+	b.WriteString("          persist-credentials: false\n")
 	b.WriteString("      - uses: actions/setup-go@v6\n")
 	b.WriteString("        with:\n")
 	b.WriteString("          go-version: \"1.26\"\n")
@@ -209,12 +216,16 @@ func writePhaseJob(b *strings.Builder, phase string) {
 	b.WriteString("    needs: [bootstrap]\n")
 	b.WriteString("    steps:\n")
 	b.WriteString("      - uses: actions/checkout@v6\n")
+	b.WriteString("        with:\n")
 
 	// Some phases need full history
 	if phase == "security" || phase == "code" {
-		b.WriteString("        with:\n")
 		b.WriteString("          fetch-depth: 0\n")
 	}
+
+	// No generated step runs authenticated git, and phase jobs run third-party
+	// images against the workspace — don't leave the token in .git/config (#207).
+	b.WriteString("          persist-credentials: false\n")
 
 	b.WriteString("      - uses: actions/download-artifact@v8\n")
 	b.WriteString("        with:\n")
