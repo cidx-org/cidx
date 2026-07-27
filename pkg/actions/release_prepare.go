@@ -113,8 +113,8 @@ func (a *ReleasePrepareAction) Execute(ctx context.Context) error {
 	}
 	log.Infof("✓ Target version saved to %s", ReleaseVersionFile)
 
-	// 7. Open editor
-	if err := a.openEditor(nextVersion); err != nil {
+	// 7. Open editor for review (skipped when there is no terminal)
+	if err := openInEditor(a.releaseConfig.GetEditor(), filepath.Join(workDir, notesFile)); err != nil {
 		log.Warnf("Could not open editor: %v", err)
 		log.Infof("📝 Please edit %s manually", notesFile)
 	}
@@ -404,41 +404,6 @@ func (a *ReleasePrepareAction) saveReleaseNotes(notes, version string) error {
 
 	path := filepath.Join(workDir, GetReleaseNotesFile(version))
 	return os.WriteFile(path, []byte(notes), 0644)
-}
-
-// openEditor opens the release notes in the user's editor
-func (a *ReleasePrepareAction) openEditor(version string) error {
-	// Priority: 1. Config editor 2. $EDITOR 3. $VISUAL 4. Common editors
-	editor := a.releaseConfig.GetEditor()
-	if editor == "" {
-		editor = os.Getenv("EDITOR")
-	}
-	if editor == "" {
-		editor = os.Getenv("VISUAL")
-	}
-	if editor == "" {
-		// Try common editors
-		for _, e := range []string{"vim", "nano", "vi", "code", "notepad"} {
-			if _, err := exec.LookPath(e); err == nil {
-				editor = e
-				break
-			}
-		}
-	}
-
-	if editor == "" {
-		return fmt.Errorf("no editor found")
-	}
-
-	workDir, _ := a.repo.GetWorkDir()
-	path := filepath.Join(workDir, GetReleaseNotesFile(version))
-
-	cmd := exec.Command(editor, path)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	return cmd.Run()
 }
 
 // LoadPreparedNotes loads previously prepared release notes for the given version

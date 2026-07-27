@@ -87,8 +87,10 @@ func (a *TagPrepareAction) Execute(ctx context.Context) error {
 	}
 	log.Infof("✓ Tag message saved to %s", TagMessageFile)
 
-	// 5. Open editor for message
-	if err := a.openEditor(workDir); err != nil {
+	// 5. Open editor for review (skipped when there is no terminal)
+	versionPath := filepath.Join(workDir, TagVersionFile)
+	messagePath := filepath.Join(workDir, TagMessageFile)
+	if err := openInEditor("", versionPath, messagePath); err != nil {
 		log.Warnf("Could not open editor: %v", err)
 		log.Infof("📝 Please edit %s and %s manually", TagVersionFile, TagMessageFile)
 	}
@@ -196,37 +198,6 @@ func (a *TagPrepareAction) getCommitSummary(tag string) string {
 		}
 	}
 	return sb.String()
-}
-
-// openEditor opens the tag message file in editor
-func (a *TagPrepareAction) openEditor(workDir string) error {
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		editor = os.Getenv("VISUAL")
-	}
-	if editor == "" {
-		for _, e := range []string{"vim", "nano", "vi", "code", "notepad"} {
-			if _, err := exec.LookPath(e); err == nil {
-				editor = e
-				break
-			}
-		}
-	}
-
-	if editor == "" {
-		return fmt.Errorf("no editor found")
-	}
-
-	// Open both files if editor supports it
-	versionPath := filepath.Join(workDir, TagVersionFile)
-	messagePath := filepath.Join(workDir, TagMessageFile)
-
-	cmd := exec.Command(editor, versionPath, messagePath)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	return cmd.Run()
 }
 
 // SavePreparedTagVersion saves the target version to a file
