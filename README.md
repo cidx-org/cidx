@@ -168,9 +168,13 @@ command = "scan ."
 phase = "security"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
+timeout = "45m"               # optional, default 30m
+pull_policy = "always"        # optional: always, if-not-present, never
 ```
 
 `workdir` and `volumes` are required for the tool to see your project: without them the container starts in `/` with nothing mounted.
+
+Unknown keys are ignored with a warning on stderr — check it if a setting seems to have no effect.
 
 ### Container options
 

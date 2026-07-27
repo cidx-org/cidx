@@ -3,7 +3,10 @@ package presets
 import (
 	_ "embed"
 	"fmt"
+	"log"
 	"os"
+	"sort"
+	"strings"
 
 	"path/filepath"
 
@@ -35,6 +38,8 @@ type PresetTOML struct {
 	RequireCI     bool                  `toml:"require_ci"`
 	LocalBehavior string                `toml:"local_behavior"`
 	Privileged    bool                  `toml:"privileged"`
+	PullPolicy    string                `toml:"pull_policy"`
+	Timeout       string                `toml:"timeout"`
 }
 
 // OptionTOML represents an option in TOML format
@@ -124,9 +129,17 @@ func loadPresetsFromFile(path string) (map[string]Preset, error) {
 // parsePresetsData parses raw TOML data into Presets map
 func parsePresetsData(data []byte, source string) (map[string]Preset, error) {
 	var presetsFile PresetsFile
-	if err := toml.Unmarshal(data, &presetsFile); err != nil {
+	md, err := toml.Decode(string(data), &presetsFile)
+	if err != nil {
 		return nil, fmt.Errorf("failed to parse presets (%s): %w", source, err)
 	}
+
+	// A key that PresetTOML does not know about is dropped by the decoder
+	// without a word — that is how pull_policy and timeout went missing (#203),
+	// and it is how any typo ("comand", "workdirr") goes missing today. Warn
+	// instead of failing: loadPresets discards errors from user/project preset
+	// files, so an error here would itself be swallowed silently.
+	warnUndecodedKeys(md.Undecoded(), source)
 
 	registry := make(map[string]Preset)
 	for name, tomlPreset := range presetsFile.Presets {
@@ -146,6 +159,8 @@ func parsePresetsData(data []byte, source string) (map[string]Preset, error) {
 			RequireCI:     tomlPreset.RequireCI,
 			LocalBehavior: tomlPreset.LocalBehavior,
 			Privileged:    tomlPreset.Privileged,
+			PullPolicy:    tomlPreset.PullPolicy,
+			Timeout:       tomlPreset.Timeout,
 		}
 
 		// Convert options
@@ -164,6 +179,21 @@ func parsePresetsData(data []byte, source string) (map[string]Preset, error) {
 	}
 
 	return registry, nil
+}
+
+// warnUndecodedKeys reports TOML keys that no field of PresetTOML claims, so a
+// misspelled or unsupported key surfaces instead of vanishing. Keys are sorted
+// for a stable message.
+func warnUndecodedKeys(keys []toml.Key, source string) {
+	if len(keys) == 0 {
+		return
+	}
+	names := make([]string, 0, len(keys))
+	for _, k := range keys {
+		names = append(names, k.String())
+	}
+	sort.Strings(names)
+	log.Printf("warning: ignoring unknown preset key(s) in %s: %s", source, strings.Join(names, ", "))
 }
 
 // mergePresets merges override presets into registry
