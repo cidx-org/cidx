@@ -187,9 +187,9 @@ func (a *ReleasePrepareAction) Execute(ctx context.Context) error {
 	log.Info("")
 	log.Info("📌 Next steps:")
 	log.Infof("   1. Review and edit %s and %s", notesFile, ReleaseVersionFile)
-	log.Info("   2. Run: cidx action release commit")
-	log.Info("   3. Run: cidx action release preview")
-	log.Info("   4. Run: cidx action release create")
+	log.Info("   2. Run: cidx release commit")
+	log.Info("   3. Run: cidx release preview")
+	log.Info("   4. Run: cidx release create")
 
 	return nil
 }

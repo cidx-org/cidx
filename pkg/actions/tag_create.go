@@ -45,7 +45,7 @@ func (a *TagCreateAction) Execute(ctx context.Context) error {
 
 	// 2. Get prepared version or fail
 	if !HasPreparedTagVersion(workDir) {
-		return fmt.Errorf("no prepared version found\n   Run 'cidx action tag prepare' first")
+		return fmt.Errorf("no prepared version found\n   Run 'cidx release tag prepare' first")
 	}
 
 	version, err := LoadPreparedTagVersion(workDir)
@@ -58,7 +58,7 @@ func (a *TagCreateAction) Execute(ctx context.Context) error {
 
 	// 3. Check if tag already exists
 	if a.tagExists(tagName) {
-		return fmt.Errorf("tag %s already exists\n   Delete it first: cidx action tag delete %s", tagName, tagName)
+		return fmt.Errorf("tag %s already exists\n   Delete it first: cidx release tag delete %s", tagName, tagName)
 	}
 
 	// 4. Get message if annotated
@@ -105,7 +105,7 @@ func (a *TagCreateAction) Execute(ctx context.Context) error {
 		log.Info("")
 		log.Info("📌 Next steps:")
 		log.Info("   The tag push should trigger your release workflow.")
-		log.Info("   Run 'cidx action release create' if you want to manually trigger it.")
+		log.Info("   Run 'cidx release create' if you want to manually trigger it.")
 	}
 
 	return nil

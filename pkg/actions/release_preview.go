@@ -54,7 +54,7 @@ func (a *ReleasePreviewAction) Execute(ctx context.Context) error {
 		log.Infof("✓ Release notes prepared (%s)", GetReleaseNotesFile(preparedVersion))
 	} else {
 		log.Warn("⚠️  No release notes prepared")
-		log.Info("   Run: cidx action release prepare")
+		log.Info("   Run: cidx release prepare")
 	}
 
 	// 2. Show the current version, reconciled from the latest tag
@@ -168,7 +168,7 @@ func (a *ReleasePreviewAction) Execute(ctx context.Context) error {
 		log.Info("✅ Ready for release!")
 		log.Info("")
 		log.Info("📌 To create the release, run:")
-		log.Info("   cidx action release create")
+		log.Info("   cidx release create")
 	} else {
 		log.Info("")
 		log.Info("📌 Fix the warnings above before releasing")

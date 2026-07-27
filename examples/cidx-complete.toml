@@ -16,16 +16,16 @@
 # ─────────────────────────────────────────────────────────────────────────────
 #
 # 📝 Daily Development (Pull Requests)
-#   1. Create feature branch & draft PR:  cidx action pr create "feat: title"
+#   1. Create feature branch & draft PR:  cidx pr create "feat: title"
 #   2. Implement feature & commit:        git commit -m "feat: ..." && git push
-#   3. Mark PR ready for review:          cidx action pr ready
-#   4. Merge to main:                     cidx action pr merge
+#   3. Mark PR ready for review:          cidx pr ready
+#   4. Merge to main:                     cidx pr merge
 #   ➡️  Result: Code merged to main, NO TAG created
 #
 # 🚀 Release Workflow (Manual, Grouped PRs)
 #   After 3-5 PRs merged to main, create a release:
 #
-#   cidx action release create
+#   cidx release create
 #
 #   ➡️  Result:
 #      - Analyzes commits since last tag
@@ -58,10 +58,10 @@
 #
 # Configure how releases are created and validated.
 # This section controls the behavior of release commands:
-#   - cidx action release prepare
-#   - cidx action release preview
-#   - cidx action release commit
-#   - cidx action release create
+#   - cidx release prepare
+#   - cidx release preview
+#   - cidx release commit
+#   - cidx release create
 #
 # WORKFLOW PATTERNS:
 # ──────────────────────────────────────────────────────────────────────────────
@@ -124,11 +124,11 @@ auto_cleanup = true
 #
 # Configure how git tags are created and managed.
 # This section controls the behavior of tag commands:
-#   - cidx action tag prepare   (prepare version and message for review)
-#   - cidx action tag preview   (preview what will happen)
-#   - cidx action tag create    (create and optionally push tag)
-#   - cidx action tag delete    (delete tags locally and/or remotely)
-#   - cidx action tag list      (list tags with filtering)
+#   - cidx release tag prepare   (prepare version and message for review)
+#   - cidx release tag preview   (preview what will happen)
+#   - cidx release tag create    (create and optionally push tag)
+#   - cidx release tag delete    (delete tags locally and/or remotely)
+#   - cidx release tag list      (list tags with filtering)
 #
 # TAG vs RELEASE:
 # ──────────────────────────────────────────────────────────────────────────────
@@ -136,13 +136,13 @@ auto_cleanup = true
 #
 # 1. COMBINED (default)
 #    - Tags trigger release workflows automatically
-#    - Use 'cidx action release create' which handles both
+#    - Use 'cidx release create' which handles both
 #    - Set: linked_to_release = true
 #
 # 2. INDEPENDENT
 #    - Tags are just git markers, releases are separate
-#    - Use 'cidx action tag create' for tags only
-#    - Use 'cidx action release create' for releases only
+#    - Use 'cidx release tag create' for tags only
+#    - Use 'cidx release create' for releases only
 #    - Set: linked_to_release = false
 #
 # VERSION DETERMINATION:
@@ -454,10 +454,9 @@ description = "Local validation before pushing"
 #   - GitHub API (create PRs, releases)
 #   - Workflow orchestration (trigger CI/CD pipelines)
 #
-# Usage:
-#   cidx action <action-name>         # Execute an action
-#   cidx action pr create "feat: ..."  # Create PR with draft
-#   cidx action release create        # Bump version and create release
+# Usage (actions live under the 'repo' and 'release' namespaces):
+#   cidx pr create "feat: ..."  # Create PR with draft
+#   cidx release create         # Bump version and create release
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Release Create Action: Automated semantic versioning and release
@@ -472,7 +471,7 @@ description = "Local validation before pushing"
 #   6. Tag the merged commit (e.g., v1.2.3) and push the tag
 #   7. Watch the release workflow triggered by the tag
 #
-# Usage: cidx action release create
+# Usage: cidx release create
 [actions.release-create]
 description = "Create new release with version bump"  # Action description
 

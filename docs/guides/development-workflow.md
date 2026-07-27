@@ -34,7 +34,7 @@ git checkout main
 git pull
 
 # Create PR with CIDX (creates branch + draft PR automatically)
-cidx action pr create "feat: add new security scanner preset"
+cidx pr create "feat: add new security scanner preset"
 
 # OR manually create feature branch
 git checkout -b feat/new-scanner
@@ -85,7 +85,7 @@ CIDX provides automated PR commands following a GitLab-style workflow:
 ### 1. Create Draft PR
 
 ```bash
-cidx action pr create "feat: your feature title"
+cidx pr create "feat: your feature title"
 ```
 
 This command:
@@ -99,8 +99,8 @@ This command:
 **Options**:
 
 ```bash
-cidx action pr create "feat: new feature" --issue 42  # Link to issue #42
-cidx action pr create "fix: bug" --dry-run            # Preview without creating
+cidx pr create "feat: new feature" --issue 42  # Link to issue #42
+cidx pr create "fix: bug" --dry-run            # Preview without creating
 ```
 
 ### 2. Work on Your Feature
@@ -124,7 +124,7 @@ All commits automatically appear in the PR. CI checks run on each push.
 When your work is complete and CI passes:
 
 ```bash
-cidx action pr ready
+cidx pr ready
 ```
 
 This command:
@@ -140,7 +140,7 @@ This command:
 After approval and passing checks:
 
 ```bash
-cidx action pr merge --watch
+cidx pr merge --watch
 ```
 
 This command:
@@ -154,12 +154,12 @@ This command:
 **Options**:
 
 ```bash
-cidx action pr merge --method squash    # Squash merge (default)
-cidx action pr merge --method merge     # Standard merge
-cidx action pr merge --method rebase    # Rebase merge
-cidx action pr merge --watch            # Watch post-merge workflow
-cidx action pr merge --skip-checks      # Bypass checks (not recommended)
-cidx action pr merge --dry-run          # Preview without merging
+cidx pr merge --method squash    # Squash merge (default)
+cidx pr merge --method merge     # Standard merge
+cidx pr merge --method rebase    # Rebase merge
+cidx pr merge --watch            # Watch post-merge workflow
+cidx pr merge --skip-checks      # Bypass checks (not recommended)
+cidx pr merge --dry-run          # Preview without merging
 ```
 
 **Pre-merge validation**:
@@ -195,7 +195,7 @@ Create a release when:
 ### Creating a Release
 
 ```bash
-cidx action release create
+cidx release create
 ```
 
 This command:
@@ -229,12 +229,12 @@ remote), `release create` refuses to start a second one and points at the open P
 **Options**:
 
 ```bash
-cidx action release create --dry-run    # Preview without creating
+cidx release create --dry-run    # Preview without creating
 ```
 
 ### Manual Release (Fallback)
 
-If `cidx action release create` fails (e.g., commitizen container issues):
+If `cidx release create` fails (e.g., commitizen container issues):
 
 ```bash
 # 1. Determine next version (check commits since last tag)
@@ -271,36 +271,36 @@ CIDX provides dedicated commands for managing git tags with human review:
 
 ```bash
 # 1. Prepare tag (determines version, generates message)
-cidx action tag prepare
+cidx release tag prepare
 
 # 2. Edit prepared files (optional)
 # - .cidx/tag-version: Target version number
 # - .cidx/tag-message: Tag annotation message
 
 # 3. Preview what will happen
-cidx action tag preview
+cidx release tag preview
 
 # 4. Create and push the tag
-cidx action tag create
+cidx release tag create
 ```
 
 #### Tag Utilities
 
 ```bash
 # List tags with details
-cidx action tag list --verbose
+cidx release tag list --verbose
 
 # Filter by pattern
-cidx action tag list --pattern "v1.*"
+cidx release tag list --pattern "v1.*"
 
 # Delete a tag (locally)
-cidx action tag delete v1.2.3
+cidx release tag delete v1.2.3
 
 # Delete a tag (local + remote)
-cidx action tag delete v1.2.3 --remote
+cidx release tag delete v1.2.3 --remote
 
 # Delete a protected tag (requires --force)
-cidx action tag delete v1.0.0 --remote --force
+cidx release tag delete v1.0.0 --remote --force
 ```
 
 #### Tag Configuration
@@ -326,7 +326,7 @@ linked_to_release = true        # Tags trigger release workflow
 
 ```bash
 # View all tags (with cidx)
-cidx action tag list
+cidx release tag list
 
 # View all tags (with git)
 git tag
@@ -380,7 +380,7 @@ GitHub Release (v1.2.0)
 
 Decision: "Let's release these features"
 
-cidx action release create
+cidx release create
     ↓
 Git tag v1.2.0 created on commit ghi789
     ↓
@@ -545,15 +545,15 @@ git commit -m "fix: patch critical security vulnerability"
 
 # 3. Push and create PR
 git push -u origin fix/critical-security-issue
-cidx action pr create "fix: critical security patch" --dry-run=false
+cidx pr create "fix: critical security patch" --dry-run=false
 
 # 4. Fast-track review and merge
-cidx action pr ready
+cidx pr ready
 # Get approval
-cidx action pr merge --watch
+cidx pr merge --watch
 
 # 5. Immediate release
-cidx action release create
+cidx release create
 # This creates a PATCH version (e.g., 1.2.3 → 1.2.4)
 ```
 
@@ -566,7 +566,7 @@ cidx action release create
 ```
 ┌─────────────────────────────────────────────────────┐
 │ 1. Start Work                                       │
-│    cidx action pr create "feat: new feature"        │
+│    cidx pr create "feat: new feature"               │
 └──────────────────┬──────────────────────────────────┘
                    ↓
 ┌─────────────────────────────────────────────────────┐
@@ -577,22 +577,22 @@ cidx action release create
                    ↓
 ┌─────────────────────────────────────────────────────┐
 │ 3. Mark Ready                                       │
-│    cidx action pr ready                             │
+│    cidx pr ready                                    │
 └──────────────────┬──────────────────────────────────┘
                    ↓
 ┌─────────────────────────────────────────────────────┐
 │ 4. Review & Merge                                   │
-│    cidx action pr merge --watch                     │
+│    cidx pr merge --watch                            │
 └──────────────────┬──────────────────────────────────┘
                    ↓
 ┌─────────────────────────────────────────────────────┐
-│ 5. Main Branch (no tag, no release yet)            │
+│ 5. Main Branch (no tag, no release yet)             │
 │    Accumulate multiple PRs                          │
 └──────────────────┬──────────────────────────────────┘
                    ↓
 ┌─────────────────────────────────────────────────────┐
 │ 6. Create Release (when ready)                      │
-│    cidx action release create                       │
+│    cidx release create                              │
 │    → Git tag created                                │
 │    → GitHub Release workflow triggered              │
 │    → Release published automatically                │
@@ -634,7 +634,7 @@ cidx action release create
 
 ```bash
 # Using cidx (recommended)
-cidx action tag delete v1.2.0 --remote
+cidx release tag delete v1.2.0 --remote
 
 # Using git directly
 git tag -d v1.2.0
@@ -647,7 +647,7 @@ git push origin :refs/tags/v1.2.0
 **Solution**: Use `--force` flag to override protection:
 
 ```bash
-cidx action tag delete v1.0.0 --remote --force
+cidx release tag delete v1.0.0 --remote --force
 ```
 
 ### No Prepared Version Found
@@ -656,9 +656,9 @@ cidx action tag delete v1.0.0 --remote --force
 **Solution**: Run `tag prepare` before `tag create`:
 
 ```bash
-cidx action tag prepare
+cidx release tag prepare
 # Review/edit .cidx/tag-version and .cidx/tag-message
-cidx action tag create
+cidx release tag create
 ```
 
 ---
@@ -693,13 +693,13 @@ docker run ghcr.io/cidx-org/cidx:nightly cidx validate
 
 ### Nightly vs Release
 
-| Aspect         | Nightly                  | Release                             |
-| -------------- | ------------------------ | ----------------------------------- |
-| Trigger        | Every push to main       | Manual `cidx action release create` |
-| Docker tag     | `:nightly`               | `:vX.Y.Z` and `:latest`             |
-| Stability      | Development              | Production-ready                    |
-| GitHub Release | No                       | Yes                                 |
-| Version        | `X.Y.Z-nightly.DATE.SHA` | `X.Y.Z`                             |
+| Aspect         | Nightly                  | Release                      |
+| -------------- | ------------------------ | ---------------------------- |
+| Trigger        | Every push to main       | Manual `cidx release create` |
+| Docker tag     | `:nightly`               | `:vX.Y.Z` and `:latest`      |
+| Stability      | Development              | Production-ready             |
+| GitHub Release | No                       | Yes                          |
+| Version        | `X.Y.Z-nightly.DATE.SHA` | `X.Y.Z`                      |
 
 **Important**: Nightly builds are **not** production-ready. Use tagged releases for production.
 
