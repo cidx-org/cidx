@@ -84,9 +84,12 @@ func (a *ReleasePrepareAction) Execute(ctx context.Context) error {
 		log.Infof("   Found %d merged PRs", len(prs))
 	}
 
-	// 4. Determine next version
-	currentVersion, _ := a.readVersionFile()
-	nextVersion := a.suggestNextVersion(currentVersion, commits)
+	// 4. Determine next version from the latest tag, not the version files
+	workDir, _ := a.repo.GetWorkDir()
+	state := ResolveVersion(workDir)
+	logDivergence(state.DivergenceError())
+	currentVersion := state.Current()
+	nextVersion := NextVersion(currentVersion, CountCommitInfos(commits))
 	log.Infof("   Suggested version: %s → %s", currentVersion, nextVersion)
 
 	// 5. Generate release notes
@@ -99,7 +102,6 @@ func (a *ReleasePrepareAction) Execute(ctx context.Context) error {
 	}
 
 	// 6. Save to files
-	workDir, _ := a.repo.GetWorkDir()
 	notesFile := GetReleaseNotesFile(nextVersion)
 	if err := a.saveReleaseNotes(notes, nextVersion); err != nil {
 		return fmt.Errorf("failed to save release notes: %w", err)
@@ -297,39 +299,6 @@ func (a *ReleasePrepareAction) parsePRList(output string, since time.Time) ([]PR
 	return prs, nil
 }
 
-// suggestNextVersion analyzes commits to suggest version bump
-func (a *ReleasePrepareAction) suggestNextVersion(current string, commits []CommitInfo) string {
-	// Parse current version
-	var major, minor, patch int
-	_, _ = fmt.Sscanf(current, "%d.%d.%d", &major, &minor, &patch)
-
-	// Determine bump type
-	hasBreaking := false
-	hasFeature := false
-
-	for _, c := range commits {
-		if strings.Contains(c.Body, "BREAKING CHANGE") || strings.HasSuffix(c.Type, "!") {
-			hasBreaking = true
-		}
-		if c.Type == "feat" {
-			hasFeature = true
-		}
-	}
-
-	if hasBreaking {
-		major++
-		minor = 0
-		patch = 0
-	} else if hasFeature {
-		minor++
-		patch = 0
-	} else {
-		patch++
-	}
-
-	return fmt.Sprintf("%d.%d.%d", major, minor, patch)
-}
-
 // generateReleaseNotes creates markdown release notes
 func (a *ReleasePrepareAction) generateReleaseNotes(version string, commits []CommitInfo, prs []PRInfo) string {
 	var sb strings.Builder
@@ -421,16 +390,6 @@ func (a *ReleasePrepareAction) generateReleaseNotes(version string, commits []Co
 	}
 
 	return sb.String()
-}
-
-// readVersionFile reads current version from VERSION file
-func (a *ReleasePrepareAction) readVersionFile() (string, error) {
-	workDir, _ := a.repo.GetWorkDir()
-	content, err := os.ReadFile(filepath.Join(workDir, "VERSION"))
-	if err != nil {
-		return "0.0.0", err
-	}
-	return strings.TrimSpace(string(content)), nil
 }
 
 // saveReleaseNotes saves notes to the release notes file with version in filename

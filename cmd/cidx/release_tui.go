@@ -3,9 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textarea"
@@ -142,7 +140,7 @@ func (m releaseModel) loadData() tea.Cmd {
 		var commits []actions.CommitInfo
 
 		if m.mode == modeTag {
-			suggestedVer = m.suggestNextVersion(lastTag)
+			suggestedVer = actions.SuggestTagVersion(m.workDir)
 			message = m.generateTagMessage(suggestedVer, lastTag)
 		} else {
 			// For release, try to get commits and generate notes
@@ -171,54 +169,11 @@ func (m releaseModel) getLastTag() string {
 	return strings.TrimSpace(string(output))
 }
 
-func (m releaseModel) suggestNextVersion(lastTag string) string {
-	version := strings.TrimPrefix(lastTag, m.tagConfig.Prefix)
-	if version == "" || version == "(none)" {
-		return "0.1.0"
-	}
-
-	var major, minor, patch int
-	_, _ = fmt.Sscanf(version, "%d.%d.%d", &major, &minor, &patch)
-	patch++
-	return fmt.Sprintf("%d.%d.%d", major, minor, patch)
-}
-
+// suggestVersionFromCommits bumps the latest tag -- not the VERSION file --
+// according to the commits in range (issue #185).
 func (m releaseModel) suggestVersionFromCommits(commits []actions.CommitInfo) string {
-	// Read current VERSION file
-	content, err := os.ReadFile(filepath.Join(m.workDir, "VERSION"))
-	current := "0.0.0"
-	if err == nil {
-		current = strings.TrimSpace(string(content))
-	}
-
-	var major, minor, patch int
-	_, _ = fmt.Sscanf(current, "%d.%d.%d", &major, &minor, &patch)
-
-	// Analyze commits for version bump
-	hasBreaking := false
-	hasFeature := false
-
-	for _, c := range commits {
-		if strings.Contains(c.Body, "BREAKING CHANGE") || strings.HasSuffix(c.Type, "!") {
-			hasBreaking = true
-		}
-		if c.Type == "feat" {
-			hasFeature = true
-		}
-	}
-
-	if hasBreaking {
-		major++
-		minor = 0
-		patch = 0
-	} else if hasFeature {
-		minor++
-		patch = 0
-	} else {
-		patch++
-	}
-
-	return fmt.Sprintf("%d.%d.%d", major, minor, patch)
+	current := actions.ResolveVersion(m.workDir).Current()
+	return actions.NextVersion(current, actions.CountCommitInfos(commits))
 }
 
 func (m releaseModel) generateTagMessage(version, lastTag string) string {

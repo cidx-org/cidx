@@ -3,7 +3,6 @@ package actions
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"strings"
 
 	"github.com/cidx-org/cidx/v2/pkg/config"
@@ -58,41 +57,39 @@ func (a *ReleasePreviewAction) Execute(ctx context.Context) error {
 		log.Info("   Run: cidx action release prepare")
 	}
 
-	// 2. Show current version
-	currentVersion, _ := readVersionFile(workDir)
-	log.Infof("📦 Current version: v%s", currentVersion)
+	// 2. Show the current version, reconciled from the latest tag
+	state := ResolveVersion(workDir)
+	log.Infof("📦 Current version: v%s (latest tag)", state.Current())
+	log.Infof("🏷️  Last tag: %s", state.LastTagDisplay())
+	logDivergence(state.DivergenceError())
 
-	// 3. Get last tag and commits
-	lastTag := a.getLastTag()
-	commits := a.getCommitCount(lastTag)
-	log.Infof("🏷️  Last tag: %s", lastTag)
-	log.Infof("📝 Commits since tag: %d", commits)
+	// 3. Analyze the commits in the range
+	counts := countCommits(workDir, state.LastTag)
+	log.Infof("📝 Commits since tag: %d", counts.Total())
 
-	// 4. Analyze commits for version suggestion
-	commitTypes := a.analyzeCommits(lastTag)
 	log.Info("")
 	log.Info("📊 Commit analysis:")
-	if commitTypes["breaking"] > 0 {
-		log.Infof("   🚨 Breaking changes: %d → MAJOR bump", commitTypes["breaking"])
+	if counts.Breaking > 0 {
+		log.Infof("   🚨 Breaking changes: %d → MAJOR bump", counts.Breaking)
 	}
-	if commitTypes["feat"] > 0 {
-		log.Infof("   ✨ Features: %d → MINOR bump", commitTypes["feat"])
+	if counts.Feat > 0 {
+		log.Infof("   ✨ Features: %d → MINOR bump", counts.Feat)
 	}
-	if commitTypes["fix"] > 0 {
-		log.Infof("   🐛 Fixes: %d → PATCH bump", commitTypes["fix"])
+	if counts.Fix > 0 {
+		log.Infof("   🐛 Fixes: %d → PATCH bump", counts.Fix)
 	}
-	if commitTypes["other"] > 0 {
-		log.Infof("   📦 Other: %d", commitTypes["other"])
+	if counts.Other > 0 {
+		log.Infof("   📦 Other: %d", counts.Other)
 	}
 
-	// 5. Check for prepared version or suggest one
+	// 4. Check for prepared version or suggest one
 	var nextVersion string
 	if hasPreparedVer {
 		nextVersion = preparedVersion
 		log.Info("")
 		log.Infof("🚀 Prepared version: v%s (editable in %s)", nextVersion, ReleaseVersionFile)
 	} else {
-		nextVersion = a.suggestVersion(currentVersion, commitTypes)
+		nextVersion = NextVersion(state.Current(), counts)
 		log.Info("")
 		log.Infof("🚀 Suggested next version: v%s", nextVersion)
 	}
@@ -139,6 +136,17 @@ func (a *ReleasePreviewAction) Execute(ctx context.Context) error {
 	log.Info("")
 	hasBlockers := false
 
+	// A version computed from the wrong source produces a broken tag sequence:
+	// stop before that, not after (issue #185).
+	if state.Diverged() {
+		hasBlockers = true
+	}
+
+	// cz bump hard-fails when the changelog and the tags disagree.
+	if warnChangelogTagGap(workDir) {
+		hasBlockers = true
+	}
+
 	// Check uncommitted changes
 	hasChanges, _ := a.repo.HasChanges()
 	if hasChanges {
@@ -172,116 +180,4 @@ func (a *ReleasePreviewAction) Execute(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-// getLastTag returns the most recent tag
-func (a *ReleasePreviewAction) getLastTag() string {
-	cmd := exec.Command("git", "describe", "--tags", "--abbrev=0")
-	workDir, _ := a.repo.GetWorkDir()
-	cmd.Dir = workDir
-
-	output, err := cmd.Output()
-	if err != nil {
-		return "(none)"
-	}
-	return strings.TrimSpace(string(output))
-}
-
-// getCommitCount returns number of commits since tag
-func (a *ReleasePreviewAction) getCommitCount(tag string) int {
-	var args []string
-	if tag != "(none)" && tag != "" {
-		args = []string{"rev-list", "--count", tag + "..HEAD"}
-	} else {
-		args = []string{"rev-list", "--count", "HEAD"}
-	}
-
-	cmd := exec.Command("git", args...)
-	workDir, _ := a.repo.GetWorkDir()
-	cmd.Dir = workDir
-
-	output, err := cmd.Output()
-	if err != nil {
-		return 0
-	}
-
-	var count int
-	_, _ = fmt.Sscanf(strings.TrimSpace(string(output)), "%d", &count)
-	return count
-}
-
-// analyzeCommits categorizes commits by type
-func (a *ReleasePreviewAction) analyzeCommits(tag string) map[string]int {
-	counts := map[string]int{
-		"breaking": 0,
-		"feat":     0,
-		"fix":      0,
-		"other":    0,
-	}
-
-	var args []string
-	if tag != "(none)" && tag != "" {
-		args = []string{"log", tag + "..HEAD", "--pretty=format:%s|%b"}
-	} else {
-		args = []string{"log", "--pretty=format:%s|%b"}
-	}
-
-	cmd := exec.Command("git", args...)
-	workDir, _ := a.repo.GetWorkDir()
-	cmd.Dir = workDir
-
-	output, err := cmd.Output()
-	if err != nil {
-		return counts
-	}
-
-	lines := strings.Split(string(output), "\n")
-	for _, line := range lines {
-		if line == "" {
-			continue
-		}
-
-		if strings.Contains(line, "BREAKING CHANGE") || strings.Contains(line, "!:") {
-			counts["breaking"]++
-		} else if strings.HasPrefix(line, "feat") {
-			counts["feat"]++
-		} else if strings.HasPrefix(line, "fix") {
-			counts["fix"]++
-		} else {
-			counts["other"]++
-		}
-	}
-
-	return counts
-}
-
-// suggestVersion suggests next version based on commit types
-func (a *ReleasePreviewAction) suggestVersion(current string, types map[string]int) string {
-	var major, minor, patch int
-	_, _ = fmt.Sscanf(current, "%d.%d.%d", &major, &minor, &patch)
-
-	if types["breaking"] > 0 {
-		major++
-		minor = 0
-		patch = 0
-	} else if types["feat"] > 0 {
-		minor++
-		patch = 0
-	} else {
-		patch++
-	}
-
-	return fmt.Sprintf("%d.%d.%d", major, minor, patch)
-}
-
-// readVersionFile reads VERSION file
-func readVersionFile(workDir string) (string, error) {
-	cmd := exec.Command("cat", "VERSION")
-	cmd.Dir = workDir
-
-	output, err := cmd.Output()
-	if err != nil {
-		return "0.0.0", err
-	}
-	return strings.TrimSpace(string(output)), nil
 }

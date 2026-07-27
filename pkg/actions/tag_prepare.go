@@ -44,24 +44,24 @@ func (a *TagPrepareAction) Execute(ctx context.Context) error {
 		return fmt.Errorf("failed to get work directory: %w", err)
 	}
 
-	// 1. Get current version and last tag
-	currentVersion, _ := readVersionFile(workDir)
-	lastTag := a.getLastTag()
-	log.Infof("   Current VERSION: %s", currentVersion)
-	log.Infof("   Last tag: %s", lastTag)
+	// 1. Reconcile the current version against the latest tag
+	state := ResolveVersion(workDir)
+	log.Infof("   Current VERSION: %s", state.FileVersion)
+	log.Infof("   Last tag: %s", state.LastTagDisplay())
+	logDivergence(state.DivergenceError())
 
 	// 2. Determine next version
 	var nextVersion string
 	if a.tagConfig.UseCommitizen {
 		nextVersion, err = a.getCommitizenVersion()
 		if err != nil {
-			log.Warnf("   Commitizen failed, using VERSION file: %v", err)
-			nextVersion = currentVersion
+			log.Warnf("   Commitizen failed, computing from the latest tag: %v", err)
+			nextVersion = SuggestTagVersion(workDir)
 		} else {
 			log.Infof("   Commitizen suggests: %s", nextVersion)
 		}
 	} else {
-		nextVersion = a.suggestNextVersion(lastTag)
+		nextVersion = SuggestTagVersion(workDir)
 		log.Infof("   Auto-increment suggests: %s", nextVersion)
 	}
 
@@ -150,22 +150,6 @@ func (a *TagPrepareAction) getCommitizenVersion() (string, error) {
 	}
 
 	return "", fmt.Errorf("could not parse cz output: %s", output)
-}
-
-// suggestNextVersion increments patch version from last tag
-func (a *TagPrepareAction) suggestNextVersion(lastTag string) string {
-	// Strip prefix
-	version := strings.TrimPrefix(lastTag, a.tagConfig.Prefix)
-	if version == "" || version == "(none)" {
-		return "0.1.0"
-	}
-
-	var major, minor, patch int
-	_, _ = fmt.Sscanf(version, "%d.%d.%d", &major, &minor, &patch)
-
-	// Default to patch bump
-	patch++
-	return fmt.Sprintf("%d.%d.%d", major, minor, patch)
 }
 
 // generateTagMessage creates a default tag message
