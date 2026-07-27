@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -261,5 +262,132 @@ func TestHasChanges_WithModifiedFile(t *testing.T) {
 
 	if !hasChanges {
 		t.Error("expected changes after modifying a tracked file")
+	}
+}
+
+// writeUntracked drops a brand-new file (git status "??") into dir.
+func writeUntracked(t *testing.T, dir string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, "brand_new.go"), []byte("package main\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestHasChanges_IgnoresUntracked pins the narrow contract the release, tag and
+// pr guards rely on: a stray scratch file is not a reason to refuse a tag.
+func TestHasChanges_IgnoresUntracked(t *testing.T) {
+	dir := initTestRepo(t, "https://github.com/owner/repo.git")
+	writeUntracked(t, dir)
+
+	repo, err := OpenRepository(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	hasChanges, err := repo.HasChanges()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if hasChanges {
+		t.Error("HasChanges must stay tracked-only: an untracked file is not a dirty tree for release/tag/pr")
+	}
+}
+
+// TestHasChangesIncludingUntracked_SeesNewFile is issue #180: cpw asked the
+// tracked-only question, so a brand-new file produced "No changes to commit"
+// and was silently left behind — even though Commit() runs `git add .` and
+// would have committed it.
+func TestHasChangesIncludingUntracked_SeesNewFile(t *testing.T) {
+	dir := initTestRepo(t, "https://github.com/owner/repo.git")
+	writeUntracked(t, dir)
+
+	repo, err := OpenRepository(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	hasChanges, err := repo.HasChangesIncludingUntracked()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !hasChanges {
+		t.Error("expected an untracked file to count as something to commit")
+	}
+}
+
+// TestHasChangesIncludingUntracked_CommitPicksItUp closes the loop: the answer
+// is only useful if Commit() actually captures the file it reported.
+func TestHasChangesIncludingUntracked_CommitPicksItUp(t *testing.T) {
+	dir := initTestRepo(t, "https://github.com/owner/repo.git")
+	writeUntracked(t, dir)
+
+	repo, err := OpenRepository(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repo.Commit("chore: add brand new file"); err != nil {
+		t.Fatalf("Commit() error = %v", err)
+	}
+
+	cmd := exec.Command("git", "show", "--name-only", "--format=", "HEAD")
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git show failed: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "brand_new.go") {
+		t.Errorf("commit does not contain the untracked file, got:\n%s", out)
+	}
+
+	// And the tree is clean afterwards.
+	hasChanges, err := repo.HasChangesIncludingUntracked()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hasChanges {
+		t.Error("expected a clean tree after committing the untracked file")
+	}
+}
+
+// TestHasChangesIncludingUntracked_IgnoresGitignored guards the obvious
+// regression: build output listed in .gitignore must not make cpw commit.
+func TestHasChangesIncludingUntracked_IgnoresGitignored(t *testing.T) {
+	dir := initTestRepo(t, "https://github.com/owner/repo.git")
+
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("bin/\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("git", "add", ".gitignore")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git add failed: %v\n%s", err, out)
+	}
+	cmd = exec.Command("git", "commit", "-m", "ignore bin", "--no-gpg-sign")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git commit failed: %v\n%s", err, out)
+	}
+
+	if err := os.Mkdir(filepath.Join(dir, "bin"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "bin", "cidx"), []byte("binary"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	repo, err := OpenRepository(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	hasChanges, err := repo.HasChangesIncludingUntracked()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hasChanges {
+		t.Error("gitignored files must not count as changes to commit")
 	}
 }

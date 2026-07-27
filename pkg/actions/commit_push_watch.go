@@ -42,8 +42,10 @@ func (a *CommitPushWatchAction) Execute(ctx context.Context) error {
 		return fmt.Errorf("refusing to push directly to %s -- create a feature branch first: cidx pr create \"your title\"", branch)
 	}
 
-	// 1. Check for changes
-	hasChanges, err := a.repo.HasChanges()
+	// 1. Check for changes. Untracked files count: Commit() runs `git add .`,
+	// so a brand-new file is committable — reporting "No changes to commit"
+	// left the user believing work was pushed when it was not (issue #180).
+	hasChanges, err := a.repo.HasChangesIncludingUntracked()
 	if err != nil {
 		return fmt.Errorf("failed to check for changes: %w", err)
 	}
