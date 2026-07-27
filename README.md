@@ -185,10 +185,10 @@ timeout = "10m"               # Per-container timeout
 pull_policy = "always"        # always, if-not-present, never
 ```
 
-### Version pinning
+### Minimum version
 
 ```toml
-required_version = "1.3.1"
+required_version = "1.3.1"   # floor, not a pin — "v1.3.1" works too
 ```
 
 ## Built-in images

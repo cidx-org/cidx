@@ -10,16 +10,16 @@ To create a default configuration:
 cidx init
 ```
 
-### 5. Version Pinning (Security)
+### 5. Minimum Version
 
-To ensure consistency between local development and CI, you can enforce a specific version of CIDX. This guarantees that everyone uses the exact same binary and embedded presets.
+To keep local development and CI on a cidx that knows the presets your config relies on, you can declare the oldest version that supports it.
 
 ```toml
 # cidx.toml
-required_version = "1.2.3"
+required_version = "1.2.3"   # "v1.2.3" works too
 ```
 
-If a user tries to run the pipeline with a different version (e.g., `1.2.4`), CIDX will refuse to start.
+This is a floor, not a pin: `1.2.3` and anything newer runs, an older cidx refuses to start with an upgrade hint. Dev builds (`go run ./cmd/cidx`) always bypass the check.
 
 ## Configuration Structure
 

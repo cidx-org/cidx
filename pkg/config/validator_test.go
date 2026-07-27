@@ -92,3 +92,45 @@ func TestValidate_OverrideOnlySectionWithoutImageRejected(t *testing.T) {
 		t.Fatal("Validate() accepted override-only section with no image and no matching preset, want rejection")
 	}
 }
+
+// TestCheckVersion covers #212: required_version is a floor, and the "v2.1.4"
+// spelling of every tag and doc example must match the "2.1.4" a release binary
+// reports.
+func TestCheckVersion(t *testing.T) {
+	tests := []struct {
+		name     string
+		required string
+		current  string
+		wantErr  string // substring, empty means the run must be allowed
+	}{
+		{name: "no requirement", required: "", current: "2.1.4"},
+		{name: "dev build bypasses", required: "9.9.9", current: "dev"},
+		{name: "same version", required: "2.1.4", current: "2.1.4"},
+		{name: "required carries the v prefix", required: "v2.1.4", current: "2.1.4"},
+		{name: "current carries the v prefix", required: "2.1.4", current: "v2.1.4"},
+		{name: "both carry the v prefix", required: "v2.1.4", current: "v2.1.4"},
+		{name: "newer patch satisfies the floor", required: "v2.1.4", current: "2.1.9"},
+		{name: "newer minor satisfies the floor", required: "2.1.4", current: "2.2.0"},
+		{name: "newer major satisfies the floor", required: "2.1.4", current: "3.0.0"},
+		{name: "older patch is refused", required: "2.1.4", current: "2.1.3", wantErr: "requires 2.1.4 or newer"},
+		{name: "older minor is refused", required: "v2.2.0", current: "2.1.9", wantErr: "cidx 2.1.9 is too old"},
+		{name: "older major is refused", required: "3.0.0", current: "2.9.9", wantErr: "too old"},
+		{name: "malformed requirement is named", required: "latest", current: "2.1.4", wantErr: `invalid required_version "latest"`},
+		{name: "incomplete requirement is named", required: "v2.1", current: "2.1.4", wantErr: "invalid required_version"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := CheckVersion(&Config{RequiredVersion: tt.required}, tt.current)
+
+			switch {
+			case tt.wantErr == "" && err != nil:
+				t.Fatalf("CheckVersion(%q, %q) = %v, want no error", tt.required, tt.current, err)
+			case tt.wantErr != "" && err == nil:
+				t.Fatalf("CheckVersion(%q, %q) = nil, want error containing %q", tt.required, tt.current, tt.wantErr)
+			case tt.wantErr != "" && !strings.Contains(err.Error(), tt.wantErr):
+				t.Errorf("CheckVersion(%q, %q) = %v, want error containing %q", tt.required, tt.current, err, tt.wantErr)
+			}
+		})
+	}
+}

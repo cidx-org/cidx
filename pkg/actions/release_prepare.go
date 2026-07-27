@@ -38,12 +38,77 @@ func GetReleaseNotesFile(version string) string {
 
 // CommitInfo holds parsed commit information
 type CommitInfo struct {
-	Hash    string
-	Type    string
-	Scope   string
-	Subject string
-	Body    string
-	PR      int
+	Hash     string
+	Type     string
+	Scope    string
+	Subject  string
+	Body     string
+	PR       int
+	Breaking bool
+}
+
+// CommitLogFormat is the git log format ParseCommitLog reads.
+const CommitLogFormat = "--pretty=format:%H|%s|%b<<<END>>>"
+
+// conventionalRe matches a conventional-commit subject "type(scope)!: text".
+// The optional "!" is what issue #175 was about: the regex used to stop at the
+// colon, so "feat!: drop X" matched nothing, was typed "other" and never
+// counted as breaking.
+var conventionalRe = regexp.MustCompile(`^(\w+)(?:\(([^)]+)\))?(!)?:\s*(.+)$`)
+
+// prRe extracts the PR number a squash merge leaves in the subject: "(#123)".
+var prRe = regexp.MustCompile(`\(#(\d+)\)`)
+
+// ParseCommit is the single conventional-commit parser of the release flow:
+// prepare, preview, tag and the TUI all classify commits through it, so they
+// cannot disagree on a version bump. Subjects that are not conventional keep
+// type "other" and their raw text.
+func ParseCommit(subject, body string) CommitInfo {
+	commit := CommitInfo{
+		Type:     "other",
+		Subject:  subject,
+		Body:     body,
+		Breaking: strings.Contains(body, "BREAKING CHANGE"),
+	}
+
+	if m := conventionalRe.FindStringSubmatch(subject); m != nil {
+		commit.Type, commit.Scope, commit.Subject = m[1], m[2], m[4]
+		commit.Breaking = commit.Breaking || m[3] == "!"
+	}
+
+	if m := prRe.FindStringSubmatch(subject); m != nil {
+		_, _ = fmt.Sscanf(m[1], "%d", &commit.PR)
+	}
+
+	return commit
+}
+
+// ParseCommitLog parses `git log CommitLogFormat` output into commits.
+func ParseCommitLog(output string) []CommitInfo {
+	var commits []CommitInfo
+
+	for _, entry := range strings.Split(output, "<<<END>>>") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+
+		parts := strings.SplitN(entry, "|", 3)
+		if len(parts) < 2 {
+			continue
+		}
+
+		body := ""
+		if len(parts) > 2 {
+			body = parts[2]
+		}
+
+		commit := ParseCommit(parts[1], body)
+		commit.Hash = parts[0][:min(8, len(parts[0]))]
+		commits = append(commits, commit)
+	}
+
+	return commits
 }
 
 // NewReleasePrepare creates a new release prepare action
@@ -145,11 +210,9 @@ func (a *ReleasePrepareAction) getLastTag() (string, error) {
 
 // getCommitsSince returns commits since a tag (or all commits if tag is empty)
 func (a *ReleasePrepareAction) getCommitsSince(tag string) ([]CommitInfo, error) {
-	var args []string
+	args := []string{"log", CommitLogFormat}
 	if tag != "" {
-		args = []string{"log", tag + "..HEAD", "--pretty=format:%H|%s|%b<<<END>>>"}
-	} else {
-		args = []string{"log", "--pretty=format:%H|%s|%b<<<END>>>"}
+		args = []string{"log", tag + "..HEAD", CommitLogFormat}
 	}
 
 	cmd := exec.Command("git", args...)
@@ -161,62 +224,7 @@ func (a *ReleasePrepareAction) getCommitsSince(tag string) ([]CommitInfo, error)
 		return nil, err
 	}
 
-	return a.parseCommits(string(output)), nil
-}
-
-// parseCommits parses git log output into CommitInfo structs
-func (a *ReleasePrepareAction) parseCommits(output string) []CommitInfo {
-	var commits []CommitInfo
-
-	// Split by our delimiter
-	entries := strings.Split(output, "<<<END>>>")
-
-	// Regex for conventional commit format: type(scope): subject
-	conventionalRe := regexp.MustCompile(`^(\w+)(?:\(([^)]+)\))?:\s*(.+)$`)
-	// Regex for PR number in commit: (#123)
-	prRe := regexp.MustCompile(`\(#(\d+)\)`)
-
-	for _, entry := range entries {
-		entry = strings.TrimSpace(entry)
-		if entry == "" {
-			continue
-		}
-
-		parts := strings.SplitN(entry, "|", 3)
-		if len(parts) < 2 {
-			continue
-		}
-
-		hash := parts[0]
-		subject := parts[1]
-		body := ""
-		if len(parts) > 2 {
-			body = parts[2]
-		}
-
-		commit := CommitInfo{
-			Hash:    hash[:8], // Short hash
-			Subject: subject,
-			Body:    body,
-			Type:    "other",
-		}
-
-		// Parse conventional commit
-		if matches := conventionalRe.FindStringSubmatch(subject); matches != nil {
-			commit.Type = matches[1]
-			commit.Scope = matches[2]
-			commit.Subject = matches[3]
-		}
-
-		// Extract PR number
-		if matches := prRe.FindStringSubmatch(subject); matches != nil {
-			_, _ = fmt.Sscanf(matches[1], "%d", &commit.PR)
-		}
-
-		commits = append(commits, commit)
-	}
-
-	return commits
+	return ParseCommitLog(string(output)), nil
 }
 
 // getMergedPRsSince returns PRs merged since a tag

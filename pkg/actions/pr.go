@@ -611,7 +611,9 @@ func printPRNextSteps() {
 }
 
 // conventionalTypeRe matches a conventional-commit header "type(scope)!: description"
-// for the types used in this repo.
+// for the types used in this repo. Deliberately not ParseCommit: this one feeds
+// a branch prefix, so it must reject anything outside the known types instead of
+// turning "Draft: rework" into a "draft/" branch.
 var conventionalTypeRe = regexp.MustCompile(`^(feat|fix|chore|docs|refactor|test|ci|perf|build)(\([^)]*\))?!?:\s*(.+)$`)
 
 // titleToBranchName converts a PR title to a branch name, deriving the prefix

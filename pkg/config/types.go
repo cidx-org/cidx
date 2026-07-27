@@ -10,7 +10,7 @@ type ProviderConfig struct {
 
 // Config represents the complete CIDX configuration
 type Config struct {
-	RequiredVersion string                    // Minimum or exact version required
+	RequiredVersion string                    // Minimum cidx version required ("2.1.4" or "v2.1.4")
 	Phases          map[string]Phase          // Phases with containers (e.g., security, code, test)
 	Pipelines       map[string]Pipeline       // Named pipelines (e.g., ci)
 	Actions         map[string]Action         // Named actions (e.g., release-create)

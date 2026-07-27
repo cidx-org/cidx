@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/cidx-org/cidx/v2/pkg/presets"
+	"github.com/cidx-org/cidx/v2/pkg/semver"
 )
 
 // ValidationResult contains validation results
@@ -53,7 +54,13 @@ func Validate(cfg *Config) ValidationResult {
 	return result
 }
 
-// CheckVersion validates if the current version matches the required version in config
+// CheckVersion validates the running cidx against the config's required_version.
+//
+// required_version is a floor, not a pin: any cidx at or above it satisfies the
+// config, so a new cidx release does not break every config that named the
+// previous one. Both sides are compared numerically, which makes the "v2.1.4"
+// spelling used by every tag and doc example equivalent to the "2.1.4" release
+// binaries report (issue #212).
 func CheckVersion(cfg *Config, currentVersion string) error {
 	if cfg.RequiredVersion == "" {
 		return nil
@@ -64,8 +71,12 @@ func CheckVersion(cfg *Config, currentVersion string) error {
 		return nil
 	}
 
-	if cfg.RequiredVersion != currentVersion {
-		return fmt.Errorf("version mismatch: config requires cidx %s, but running %s", cfg.RequiredVersion, currentVersion)
+	if !semver.IsValid(cfg.RequiredVersion) {
+		return fmt.Errorf("invalid required_version %q in config: expected a version like 2.1.4 or v2.1.4", cfg.RequiredVersion)
+	}
+
+	if semver.Compare(currentVersion, cfg.RequiredVersion) < 0 {
+		return fmt.Errorf("cidx %s is too old: this config requires %s or newer\n   Update with: go install github.com/cidx-org/cidx/v2/cmd/cidx@latest", currentVersion, cfg.RequiredVersion)
 	}
 
 	return nil

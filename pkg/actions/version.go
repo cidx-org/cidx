@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"unicode"
 
+	"github.com/cidx-org/cidx/v2/pkg/semver"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -33,7 +33,7 @@ func ResolveVersion(workDir string) VersionState {
 
 	if output, err := runGit(workDir, "describe", "--tags", "--abbrev=0"); err == nil {
 		state.LastTag = strings.TrimSpace(string(output))
-		if version := trimVersionPrefix(state.LastTag); isSemver(version) {
+		if version := semver.Trim(state.LastTag); semver.IsValid(version) {
 			state.TagVersion = version
 		}
 	}
@@ -75,7 +75,7 @@ func (s VersionState) compare() int {
 	if s.TagVersion == "" || s.FileVersion == "" {
 		return 0
 	}
-	return compareSemver(s.FileVersion, s.TagVersion)
+	return semver.Compare(s.FileVersion, s.TagVersion)
 }
 
 // DivergenceError names both values and the way out, or nil when they agree.
@@ -138,26 +138,17 @@ func countCommits(workDir, lastTag string) CommitCounts {
 		return CommitCounts{}
 	}
 
-	var counts CommitCounts
+	var commits []CommitInfo
 	for _, record := range strings.Split(string(output), "\x1e") {
 		record = strings.TrimSpace(record)
 		if record == "" {
 			continue
 		}
 		subject, body, _ := strings.Cut(record, "\x00")
-		switch {
-		case strings.Contains(subject, "!:") || strings.Contains(body, "BREAKING CHANGE"):
-			counts.Breaking++
-		case strings.HasPrefix(subject, "feat"):
-			counts.Feat++
-		case strings.HasPrefix(subject, "fix"):
-			counts.Fix++
-		default:
-			counts.Other++
-		}
+		commits = append(commits, ParseCommit(subject, body))
 	}
 
-	return counts
+	return CountCommitInfos(commits)
 }
 
 // CountCommitInfos is countCommits for callers that already parsed the range.
@@ -165,7 +156,7 @@ func CountCommitInfos(commits []CommitInfo) CommitCounts {
 	var counts CommitCounts
 	for _, c := range commits {
 		switch {
-		case strings.HasSuffix(c.Type, "!") || strings.Contains(c.Body, "BREAKING CHANGE"):
+		case c.Breaking:
 			counts.Breaking++
 		case c.Type == "feat":
 			counts.Feat++
@@ -180,7 +171,7 @@ func CountCommitInfos(commits []CommitInfo) CommitCounts {
 
 // NextVersion applies the semantic bump implied by counts to current.
 func NextVersion(current string, counts CommitCounts) string {
-	major, minor, patch, _ := parseSemver(current)
+	major, minor, patch, _ := semver.Parse(current)
 
 	switch {
 	case counts.Breaking > 0:
@@ -243,8 +234,8 @@ func changelogTagGap(workDir string) string {
 		if len(fields) == 0 {
 			continue
 		}
-		version := trimVersionPrefix(strings.Trim(fields[0], "[]"))
-		if !isSemver(version) {
+		version := semver.Trim(strings.Trim(fields[0], "[]"))
+		if !semver.IsValid(version) {
 			continue
 		}
 
@@ -274,36 +265,4 @@ func readVersionFile(workDir string) (string, error) {
 		return "", fmt.Errorf("failed to read VERSION file: %w", err)
 	}
 	return strings.TrimSpace(string(content)), nil
-}
-
-// trimVersionPrefix drops any tag prefix ("v", "release-") so the numeric part
-// parses whatever prefix the project configured.
-func trimVersionPrefix(tag string) string {
-	return strings.TrimLeftFunc(tag, func(r rune) bool { return !unicode.IsDigit(r) })
-}
-
-func parseSemver(version string) (major, minor, patch int, ok bool) {
-	n, _ := fmt.Sscanf(version, "%d.%d.%d", &major, &minor, &patch)
-	return major, minor, patch, n == 3
-}
-
-func isSemver(version string) bool {
-	_, _, _, ok := parseSemver(version)
-	return ok
-}
-
-// compareSemver returns -1, 0 or 1 depending on how a compares to b.
-func compareSemver(a, b string) int {
-	aMajor, aMinor, aPatch, _ := parseSemver(a)
-	bMajor, bMinor, bPatch, _ := parseSemver(b)
-
-	for _, pair := range [][2]int{{aMajor, bMajor}, {aMinor, bMinor}, {aPatch, bPatch}} {
-		switch {
-		case pair[0] < pair[1]:
-			return -1
-		case pair[0] > pair[1]:
-			return 1
-		}
-	}
-	return 0
 }

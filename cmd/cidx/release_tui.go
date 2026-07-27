@@ -219,11 +219,9 @@ func (m releaseModel) getCommitSummary(tag string) string {
 }
 
 func (m releaseModel) getCommitsSince(tag string) []actions.CommitInfo {
-	var args []string
+	args := []string{"log", actions.CommitLogFormat, "-20"}
 	if tag != "" && tag != "(none)" {
-		args = []string{"log", tag + "..HEAD", "--pretty=format:%H|%s|%b<<<END>>>"}
-	} else {
-		args = []string{"log", "--pretty=format:%H|%s|%b<<<END>>>", "-20"}
+		args = []string{"log", tag + "..HEAD", actions.CommitLogFormat}
 	}
 
 	cmd := exec.Command("git", args...)
@@ -234,57 +232,7 @@ func (m releaseModel) getCommitsSince(tag string) []actions.CommitInfo {
 		return nil
 	}
 
-	return parseCommits(string(output))
-}
-
-func parseCommits(output string) []actions.CommitInfo {
-	var commits []actions.CommitInfo
-	entries := strings.Split(output, "<<<END>>>")
-
-	for _, entry := range entries {
-		entry = strings.TrimSpace(entry)
-		if entry == "" {
-			continue
-		}
-
-		parts := strings.SplitN(entry, "|", 3)
-		if len(parts) < 2 {
-			continue
-		}
-
-		hash := parts[0]
-		subject := parts[1]
-		body := ""
-		if len(parts) > 2 {
-			body = parts[2]
-		}
-
-		commit := actions.CommitInfo{
-			Hash:    hash[:min(8, len(hash))],
-			Subject: subject,
-			Body:    body,
-			Type:    "other",
-		}
-
-		// Parse conventional commit type
-		if idx := strings.Index(subject, ":"); idx > 0 {
-			typeScope := subject[:idx]
-			if parenIdx := strings.Index(typeScope, "("); parenIdx > 0 {
-				commit.Type = typeScope[:parenIdx]
-				scopeEnd := strings.Index(typeScope, ")")
-				if scopeEnd > parenIdx {
-					commit.Scope = typeScope[parenIdx+1 : scopeEnd]
-				}
-			} else {
-				commit.Type = typeScope
-			}
-			commit.Subject = strings.TrimSpace(subject[idx+1:])
-		}
-
-		commits = append(commits, commit)
-	}
-
-	return commits
+	return actions.ParseCommitLog(string(output))
 }
 
 func (m releaseModel) generateReleaseNotes(version string, commits []actions.CommitInfo) string {
