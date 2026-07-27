@@ -134,15 +134,10 @@ func (a *ReleasePreviewAction) Execute(ctx context.Context) error {
 
 	// 8. Check for blockers
 	log.Info("")
-	hasBlockers := false
-
-	// A version computed from the wrong source produces a broken tag sequence:
-	// stop before that, not after (issue #185).
-	if state.Diverged() {
-		hasBlockers = true
-	}
-
-	// cz bump hard-fails when the changelog and the tags disagree.
+	// A version computed from the wrong source produces a broken tag sequence,
+	// and cz bump hard-fails when the changelog and the tags disagree: stop
+	// before either, not after (issue #185).
+	hasBlockers := state.Diverged()
 	if warnChangelogTagGap(workDir) {
 		hasBlockers = true
 	}
