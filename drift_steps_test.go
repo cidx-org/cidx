@@ -128,11 +128,19 @@ func (tc *TestContext) simulateDriftIfNeeded() {
 	ciJobs, _ := tc.Config["ci_jobs"].([]string)
 	ciTriggers, _ := tc.Config["ci_triggers"].([]string)
 
-	// Collect cidx phases
+	// Collect the phases the CI workflow is expected to run: those of the
+	// pipeline it implements ([pipelines.ci] by convention), not those of every
+	// pipeline — a release pipeline runs in its own workflow (issue #178).
 	cidxPhases := make(map[string]bool)
-	for _, phases := range pipelines {
-		for _, p := range phases {
+	if ciPhases, ok := pipelines["ci"]; ok {
+		for _, p := range ciPhases {
 			cidxPhases[p] = true
+		}
+	} else {
+		for _, phases := range pipelines {
+			for _, p := range phases {
+				cidxPhases[p] = true
+			}
 		}
 	}
 
