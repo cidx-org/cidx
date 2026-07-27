@@ -4,7 +4,29 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 )
+
+// PodmanUsable reports whether cidx can actually drive Podman.
+// The Podman CLI alone is not enough: cidx talks to Podman through its
+// Docker-compatible API socket, so the socket must exist and respond.
+func PodmanUsable() bool {
+	p, err := NewPodmanExecutor(true, false, true)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = p.Close() }()
+	return p.Available()
+}
+
+// PodmanSocketHint returns the platform-appropriate command that makes
+// Podman's Docker-compatible API socket available.
+func PodmanSocketHint() string {
+	if runtime.GOOS == "linux" {
+		return "systemctl --user enable --now podman.socket"
+	}
+	return "podman machine start"
+}
 
 // findPodmanSocket locates the Podman Docker-compatible socket.
 // Podman exposes its API on different paths depending on the OS and setup.

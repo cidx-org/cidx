@@ -1,8 +1,32 @@
 package doctor
 
 import (
+	"errors"
+	"strings"
 	"testing"
 )
+
+// stubRuntimeProbes replaces the environment probes for the duration of a test.
+// dockerVersion/podmanVersion == "" simulates the command failing.
+func stubRuntimeProbes(t *testing.T, dockerVersion, podmanVersion string, socketUsable bool) {
+	t.Helper()
+	origVersion, origUsable := commandVersion, podmanUsable
+	t.Cleanup(func() {
+		commandVersion = origVersion
+		podmanUsable = origUsable
+	})
+
+	commandVersion = func(name string, args ...string) (string, error) {
+		switch {
+		case name == "docker" && dockerVersion != "":
+			return dockerVersion, nil
+		case name == "podman" && podmanVersion != "":
+			return podmanVersion, nil
+		}
+		return "", errors.New("command failed")
+	}
+	podmanUsable = func() bool { return socketUsable }
+}
 
 func TestResult_Passed_AllPass(t *testing.T) {
 	r := &Result{
@@ -69,16 +93,65 @@ func TestResult_Warnings(t *testing.T) {
 
 func TestCheckContainerRuntime(t *testing.T) {
 	check := checkContainerRuntime()
-	// In most dev environments, Docker is available
-	// We just verify the check runs without panic and returns a valid status
+	// We just verify the check runs against the real environment without
+	// panicking and returns a coherent result; any status is legitimate.
 	if check.Name != "Container runtime" {
 		t.Errorf("Name = %q, want 'Container runtime'", check.Name)
 	}
-	if check.Status != StatusPass && check.Status != StatusFail {
-		t.Errorf("unexpected status %d", check.Status)
-	}
 	if check.Detail == "" {
 		t.Error("expected non-empty detail")
+	}
+}
+
+func TestCheckContainerRuntime_DockerAvailable(t *testing.T) {
+	stubRuntimeProbes(t, "29.6.1", "", false)
+
+	check := checkContainerRuntime()
+	if check.Status != StatusPass {
+		t.Errorf("Status = %d, want StatusPass", check.Status)
+	}
+	if check.Detail != "Docker 29.6.1" {
+		t.Errorf("Detail = %q, want 'Docker 29.6.1'", check.Detail)
+	}
+}
+
+func TestCheckContainerRuntime_PodmanWithoutSocket_Warns(t *testing.T) {
+	// The #190 environment: Docker down, Podman CLI works, no API socket.
+	stubRuntimeProbes(t, "", "4.9.3", false)
+
+	check := checkContainerRuntime()
+	if check.Status != StatusWarn {
+		t.Errorf("Status = %d, want StatusWarn", check.Status)
+	}
+	if !strings.Contains(check.Detail, "Podman 4.9.3") || !strings.Contains(check.Detail, "cannot use it") {
+		t.Errorf("Detail = %q, want mention of Podman 4.9.3 being unusable", check.Detail)
+	}
+	if !strings.Contains(check.Suggestion, "Docker") || !strings.Contains(check.Suggestion, "socket") {
+		t.Errorf("Suggestion = %q, want Docker and Podman socket remedies", check.Suggestion)
+	}
+}
+
+func TestCheckContainerRuntime_PodmanWithSocket_Passes(t *testing.T) {
+	stubRuntimeProbes(t, "", "4.9.3", true)
+
+	check := checkContainerRuntime()
+	if check.Status != StatusPass {
+		t.Errorf("Status = %d, want StatusPass", check.Status)
+	}
+	if !strings.Contains(check.Detail, "Podman 4.9.3") {
+		t.Errorf("Detail = %q, want mention of Podman 4.9.3", check.Detail)
+	}
+}
+
+func TestCheckContainerRuntime_NoRuntime_Fails(t *testing.T) {
+	stubRuntimeProbes(t, "", "", false)
+
+	check := checkContainerRuntime()
+	if check.Status != StatusFail {
+		t.Errorf("Status = %d, want StatusFail", check.Status)
+	}
+	if !strings.Contains(check.Suggestion, "Install Docker") {
+		t.Errorf("Suggestion = %q, want install suggestion", check.Suggestion)
 	}
 }
 

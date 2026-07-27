@@ -3,7 +3,9 @@ package executor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 
 	"github.com/cidx-org/cidx/pkg/config"
 	"github.com/sirupsen/logrus"
@@ -78,7 +80,7 @@ func (s *Selector) selectDocker() (Executor, error) {
 // selectPodman forces Podman backend
 func (s *Selector) selectPodman() (Executor, error) {
 	if s.podman == nil {
-		return nil, errors.New("podman executor not yet implemented")
+		return nil, fmt.Errorf("podman backend unavailable: cidx drives Podman through its Docker-compatible API socket, which was not found — enable it with '%s'", PodmanSocketHint())
 	}
 
 	if !s.podman.Available() {
@@ -106,6 +108,13 @@ func (s *Selector) selectAuto() (Executor, error) {
 	return nil, s.buildUnavailableError()
 }
 
+// podmanOnPath reports whether the Podman CLI is installed.
+// Package variable so tests can stub it.
+var podmanOnPath = func() bool {
+	_, err := exec.LookPath("podman")
+	return err == nil
+}
+
 // buildUnavailableError creates a helpful error message when no executor is available
 func (s *Selector) buildUnavailableError() error {
 	var msg string
@@ -116,10 +125,19 @@ func (s *Selector) buildUnavailableError() error {
 		msg = "Docker daemon is not running."
 	}
 
+	podmanInstalled := podmanOnPath()
+	if s.podman != nil && !s.podman.Available() {
+		msg += "\nPodman's API socket was found but is not responding."
+	} else if s.podman == nil && podmanInstalled {
+		msg += "\nPodman is installed, but cidx cannot use it — its Docker-compatible API socket is not available."
+	}
+
 	msg += "\n\nStart a container runtime:\n"
 	msg += "  sudo systemctl start docker  # Docker on Linux\n"
-	msg += "  open -a Docker               # Docker on macOS\n"
-	msg += "  podman machine start         # Podman"
+	msg += "  open -a Docker               # Docker on macOS"
+	if podmanInstalled {
+		msg += fmt.Sprintf("\n  %s  # Podman API socket", PodmanSocketHint())
+	}
 
 	return errors.New(msg)
 }
