@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/cidx-org/cidx/v2/pkg/config"
 	"github.com/cidx-org/cidx/v2/pkg/executor"
@@ -18,6 +19,13 @@ import (
 // the bump straight to main is rejected on any repository whose ruleset
 // requires pull requests, so the PR route is the only route.
 const releaseBranchPrefix = "chore/release-"
+
+// How long the release waits for GitHub to register the run its tag push
+// triggered, and how often it asks. Package-level so tests can shrink them.
+var (
+	tagWorkflowWaitTimeout  = 90 * time.Second
+	tagWorkflowPollInterval = 3 * time.Second
+)
 
 // runGit runs a git command in workDir. Package-level so tests can record the
 // plumbing the release orchestration issues without a real repository.
@@ -248,9 +256,9 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 
 	log.Info("⏳ Waiting for release workflow to start...")
 
-	// Get latest workflow for the tag
+	// Get the run the tag push just triggered
 	tagName := fmt.Sprintf("v%s", newVersion)
-	workflow, err := a.provider.GetLatestWorkflow(ctx, tagName)
+	workflow, err := a.waitForTagWorkflow(ctx, tagName)
 	if err != nil {
 		log.Warnf("⚠️  Could not get workflow for tag %s: %v", tagName, err)
 		log.Infof("🔗 Check release status at: https://github.com/%s/releases", a.getRepoPath())
@@ -293,6 +301,34 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// waitForTagWorkflow returns the workflow run the pushed tag triggered.
+//
+// The run is resolved by tag, not by workflow file name: the release workflow
+// lives in its own file, so probing the CI candidates never found it and the
+// release ended on a "check the releases page" message (issue #223). GitHub
+// also needs a few seconds to register the run after the push returns, hence
+// the bounded polling instead of a single lookup.
+func (a *ReleaseAction) waitForTagWorkflow(ctx context.Context, tagName string) (*remote.Workflow, error) {
+	deadline := time.Now().Add(tagWorkflowWaitTimeout)
+
+	for {
+		workflow, err := a.provider.GetLatestRunForTag(ctx, tagName)
+		if err == nil {
+			return workflow, nil
+		}
+
+		if time.Now().After(deadline) {
+			return nil, err
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(tagWorkflowPollInterval):
+		}
+	}
 }
 
 // checkNoReleaseInFlight stops the release when a release branch is already

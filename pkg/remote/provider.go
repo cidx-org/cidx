@@ -15,6 +15,12 @@ type Provider interface {
 	// Useful for watching runs on non-PR branches (e.g., direct pushes to main).
 	GetLatestRunForBranch(ctx context.Context, branch string) (*Workflow, error)
 
+	// GetLatestRunForTag returns the most recent workflow run triggered by the
+	// push of a tag, identified by the tag itself rather than by a workflow
+	// file name. A release workflow lives in its own file (release.yml), so the
+	// CI candidates cidx knows about never match it (issue #223).
+	GetLatestRunForTag(ctx context.Context, tag string) (*Workflow, error)
+
 	// GetWorkflowRun returns a workflow run by its provider-specific ID.
 	GetWorkflowRun(ctx context.Context, runID string) (*Workflow, error)
 

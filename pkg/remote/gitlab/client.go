@@ -91,6 +91,22 @@ func (c *Client) GetLatestRunForBranch(ctx context.Context, branch string) (*rem
 	return c.GetLatestWorkflow(ctx, branch)
 }
 
+// GetLatestRunForTag returns the most recent pipeline triggered by a tag.
+// GitLab queries pipelines by ref, which covers branches and tags alike, so the
+// tag name is passed through unchanged. Unlike GetLatestWorkflow it reports an
+// error rather than a nil pipeline when nothing matches, because callers watch
+// the result (issue #223).
+func (c *Client) GetLatestRunForTag(ctx context.Context, tag string) (*remote.Workflow, error) {
+	workflow, err := c.GetLatestWorkflow(ctx, tag)
+	if err != nil {
+		return nil, err
+	}
+	if workflow == nil {
+		return nil, fmt.Errorf("no pipeline found for tag %s", tag)
+	}
+	return workflow, nil
+}
+
 // GetWorkflowRun returns a pipeline by its ID.
 func (c *Client) GetWorkflowRun(ctx context.Context, runID string) (*remote.Workflow, error) {
 	pipelineID := mustAtoi64(runID)

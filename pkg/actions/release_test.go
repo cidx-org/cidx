@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cidx-org/cidx/v2/pkg/remote"
 	"github.com/cidx-org/cidx/v2/pkg/vcs"
@@ -259,6 +260,102 @@ func TestCheckNoReleaseInFlight_UnresolvablePRStillStops(t *testing.T) {
 
 	if err := action.checkNoReleaseInFlight(context.Background(), "/repo"); err == nil {
 		t.Fatal("expected the release to stop on a published release branch")
+	}
+}
+
+// tagRunProvider answers the tag lookup with a canned sequence, so the wait for
+// the run a tag push triggered can be driven through "not registered yet" and
+// then "found".
+type tagRunProvider struct {
+	fakeProvider
+
+	failures int // number of lookups that report no run before one appears
+	calls    int
+	run      *remote.Workflow
+}
+
+func (p *tagRunProvider) GetLatestRunForTag(_ context.Context, tag string) (*remote.Workflow, error) {
+	p.calls++
+	p.tagLookups = append(p.tagLookups, tag)
+	if p.calls <= p.failures {
+		return nil, errors.New("no workflow runs found for tag " + tag)
+	}
+	return p.run, nil
+}
+
+// shrinkTagWorkflowWait keeps the polling test fast.
+func shrinkTagWorkflowWait(t *testing.T, timeout, interval time.Duration) {
+	t.Helper()
+	origTimeout, origInterval := tagWorkflowWaitTimeout, tagWorkflowPollInterval
+	tagWorkflowWaitTimeout, tagWorkflowPollInterval = timeout, interval
+	t.Cleanup(func() {
+		tagWorkflowWaitTimeout, tagWorkflowPollInterval = origTimeout, origInterval
+	})
+}
+
+func TestWaitForTagWorkflow_ResolvesTheRunTheTagTriggered(t *testing.T) {
+	shrinkTagWorkflowWait(t, 50*time.Millisecond, time.Millisecond)
+
+	releaseRun := &remote.Workflow{ID: "30283021151", Status: "in_progress"}
+	provider := &tagRunProvider{run: releaseRun}
+	action := &ReleaseAction{provider: provider}
+
+	workflow, err := action.waitForTagWorkflow(context.Background(), "v2.1.4")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if workflow.ID != releaseRun.ID {
+		t.Errorf("got run %s, want the release run %s", workflow.ID, releaseRun.ID)
+	}
+	// Resolved by tag, not by the CI workflow candidates on a branch (#223).
+	if len(provider.tagLookups) != 1 || provider.tagLookups[0] != "v2.1.4" {
+		t.Errorf("expected a single lookup for tag v2.1.4, got %v", provider.tagLookups)
+	}
+}
+
+func TestWaitForTagWorkflow_RetriesUntilTheRunIsRegistered(t *testing.T) {
+	shrinkTagWorkflowWait(t, time.Second, time.Millisecond)
+
+	// GitHub registers the run a moment after the push returns.
+	provider := &tagRunProvider{failures: 2, run: &remote.Workflow{ID: "77"}}
+	action := &ReleaseAction{provider: provider}
+
+	workflow, err := action.waitForTagWorkflow(context.Background(), "v2.1.4")
+	if err != nil {
+		t.Fatalf("expected the wait to outlast the registration delay, got: %v", err)
+	}
+	if workflow.ID != "77" {
+		t.Errorf("got run %s, want 77", workflow.ID)
+	}
+	if provider.calls != 3 {
+		t.Errorf("expected 3 lookups (2 empty + 1 hit), got %d", provider.calls)
+	}
+}
+
+func TestWaitForTagWorkflow_TimesOutWithTheLookupError(t *testing.T) {
+	shrinkTagWorkflowWait(t, 5*time.Millisecond, time.Millisecond)
+
+	provider := &tagRunProvider{failures: 1000}
+	action := &ReleaseAction{provider: provider}
+
+	_, err := action.waitForTagWorkflow(context.Background(), "v2.1.4")
+	if err == nil {
+		t.Fatal("expected an error when no run ever appears for the tag")
+	}
+	if !strings.Contains(err.Error(), "v2.1.4") {
+		t.Errorf("expected the tag in the error, got: %v", err)
+	}
+}
+
+func TestWaitForTagWorkflow_StopsOnCancelledContext(t *testing.T) {
+	shrinkTagWorkflowWait(t, time.Hour, 10*time.Millisecond)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	action := &ReleaseAction{provider: &tagRunProvider{failures: 1000}}
+	if _, err := action.waitForTagWorkflow(ctx, "v2.1.4"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected the wait to honour cancellation, got: %v", err)
 	}
 }
 
