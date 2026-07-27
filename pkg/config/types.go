@@ -225,6 +225,7 @@ type ContainerConfig struct {
 	Privileged  bool   // Requires root privileges
 	PullPolicy  string // always, if-not-present, never
 	Timeout     string // duration string (e.g., "5m", "45m"), empty = default 30m
+	Workspace   string // Absolute project path; scopes the container name (#197)
 }
 
 // Action represents an automated workflow configuration

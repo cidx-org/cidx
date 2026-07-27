@@ -8,19 +8,27 @@ CIDX optimizes local development by reusing Docker containers across runs, prese
 
 Instead of creating a new container for each run, CIDX:
 
-1. **Checks** if a container with name `cidx_<toolname>` already exists
-2. **Reuses** the existing container if found (preserves filesystem and cache)
-3. **Creates** a new container only if none exists
-4. **Keeps** containers running after execution (not deleted)
+1. **Checks** — among containers labelled `managed-by=cidx` — whether one already owns this project's container name
+2. **Reuses** the existing container if its config hash still matches (preserves filesystem and cache)
+3. **Recreates** it when the config changed, **creates** a new one when none exists
+4. **Keeps** containers around after execution (not deleted)
 
 ### Container Naming
 
-Containers use **fixed names** without timestamps:
+Containers use **fixed, project-scoped names** without timestamps:
 
-- Format: `cidx_<toolname>`
-- Examples: `cidx_trivy`, `cidx_gitleaks`, `cidx_prettier`
+- Format: `cidx_<project>_<toolname>`
+- `<project>` is the sanitized workspace basename plus a short hash of its absolute path
+- Examples: `cidx_myrepo-3f5a9c21_trivy`, `cidx_myrepo-3f5a9c21_golangci-lint`
 
-This allows consistent reuse across multiple CI runs.
+The name is stable for a given directory, so reuse works across runs. The path
+hash keeps two repositories on the same host — including two checkouts of the
+same repo, or two different repos sharing a basename — from fighting over one
+container and destroying each other's cache (issue #197).
+
+Containers created by cidx versions before this change use the unscoped
+`cidx_<toolname>` form. They carry the same `managed-by=cidx` label, so
+`cidx cleanup` still collects them; they are simply never reused again.
 
 ## Performance Benefits
 
@@ -65,31 +73,39 @@ Containers preserve their internal filesystem between runs, which means:
 
 ### List CIDX Containers
 
+Select on the ownership label, not on the name:
+
 ```bash
-docker ps -a --filter "name=cidx_"
+docker ps -a --filter "label=managed-by=cidx"
 ```
 
 Example output:
 
 ```
-NAMES           STATUS                      CREATED
-cidx_gitleaks   Exited (0) 2 minutes ago    2025-11-18 14:07:28
-cidx_trivy      Exited (0) 2 minutes ago    2025-11-18 14:07:18
-cidx_prettier   Exited (1) 5 minutes ago    2025-11-18 14:02:15
+NAMES                            STATUS                      CREATED
+cidx_myrepo-3f5a9c21_gitleaks    Exited (0) 2 minutes ago    2025-11-18 14:07:28
+cidx_myrepo-3f5a9c21_trivy       Exited (0) 2 minutes ago    2025-11-18 14:07:18
+cidx_myrepo-3f5a9c21_prettier    Exited (1) 5 minutes ago    2025-11-18 14:02:15
 ```
 
 ### Clean All CIDX Containers
 
 ```bash
-# Remove all CIDX containers (will be recreated on next run)
-docker rm -f $(docker ps -aq --filter "name=cidx_")
+# Remove stopped CIDX containers (recreated on the next run)
+cidx cleanup
+
+# Preview first
+cidx cleanup --dry-run
 ```
 
 ### Clean Specific Container
 
 ```bash
-# Force recreate trivy container on next run
-docker rm -f cidx_trivy
+# Force recreate one container on the next run
+docker rm -f cidx_myrepo-3f5a9c21_trivy
+
+# Or force recreate everything for one run
+CIDX_NO_REUSE=1 cidx run security
 ```
 
 ## Verbose Logging
@@ -103,19 +119,24 @@ cidx --verbose run security
 Output:
 
 ```
-time="..." level=debug msg="♻ Reusing container cidx_trivy (preserves cache)"
-time="..." level=debug msg="Starting container: cidx_trivy"
+time="..." level=debug msg="♻ Reusing container cidx_myrepo-3f5a9c21_trivy (preserves cache, config hash 7c8ba14f6a4f3495)"
+time="..." level=debug msg="Starting container: cidx_myrepo-3f5a9c21_trivy"
 ```
 
 ## Container Labels
 
-All CIDX containers are tagged with labels for easy filtering:
+All CIDX containers are tagged with labels. `managed-by=cidx` is the ownership
+signal: lookup, reconciliation and `cidx cleanup` all select on it, never on the
+container name.
 
 ```yaml
 labels:
   managed-by: "cidx"
-  cidx.container: "trivy"
+  cidx.tool: "trivy"
   cidx.phase: "security"
+  cidx.image: "dhi.io/trivy:0.68"
+  cidx.version: "2.1.0"
+  cidx.config_hash: "7c8ba14f6a4f3495"
 ```
 
 Query by label:
@@ -130,10 +151,16 @@ docker ps -a --filter "label=cidx.phase=security"
 Containers are **recreated** (not reused) when:
 
 1. **Manually removed** with `docker rm`
-2. **Configuration changes** (future: detect config changes)
-3. **Image updates** (future: detect image changes)
+2. **The config changed** — cidx stores a `cidx.config_hash` label over the
+   behavior-affecting fields (image, command, workdir, entrypoint, volumes, env)
+   and recreates the container when it no longer matches
+3. **The container predates the hash label** — it can't be proven current
+4. **`CIDX_NO_REUSE` is set** — escape hatch that forces a recreate every run
 
-Currently, containers are reused even if configuration changes. This is intentional for development speed, but may be refined in future versions.
+If the container name is held by a container that carries `managed-by=cidx`,
+cidx reclaims it (removes and recreates). If it is held by a container cidx does
+**not** own, cidx refuses to touch it and tells you so — it never force-removes
+someone else's container.
 
 ## Best Practices
 
@@ -156,11 +183,11 @@ For production CI/CD, consider:
 If you experience issues with cached data:
 
 ```bash
-# Clean specific container container
-docker rm -f cidx_trivy
+# Clean one specific container
+docker rm -f cidx_myrepo-3f5a9c21_trivy
 
 # Clean all CIDX containers
-docker rm -f $(docker ps -aq --filter "name=cidx_")
+cidx cleanup
 
 # Next run will create fresh containers
 cidx run security
@@ -178,9 +205,11 @@ cidx run security
 
 ```
 1. getOrCreateContainer()
-   ├─ List containers with name=cidx_<container>
-   ├─ If found → Return existing container ID
+   ├─ List containers with label=managed-by=cidx, match the name exactly
+   ├─ If found and config hash matches → Return existing container ID
+   ├─ If found and stale → Remove, then createContainer()
    └─ If not found → createContainer()
+      └─ On a name conflict → reclaim if ours, error otherwise
 
 2. ContainerStart()
    └─ Starts the container (fresh or reused)
@@ -212,8 +241,6 @@ Keeping containers:
 
 Planned improvements:
 
-- [ ] **Config change detection**: Recreate container if container config changed
-- [ ] **Image update detection**: Recreate if Docker image updated
 - [ ] **`--clean` flag**: Force clean start (delete containers before run)
 - [ ] **`--no-cache` flag**: Skip cache, force fresh operations
 - [ ] **Named volumes**: Use Docker volumes for even better cache management

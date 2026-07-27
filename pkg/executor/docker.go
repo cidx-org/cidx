@@ -31,10 +31,19 @@ const DefaultTimeout = 30 * time.Minute
 // executor package stays free of import cycles. Defaults to "dev".
 var Version = "dev"
 
-// noReuseEnv, when set to a non-empty value, forces every cidx_<tool>
-// container to be recreated on every run. Useful as an escape hatch for
-// debugging or for users who want strict immutability semantics.
+// noReuseEnv, when set to a non-empty value, forces every cidx container to be
+// recreated on every run. Useful as an escape hatch for debugging or for users
+// who want strict immutability semantics.
 const noReuseEnv = "CIDX_NO_REUSE"
+
+// managedByLabel / managedByValue mark every container cidx creates. They are
+// the ownership signal for lookup, reconciliation and `cidx cleanup` — name
+// matching is never used for ownership, since names are project-scoped and
+// containers created by older cidx versions still carry these labels (#197).
+const (
+	managedByLabel = "managed-by"
+	managedByValue = "cidx"
+)
 
 // DockerExecutor executes tools using Docker
 type DockerExecutor struct {
@@ -48,6 +57,67 @@ type DockerExecutor struct {
 
 	// pullFn overrides client.ImagePull in tests. Nil means use the real client.
 	pullFn func(ctx context.Context, ref string, opts image.PullOptions) (io.ReadCloser, error)
+	// listFn overrides client.ContainerList in tests.
+	listFn func(ctx context.Context, opts container.ListOptions) ([]container.Summary, error)
+	// inspectFn overrides client.ContainerInspect in tests.
+	inspectFn func(ctx context.Context, idOrName string) (container.InspectResponse, error)
+	// removeFn overrides client.ContainerRemove in tests.
+	removeFn func(ctx context.Context, id string, opts container.RemoveOptions) error
+}
+
+// listContainers dispatches to the test seam when set, the real client otherwise.
+func (e *DockerExecutor) listContainers(ctx context.Context, opts container.ListOptions) ([]container.Summary, error) {
+	if e.listFn != nil {
+		return e.listFn(ctx, opts)
+	}
+	return e.client.ContainerList(ctx, opts)
+}
+
+// inspectContainer dispatches to the test seam when set, the real client otherwise.
+func (e *DockerExecutor) inspectContainer(ctx context.Context, idOrName string) (container.InspectResponse, error) {
+	if e.inspectFn != nil {
+		return e.inspectFn(ctx, idOrName)
+	}
+	return e.client.ContainerInspect(ctx, idOrName)
+}
+
+// removeContainer dispatches to the test seam when set, the real client otherwise.
+func (e *DockerExecutor) removeContainer(ctx context.Context, id string, opts container.RemoveOptions) error {
+	if e.removeFn != nil {
+		return e.removeFn(ctx, id, opts)
+	}
+	return e.client.ContainerRemove(ctx, id, opts)
+}
+
+// NameConflictError reports that a container name cidx wants is held by a
+// container cidx does not manage. Deleting it is the user's call, so cidx
+// refuses rather than forcing a removal.
+type NameConflictError struct {
+	Name string
+	ID   string
+}
+
+func (e *NameConflictError) Error() string {
+	id := e.ID
+	if len(id) > 12 {
+		id = id[:12]
+	}
+	return fmt.Sprintf(`container name %q is already in use by container %s, which is not managed by cidx
+
+cidx will not remove containers it does not own. Either:
+  - run 'cidx cleanup' if it is a leftover cidx container from an older version
+  - or remove it yourself: docker rm -f %s`, e.Name, id, e.Name)
+}
+
+// isNameConflictError reports whether a container-create error is the daemon
+// rejecting a duplicate container name. Both Docker ("Conflict. The container
+// name "/x" is already in use by container ...") and Podman ("the container
+// name "x" is already in use by ...") phrase it with "already in use".
+func isNameConflictError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "already in use")
 }
 
 // NewDockerExecutor creates a new Docker executor
@@ -352,26 +422,28 @@ func (e *DockerExecutor) getAuthForImage(imageName string) string {
 	return base64.URLEncoding.EncodeToString(encodedJSON)
 }
 
+// containerName returns the project-scoped container name for a config
+// (`cidx_<project>_<tool>`, issue #197). Falls back to the process working
+// directory when the caller did not resolve a workspace.
+func (e *DockerExecutor) containerName(containerConfig *config.ContainerConfig) string {
+	workspace := containerConfig.Workspace
+	if workspace == "" {
+		workspace, _ = os.Getwd()
+	}
+	return ContainerName(workspace, containerConfig.Name)
+}
+
 // getOrCreateContainer gets an existing container or creates a new one
 func (e *DockerExecutor) getOrCreateContainer(ctx context.Context, containerConfig *config.ContainerConfig, volumes []string, command string) (string, string, error) {
-	containerName := fmt.Sprintf("cidx_%s", containerConfig.Name)
+	containerName := e.containerName(containerConfig)
 
-	// Try to find existing container
-	filterArgs := filters.NewArgs()
-	filterArgs.Add("name", containerName)
-
-	containers, err := e.client.ContainerList(ctx, container.ListOptions{
-		All:     true,
-		Filters: filterArgs,
-	})
-
+	existingContainer, err := e.findManagedContainer(ctx, containerName)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to list containers: %w", err)
+		return "", "", err
 	}
 
 	// If container exists, decide reuse vs recreate
-	if len(containers) > 0 {
-		existingContainer := containers[0]
+	if existingContainer != nil {
 		newHash := configHash(containerConfig.Image, command, containerConfig.Workdir, containerConfig.Entrypoint, volumes, containerConfig.Env)
 		existingHash := existingContainer.Labels["cidx.config_hash"]
 
@@ -381,7 +453,7 @@ func (e *DockerExecutor) getOrCreateContainer(ctx context.Context, containerConf
 			e.logger.Infof("  🔄 Recreating container %s — %s", containerName, recreateReason)
 
 			// Remove old container
-			if err := e.client.ContainerRemove(ctx, existingContainer.ID, container.RemoveOptions{Force: true}); err != nil {
+			if err := e.removeContainer(ctx, existingContainer.ID, container.RemoveOptions{Force: true}); err != nil {
 				return "", "", fmt.Errorf("failed to remove old container: %w", err)
 			}
 
@@ -396,6 +468,46 @@ func (e *DockerExecutor) getOrCreateContainer(ctx context.Context, containerConf
 	// Container doesn't exist, create new one
 	e.logger.Debugf("Creating new container: %s", containerName)
 	return e.createContainer(ctx, containerConfig, volumes, command)
+}
+
+// findManagedContainer looks up a cidx-managed container by its exact name.
+//
+// The lookup filters on the `managed-by=cidx` label rather than on the name,
+// then matches the name exactly in Go. Docker's `name` filter is a substring
+// (regex) match: filtering on `cidx_build` also returns `cidx_build-musl`, and
+// the previous code took containers[0] — the most recently created match. It
+// would then remove that unrelated container and try to create the one it was
+// actually asked for, whose name was still taken, surfacing the raw daemon
+// error `Conflict. The container name "/cidx_build" is already in use`
+// (issue #197).
+//
+// Returns (nil, nil) when no cidx container owns that name.
+func (e *DockerExecutor) findManagedContainer(ctx context.Context, name string) (*container.Summary, error) {
+	filterArgs := filters.NewArgs()
+	filterArgs.Add("label", managedByLabel+"="+managedByValue)
+
+	containers, err := e.listContainers(ctx, container.ListOptions{
+		All:     true,
+		Filters: filterArgs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list containers: %w", err)
+	}
+
+	return findByExactName(containers, name), nil
+}
+
+// findByExactName returns the container whose name matches exactly, or nil.
+// Docker reports names with a leading "/".
+func findByExactName(containers []container.Summary, name string) *container.Summary {
+	for i := range containers {
+		for _, candidate := range containers[i].Names {
+			if strings.TrimPrefix(candidate, "/") == name {
+				return &containers[i]
+			}
+		}
+	}
+	return nil
 }
 
 // createContainer creates a Docker container and returns containerID and containerName
@@ -429,8 +541,8 @@ func (e *DockerExecutor) createContainer(ctx context.Context, containerConfig *c
 		return "", "", fmt.Errorf("empty command")
 	}
 
-	// Generate container name with cidx_ prefix (fixed name for reuse)
-	containerName := fmt.Sprintf("cidx_%s", containerConfig.Name)
+	// Project-scoped, stable name so the container can be reused (issue #197)
+	containerName := e.containerName(containerConfig)
 
 	dockerConfig := &container.Config{
 		Image:      containerConfig.Image,
@@ -438,7 +550,7 @@ func (e *DockerExecutor) createContainer(ctx context.Context, containerConfig *c
 		WorkingDir: containerConfig.Workdir,
 		Env:        env,
 		Labels: map[string]string{
-			"managed-by":       "cidx",
+			managedByLabel:     managedByValue,
 			"cidx.tool":        containerConfig.Name,
 			"cidx.phase":       containerConfig.Phase,
 			"cidx.image":       containerConfig.Image,
@@ -469,15 +581,55 @@ func (e *DockerExecutor) createContainer(ctx context.Context, containerConfig *c
 
 	resp, err := e.client.ContainerCreate(ctx, dockerConfig, hostConfig, nil, nil, containerName)
 	if err != nil {
-		return "", "", err
+		if !isNameConflictError(err) {
+			return "", "", err
+		}
+		// The name is taken by a container findManagedContainer did not see
+		// (created between our lookup and this create, e.g. a parallel phase).
+		// Reclaim it when it is ours; report an actionable error otherwise.
+		if reclaimErr := e.reclaimContainerName(ctx, containerName); reclaimErr != nil {
+			return "", "", reclaimErr
+		}
+		resp, err = e.client.ContainerCreate(ctx, dockerConfig, hostConfig, nil, nil, containerName)
+		if err != nil {
+			return "", "", err
+		}
 	}
 
 	return resp.ID, containerName, nil
 }
 
+// reclaimContainerName removes the container currently holding containerName so
+// the caller can retry creation. It only removes containers carrying the
+// `managed-by=cidx` label — anything else belongs to the user and is reported
+// as a NameConflictError instead (issue #197).
+func (e *DockerExecutor) reclaimContainerName(ctx context.Context, containerName string) error {
+	inspected, err := e.inspectContainer(ctx, containerName)
+	if err != nil {
+		return fmt.Errorf("container name %q is already in use but could not be inspected: %w", containerName, err)
+	}
+
+	var id string
+	if inspected.ContainerJSONBase != nil {
+		id = inspected.ID
+	}
+
+	if inspected.Config == nil || inspected.Config.Labels[managedByLabel] != managedByValue {
+		return &NameConflictError{Name: containerName, ID: id}
+	}
+
+	e.logger.Infof("  🔄 Reclaiming container name %s — held by a stale cidx container", containerName)
+	// Remove by name: the daemon accepts either, and the name is what we know
+	// for certain here.
+	if err := e.removeContainer(ctx, containerName, container.RemoveOptions{Force: true}); err != nil {
+		return fmt.Errorf("failed to remove conflicting container %s: %w", containerName, err)
+	}
+	return nil
+}
+
 // printDryRun prints what would be executed
 func (e *DockerExecutor) printDryRun(containerConfig *config.ContainerConfig, volumes []string, command string) {
-	containerName := fmt.Sprintf("cidx_%s", containerConfig.Name)
+	containerName := e.containerName(containerConfig)
 
 	fmt.Printf("Would execute:\n")
 	fmt.Printf("  Container: %s\n", containerName)
@@ -553,7 +705,7 @@ func expandCommand(command string, env map[string]string) string {
 }
 
 // decideRecreate returns a non-empty human-readable reason when an existing
-// `cidx_<tool>` container must be removed and recreated instead of reused.
+// cidx container must be removed and recreated instead of reused.
 // Returns "" when the container is safe to reuse.
 //
 // Decision signals, in priority order:
@@ -581,7 +733,7 @@ func decideRecreate(existingHash, newHash, noReuseValue string) string {
 }
 
 // configHash creates a short, stable hash of the behavior-affecting container
-// configuration. Used to detect stale `cidx_<tool>` containers when cidx.toml
+// configuration. Used to detect stale containers when cidx.toml
 // changes between runs (issue #144).
 //
 // Hash input shape (NUL-separated, in this exact order):

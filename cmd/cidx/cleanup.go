@@ -35,9 +35,14 @@ func cleanupCommand() *cli.Command {
 			}
 			defer func() { _ = docker.Close() }()
 
-			// List cidx_ containers
+			// Select by ownership label, not by name. Container names are
+			// project-scoped (cidx_<project>_<tool>, #197) and containers
+			// created by older cidx versions still use the legacy
+			// cidx_<tool> form — both carry `managed-by=cidx`, so the label
+			// collects every generation while never touching a container
+			// that merely happens to be named like ours.
 			filterArgs := filters.NewArgs()
-			filterArgs.Add("name", "cidx_")
+			filterArgs.Add("label", "managed-by=cidx")
 
 			listOpts := container.ListOptions{
 				All:     true,
@@ -65,19 +70,19 @@ func cleanupCommand() *cli.Command {
 
 				// Skip running containers unless --all
 				if state == "running" && !removeAll {
-					fmt.Printf("  ⏭  %-25s %s (running, use --all to include)\n", name, ctr.Image)
+					fmt.Printf("  ⏭  %-40s %s (running, use --all to include)\n", name, ctr.Image)
 					skipped++
 					continue
 				}
 
 				if dryRun {
-					fmt.Printf("  🗑  %-25s %s (%s) — would remove\n", name, ctr.Image, state)
+					fmt.Printf("  🗑  %-40s %s (%s) — would remove\n", name, ctr.Image, state)
 				} else {
 					if err := docker.ContainerRemove(ctx, ctr.ID, container.RemoveOptions{Force: removeAll}); err != nil {
-						fmt.Printf("  ✗  %-25s failed: %v\n", name, err)
+						fmt.Printf("  ✗  %-40s failed: %v\n", name, err)
 						continue
 					}
-					fmt.Printf("  ✓  %-25s %s removed\n", name, ctr.Image)
+					fmt.Printf("  ✓  %-40s %s removed\n", name, ctr.Image)
 				}
 				removed++
 			}

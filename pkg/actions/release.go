@@ -173,6 +173,7 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 		Workdir:    action.Workdir,
 		Volumes:    volumes,
 		Env:        action.Env,
+		Workspace:  workDir,
 	}
 
 	// Execute using Docker executor
