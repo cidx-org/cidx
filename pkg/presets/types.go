@@ -10,7 +10,8 @@ type Preset struct {
 	Name          string            `yaml:"name" toml:"name"`
 	Phase         string            `yaml:"phase" toml:"phase"`
 	Image         string            `yaml:"image" toml:"image"`
-	Hardened      bool              `yaml:"hardened,omitempty" toml:"hardened,omitempty"` // Uses Docker Hardened Image (dhi.io)
+	Description   string            `yaml:"description,omitempty" toml:"description,omitempty"` // Usage notes and constraints, shown by `preset info`
+	Hardened      bool              `yaml:"hardened,omitempty" toml:"hardened,omitempty"`       // Uses Docker Hardened Image (dhi.io)
 	Command       string            `yaml:"command" toml:"command"`
 	Entrypoint    []string          `yaml:"entrypoint" toml:"entrypoint"`
 	Workdir       string            `yaml:"workdir" toml:"workdir"`

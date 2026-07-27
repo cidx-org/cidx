@@ -109,6 +109,9 @@ func presetInfoCommand() *cli.Command {
 			fmt.Printf("Image: %s\n", preset.Image)
 			fmt.Printf("Command: %s\n", preset.Command)
 			fmt.Printf("Workdir: %s\n", preset.Workdir)
+			if preset.Description != "" {
+				fmt.Printf("Description: %s\n", preset.Description)
+			}
 			fmt.Println()
 
 			if len(preset.Volumes) > 0 {
@@ -288,9 +291,9 @@ func presetSearchCommand() *cli.Command {
 			for _, name := range presets.List() {
 				preset, _ := presets.Get(name)
 
-				// Search in name, image, command, phase
-				searchable := strings.ToLower(fmt.Sprintf("%s %s %s %s",
-					preset.Name, preset.Image, preset.Command, preset.Phase))
+				// Search in name, image, command, phase, description
+				searchable := strings.ToLower(fmt.Sprintf("%s %s %s %s %s",
+					preset.Name, preset.Image, preset.Command, preset.Phase, preset.Description))
 
 				// Also search in option descriptions
 				for _, opt := range preset.Options {
