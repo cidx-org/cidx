@@ -52,11 +52,13 @@ func TestAppendCommandFlag(t *testing.T) {
 			want:    "sh -c 'pip install --quiet bandit && bandit -r . -ll low -i low'",
 		},
 		{
+			// An empty value means "switch, no value" (#214) — the flag lands
+			// inside the quotes with nothing appended after it.
 			name:    "empty value keeps the flag inside the quotes",
 			command: "sh -c 'cargo-audit audit'",
 			flag:    "--deny warnings",
 			value:   "",
-			want:    "sh -c 'cargo-audit audit --deny warnings '",
+			want:    "sh -c 'cargo-audit audit --deny warnings'",
 		},
 		{
 			name:    "unbalanced quoting falls back to appending at the end",
@@ -128,8 +130,14 @@ func TestMergeWith_ShellWrappedPresetOptions(t *testing.T) {
 		}
 
 		t.Run(name, func(t *testing.T) {
+			// Each option gets a value of its declared type: a boolean option
+			// refuses "x" since #214, and an enabled one emits its flag alone.
 			overrides := make(map[string]any, len(preset.Options))
-			for optName := range preset.Options {
+			for optName, opt := range preset.Options {
+				if opt.Type == "bool" {
+					overrides[optName] = true
+					continue
+				}
 				overrides[optName] = "x"
 			}
 
@@ -142,7 +150,11 @@ func TestMergeWith_ShellWrappedPresetOptions(t *testing.T) {
 				if opt.CommandFlag == "" {
 					continue
 				}
-				flagPos := strings.Index(merged.Command, opt.CommandFlag+" x")
+				want := opt.CommandFlag + " x"
+				if opt.Type == "bool" {
+					want = opt.CommandFlag
+				}
+				flagPos := strings.Index(merged.Command, want)
 				if flagPos == -1 {
 					t.Fatalf("flag for option %q missing from command: %q", optName, merged.Command)
 				}
@@ -156,18 +168,20 @@ func TestMergeWith_ShellWrappedPresetOptions(t *testing.T) {
 
 // TestMergeWith_CargoAuditDenyOption is the end-to-end regression from #200:
 // the reported preset, the reported override, the exact resolved command.
+// `deny` is declared type = "bool", so since #214 it is enabled with a boolean
+// and the flag it carries ("--deny warnings") lands with nothing after it.
 func TestMergeWith_CargoAuditDenyOption(t *testing.T) {
 	preset, err := Get("cargo-audit")
 	if err != nil {
 		t.Fatalf("Get(cargo-audit): %v", err)
 	}
 
-	merged := preset.MergeWith(map[string]any{"deny": "warnings"})
+	merged := preset.MergeWith(map[string]any{"deny": true})
 
 	if strings.Contains(merged.Command, "audit' --deny") {
 		t.Fatalf("--deny landed outside the sh -c quoting: %q", merged.Command)
 	}
-	if !strings.Contains(merged.Command, "/tmp/cargo-audit audit --deny warnings warnings'") {
+	if !strings.Contains(merged.Command, "/tmp/cargo-audit audit --deny warnings'") {
 		t.Errorf("command = %q, want --deny injected before the closing quote", merged.Command)
 	}
 }
