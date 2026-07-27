@@ -237,6 +237,30 @@ func TestCargoAuditUsesPrebuiltBinary(t *testing.T) {
 	}
 }
 
+// TestProbatumDocumentsMuslConstraint locks down the #195 contract: the
+// probatum image (ghcr.io/probatum-org/probatum) is Alpine/musl with no glibc
+// loader, and no glibc variant is published. glibc binaries (e.g. built by the
+// cargo-build preset) fail inside it with the shell's misleading
+// "sh: <path>: not found". Since cidx does not control that image, the preset
+// description must state the musl/static constraint and the actionable fix
+// (--target x86_64-unknown-linux-musl) so users hit it in `preset info`
+// instead of after debugging exit 127.
+func TestProbatumDocumentsMuslConstraint(t *testing.T) {
+	preset, err := Get("probatum")
+	if err != nil {
+		t.Fatalf("Get(%q) unexpected error: %v", "probatum", err)
+	}
+	if preset.Description == "" {
+		t.Fatalf("preset %q has no Description; must document the musl-only execution constraint (#195)", "probatum")
+	}
+	for _, want := range []string{"musl", "glibc", "x86_64-unknown-linux-musl"} {
+		if !strings.Contains(preset.Description, want) {
+			t.Errorf("preset %q Description = %q, expected to mention %q (#195)",
+				"probatum", preset.Description, want)
+		}
+	}
+}
+
 func TestGroupByPhase(t *testing.T) {
 	grouped := GroupByPhase()
 
