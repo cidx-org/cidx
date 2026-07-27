@@ -3,6 +3,7 @@
 ### Fix
 
 - **version**: resolve the version from the embedded build info when ldflags are absent, so `go install`ed binaries report their real release instead of `dev` and generated workflows pin the bootstrap instead of falling back to `@latest` (#205)
+- **presets**: inject option `command_flag`s inside `sh -c '...'` commands so overrides reach the wrapped tool instead of breaking the container (#200)
 - **presets**: decode `pull_policy` and `timeout` from custom `presets.toml` files, and warn on unknown preset keys instead of dropping them silently (#203)
 
 ## v2.1.2 (2026-07-27)

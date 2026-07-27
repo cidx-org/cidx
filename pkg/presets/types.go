@@ -3,6 +3,7 @@ package presets
 import (
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 // Preset defines a complete tool configuration with sensible defaults
@@ -114,10 +115,39 @@ func applyOption(preset *Preset, name string, opt Option, value any) Preset {
 
 	// Apply to command flag if specified
 	if opt.CommandFlag != "" {
-		p.Command = p.Command + " " + opt.CommandFlag + " " + toString(value)
+		p.Command = appendCommandFlag(p.Command, opt.CommandFlag, toString(value))
 	}
 
 	return p
+}
+
+// shellCommandPrefix marks a command that wraps a script for a container shell.
+const shellCommandPrefix = "sh -c "
+
+// appendCommandFlag returns command with " <flag> <value>" added.
+//
+// For a shell-wrapped command (`sh -c '<script>'`) the flag must land *inside*
+// the quotes. Appended after the closing quote it becomes an argument of sh
+// instead of the wrapped tool, and executor.parseCommand — which unquotes the
+// script by stripping matching first/last quote characters — then fails to
+// unquote at all and hands the whole `'<script>' --flag value` string to sh as
+// a single command name (exit 127). See #200.
+//
+// The quote pair recognised here is exactly the one executor.parseCommand
+// strips, so composition and execution agree by construction. Anything that
+// does not match that shape (plain commands, unbalanced quoting) keeps the
+// historical append-at-the-end behaviour.
+func appendCommandFlag(command, flag, value string) string {
+	suffix := " " + flag + " " + value
+
+	if rest, ok := strings.CutPrefix(command, shellCommandPrefix); ok && len(rest) >= 2 {
+		quote := rest[0]
+		if (quote == '\'' || quote == '"') && rest[len(rest)-1] == quote {
+			return command[:len(command)-1] + suffix + string(quote)
+		}
+	}
+
+	return command + suffix
 }
 
 // normalizeStringSliceOverride coerces a TOML-decoded array value into []string.
