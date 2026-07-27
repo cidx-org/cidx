@@ -162,12 +162,15 @@ Define new tools or override built-in ones:
 
 ```toml
 [presets.my-scanner]
+name = "my-scanner"
 image = "myorg/scanner:latest"
 command = "scan ."
 phase = "security"
-timeout = "15m"
-pull_policy = "if-not-present"
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 ```
+
+`workdir` and `volumes` are required for the tool to see your project: without them the container starts in `/` with nothing mounted.
 
 ### Container options
 

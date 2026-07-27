@@ -115,7 +115,11 @@ image = "myorg/tool:latest"
 command = "run-check"
 phase = "test"
 description = "My custom internal tool"
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 ```
+
+Always set `workdir` and `volumes`: without them the container starts in `/` with nothing mounted, so the tool cannot see your project (e.g. `could not find Cargo.toml in /`). Every built-in preset mounts the project with `volumes = ["${WORKSPACE}:/work"]` and runs from `workdir = "/work"`.
 
 ### 4. Environment Variables
 
