@@ -5,10 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/cidx-org/cidx/pkg/config"
-	"github.com/cidx-org/cidx/pkg/drift"
-	"github.com/cidx-org/cidx/pkg/remote"
-	"github.com/cidx-org/cidx/pkg/validator"
+	"github.com/cidx-org/cidx/v2/pkg/config"
+	"github.com/cidx-org/cidx/v2/pkg/drift"
+	"github.com/cidx-org/cidx/v2/pkg/remote"
+	"github.com/cidx-org/cidx/v2/pkg/validator"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 )

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/cidx-org/cidx/pkg/executor"
-	"github.com/cidx-org/cidx/pkg/generate"
+	"github.com/cidx-org/cidx/v2/pkg/executor"
+	"github.com/cidx-org/cidx/v2/pkg/generate"
 	"github.com/urfave/cli/v2"
 )
 

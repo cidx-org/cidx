@@ -11,7 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 
-	"github.com/cidx-org/cidx/pkg/remote"
+	"github.com/cidx-org/cidx/v2/pkg/remote"
 )
 
 var log = logrus.New()

@@ -7,10 +7,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cidx-org/cidx/pkg/config"
-	"github.com/cidx-org/cidx/pkg/environment"
-	"github.com/cidx-org/cidx/pkg/executor"
-	"github.com/cidx-org/cidx/pkg/presets"
+	"github.com/cidx-org/cidx/v2/pkg/config"
+	"github.com/cidx-org/cidx/v2/pkg/environment"
+	"github.com/cidx-org/cidx/v2/pkg/executor"
+	"github.com/cidx-org/cidx/v2/pkg/presets"
 	"github.com/sirupsen/logrus"
 )
 

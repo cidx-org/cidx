@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cidx-org/cidx/pkg/config"
+	"github.com/cidx-org/cidx/v2/pkg/config"
 )
 
 func TestCompareFromData_AllMatch(t *testing.T) {

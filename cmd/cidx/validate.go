@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/cidx-org/cidx/pkg/config"
+	"github.com/cidx-org/cidx/v2/pkg/config"
 	"github.com/urfave/cli/v2"
 )
 

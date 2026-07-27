@@ -3,7 +3,7 @@ package config
 import (
 	"fmt"
 
-	"github.com/cidx-org/cidx/pkg/presets"
+	"github.com/cidx-org/cidx/v2/pkg/presets"
 )
 
 // ValidationResult contains validation results

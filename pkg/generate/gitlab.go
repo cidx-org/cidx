@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cidx-org/cidx/pkg/config"
+	"github.com/cidx-org/cidx/v2/pkg/config"
 )
 
 // GitLab generates a GitLab CI configuration YAML from the CIDX config.

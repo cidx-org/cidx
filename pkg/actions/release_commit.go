@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 
-	"github.com/cidx-org/cidx/pkg/vcs"
+	"github.com/cidx-org/cidx/v2/pkg/vcs"
 	log "github.com/sirupsen/logrus"
 )
 

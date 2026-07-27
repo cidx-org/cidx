@@ -3,7 +3,7 @@ package actions
 import (
 	"fmt"
 
-	"github.com/cidx-org/cidx/pkg/remote"
+	"github.com/cidx-org/cidx/v2/pkg/remote"
 )
 
 // DisplayWorkflowStatus renders the current workflow status to stdout

@@ -6,8 +6,8 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/cidx-org/cidx/pkg/config"
-	"github.com/cidx-org/cidx/pkg/executor"
+	"github.com/cidx-org/cidx/v2/pkg/config"
+	"github.com/cidx-org/cidx/v2/pkg/executor"
 )
 
 // Package variables so tests can stub environment probes.
