@@ -2,6 +2,7 @@ package presets
 
 import (
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 )
@@ -105,6 +106,23 @@ func (p *Preset) MergeWith(overrides map[string]any) *Preset {
 func applyOption(preset *Preset, name string, opt Option, value any) Preset {
 	p := *preset
 
+	// A boolean option is a switch, not a key/value pair. Appending its value
+	// produced "--fix true" — a stray argument most tools reject (#214).
+	//
+	// The declared type is also the only type check the merge performs, and
+	// applyOption cannot report an error (MergeWith has no error return). A
+	// non-boolean value here is a typo that would otherwise surface as an
+	// opaque container failure, so we name it and keep the preset default.
+	enabled := true
+	if opt.Type == "bool" {
+		parsed, ok := toBool(value)
+		if !ok {
+			log.Printf("warning: option %q of preset %q expects a boolean (got %v) — override ignored", name, p.Name, value)
+			return p
+		}
+		enabled = parsed
+	}
+
 	// Apply to environment variable if specified
 	if opt.EnvVar != "" {
 		if p.Env == nil {
@@ -113,9 +131,14 @@ func applyOption(preset *Preset, name string, opt Option, value any) Preset {
 		p.Env[opt.EnvVar] = toString(value)
 	}
 
-	// Apply to command flag if specified
-	if opt.CommandFlag != "" {
-		p.Command = appendCommandFlag(p.Command, opt.CommandFlag, toString(value))
+	// Apply to command flag if specified. A true boolean emits the flag alone;
+	// a false one emits nothing at all.
+	if opt.CommandFlag != "" && enabled {
+		flagValue := toString(value)
+		if opt.Type == "bool" {
+			flagValue = ""
+		}
+		p.Command = appendCommandFlag(p.Command, opt.CommandFlag, flagValue)
 	}
 
 	return p
@@ -124,7 +147,8 @@ func applyOption(preset *Preset, name string, opt Option, value any) Preset {
 // shellCommandPrefix marks a command that wraps a script for a container shell.
 const shellCommandPrefix = "sh -c "
 
-// appendCommandFlag returns command with " <flag> <value>" added.
+// appendCommandFlag returns command with " <flag> <value>" added, or just
+// " <flag>" when value is empty — a valueless flag is a switch (#214).
 //
 // For a shell-wrapped command (`sh -c '<script>'`) the flag must land *inside*
 // the quotes. Appended after the closing quote it becomes an argument of sh
@@ -138,7 +162,10 @@ const shellCommandPrefix = "sh -c "
 // does not match that shape (plain commands, unbalanced quoting) keeps the
 // historical append-at-the-end behaviour.
 func appendCommandFlag(command, flag, value string) string {
-	suffix := " " + flag + " " + value
+	suffix := " " + flag
+	if value != "" {
+		suffix += " " + value
+	}
 
 	if rest, ok := strings.CutPrefix(command, shellCommandPrefix); ok && len(rest) >= 2 {
 		quote := rest[0]
@@ -261,6 +288,24 @@ func normalizeEnvOverride(v any) (map[string]string, bool) {
 		return out, true
 	default:
 		return nil, false
+	}
+}
+
+// toBool coerces an option value into a boolean. Both shapes an override can
+// take are accepted: the native TOML boolean (`fix = true`) and the string
+// form, which is what a quoted value (`fix = "true"`) or an expanded
+// `${VAR}` placeholder yields by the time it reaches MergeWith. Anything
+// strconv.ParseBool rejects ("yes", "on", "1.0", a typo) returns false so the
+// caller can refuse the override rather than guess.
+func toBool(v any) (bool, bool) {
+	switch b := v.(type) {
+	case bool:
+		return b, true
+	case string:
+		parsed, err := strconv.ParseBool(strings.TrimSpace(b))
+		return parsed, err == nil
+	default:
+		return false, false
 	}
 }
 

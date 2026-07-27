@@ -109,6 +109,14 @@ func presetInfoCommand() *cli.Command {
 			fmt.Printf("Image: %s\n", preset.Image)
 			fmt.Printf("Command: %s\n", preset.Command)
 			fmt.Printf("Workdir: %s\n", preset.Workdir)
+			// #211: both fields affect execution, so they belong where the
+			// user checks a preset — not only in `preset show`.
+			if preset.PullPolicy != "" {
+				fmt.Printf("Pull policy: %s\n", preset.PullPolicy)
+			}
+			if preset.Timeout != "" {
+				fmt.Printf("Timeout: %s\n", preset.Timeout)
+			}
 			if preset.Description != "" {
 				fmt.Printf("Description: %s\n", preset.Description)
 			}

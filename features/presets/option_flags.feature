@@ -11,12 +11,26 @@ Feature: Preset Option Flags
 
     Scenario: A shell-wrapped command receives the flag inside the quoting
       When I resolve the preset "mypy" with option "strict" set to "true"
-      Then the resolved command should be "sh -c 'pip install --quiet mypy && mypy . --strict true'"
+      Then the resolved command should be "sh -c 'pip install --quiet mypy && mypy . --strict'"
 
     Scenario: A shell-wrapped command is untouched without overrides
       When I resolve the preset "mypy" without overrides
       Then the resolved command should be "sh -c 'pip install --quiet mypy && mypy .'"
 
     Scenario: The reported cargo-audit override reaches cargo-audit
-      When I resolve the preset "cargo-audit" with option "deny" set to "warnings"
-      Then the resolved command should contain "/tmp/cargo-audit audit --deny warnings warnings'"
+      When I resolve the preset "cargo-audit" with option "deny" set to "true"
+      Then the resolved command should contain "/tmp/cargo-audit audit --deny warnings'"
+
+  Rule: A boolean option is a switch, not a key/value pair
+
+    Scenario: An enabled boolean emits the flag alone
+      When I resolve the preset "golangci-lint" with option "fix" set to "true"
+      Then the resolved command should be "golangci-lint run --timeout 5m --fix"
+
+    Scenario: A disabled boolean emits nothing
+      When I resolve the preset "golangci-lint" with option "fix" set to "false"
+      Then the resolved command should be "golangci-lint run --timeout 5m"
+
+    Scenario: A value that is not a boolean is refused and the default stands
+      When I resolve the preset "golangci-lint" with option "fix" set to "yes"
+      Then the resolved command should be "golangci-lint run --timeout 5m"

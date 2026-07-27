@@ -4,6 +4,8 @@
 
 - **actions**: cpw now commits untracked files instead of answering "No changes to commit" — `Commit()` already runs `git add .`, but the pre-flight check asked the tracked-only question, so a brand-new file was left behind while the user believed it was pushed. `HasChanges()` keeps its narrower meaning for the release/tag/pr guards, where a stray scratch file must not block anything (#180)
 - **presets**: a `presets.toml` that fails to parse is reported with its path and the TOML error instead of being discarded whole and in silence — every custom preset in it used to vanish, surfacing much later as a misleading "container X is not a built-in preset". Warning rather than hard error: `loadPresets` runs from `init()`, where a returned error becomes `log.Fatalf` and would kill even `cidx doctor` (#210)
+- **presets**: an option declared `type = "bool"` now emits its flag alone when enabled and nothing when disabled — `fix = true` produced `--fix true`, a stray argument the tool reads as a path (`stat /work/true: directory not found`). Both value shapes an override can take are accepted (native TOML boolean and string, including an expanded `${VAR}`); a value that is not a boolean is named in a warning and the preset default stands, so a typo no longer surfaces as an opaque container failure (#214)
+- **presets**: `preset info` and `run --dry-run` print `pull_policy` and `timeout` when set — both fields drive the real run (pull decision, execution deadline) but were visible only through `preset show`, which re-encodes the whole struct (#211)
 
 ## v2.1.4 (2026-07-27)
 

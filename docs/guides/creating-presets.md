@@ -324,16 +324,23 @@ options:
     env_var: string # Maps to env var (optional)
 ```
 
-`command_flag` appends `<flag> <value>` to the preset's `command`. For a
-shell-wrapped command (`sh -c '<script>'`) the flag is injected before the
-closing quote, so it reaches the wrapped tool instead of `sh`:
+`command_flag` appends `<flag> <value>` to the preset's `command`. A
+`type = "bool"` option is a switch: enabled it appends the flag alone, disabled
+it appends nothing. For a shell-wrapped command (`sh -c '<script>'`) the flag is
+injected before the closing quote, so it reaches the wrapped tool instead of
+`sh`:
 
 ```
 command = "sh -c 'pip install --quiet mypy && mypy .'"   # strict = true
-       →  sh -c 'pip install --quiet mypy && mypy . --strict true'
+       →  sh -c 'pip install --quiet mypy && mypy . --strict'
 ```
 
 Write the script so the flag-bearing tool invocation comes last.
+
+A boolean override is accepted as a TOML boolean (`strict = true`) or as the
+string form a quoted value or an expanded `${VAR}` produces (`strict = "true"`).
+Anything else is reported as a warning and ignored, so the preset default
+stands rather than a typo reaching the container.
 
 ## Migration Guide
 

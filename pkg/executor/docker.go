@@ -637,6 +637,14 @@ func (e *DockerExecutor) printDryRun(containerConfig *config.ContainerConfig, vo
 	fmt.Printf("  Image: %s\n", containerConfig.Image)
 	fmt.Printf("  Command: %s\n", command)
 	fmt.Printf("  Workdir: %s\n", containerConfig.Workdir)
+	// #211: a dry-run that hides the pull policy and the timeout hides two of
+	// the things the real run would do.
+	if containerConfig.PullPolicy != "" {
+		fmt.Printf("  Pull policy: %s\n", containerConfig.PullPolicy)
+	}
+	if containerConfig.Timeout != "" {
+		fmt.Printf("  Timeout: %s\n", containerConfig.Timeout)
+	}
 	fmt.Printf("  Volumes:\n")
 	for _, vol := range volumes {
 		fmt.Printf("    - %s\n", vol)
