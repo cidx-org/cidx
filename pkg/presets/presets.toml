@@ -849,11 +849,17 @@ command_flag = "-W clippy::pedantic"
 # instead of `cargo install` (compiles from source for minutes and can fail
 # for reasons unrelated to the audited project — see #161). RustSec ships
 # x86_64 and aarch64 linux-gnu assets, so $(uname -m) covers both.
+# Extracts to /tmp (world-writable) instead of /usr/local/bin (root-owned):
+# containers often run non-root (CI runners, user-mapped local runs) and tar
+# cannot write there — see #188. HOME/CARGO_HOME point at writable dirs so
+# the advisory DB fetch also works non-root; the binary is invoked directly
+# (`cargo-audit audit` is RustSec's documented direct invocation) to avoid
+# depending on PATH.
 [presets.cargo-audit]
 name = "cargo-audit"
 phase = "security"
 image = "rust:1.95.0"
-command = "sh -c 'curl -sSfL https://github.com/rustsec/rustsec/releases/download/cargo-audit/v0.22.2/cargo-audit-$(uname -m)-unknown-linux-gnu-v0.22.2.tgz | tar xz --strip-components=1 -C /usr/local/bin && cargo audit'"
+command = "sh -c 'curl -sSfL https://github.com/rustsec/rustsec/releases/download/cargo-audit/v0.22.2/cargo-audit-$(uname -m)-unknown-linux-gnu-v0.22.2.tgz | tar xz --strip-components=1 -C /tmp && HOME=/tmp CARGO_HOME=/tmp/cargo /tmp/cargo-audit audit'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
 
