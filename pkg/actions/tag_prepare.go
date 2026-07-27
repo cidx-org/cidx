@@ -98,8 +98,8 @@ func (a *TagPrepareAction) Execute(ctx context.Context) error {
 	log.Info("")
 	log.Info("📌 Next steps:")
 	log.Infof("   1. Review and edit %s (version) and %s (message)", TagVersionFile, TagMessageFile)
-	log.Info("   2. Run: cidx action tag preview")
-	log.Info("   3. Run: cidx action tag create")
+	log.Info("   2. Run: cidx release tag preview")
+	log.Info("   3. Run: cidx release tag create")
 
 	return nil
 }

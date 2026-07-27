@@ -32,7 +32,7 @@ func (a *ReleaseCommitAction) Execute(ctx context.Context) error {
 
 	// First check for prepared version file - we need this to find the notes file
 	if !HasPreparedVersion(workDir) {
-		return fmt.Errorf("no prepared version found at %s\nRun 'cidx action release prepare' first", ReleaseVersionFile)
+		return fmt.Errorf("no prepared version found at %s\nRun 'cidx release prepare' first", ReleaseVersionFile)
 	}
 
 	version, err := LoadPreparedVersion(workDir)
@@ -43,7 +43,7 @@ func (a *ReleaseCommitAction) Execute(ctx context.Context) error {
 	// Check if release notes exist for this version
 	notesFile := GetReleaseNotesFile(version)
 	if !HasPreparedNotes(workDir, version) {
-		return fmt.Errorf("no release notes found at %s\nRun 'cidx action release prepare' first", notesFile)
+		return fmt.Errorf("no release notes found at %s\nRun 'cidx release prepare' first", notesFile)
 	}
 
 	log.Infof("📝 Committing release notes for v%s...", version)
@@ -81,8 +81,8 @@ func (a *ReleaseCommitAction) Execute(ctx context.Context) error {
 	log.Info("✓ Release notes committed")
 	log.Info("")
 	log.Info("📌 Next steps:")
-	log.Info("   1. Run: cidx action release preview")
-	log.Info("   2. Run: cidx action release create")
+	log.Info("   1. Run: cidx release preview")
+	log.Info("   2. Run: cidx release create")
 
 	return nil
 }

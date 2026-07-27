@@ -69,22 +69,22 @@ Validate the syntax and structure of the configuration file.
 cidx validate
 ```
 
-### `cidx action tag`
+### `cidx release tag`
 
 Tag management commands with prepare/preview/create workflow.
 
 ```bash
-cidx action tag <command> [flags]
+cidx release tag <command> [flags]
 ```
 
 **Subcommands:**
 
-#### `cidx action tag prepare`
+#### `cidx release tag prepare`
 
 Prepare a tag version and message for human review before creation.
 
 ```bash
-cidx action tag prepare [flags]
+cidx release tag prepare [flags]
 ```
 
 **Flags:**
@@ -100,12 +100,12 @@ cidx action tag prepare [flags]
 5. Saves message to `.cidx/tag-message` (editable)
 6. Opens editor for review
 
-#### `cidx action tag preview`
+#### `cidx release tag preview`
 
 Preview what will happen during tag creation.
 
 ```bash
-cidx action tag preview
+cidx release tag preview
 ```
 
 **What it shows:**
@@ -116,12 +116,12 @@ cidx action tag preview
 - Configuration summary
 - Blockers (uncommitted changes, missing preparation)
 
-#### `cidx action tag create`
+#### `cidx release tag create`
 
 Create and optionally push a git tag.
 
 ```bash
-cidx action tag create [flags]
+cidx release tag create [flags]
 ```
 
 **Flags:**
@@ -140,12 +140,12 @@ cidx action tag create [flags]
 3. Pushes to origin if `auto_push = true`
 4. Cleans up prepared files
 
-#### `cidx action tag delete`
+#### `cidx release tag delete`
 
 Delete a git tag locally and optionally from remote.
 
 ```bash
-cidx action tag delete <tag-name> [flags]
+cidx release tag delete <tag-name> [flags]
 ```
 
 **Arguments:**
@@ -162,12 +162,12 @@ cidx action tag delete <tag-name> [flags]
 
 Tags matching patterns in `protected_tags` config cannot be deleted without `--force`.
 
-#### `cidx action tag list`
+#### `cidx release tag list`
 
 List git tags with optional filtering.
 
 ```bash
-cidx action tag list [flags]
+cidx release tag list [flags]
 ```
 
 **Flags:**
@@ -192,12 +192,12 @@ cidx action tag list [flags]
 
 ---
 
-### `cidx action release`
+### `cidx release`
 
 Release management commands. See [Development Workflow](../guides/development-workflow.md) for detailed usage.
 
 ```bash
-cidx action release <command> [flags]
+cidx release <command> [flags]
 ```
 
 **Subcommands:**

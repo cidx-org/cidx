@@ -73,7 +73,15 @@ func prCommand() *cli.Command {
 			},
 			{
 				Name:  "merge",
-				Usage: "Merge the current PR and optionally watch post-merge workflow",
+				Usage: "Merge the current PR (non-interactive) and optionally watch post-merge workflow",
+				Description: `Merges as soon as the required checks are green. This command is
+non-interactive by design -- it asks for no confirmation, so it behaves the same
+when driven by a human or by a script.
+
+Use --dry-run to see what would be merged without merging anything.
+
+The green-checks gate is the safety net: --skip-checks removes it (not
+recommended).`,
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:    "method",

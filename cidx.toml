@@ -6,7 +6,7 @@
 #   examples/cidx.toml               (minimal starter)
 #   examples/cidx-advanced.toml      (small custom config)
 
-# ─── release & tag workflow (used by `cidx action release`, `cidx action tag`) ───
+# ─── release & tag workflow (used by `cidx release`, `cidx release tag`) ───
 [release_workflow]
 main_branch = "main"
 allow_release_from_any_branch = true

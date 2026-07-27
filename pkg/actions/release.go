@@ -96,10 +96,10 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 		log.Infof("📋 Using prepared release notes from %s", GetReleaseNotesFile(preparedVersion))
 	} else {
 		if a.releaseConfig.RequirePrepare {
-			return fmt.Errorf("no prepared release notes found\n   Run 'cidx action release prepare' first\n   Or set require_prepare = false in [release] config")
+			return fmt.Errorf("no prepared release notes found\n   Run 'cidx release prepare' first\n   Or set require_prepare = false in [release] config")
 		}
 		log.Info("📝 No prepared notes found - GitHub will auto-generate release notes")
-		log.Info("   Tip: Run 'cidx action release prepare' before creating releases")
+		log.Info("   Tip: Run 'cidx release prepare' before creating releases")
 	}
 
 	if hasPreparedVer {
@@ -131,7 +131,7 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 			log.Info("   💡 Typical workflow for protected branches:")
 			log.Info("      1. Prepare & commit on this branch")
 			log.Infof("      2. Create PR and merge to %s", mainBranch)
-			log.Infof("      3. Run 'cidx action release create' on %s", mainBranch)
+			log.Infof("      3. Run 'cidx release create' on %s", mainBranch)
 			log.Info("")
 			log.Info("   To allow releases from any branch, set in cidx.toml:")
 			log.Info("   [release]")

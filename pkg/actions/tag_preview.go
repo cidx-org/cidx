@@ -44,7 +44,7 @@ func (a *TagPreviewAction) Execute(ctx context.Context) error {
 		log.Infof("✓ Prepared version: %s (editable in %s)", version, TagVersionFile)
 	} else {
 		log.Warn("⚠️  No prepared version found")
-		log.Info("   Run: cidx action tag prepare")
+		log.Info("   Run: cidx release tag prepare")
 		version = SuggestTagVersion(workDir)
 		log.Infof("   Suggested version: %s", version)
 	}
@@ -75,7 +75,7 @@ func (a *TagPreviewAction) Execute(ctx context.Context) error {
 		log.Info("───────────────────")
 	} else if a.tagConfig.RequireAnnotated {
 		log.Warn("⚠️  No tag message prepared (required for annotated tags)")
-		log.Info("   Run: cidx action tag prepare")
+		log.Info("   Run: cidx release tag prepare")
 	}
 
 	// 4. Show last tags
@@ -86,7 +86,7 @@ func (a *TagPreviewAction) Execute(ctx context.Context) error {
 	// 5. Check if tag already exists
 	if a.tagExists(tagName) {
 		log.Warnf("⚠️  Tag %s already exists!", tagName)
-		log.Info("   Delete it first: cidx action tag delete " + tagName)
+		log.Info("   Delete it first: cidx release tag delete " + tagName)
 	}
 
 	// 6. Show configuration
@@ -137,7 +137,7 @@ func (a *TagPreviewAction) Execute(ctx context.Context) error {
 		log.Info("✅ Ready to create tag!")
 		log.Info("")
 		log.Info("📌 To create the tag, run:")
-		log.Info("   cidx action tag create")
+		log.Info("   cidx release tag create")
 	} else {
 		log.Info("")
 		log.Info("📌 Fix the warnings above before creating tag")

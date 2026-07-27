@@ -178,7 +178,7 @@ func (a *ArtifactStatsAction) Execute(ctx context.Context) error {
 
 	// Recommendations
 	if expiredCount > 0 {
-		fmt.Printf("\n💡 Tip: Run 'cidx action artifact cleanup --expired' to free %s\n", formatBytes(expiredSize))
+		fmt.Printf("\n💡 Tip: Run 'cidx repo artifact cleanup --expired' to free %s\n", formatBytes(expiredSize))
 	}
 
 	return nil

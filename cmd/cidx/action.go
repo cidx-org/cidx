@@ -28,7 +28,7 @@ func releaseCreateAction(c *cli.Context) error {
 func prCreateAction(c *cli.Context) error {
 	title := c.Args().First()
 	if title == "" {
-		return fmt.Errorf("PR title is required: cidx action pr create \"Your PR title\"")
+		return fmt.Errorf("PR title is required: cidx pr create \"Your PR title\"")
 	}
 
 	return withRepoAndProvider(func(repo *vcs.Repository, provider remote.Provider) error {
@@ -137,7 +137,7 @@ func prTUIAction(c *cli.Context) error {
 func tagDeleteAction(c *cli.Context) error {
 	tagName := c.Args().First()
 	if tagName == "" {
-		return fmt.Errorf("tag name is required: cidx action tag delete <tag-name>")
+		return fmt.Errorf("tag name is required: cidx release tag delete <tag-name>")
 	}
 
 	return withRepo(func(repo *vcs.Repository) error {
