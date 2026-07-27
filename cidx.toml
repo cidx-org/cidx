@@ -63,7 +63,7 @@ description = "Main branch pipeline (builds artifacts)"
 phases = ["security", "code", "test", "build", "docker", "release"]
 description = "Complete release pipeline"
 
-# ─── release-create action (commitizen-based version bump + tag + push) ───
+# ─── release-create action (commitizen version bump, routed through a PR) ───
 [actions.release-create]
 description = "Create new release with version bump"
 image = "commitizen/commitizen:latest"
@@ -73,8 +73,6 @@ volumes = [
     "${WORKSPACE}:/app",
     "${WORKSPACE}/.git:/app/.git",
 ]
-auto_push = true
-push_tags = true
 watch_workflow = true
 
 [actions.release-create.env]

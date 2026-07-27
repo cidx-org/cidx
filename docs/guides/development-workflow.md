@@ -202,10 +202,22 @@ This command:
 
 1. Analyzes conventional commits since last release
 2. Calculates version bump (MAJOR.MINOR.PATCH)
-3. Updates VERSION file and .cz.toml
-4. Creates annotated Git tag (e.g., `v1.2.0`)
-5. Pushes tag to remote
-6. Triggers GitHub Release workflow automatically
+3. Updates VERSION, .cz.toml and CHANGELOG.md, and commits the bump
+4. Moves that commit onto a `chore/release-vX.Y.Z` branch (main stays untouched)
+5. Opens the release pull request, waits for CI, and squash-merges it
+6. Creates the annotated Git tag (e.g., `v1.2.0`) on the **merged** commit and pushes it
+7. Triggers GitHub Release workflow automatically
+
+The bump always travels through a PR, so it behaves identically with or without
+branch protection on main. Tag pushes are not covered by branch rulesets, which
+is why the tag can be pushed directly after the merge.
+
+**If the release PR's CI fails**, nothing is tagged. The bump stays on the PR
+branch: fix the failure, `cidx cpw -m "fix: ..."`, `cidx pr merge`, then
+`cidx release tag prepare && cidx release tag create`.
+
+**If a release is already in flight** (a `chore/release-*` branch exists on the
+remote), `release create` refuses to start a second one and points at the open PR.
 
 **The release workflow** (`.github/workflows/release.yml`):
 
@@ -232,13 +244,15 @@ git log $(git describe --tags --abbrev=0)..HEAD --oneline
 echo "1.2.0" > VERSION
 sed -i 's/version = "1.1.0"/version = "1.2.0"/' .cz.toml
 
-# 3. Commit version bump
-git add VERSION .cz.toml
-git commit --no-verify -m "bump: version 1.1.0 → 1.2.0"
+# 3. Commit the version bump on a branch and merge it through a PR
+#    (direct pushes to main are rejected when a ruleset requires PRs)
+cidx pr create "chore(release): bump version to v1.2.0"
+cidx cpw -m "bump: version 1.1.0 → 1.2.0"
+cidx pr merge
 
-# 4. Create and push tag
+# 4. Create and push the tag on the merged commit
 git tag -a v1.2.0 -m "Release 1.2.0"
-git push && git push --tags
+git push origin v1.2.0
 ```
 
 The GitHub workflow automatically detects the tag push and creates the release.

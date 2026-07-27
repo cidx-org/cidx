@@ -466,10 +466,10 @@ description = "Local validation before pushing"
 #   1. Analyze commits since last tag (using conventional commits)
 #   2. Determine version bump (PATCH/MINOR/MAJOR)
 #   3. Update VERSION and .cz.toml files
-#   4. Create version bump commit
-#   5. Create and push git tag (e.g., v1.2.3)
-#   6. Trigger GitHub Release workflow
-#   7. Watch workflow execution
+#   4. Create version bump commit on a chore/release-vX.Y.Z branch
+#   5. Open the release PR, wait for CI, squash-merge it
+#   6. Tag the merged commit (e.g., v1.2.3) and push the tag
+#   7. Watch the release workflow triggered by the tag
 #
 # Usage: cidx action release create
 [actions.release-create]
@@ -487,9 +487,10 @@ volumes = [
 ]
 
 # Automation flags: What to do after version bump
-auto_push = true       # Automatically push version bump commit to remote
-push_tags = true       # Automatically push git tag to remote (triggers release workflow)
-watch_workflow = true  # Watch GitHub Actions workflow execution after push
+# The bump commit always travels through a pull request, so it works the same
+# with or without branch protection (issue #184). The tag is created on the
+# merged commit and pushed automatically.
+watch_workflow = true  # Watch GitHub Actions workflow execution after the tag push
 
 # Git configuration: Allow container to access git repository
 [actions.release-create.env]

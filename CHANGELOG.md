@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Fix
+
+- **release**: route the version bump through a pull request instead of pushing it straight to main, which any ruleset requiring PRs rejects (`GH013`) and which left a local-only bump commit and tag behind. `release create` now moves the bump commit onto a `chore/release-vX.Y.Z` branch, restores the base branch, opens the release PR, waits for CI and squash-merges it (reusing `cidx pr merge`), then tags the *merged* commit and pushes the tag. CI failure stops before tagging with recovery steps, and a release branch already on the remote stops a second run instead of racing two bump PRs (#184)
+
 ## v2.1.3 (2026-07-27)
 
 ### Fix

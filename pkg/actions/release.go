@@ -14,6 +14,28 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// releaseBranchPrefix names the short-lived branch that carries the version
+// bump commit to the main branch through a pull request (issue #184). Pushing
+// the bump straight to main is rejected on any repository whose ruleset
+// requires pull requests, so the PR route is the only route.
+const releaseBranchPrefix = "chore/release-"
+
+// runGit runs a git command in workDir. Package-level so tests can record the
+// plumbing the release orchestration issues without a real repository.
+var runGit = func(workDir string, args ...string) ([]byte, error) {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = workDir
+	return cmd.CombinedOutput()
+}
+
+// mergeReleasePR waits for the release PR's CI and squash-merges it, reusing
+// the exact machinery behind `cidx pr merge` (checks wait, SHA pinning,
+// post-merge checkout/pull/branch cleanup). Package-level so tests can drive
+// the green and red CI paths.
+var mergeReleasePR = func(ctx context.Context, repo *vcs.Repository, provider remote.Provider) error {
+	return NewPRMerge(repo, provider, "squash", false, false, false).Execute(ctx)
+}
+
 // ReleaseAction orchestrates the release process using dynamic action configuration
 type ReleaseAction struct {
 	repo          *vcs.Repository
@@ -118,7 +140,12 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 		return fmt.Errorf("failed to get work directory: %w", err)
 	}
 
-	// 5. Execute action container (version bump)
+	// 5. Refuse to open a second release PR on top of an unfinished one
+	if err := a.checkNoReleaseInFlight(ctx, workDir); err != nil {
+		return err
+	}
+
+	// 6. Execute action container (version bump)
 	log.Info("🔍 Analyzing commits and determining version bump...")
 
 	if a.dryRun {
@@ -129,20 +156,25 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 		}
 		log.Infof("   Command: %s", action.Command)
 		log.Info("   This would:")
-		log.Info("   - Analyze conventional commits since last tag")
-		log.Info("   - Determine semantic version bump (major/minor/patch)")
-		log.Info("   - Update VERSION and .cz.toml files")
-		log.Info("   - Create version bump commit and tag")
-		if action.AutoPush {
-			log.Info("   - Push commit to remote")
-		}
-		if action.PushTags {
-			log.Info("   - Push tags to remote")
-		}
+		log.Info("   1. Run the bump container: analyze conventional commits since the last")
+		log.Info("      tag, pick the semantic bump, update VERSION/.cz.toml/CHANGELOG.md,")
+		log.Info("      commit, and create a local tag")
+		log.Infof("   2. Move that commit onto '%s<version>' and restore '%s'", releaseBranchPrefix, branch)
+		log.Info("   3. Delete the local tag (the squash-merge rewrites the commit)")
+		log.Info("   4. Push the branch and open the release pull request")
+		log.Info("   5. Wait for the PR checks to pass, then squash-merge it")
+		log.Infof("   6. Back on '%s': tag the merged commit and push the tag", branch)
 		if action.WatchWorkflow {
-			log.Info("   - Watch release workflow")
+			log.Info("   7. Watch the release workflow triggered by the tag")
 		}
 		return nil
+	}
+
+	// The bump commit is created on the current branch; remember where that
+	// branch stood so it can be restored once the commit moves to its own branch.
+	baseSHA, err := a.repo.GetHeadSHA()
+	if err != nil {
+		return fmt.Errorf("failed to read current commit: %w", err)
 	}
 
 	// Convert Action to ContainerConfig for executor
@@ -186,7 +218,7 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 		return fmt.Errorf("action execution failed: %w", err)
 	}
 
-	// 6. Read new version from VERSION file
+	// 7. Read new version from VERSION file
 	newVersion, err := a.readVersionFile(workDir)
 	if err != nil {
 		return fmt.Errorf("failed to read new version: %w", err)
@@ -194,25 +226,9 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 
 	log.Infof("✓ Version bumped to v%s", newVersion)
 
-	// 7. Auto-push commit if configured
-	if action.AutoPush {
-		log.Info("📤 Pushing version bump commit...")
-		if err := a.repo.Push(); err != nil {
-			return fmt.Errorf("failed to push commit: %w", err)
-		}
-		log.Info("✓ Commit pushed")
-	}
-
-	// 8. Push tags if configured
-	if action.PushTags {
-		log.Infof("🏷️  Pushing tag v%s...", newVersion)
-		tagName := fmt.Sprintf("v%s", newVersion)
-		pushTagCmd := exec.Command("git", "push", "origin", tagName)
-		pushTagCmd.Dir = workDir
-		if output, err := pushTagCmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("failed to push tag: %w\n%s", err, output)
-		}
-		log.Infof("✓ Tag %s pushed", tagName)
+	// 8. Carry the bump to the base branch through a PR, then tag the merged commit
+	if err := a.releaseViaPR(ctx, workDir, branch, baseSHA, newVersion); err != nil {
+		return err
 	}
 
 	// 9. Watch workflow if configured
@@ -268,6 +284,116 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 			break
 		}
 	}
+
+	return nil
+}
+
+// checkNoReleaseInFlight stops the release when a release branch is already
+// published on the remote. That means a previous run already opened a bump PR
+// (or was interrupted after pushing), and bumping again would compute the same
+// version and race a second PR against the first one.
+func (a *ReleaseAction) checkNoReleaseInFlight(ctx context.Context, workDir string) error {
+	branch := releaseBranchInFlight(workDir)
+	if branch == "" {
+		return nil
+	}
+
+	log.Errorf("❌ A release is already in flight on branch '%s'", branch)
+	if _, prURL, err := a.provider.GetPullRequestByBranch(ctx, branch); err == nil {
+		log.Infof("🔗 %s", prURL)
+	}
+	log.Info("📌 Finish it, or drop it and start over:")
+	log.Info("   - finish: check out that branch, then cidx pr merge")
+	log.Info("             followed by cidx release tag prepare && cidx release tag create")
+	log.Info("   - drop:   close the PR and delete the branch, then run cidx release create again")
+
+	return fmt.Errorf("release branch '%s' already exists on the remote", branch)
+}
+
+// releaseBranchInFlight returns the name of a release branch already published
+// on origin, or "" when there is none.
+func releaseBranchInFlight(workDir string) string {
+	output, err := runGit(workDir, "ls-remote", "--heads", "origin", releaseBranchPrefix+"*")
+	if err != nil {
+		log.Debugf("could not list remote release branches: %v", err)
+		return ""
+	}
+
+	const refPrefix = "refs/heads/"
+	for _, line := range strings.Split(string(output), "\n") {
+		_, ref, found := strings.Cut(strings.TrimSpace(line), refPrefix)
+		if found && ref != "" {
+			return ref
+		}
+	}
+
+	return ""
+}
+
+// releaseViaPR moves the version bump commit created by the action container
+// onto its own branch, opens a pull request, merges it once CI is green, and
+// tags the merged commit.
+//
+// Tagging happens after the merge on purpose: the squash-merge rewrites the
+// bump commit, so the tag cz created locally points at a SHA that never lands
+// on the base branch (issue #184).
+func (a *ReleaseAction) releaseViaPR(ctx context.Context, workDir, baseBranch, baseSHA, version string) error {
+	tagName := fmt.Sprintf("v%s", version)
+	branchName := releaseBranchPrefix + tagName
+
+	// Drop the local tag cz created: it points at the pre-merge commit.
+	if output, err := runGit(workDir, "tag", "-d", tagName); err != nil {
+		log.Debugf("no local tag %s to delete: %v\n%s", tagName, err, output)
+	}
+
+	log.Infof("🌿 Moving the bump commit onto '%s'...", branchName)
+	if output, err := runGit(workDir, "checkout", "-B", branchName); err != nil {
+		return fmt.Errorf("failed to create release branch: %w\n%s", err, output)
+	}
+	if output, err := runGit(workDir, "branch", "-f", baseBranch, baseSHA); err != nil {
+		return fmt.Errorf("failed to restore '%s': %w\n%s", baseBranch, err, output)
+	}
+
+	log.Info("📤 Pushing release branch...")
+	if output, err := runGit(workDir, "push", "-u", "origin", branchName); err != nil {
+		return fmt.Errorf("failed to push release branch: %w\n%s", err, output)
+	}
+
+	log.Info("📝 Opening the release pull request...")
+	body := fmt.Sprintf("Version bump to %s.\n\n---\n🤖 Created with [CIDX](https://github.com/cidx-org/cidx)", tagName)
+	_, prURL, err := a.provider.CreatePullRequest(
+		ctx,
+		fmt.Sprintf("chore(release): bump version to %s", tagName),
+		body,
+		branchName,
+		baseBranch,
+		false, // not a draft: it must run CI and be mergeable right away
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create release PR: %w", err)
+	}
+	log.Infof("🔗 %s", prURL)
+
+	if err := mergeReleasePR(ctx, a.repo, a.provider); err != nil {
+		log.Errorf("❌ Release PR was not merged -- no tag was created")
+		log.Infof("🔗 %s", prURL)
+		log.Info("📌 The version bump is safe on the PR branch. To finish the release:")
+		log.Info("   1. Fix the failure and push: cidx cpw -m \"fix: ...\"")
+		log.Info("   2. Merge the release PR:     cidx pr merge")
+		log.Info("   3. Tag the merged commit:    cidx release tag prepare && cidx release tag create")
+		return fmt.Errorf("release PR %s was not merged: %w", prURL, err)
+	}
+
+	// `pr merge` left us back on the base branch with the merge pulled, so
+	// HEAD is the squashed bump commit: that is what gets tagged.
+	log.Infof("🏷️  Tagging the merged commit as %s...", tagName)
+	if output, err := runGit(workDir, "tag", "-a", tagName, "-m", "Release "+tagName); err != nil {
+		return fmt.Errorf("failed to create tag %s: %w\n%s", tagName, err, output)
+	}
+	if output, err := runGit(workDir, "push", "origin", tagName); err != nil {
+		return fmt.Errorf("failed to push tag %s: %w\n%s", tagName, err, output)
+	}
+	log.Infof("✓ Tag %s pushed", tagName)
 
 	return nil
 }
