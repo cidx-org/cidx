@@ -45,7 +45,7 @@ func (a *TagPreviewAction) Execute(ctx context.Context) error {
 	} else {
 		log.Warn("⚠️  No prepared version found")
 		log.Info("   Run: cidx action tag prepare")
-		version = a.suggestVersion()
+		version = SuggestTagVersion(workDir)
 		log.Infof("   Suggested version: %s", version)
 	}
 
@@ -144,33 +144,6 @@ func (a *TagPreviewAction) Execute(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-// suggestVersion returns suggested version based on last tag
-func (a *TagPreviewAction) suggestVersion() string {
-	lastTag := a.getLastTag()
-	if lastTag == "(none)" {
-		return "0.1.0"
-	}
-
-	version := strings.TrimPrefix(lastTag, a.tagConfig.Prefix)
-	var major, minor, patch int
-	_, _ = fmt.Sscanf(version, "%d.%d.%d", &major, &minor, &patch)
-	patch++
-	return fmt.Sprintf("%d.%d.%d", major, minor, patch)
-}
-
-// getLastTag returns the most recent tag
-func (a *TagPreviewAction) getLastTag() string {
-	cmd := exec.Command("git", "describe", "--tags", "--abbrev=0")
-	workDir, _ := a.repo.GetWorkDir()
-	cmd.Dir = workDir
-
-	output, err := cmd.Output()
-	if err != nil {
-		return "(none)"
-	}
-	return strings.TrimSpace(string(output))
 }
 
 // showRecentTags displays the last few tags

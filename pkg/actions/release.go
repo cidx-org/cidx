@@ -3,7 +3,6 @@ package actions
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 
@@ -140,12 +139,20 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 		return fmt.Errorf("failed to get work directory: %w", err)
 	}
 
-	// 5. Refuse to open a second release PR on top of an unfinished one
+	// 5. Refuse to bump from a version that disagrees with the latest tag: the
+	// bump would land below (or duplicate) an already released version (#185).
+	state := ResolveVersion(workDir)
+	if state.Diverged() {
+		return state.DivergenceError()
+	}
+	warnChangelogTagGap(workDir)
+
+	// 6. Refuse to open a second release PR on top of an unfinished one
 	if err := a.checkNoReleaseInFlight(ctx, workDir); err != nil {
 		return err
 	}
 
-	// 6. Execute action container (version bump)
+	// 7. Execute action container (version bump)
 	log.Info("🔍 Analyzing commits and determining version bump...")
 
 	if a.dryRun {
@@ -218,20 +225,20 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 		return fmt.Errorf("action execution failed: %w", err)
 	}
 
-	// 7. Read new version from VERSION file
-	newVersion, err := a.readVersionFile(workDir)
+	// 8. Read new version from VERSION file
+	newVersion, err := readVersionFile(workDir)
 	if err != nil {
 		return fmt.Errorf("failed to read new version: %w", err)
 	}
 
 	log.Infof("✓ Version bumped to v%s", newVersion)
 
-	// 8. Carry the bump to the base branch through a PR, then tag the merged commit
+	// 9. Carry the bump to the base branch through a PR, then tag the merged commit
 	if err := a.releaseViaPR(ctx, workDir, branch, baseSHA, newVersion); err != nil {
 		return err
 	}
 
-	// 9. Watch workflow if configured
+	// 10. Watch workflow if configured
 	if !action.WatchWorkflow {
 		log.Info("✅ Release action completed")
 		// Cleanup prepared files when not watching workflow
@@ -396,18 +403,6 @@ func (a *ReleaseAction) releaseViaPR(ctx context.Context, workDir, baseBranch, b
 	log.Infof("✓ Tag %s pushed", tagName)
 
 	return nil
-}
-
-// readVersionFile reads the current version from the VERSION file
-func (a *ReleaseAction) readVersionFile(workDir string) (string, error) {
-	versionFile := fmt.Sprintf("%s/VERSION", workDir)
-	content, err := os.ReadFile(versionFile)
-	if err != nil {
-		return "", fmt.Errorf("failed to read VERSION file: %w", err)
-	}
-
-	version := strings.TrimSpace(string(content))
-	return version, nil
 }
 
 // getRepoPath returns owner/repo from the repository
