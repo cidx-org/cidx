@@ -1,10 +1,10 @@
-## [Unreleased]
+## v2.1.2 (2026-07-27)
 
 ### Fix
 
-- **presets**: document that probatum (Alpine/musl image) executes static or musl-linked artifacts only — glibc binaries from cargo-build fail with a misleading "sh: not found"; presets now support a description field shown by `preset info` (#195)
-- **presets**: cargo-audit extracts to /tmp instead of root-owned /usr/local/bin and points HOME/CARGO_HOME at writable dirs, so the preset works when the container runs non-root (#188)
-- **gomod**: move module path to `github.com/cidx-org/cidx/v2` so v2 releases are installable via `go install`; generated workflows now bootstrap the `/v2` path (#187). Effective from the next tag — v2.0.0 through v2.1.1 remain non-installable, and the old path's `@latest` still resolves to v1.8.0.
+- **presets**: document probatum musl-only execution constraint (#201)
+- **presets**: extract cargo-audit to a writable dir for non-root containers (#199)
+- **gomod**: move module to /v2 path so v2 releases are go-installable (#198)
 
 ## v2.1.1 (2026-07-27)
 
