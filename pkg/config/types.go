@@ -237,7 +237,5 @@ type Action struct {
 	Workdir       string            `toml:"workdir"`
 	Volumes       []string          `toml:"volumes"`
 	Env           map[string]string `toml:"env"`
-	AutoPush      bool              `toml:"auto_push"`
-	PushTags      bool              `toml:"push_tags"`
 	WatchWorkflow bool              `toml:"watch_workflow"`
 }
