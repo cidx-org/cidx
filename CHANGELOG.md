@@ -1,3 +1,10 @@
+## [Unreleased]
+
+### Fix
+
+- **actions**: cpw now commits untracked files instead of answering "No changes to commit" — `Commit()` already runs `git add .`, but the pre-flight check asked the tracked-only question, so a brand-new file was left behind while the user believed it was pushed. `HasChanges()` keeps its narrower meaning for the release/tag/pr guards, where a stray scratch file must not block anything (#180)
+- **presets**: a `presets.toml` that fails to parse is reported with its path and the TOML error instead of being discarded whole and in silence — every custom preset in it used to vanish, surfacing much later as a misleading "container X is not a built-in preset". Warning rather than hard error: `loadPresets` runs from `init()`, where a returned error becomes `log.Fatalf` and would kill even `cidx doctor` (#210)
+
 ## v2.1.4 (2026-07-27)
 
 ### Fix

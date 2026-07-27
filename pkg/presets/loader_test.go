@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -116,5 +117,80 @@ func TestParsePresetsDataQuietOnKnownKeys(t *testing.T) {
 
 	if buf.Len() != 0 {
 		t.Errorf("built-in presets produced warnings: %s", buf.String())
+	}
+}
+
+// TestMergeOptionalPresetFileWarnsOnBrokenFile covers #210: a presets.toml that
+// does not parse was dropped whole and in silence, so every custom preset in it
+// disappeared and the user only saw "container X is not a built-in preset"
+// later. The warning must name the file and carry the TOML error.
+func TestMergeOptionalPresetFileWarnsOnBrokenFile(t *testing.T) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+
+	path := filepath.Join(t.TempDir(), "presets.toml")
+	// Unterminated string: the file cannot be parsed at all.
+	broken := []byte("[presets.my-scanner]\nname = \"my-scanner\"\nimage = \"alpine:3.20\ncommand = \"echo scanning\"\n")
+	if err := os.WriteFile(path, broken, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	registry := map[string]Preset{"trivy": {Name: "trivy"}}
+	mergeOptionalPresetFile(registry, path)
+
+	got := buf.String()
+	if !strings.Contains(got, path) {
+		t.Errorf("warning %q does not name the offending file %q", got, path)
+	}
+	if !strings.Contains(got, "toml") {
+		t.Errorf("warning %q does not carry the TOML parse error", got)
+	}
+
+	// The broken file is still skipped -- built-ins must survive it.
+	if _, ok := registry["trivy"]; !ok {
+		t.Error("a broken preset file must not take the built-in presets with it")
+	}
+	if _, ok := registry["my-scanner"]; ok {
+		t.Error("presets from an unparseable file must not be merged")
+	}
+}
+
+// TestMergeOptionalPresetFileLoadsValidFileQuietly guards the other side: a
+// good file merges, and does so without noise.
+func TestMergeOptionalPresetFileLoadsValidFileQuietly(t *testing.T) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+
+	path := filepath.Join(t.TempDir(), "presets.toml")
+	valid := []byte("[presets.my-scanner]\nname = \"my-scanner\"\nphase = \"security\"\nimage = \"alpine:3.20\"\n")
+	if err := os.WriteFile(path, valid, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	registry := map[string]Preset{}
+	mergeOptionalPresetFile(registry, path)
+
+	if _, ok := registry["my-scanner"]; !ok {
+		t.Fatalf("valid preset file was not merged, got %v", registry)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("valid preset file produced output: %s", buf.String())
+	}
+}
+
+// TestMergeOptionalPresetFileSilentWhenAbsent keeps the common case quiet:
+// almost no project ships a .cidx/presets.toml.
+func TestMergeOptionalPresetFileSilentWhenAbsent(t *testing.T) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+
+	registry := map[string]Preset{}
+	mergeOptionalPresetFile(registry, filepath.Join(t.TempDir(), "does-not-exist.toml"))
+
+	if buf.Len() != 0 {
+		t.Errorf("missing preset file produced output: %s", buf.String())
 	}
 }

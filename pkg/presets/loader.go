@@ -65,28 +65,41 @@ func loadPresets() (map[string]Preset, error) {
 
 	// 2. Load User Presets (~/.config/cidx/presets.toml)
 	if homeDir, err := os.UserHomeDir(); err == nil {
-		userPath := filepath.Join(homeDir, ".config", "cidx", "presets.toml")
-		if _, err := os.Stat(userPath); err == nil {
-			userPresets, err := loadPresetsFromFile(userPath)
-			if err == nil {
-				mergePresets(registry, userPresets)
-			}
-		}
+		mergeOptionalPresetFile(registry, filepath.Join(homeDir, ".config", "cidx", "presets.toml"))
 	}
 
 	// 3. Load Project Presets (.cidx/presets.toml)
 	// We assume current working directory is project root
 	if cwd, err := os.Getwd(); err == nil {
-		projectPath := filepath.Join(cwd, ".cidx", "presets.toml")
-		if _, err := os.Stat(projectPath); err == nil {
-			projectPresets, err := loadPresetsFromFile(projectPath)
-			if err == nil {
-				mergePresets(registry, projectPresets)
-			}
-		}
+		mergeOptionalPresetFile(registry, filepath.Join(cwd, ".cidx", "presets.toml"))
 	}
 
 	return registry, nil
+}
+
+// mergeOptionalPresetFile merges a preset file into registry if it exists.
+//
+// A file that fails to parse used to be dropped whole and in silence: every
+// custom preset in it vanished, and the user only met "container X is not a
+// built-in preset" much later, pointing at the wrong thing (#210). Say so.
+//
+// Warning rather than hard error, including for the project file: loadPresets
+// runs from this package's init(), whose only failure path is log.Fatalf. A
+// returned error would abort every cidx invocation before the CLI starts —
+// including `cidx doctor` and `--help`, the commands that would tell the user
+// what is broken. A named warning is observable and leaves them in control.
+func mergeOptionalPresetFile(registry map[string]Preset, path string) {
+	if _, err := os.Stat(path); err != nil {
+		return
+	}
+	filePresets, err := loadPresetsFromFile(path)
+	if err != nil {
+		// Both failure modes already name the file: os.ReadFile returns a
+		// *PathError, parsePresetsData embeds its source.
+		log.Printf("warning: ignoring preset file: %v", err)
+		return
+	}
+	mergePresets(registry, filePresets)
 }
 
 // loadBasePresets loads the core presets
@@ -137,8 +150,8 @@ func parsePresetsData(data []byte, source string) (map[string]Preset, error) {
 	// A key that PresetTOML does not know about is dropped by the decoder
 	// without a word — that is how pull_policy and timeout went missing (#203),
 	// and it is how any typo ("comand", "workdirr") goes missing today. Warn
-	// instead of failing: loadPresets discards errors from user/project preset
-	// files, so an error here would itself be swallowed silently.
+	// instead of failing: an unknown key costs one field, whereas an error here
+	// costs the whole file (mergeOptionalPresetFile drops a file it cannot parse).
 	warnUndecodedKeys(md.Undecoded(), source)
 
 	registry := make(map[string]Preset)

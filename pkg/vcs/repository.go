@@ -177,7 +177,27 @@ func (r *Repository) GetHeadSHA() (string, error) {
 }
 
 // HasChanges checks if there are uncommitted changes (modified or staged files only, ignoring untracked)
+//
+// This is the "would a release/tag be built from a dirty tree?" question: a
+// stray scratch file next to the source must not block `pr create`, `tag
+// create` or `release create`. Use HasChangesIncludingUntracked to ask "is
+// there anything to commit?".
 func (r *Repository) HasChanges() (bool, error) {
+	return r.hasChanges(false)
+}
+
+// HasChangesIncludingUntracked reports uncommitted changes the way Commit()
+// sees them. Commit() runs `git add .`, so a brand-new file is something to
+// commit; cpw asked HasChanges instead and answered "No changes to commit"
+// while quietly leaving the user's new file behind (issue #180).
+func (r *Repository) HasChangesIncludingUntracked() (bool, error) {
+	return r.hasChanges(true)
+}
+
+// hasChanges walks the worktree status. Ignored files are already excluded by
+// go-git's Status(), so includeUntracked only ever sees files `git add .`
+// would stage.
+func (r *Repository) hasChanges(includeUntracked bool) (bool, error) {
 	w, err := r.repo.Worktree()
 	if err != nil {
 		return false, fmt.Errorf("failed to get worktree: %w", err)
@@ -188,8 +208,13 @@ func (r *Repository) HasChanges() (bool, error) {
 		return false, fmt.Errorf("failed to get status: %w", err)
 	}
 
-	// Check only for modified or staged files, ignore untracked files
 	for _, fileStatus := range status {
+		if includeUntracked {
+			if fileStatus.Worktree != git.Unmodified || fileStatus.Staging != git.Unmodified {
+				return true, nil
+			}
+			continue
+		}
 		if fileStatus.Worktree != git.Untracked && fileStatus.Worktree != git.Unmodified {
 			return true, nil
 		}
