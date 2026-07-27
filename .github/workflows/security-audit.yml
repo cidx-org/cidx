@@ -126,7 +126,7 @@ jobs:
       - name: Generate ignore file
         run: |
           IMAGE="${{ matrix.image }}"
-          ./bin/cidx vuln ignore --format trivy -o .trivyignore "$IMAGE"
+          ./bin/cidx security vuln ignore --format trivy -o .trivyignore "$IMAGE"
 
       - name: Scan and save results
         id: scan
@@ -190,7 +190,7 @@ jobs:
         if: steps.scan.outputs.status == 'vulnerable'
         run: |
           echo "❌ Unhandled vulnerabilities found in ${{ matrix.image }}"
-          echo "   Add exceptions with: cidx vuln add <CVE> ${{ matrix.image }}"
+          echo "   Add exceptions with: cidx security vuln add <CVE> ${{ matrix.image }}"
           exit 1
 
   # Job 3: Grype scan (parallel)
@@ -237,7 +237,7 @@ jobs:
       - name: Generate ignore file
         run: |
           IMAGE="${{ matrix.image }}"
-          ./bin/cidx vuln ignore --format grype -o .grype.yaml "$IMAGE"
+          ./bin/cidx security vuln ignore --format grype -o .grype.yaml "$IMAGE"
 
       - name: Scan and save results
         id: scan
@@ -301,7 +301,7 @@ jobs:
         if: steps.scan.outputs.status == 'vulnerable'
         run: |
           echo "❌ Unhandled vulnerabilities found in ${{ matrix.image }}"
-          echo "   Add exceptions with: cidx vuln add <CVE> ${{ matrix.image }}"
+          echo "   Add exceptions with: cidx security vuln add <CVE> ${{ matrix.image }}"
           exit 1
 
   # Job 4: Check for expired exceptions
@@ -326,7 +326,7 @@ jobs:
       - name: Check for expired exceptions
         id: check
         run: |
-          if ./bin/cidx vuln check --days 7; then
+          if ./bin/cidx security vuln check --days 7; then
             echo "status=ok" >> $GITHUB_OUTPUT
           else
             echo "status=expired" >> $GITHUB_OUTPUT
@@ -456,7 +456,7 @@ jobs:
           # Current Exceptions List
           echo "### Current Exceptions" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          EXCEPTIONS=$(./bin/cidx vuln list 2>/dev/null)
+          EXCEPTIONS=$(./bin/cidx security vuln list 2>/dev/null)
           if [ -n "$EXCEPTIONS" ]; then
             echo '```' >> $GITHUB_STEP_SUMMARY
             echo "$EXCEPTIONS" >> $GITHUB_STEP_SUMMARY
@@ -473,11 +473,11 @@ jobs:
             echo "1. Review vulnerability details above" >> $GITHUB_STEP_SUMMARY
             echo "2. For accepted risks, add exceptions:" >> $GITHUB_STEP_SUMMARY
             echo '   ```bash' >> $GITHUB_STEP_SUMMARY
-            echo '   cidx vuln add <CVE-ID> <IMAGE>' >> $GITHUB_STEP_SUMMARY
+            echo '   cidx security vuln add <CVE-ID> <IMAGE>' >> $GITHUB_STEP_SUMMARY
             echo '   ```' >> $GITHUB_STEP_SUMMARY
             echo "3. Verify exceptions work locally:" >> $GITHUB_STEP_SUMMARY
             echo '   ```bash' >> $GITHUB_STEP_SUMMARY
-            echo '   cidx vuln verify' >> $GITHUB_STEP_SUMMARY
+            echo '   cidx security vuln verify' >> $GITHUB_STEP_SUMMARY
             echo '   ```' >> $GITHUB_STEP_SUMMARY
             echo "4. Commit and push changes" >> $GITHUB_STEP_SUMMARY
           fi
@@ -496,6 +496,6 @@ jobs:
           else
             echo "❌ Unhandled vulnerabilities detected"
             echo "   Review the report above for details"
-            echo "   Add exceptions with: cidx vuln add <CVE> <IMAGE>"
+            echo "   Add exceptions with: cidx security vuln add <CVE> <IMAGE>"
             exit 1
           fi
