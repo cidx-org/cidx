@@ -1,6 +1,8 @@
 package pipeline
 
 import (
+	"context"
+	"strings"
 	"testing"
 
 	"github.com/cidx-org/cidx/v2/pkg/config"
@@ -179,5 +181,49 @@ func TestCheckWorkdirCoveredByVolumes(t *testing.T) {
 					tt.workdir, tt.volumes, err, tt.wantErr)
 			}
 		})
+	}
+}
+
+// TestRun_TargetResolution covers #216: `cidx run <name>` must accept a
+// container declared only through [containers.NAME] with an `image` field,
+// not just built-in presets. The custom container is only rejected at the
+// resolution step — anything past it (executor selection, execution) is out
+// of scope here, so we assert on the "unknown target" rejection alone.
+func TestRun_TargetResolution(t *testing.T) {
+	cfg := &config.Config{
+		Overrides: map[string]map[string]any{
+			"my-tool": {"image": "alpine:3.20", "command": "echo hi"},
+			// Override-only section (no image): not a runnable target.
+			"tweaks-only": {"severity": "HIGH"},
+		},
+		Workspace: t.TempDir(),
+	}
+
+	selector, err := executor.NewSelector(true, false, true) // dry-run executors
+	if err != nil {
+		t.Fatalf("failed to create selector: %v", err)
+	}
+	t.Cleanup(func() { _ = selector.Close() })
+
+	runner := NewRunnerWithOptions(cfg, selector, RunnerOptions{
+		Backend:     executor.BackendAuto,
+		Concurrency: 1,
+	})
+	ctx := context.Background()
+
+	// Declared custom container: resolved, never rejected as unknown.
+	if err := runner.Run(ctx, "my-tool"); err != nil && strings.Contains(err.Error(), "unknown target") {
+		t.Errorf("custom container declared via [containers.my-tool] was rejected: %v", err)
+	}
+
+	// Names the config does not declare still fail, and say so clearly.
+	for _, target := range []string{"nope", "tweaks-only"} {
+		err := runner.Run(ctx, target)
+		if err == nil {
+			t.Fatalf("Run(%q) should fail: nothing declares it", target)
+		}
+		if !strings.Contains(err.Error(), "unknown target") || !strings.Contains(err.Error(), target) {
+			t.Errorf("Run(%q) error should name the unknown target, got: %v", target, err)
+		}
 	}
 }
