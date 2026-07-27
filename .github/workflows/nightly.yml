@@ -45,7 +45,8 @@ jobs:
         with:
           name: cidx-nightly
           path: bin/cidx
-          retention-days: 7
+          # Inter-job handoff only (build -> docker); the image is the deliverable.
+          retention-days: 1
 
   # Docker: Build and push nightly container image
   docker:
