@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/cidx-org/cidx/v2/pkg/presets"
@@ -30,6 +31,57 @@ func RegisterPresetSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Then(`^it should be valid$`, tc.configShouldBeValid)
 	ctx.Then(`^the tool "([^"]*)" should be available$`, tc.toolShouldBeAvailable)
 	ctx.Then(`^the preset "([^"]*)" should have "([^"]*)" set to "([^"]*)"$`, tc.presetFieldShouldEqual)
+
+	// Option flag placement (#200)
+	ctx.When(`^I resolve the preset "([^"]*)" with option "([^"]*)" set to "([^"]*)"$`, tc.resolvePresetWithOption)
+	ctx.When(`^I resolve the preset "([^"]*)" without overrides$`, tc.resolvePresetWithoutOverrides)
+	ctx.Then(`^the resolved command should be "([^"]*)"$`, tc.resolvedCommandShouldBe)
+	ctx.Then(`^the resolved command should contain "([^"]*)"$`, tc.resolvedCommandShouldContain)
+}
+
+// resolvePresetWithOption merges a single user option override into a built-in
+// preset, exactly as cidx.toml's `[containers.NAME]` section does at runtime.
+func (tc *TestContext) resolvePresetWithOption(presetName, option, value string) error {
+	return tc.resolvePreset(presetName, map[string]any{option: value})
+}
+
+// resolvePresetWithoutOverrides resolves a built-in preset as-is.
+func (tc *TestContext) resolvePresetWithoutOverrides(presetName string) error {
+	return tc.resolvePreset(presetName, map[string]any{})
+}
+
+func (tc *TestContext) resolvePreset(presetName string, overrides map[string]any) error {
+	preset, err := presets.Get(presetName)
+	if err != nil {
+		return fmt.Errorf("failed to resolve preset %q: %w", presetName, err)
+	}
+	tc.Config["resolved_command"] = preset.MergeWith(overrides).Command
+	return nil
+}
+
+// resolvedCommandShouldBe asserts the exact command handed to the executor.
+func (tc *TestContext) resolvedCommandShouldBe(want string) error {
+	got, ok := tc.Config["resolved_command"].(string)
+	if !ok {
+		return fmt.Errorf("no preset resolved")
+	}
+	if got != want {
+		return fmt.Errorf("resolved command = %q, want %q", got, want)
+	}
+	return nil
+}
+
+// resolvedCommandShouldContain asserts a fragment of the resolved command, for
+// commands too long to spell out in full.
+func (tc *TestContext) resolvedCommandShouldContain(want string) error {
+	got, ok := tc.Config["resolved_command"].(string)
+	if !ok {
+		return fmt.Errorf("no preset resolved")
+	}
+	if !strings.Contains(got, want) {
+		return fmt.Errorf("resolved command %q does not contain %q", got, want)
+	}
+	return nil
 }
 
 // loadCustomPresets decodes the preset file staged by `a file "..." with content:`

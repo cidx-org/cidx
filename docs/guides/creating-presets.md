@@ -324,6 +324,17 @@ options:
     env_var: string # Maps to env var (optional)
 ```
 
+`command_flag` appends `<flag> <value>` to the preset's `command`. For a
+shell-wrapped command (`sh -c '<script>'`) the flag is injected before the
+closing quote, so it reaches the wrapped tool instead of `sh`:
+
+```
+command = "sh -c 'pip install --quiet mypy && mypy .'"   # strict = true
+       →  sh -c 'pip install --quiet mypy && mypy . --strict true'
+```
+
+Write the script so the flag-bearing tool invocation comes last.
+
 ## Migration Guide
 
 ### From Hardcoded to File-based
