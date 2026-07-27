@@ -58,9 +58,13 @@ func workflowCommand() *cli.Command {
 Unlike 'cidx pr watch', this command does not require an open pull request, so
 it works for direct pushes to main and any other non-PR branch.
 
+--tag watches the run a tag push triggered (typically the release workflow),
+which is a different run from the CI one on the same commit.
+
 Examples:
   cidx workflow watch                    # latest run on current branch
   cidx workflow watch --branch main      # latest run on main
+  cidx workflow watch --tag v2.1.4       # run triggered by the v2.1.4 tag push
   cidx workflow watch 12345678           # specific run by ID
   cidx workflow watch --run 12345678     # same, via flag`,
 				Flags: []cli.Flag{
@@ -68,6 +72,11 @@ Examples:
 						Name:    "branch",
 						Aliases: []string{"b"},
 						Usage:   "Branch to watch (defaults to current branch)",
+					},
+					&cli.StringFlag{
+						Name:    "tag",
+						Aliases: []string{"t"},
+						Usage:   "Watch the run triggered by a tag push (e.g. v2.1.4)",
 					},
 					&cli.StringFlag{
 						Name:  "run",
@@ -85,8 +94,8 @@ Examples:
 	}
 }
 
-// workflowWatchAction resolves the run to watch (by ID, by --branch, or by
-// current branch) and delegates to actions.WorkflowWatchAction.
+// workflowWatchAction resolves the run to watch (by ID, by --tag, by --branch,
+// or by current branch) and delegates to actions.WorkflowWatchAction.
 func workflowWatchAction(c *cli.Context) error {
 	runID := c.String("run")
 	if runID == "" && c.Args().Len() > 0 {
@@ -94,10 +103,11 @@ func workflowWatchAction(c *cli.Context) error {
 	}
 
 	branchName := c.String("branch")
+	tagName := c.String("tag")
 
-	// If neither a run ID nor an explicit branch is provided, default to the
-	// current git branch -- the common case from the user's terminal.
-	if runID == "" && branchName == "" {
+	// With no explicit selector, default to the current git branch -- the
+	// common case from the user's terminal.
+	if runID == "" && branchName == "" && tagName == "" {
 		var err error
 		branchName, err = branch.GetCurrentBranch()
 		if err != nil {
@@ -106,7 +116,7 @@ func workflowWatchAction(c *cli.Context) error {
 	}
 
 	return withRepoAndProvider(func(_ *vcs.Repository, provider remote.Provider) error {
-		action := actions.NewWorkflowWatch(provider, branchName, runID, c.Bool("quiet"))
+		action := actions.NewWorkflowWatch(provider, branchName, tagName, runID, c.Bool("quiet"))
 		return action.Execute(context.Background())
 	})
 }

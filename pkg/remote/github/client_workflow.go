@@ -64,30 +64,63 @@ func latestRunFromCandidates(ctx context.Context, branch string, list listRunsFu
 	return nil, fmt.Errorf("no workflow runs found for branch %s (tried %s)", branch, strings.Join(remote.CandidateWorkflowFiles, ", "))
 }
 
+// listRepoRunsFunc lists repository-wide workflow runs under the given filters.
+// It exists as a seam so latestRunForRef can be unit-tested without a real
+// GitHub client.
+type listRepoRunsFunc func(ctx context.Context, opts *github.ListWorkflowRunsOptions) (*github.WorkflowRuns, *github.Response, error)
+
 // GetLatestRunForBranch returns the most recent workflow run on a branch across
 // all workflows in the repository. Unlike GetLatestWorkflow, it is not scoped to
 // a specific workflow filename, so it works for repositories that don't use
 // cidx-generated workflows. Used by `cidx workflow watch` to support watching
 // runs on non-PR branches (issue #125).
 func (c *Client) GetLatestRunForBranch(ctx context.Context, branch string) (*remote.Workflow, error) {
-	runs, _, err := c.client.Actions.ListRepositoryWorkflowRuns(
-		ctx,
-		c.owner,
-		c.repo,
-		&github.ListWorkflowRunsOptions{
-			Branch:      branch,
-			ListOptions: github.ListOptions{PerPage: 1},
-		},
-	)
+	run, err := latestRunForRef(ctx, branch, "branch", c.listRepositoryRuns)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.convertWorkflow(ctx, run)
+}
+
+// GetLatestRunForTag returns the most recent workflow run triggered by the push
+// of a tag. GitHub records the ref that started a run in head_branch -- for a
+// tag push that is the tag name -- and the repository-wide runs listing filters
+// on it. Resolving by ref instead of by workflow file name means the release
+// workflow is found whatever it is called, and the runs that a branch push of
+// the very same commit produced (CI, nightly) are left out because their ref is
+// the branch, not the tag (issue #223).
+func (c *Client) GetLatestRunForTag(ctx context.Context, tag string) (*remote.Workflow, error) {
+	run, err := latestRunForRef(ctx, tag, "tag", c.listRepositoryRuns)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.convertWorkflow(ctx, run)
+}
+
+// listRepositoryRuns is the real implementation behind listRepoRunsFunc.
+func (c *Client) listRepositoryRuns(ctx context.Context, opts *github.ListWorkflowRunsOptions) (*github.WorkflowRuns, *github.Response, error) {
+	return c.client.Actions.ListRepositoryWorkflowRuns(ctx, c.owner, c.repo, opts)
+}
+
+// latestRunForRef returns the most recent run whose ref is the given branch or
+// tag. refKind only shapes the error message, so the user is told what was
+// actually searched.
+func latestRunForRef(ctx context.Context, ref, refKind string, list listRepoRunsFunc) (*github.WorkflowRun, error) {
+	runs, _, err := list(ctx, &github.ListWorkflowRunsOptions{
+		Branch:      ref,
+		ListOptions: github.ListOptions{PerPage: 1},
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list workflow runs: %w", err)
 	}
 
-	if len(runs.WorkflowRuns) == 0 {
-		return nil, fmt.Errorf("no workflow runs found for branch %s", branch)
+	if runs == nil || len(runs.WorkflowRuns) == 0 {
+		return nil, fmt.Errorf("no workflow runs found for %s %s", refKind, ref)
 	}
 
-	return c.convertWorkflow(ctx, runs.WorkflowRuns[0])
+	return runs.WorkflowRuns[0], nil
 }
 
 // GetWorkflowRun returns a workflow run by its ID. Used by `cidx workflow watch

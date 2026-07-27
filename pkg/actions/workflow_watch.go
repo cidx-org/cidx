@@ -8,25 +8,27 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// WorkflowWatchAction watches a single workflow run on a branch (or by run ID).
-// It complements `cidx pr watch` by supporting non-PR branches such as direct
-// pushes to main (issue #125).
+// WorkflowWatchAction watches a single workflow run, selected by branch, tag or
+// run ID. It complements `cidx pr watch` by supporting non-PR branches such as
+// direct pushes to main (issue #125) and tag pushes (issue #223).
 type WorkflowWatchAction struct {
 	provider remote.Provider
-	branch   string // resolved branch name; empty if runID is set
-	runID    string // explicit run ID; empty if branch lookup is used
+	branch   string // resolved branch name; empty if tag or runID is set
+	tag      string // tag whose push triggered the run; empty otherwise
+	runID    string // explicit run ID; empty if branch/tag lookup is used
 	quiet    bool
 }
 
 // NewWorkflowWatch creates a new workflow watch action.
 //
-// Exactly one of branch or runID should be set. When branch is set, the action
-// resolves the most recent workflow run on that branch. When runID is set, it
-// watches the specified run directly.
-func NewWorkflowWatch(provider remote.Provider, branch, runID string, quiet bool) *WorkflowWatchAction {
+// Exactly one of branch, tag or runID should be set. A branch or a tag resolves
+// to the most recent run on that ref; a run ID watches that run directly. When
+// several are set, the most specific wins: runID, then tag, then branch.
+func NewWorkflowWatch(provider remote.Provider, branch, tag, runID string, quiet bool) *WorkflowWatchAction {
 	return &WorkflowWatchAction{
 		provider: provider,
 		branch:   branch,
+		tag:      tag,
 		runID:    runID,
 		quiet:    quiet,
 	}
@@ -76,7 +78,7 @@ func (a *WorkflowWatchAction) Execute(ctx context.Context) error {
 	return nil
 }
 
-// resolveWorkflow picks the run to watch based on branch or runID.
+// resolveWorkflow picks the run to watch based on runID, tag or branch.
 func (a *WorkflowWatchAction) resolveWorkflow(ctx context.Context) (*remote.Workflow, error) {
 	if a.runID != "" {
 		workflow, err := a.provider.GetWorkflowRun(ctx, a.runID)
@@ -86,8 +88,16 @@ func (a *WorkflowWatchAction) resolveWorkflow(ctx context.Context) (*remote.Work
 		return workflow, nil
 	}
 
+	if a.tag != "" {
+		workflow, err := a.provider.GetLatestRunForTag(ctx, a.tag)
+		if err != nil {
+			return nil, fmt.Errorf("no workflow run found for tag %q (push the tag or check its name): %w", a.tag, err)
+		}
+		return workflow, nil
+	}
+
 	if a.branch == "" {
-		return nil, fmt.Errorf("either a branch or a run ID is required")
+		return nil, fmt.Errorf("a branch, a tag or a run ID is required")
 	}
 
 	workflow, err := a.provider.GetLatestRunForBranch(ctx, a.branch)

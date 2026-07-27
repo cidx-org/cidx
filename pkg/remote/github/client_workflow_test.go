@@ -104,3 +104,63 @@ func TestLatestRunFromCandidates(t *testing.T) {
 		}
 	})
 }
+
+func TestLatestRunForRef(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("filters the repository-wide runs on the tag ref", func(t *testing.T) {
+		var got *github.ListWorkflowRunsOptions
+		run, err := latestRunForRef(ctx, "v2.1.4", "tag", func(_ context.Context, opts *github.ListWorkflowRunsOptions) (*github.WorkflowRuns, *github.Response, error) {
+			got = opts
+			// GitHub stores the ref that triggered the run in head_branch; for
+			// a tag push that is the tag name, so the release run comes back
+			// and the CI/nightly runs of the same commit do not.
+			return fakeRuns(30283021151), nil, nil
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if run.GetID() != 30283021151 {
+			t.Errorf("got run ID %d, want the release run", run.GetID())
+		}
+		if got == nil || got.Branch != "v2.1.4" {
+			t.Errorf("expected the listing to be filtered on ref v2.1.4, got %+v", got)
+		}
+		if got.PerPage != 1 {
+			t.Errorf("expected only the latest run to be fetched, got PerPage=%d", got.PerPage)
+		}
+	})
+
+	t.Run("names the ref kind when nothing matches", func(t *testing.T) {
+		_, err := latestRunForRef(ctx, "v9.9.9", "tag", func(_ context.Context, _ *github.ListWorkflowRunsOptions) (*github.WorkflowRuns, *github.Response, error) {
+			return &github.WorkflowRuns{}, nil, nil
+		})
+		if err == nil {
+			t.Fatal("expected an error when the tag triggered no run")
+		}
+		for _, want := range []string{"tag", "v9.9.9"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error %q should mention %q", err, want)
+			}
+		}
+	})
+
+	t.Run("branch lookups keep their own wording", func(t *testing.T) {
+		_, err := latestRunForRef(ctx, "feature-x", "branch", func(_ context.Context, _ *github.ListWorkflowRunsOptions) (*github.WorkflowRuns, *github.Response, error) {
+			return nil, nil, nil
+		})
+		if err == nil || !strings.Contains(err.Error(), "branch feature-x") {
+			t.Fatalf("expected a branch-specific error, got %v", err)
+		}
+	})
+
+	t.Run("propagates API errors", func(t *testing.T) {
+		apiErr := errors.New("503 Service Unavailable")
+		_, err := latestRunForRef(ctx, "v2.1.4", "tag", func(_ context.Context, _ *github.ListWorkflowRunsOptions) (*github.WorkflowRuns, *github.Response, error) {
+			return nil, &github.Response{Response: &http.Response{StatusCode: http.StatusServiceUnavailable}}, apiErr
+		})
+		if err == nil || !errors.Is(err, apiErr) {
+			t.Fatalf("expected wrapped API error, got %v", err)
+		}
+	})
+}

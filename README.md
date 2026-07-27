@@ -134,6 +134,7 @@ cidx repo branch cleanup -x              # Delete merged branches
 # Workflow runs (no PR required, e.g. direct push to main)
 cidx repo workflow watch                  # Watch latest run on current branch
 cidx repo workflow watch --branch main    # Watch latest run on main
+cidx repo workflow watch --tag v1.2.3     # Watch the run a tag push triggered
 cidx repo workflow watch <run-id>         # Watch a specific run by ID
 
 # Releases (cidx release)

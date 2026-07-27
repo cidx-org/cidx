@@ -16,6 +16,9 @@ import (
 type fakeProvider struct {
 	latestForBranch map[string]*remote.Workflow
 	latestErr       map[string]error
+	latestForTag    map[string]*remote.Workflow
+	tagErr          map[string]error
+	tagLookups      []string
 	runs            map[string]*remote.Workflow
 	runErr          map[string]error
 	watchUpdates    []remote.WorkflowUpdate
@@ -34,6 +37,17 @@ func (f *fakeProvider) GetLatestRunForBranch(_ context.Context, branch string) (
 		return w, nil
 	}
 	return nil, errors.New("no workflow runs found")
+}
+
+func (f *fakeProvider) GetLatestRunForTag(_ context.Context, tag string) (*remote.Workflow, error) {
+	f.tagLookups = append(f.tagLookups, tag)
+	if err, ok := f.tagErr[tag]; ok {
+		return nil, err
+	}
+	if w, ok := f.latestForTag[tag]; ok {
+		return w, nil
+	}
+	return nil, errors.New("no workflow runs found for tag " + tag)
 }
 
 func (f *fakeProvider) GetWorkflowRun(_ context.Context, runID string) (*remote.Workflow, error) {
@@ -100,7 +114,7 @@ func TestWorkflowWatch_ResolveByBranch_Success(t *testing.T) {
 		},
 	}
 
-	action := NewWorkflowWatch(provider, "main", "", true)
+	action := NewWorkflowWatch(provider, "main", "", "", true)
 	if err := action.Execute(context.Background()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -113,7 +127,7 @@ func TestWorkflowWatch_ResolveByBranch_NoRunsFound(t *testing.T) {
 		},
 	}
 
-	action := NewWorkflowWatch(provider, "feature-x", "", true)
+	action := NewWorkflowWatch(provider, "feature-x", "", "", true)
 	err := action.Execute(context.Background())
 	if err == nil {
 		t.Fatal("expected error when no runs are found, got nil")
@@ -140,9 +154,72 @@ func TestWorkflowWatch_ResolveByRunID(t *testing.T) {
 	}
 
 	// Branch is not consulted when runID is provided.
-	action := NewWorkflowWatch(provider, "ignored-branch", "9999", true)
+	action := NewWorkflowWatch(provider, "ignored-branch", "", "9999", true)
 	if err := action.Execute(context.Background()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestWorkflowWatch_ResolveByTag_Success(t *testing.T) {
+	releaseRun := &remote.Workflow{
+		ID:         "30283021151",
+		Status:     "completed",
+		Conclusion: "success",
+		URL:        "https://example.test/runs/30283021151",
+	}
+	provider := &fakeProvider{
+		latestForTag: map[string]*remote.Workflow{
+			"v2.1.4": releaseRun,
+		},
+		// A completed run must be reported without streaming: watching it
+		// would surface this error.
+		watchErr: errors.New("WatchWorkflow must not be called for a completed run"),
+	}
+
+	action := NewWorkflowWatch(provider, "", "v2.1.4", "", true)
+	if err := action.Execute(context.Background()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(provider.tagLookups) != 1 || provider.tagLookups[0] != "v2.1.4" {
+		t.Errorf("expected the run to be resolved by tag v2.1.4, got lookups %v", provider.tagLookups)
+	}
+}
+
+func TestWorkflowWatch_ResolveByTag_NoRunFound(t *testing.T) {
+	provider := &fakeProvider{
+		tagErr: map[string]error{
+			"v9.9.9": errors.New("no workflow runs found for tag v9.9.9"),
+		},
+	}
+
+	action := NewWorkflowWatch(provider, "", "v9.9.9", "", true)
+	err := action.Execute(context.Background())
+	if err == nil {
+		t.Fatal("expected an error when no run matches the tag")
+	}
+	if !strings.Contains(err.Error(), "no workflow run found for tag") {
+		t.Errorf("expected a tag-specific error, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "v9.9.9") {
+		t.Errorf("expected the tag name in the error, got: %v", err)
+	}
+}
+
+func TestWorkflowWatch_TagWinsOverBranch(t *testing.T) {
+	// A tag push and the branch push of the same commit produce different runs;
+	// --tag must select the tag's one.
+	provider := &fakeProvider{
+		latestForBranch: map[string]*remote.Workflow{
+			"main": {ID: "1", Status: "completed", Conclusion: "failure"},
+		},
+		latestForTag: map[string]*remote.Workflow{
+			"v2.1.4": {ID: "2", Status: "completed", Conclusion: "success"},
+		},
+	}
+
+	action := NewWorkflowWatch(provider, "main", "v2.1.4", "", true)
+	if err := action.Execute(context.Background()); err != nil {
+		t.Fatalf("expected the tag run to be watched, got error from the branch run: %v", err)
 	}
 }
 
@@ -153,7 +230,7 @@ func TestWorkflowWatch_RunIDNotFound(t *testing.T) {
 		},
 	}
 
-	action := NewWorkflowWatch(provider, "", "42", true)
+	action := NewWorkflowWatch(provider, "", "", "42", true)
 	err := action.Execute(context.Background())
 	if err == nil {
 		t.Fatal("expected error for unknown run ID")
@@ -165,7 +242,7 @@ func TestWorkflowWatch_RunIDNotFound(t *testing.T) {
 
 func TestWorkflowWatch_NoBranchOrRunID(t *testing.T) {
 	provider := &fakeProvider{}
-	action := NewWorkflowWatch(provider, "", "", true)
+	action := NewWorkflowWatch(provider, "", "", "", true)
 	err := action.Execute(context.Background())
 	if err == nil {
 		t.Fatal("expected error when neither branch nor run ID is provided")
@@ -195,7 +272,7 @@ func TestWorkflowWatch_StreamsUpdatesUntilCompletion(t *testing.T) {
 		},
 	}
 
-	action := NewWorkflowWatch(provider, "main", "", true)
+	action := NewWorkflowWatch(provider, "main", "", "", true)
 	if err := action.Execute(context.Background()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -214,7 +291,7 @@ func TestWorkflowWatch_FailureConclusionReturnsError(t *testing.T) {
 		},
 	}
 
-	action := NewWorkflowWatch(provider, "main", "", true)
+	action := NewWorkflowWatch(provider, "main", "", "", true)
 	err := action.Execute(context.Background())
 	if err == nil {
 		t.Fatal("expected error when workflow concluded with failure")
@@ -238,7 +315,7 @@ func TestWorkflowWatch_StreamUpdateError(t *testing.T) {
 		},
 	}
 
-	action := NewWorkflowWatch(provider, "main", "", true)
+	action := NewWorkflowWatch(provider, "main", "", "", true)
 	err := action.Execute(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "API blew up") {
 		t.Fatalf("expected wrapped stream error, got: %v", err)
