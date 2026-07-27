@@ -5,6 +5,7 @@
 - **version**: resolve the version from the embedded build info when ldflags are absent, so `go install`ed binaries report their real release instead of `dev` and generated workflows pin the bootstrap instead of falling back to `@latest` (#205)
 - **presets**: inject option `command_flag`s inside `sh -c '...'` commands so overrides reach the wrapped tool instead of breaking the container (#200)
 - **presets**: decode `pull_policy` and `timeout` from custom `presets.toml` files, and warn on unknown preset keys instead of dropping them silently (#203)
+- **executor**: scope container names per project (`cidx_<project>_<tool>` instead of `cidx_<tool>`, e.g. `cidx_myrepo-3f5a9c21_trivy`) so two repositories on the same host no longer destroy each other's containers and caches. The get-or-create lookup now matches the exact name among containers labelled `managed-by=cidx` instead of using Docker's substring `name` filter, which could pick an unrelated container (`cidx_build-musl` when asked for `cidx_build`), remove it, and then fail with the raw daemon error `Conflict. The container name is already in use`. A name held by one of our own containers is now reclaimed; a name held by a foreign container yields an actionable error pointing at `cidx cleanup`. `cidx cleanup` selects on the `managed-by=cidx` label, so it still collects containers named under the old scheme (#197)
 
 ## v2.1.2 (2026-07-27)
 

@@ -420,6 +420,7 @@ func (r *Runner) RunTool(ctx context.Context, toolName string) error {
 		Privileged:  mergedPreset.Privileged,
 		PullPolicy:  r.resolvePullPolicy(mergedPreset.PullPolicy),
 		Timeout:     mergedPreset.Timeout,
+		Workspace:   r.config.Workspace,
 	}
 
 	// If execution mode forces dry-run (local safety), show what would be done

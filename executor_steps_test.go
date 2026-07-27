@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/cidx-org/cidx/v2/pkg/executor"
@@ -33,6 +34,96 @@ func RegisterExecutorSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Step(`^the executor should have method "([^"]*)"$`, tc.theExecutorShouldHaveMethod)
 	ctx.Step(`^I run a tool$`, tc.iRunATool)
 	ctx.Step(`^the ContainerConfig should contain:$`, tc.theContainerConfigShouldContain)
+
+	// Project-scoped container names (#197)
+	ctx.When(`^I compute the container name for tool "([^"]*)" in workspace "([^"]*)"$`, tc.computeContainerName)
+	ctx.Then(`^the container name should start with "([^"]*)"$`, tc.containerNameShouldStartWith)
+	ctx.Then(`^the container name should end with "([^"]*)"$`, tc.containerNameShouldEndWith)
+	ctx.Then(`^the container name should be a valid Docker container name$`, tc.containerNameShouldBeValid)
+	ctx.Then(`^the two container names should differ$`, tc.twoContainerNamesShouldDiffer)
+	ctx.Then(`^the two container names should be identical$`, tc.twoContainerNamesShouldBeIdentical)
+}
+
+// dockerContainerNameRE is Docker's container name grammar.
+var dockerContainerNameRE = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)
+
+// computeContainerName resolves the container name cidx would use for a tool
+// in a given workspace, appending it to the names collected by the scenario.
+func (tc *TestContext) computeContainerName(tool, workspace string) error {
+	names, _ := tc.Config["container_names"].([]string)
+	tc.Config["container_names"] = append(names, executor.ContainerName(workspace, tool))
+	return nil
+}
+
+func (tc *TestContext) lastContainerName() (string, error) {
+	names, _ := tc.Config["container_names"].([]string)
+	if len(names) == 0 {
+		return "", fmt.Errorf("no container name has been computed yet")
+	}
+	return names[len(names)-1], nil
+}
+
+func (tc *TestContext) containerNameShouldStartWith(prefix string) error {
+	name, err := tc.lastContainerName()
+	if err != nil {
+		return err
+	}
+	if !strings.HasPrefix(name, prefix) {
+		return fmt.Errorf("container name %q does not start with %q", name, prefix)
+	}
+	return nil
+}
+
+func (tc *TestContext) containerNameShouldEndWith(suffix string) error {
+	name, err := tc.lastContainerName()
+	if err != nil {
+		return err
+	}
+	if !strings.HasSuffix(name, suffix) {
+		return fmt.Errorf("container name %q does not end with %q", name, suffix)
+	}
+	return nil
+}
+
+func (tc *TestContext) containerNameShouldBeValid() error {
+	name, err := tc.lastContainerName()
+	if err != nil {
+		return err
+	}
+	if !dockerContainerNameRE.MatchString(name) {
+		return fmt.Errorf("container name %q is not a valid Docker container name", name)
+	}
+	return nil
+}
+
+func (tc *TestContext) twoContainerNames() (string, string, error) {
+	names, _ := tc.Config["container_names"].([]string)
+	if len(names) < 2 {
+		return "", "", fmt.Errorf("expected 2 computed container names, got %d", len(names))
+	}
+	return names[len(names)-2], names[len(names)-1], nil
+}
+
+func (tc *TestContext) twoContainerNamesShouldDiffer() error {
+	first, second, err := tc.twoContainerNames()
+	if err != nil {
+		return err
+	}
+	if first == second {
+		return fmt.Errorf("expected distinct container names, both are %q", first)
+	}
+	return nil
+}
+
+func (tc *TestContext) twoContainerNamesShouldBeIdentical() error {
+	first, second, err := tc.twoContainerNames()
+	if err != nil {
+		return err
+	}
+	if first != second {
+		return fmt.Errorf("expected identical container names, got %q and %q", first, second)
+	}
+	return nil
 }
 
 func (tc *TestContext) iHaveAValidCidxTomlConfiguration() error {
