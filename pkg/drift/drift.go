@@ -4,6 +4,7 @@ package drift
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -38,6 +39,8 @@ type TriggerDiff struct {
 
 // Result holds the complete drift analysis.
 type Result struct {
+	Workflow string // workflow file the config was compared against
+	Pipeline string // pipeline the workflow implements ("" = every pipeline)
 	Phases   []PhaseDiff
 	Triggers []TriggerDiff
 }
@@ -75,28 +78,69 @@ func (r *Result) DiffCount() int {
 
 // Compare analyzes drift between cidx.toml config and a GitHub Actions workflow file.
 func Compare(cfg *config.Config, workflowPath string) (*Result, error) {
-	workflow, err := parseGitHubWorkflow(workflowPath)
+	data, err := os.ReadFile(workflowPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read workflow %s: %w", workflowPath, err)
+	}
+	return CompareFromData(cfg, workflowPath, data)
+}
+
+// CompareFromData analyzes drift using raw YAML data. workflowPath is not read;
+// it names the workflow so the comparison can be scoped to the pipeline that
+// workflow implements (see pipelineFor).
+func CompareFromData(cfg *config.Config, workflowPath string, workflowData []byte) (*Result, error) {
+	workflow, err := parseGitHubWorkflowData(workflowData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse workflow %s: %w", workflowPath, err)
 	}
 
-	result := &Result{}
-	result.Phases = comparePhases(cfg, workflow)
-	result.Triggers = compareTriggers(cfg, workflow)
-	return result, nil
+	pipeline := pipelineFor(cfg, workflowPath)
+	return &Result{
+		Workflow: workflowPath,
+		Pipeline: pipeline,
+		Phases:   comparePhases(expectedPhases(cfg, pipeline), workflow),
+		Triggers: compareTriggers(cfg, workflow),
+	}, nil
 }
 
-// CompareFromData analyzes drift using raw YAML data (for testing).
-func CompareFromData(cfg *config.Config, workflowData []byte) (*Result, error) {
-	workflow, err := parseGitHubWorkflowData(workflowData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse workflow data: %w", err)
+// pipelineFor returns the name of the pipeline a workflow file implements, or
+// "" when it implements every declared pipeline.
+//
+// The mapping is the workflow's basename: ci.yml ↔ [pipelines.ci], release.yml
+// ↔ [pipelines.release] — the same file↔pipeline convention
+// validator.ValidateAllWorkflows uses. A basename that names no declared
+// pipeline covers them all: `cidx generate github` writes a single cidx.yml
+// holding one job per phase of every pipeline (see generate.collectPhases), so
+// that file legitimately implements all of them.
+func pipelineFor(cfg *config.Config, workflowPath string) string {
+	base := filepath.Base(workflowPath)
+	name := strings.TrimSuffix(base, filepath.Ext(base))
+	if _, ok := cfg.Pipelines[name]; ok {
+		return name
 	}
+	return ""
+}
 
-	result := &Result{}
-	result.Phases = comparePhases(cfg, workflow)
-	result.Triggers = compareTriggers(cfg, workflow)
-	return result, nil
+// expectedPhases returns the phases the workflow is expected to run as jobs:
+// those of the named pipeline, or of every pipeline when pipeline is "".
+//
+// Scoping this to one pipeline is what keeps a repo with a separate release
+// workflow drift-clean: phases declared only by [pipelines.release] run in
+// release.yml and are not supposed to appear in the CI workflow (issue #178).
+func expectedPhases(cfg *config.Config, pipeline string) map[string]bool {
+	phases := make(map[string]bool)
+	if pipeline != "" {
+		for _, phase := range cfg.Pipelines[pipeline].Phases {
+			phases[phase] = true
+		}
+		return phases
+	}
+	for _, p := range cfg.Pipelines {
+		for _, phase := range p.Phases {
+			phases[phase] = true
+		}
+	}
+	return phases
 }
 
 // githubWorkflow is a minimal representation of a GitHub Actions workflow.
@@ -130,14 +174,6 @@ func (t *workflowTriggers) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-func parseGitHubWorkflow(path string) (*githubWorkflow, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	return parseGitHubWorkflowData(data)
-}
-
 func parseGitHubWorkflowData(data []byte) (*githubWorkflow, error) {
 	var workflow githubWorkflow
 	if err := yaml.Unmarshal(data, &workflow); err != nil {
@@ -146,16 +182,8 @@ func parseGitHubWorkflowData(data []byte) (*githubWorkflow, error) {
 	return &workflow, nil
 }
 
-// comparePhases compares cidx.toml phases with workflow jobs.
-func comparePhases(cfg *config.Config, workflow *githubWorkflow) []PhaseDiff {
-	// Collect all unique phases from cidx.toml pipelines
-	cidxPhases := make(map[string]bool)
-	for _, pipeline := range cfg.Pipelines {
-		for _, phase := range pipeline.Phases {
-			cidxPhases[phase] = true
-		}
-	}
-
+// comparePhases compares the phases expected from cidx.toml with workflow jobs.
+func comparePhases(cidxPhases map[string]bool, workflow *githubWorkflow) []PhaseDiff {
 	// Collect CI job names (exclude infrastructure jobs like bootstrap)
 	ciJobs := make(map[string]bool)
 	infraJobs := map[string]bool{"bootstrap": true}
@@ -266,6 +294,16 @@ func compareTriggers(cfg *config.Config, workflow *githubWorkflow) []TriggerDiff
 // Format renders the drift result as a human-readable table.
 func Format(result *Result) string {
 	var b strings.Builder
+
+	// State what was compared against what — the comparison is scoped to one
+	// pipeline, so the user has to be able to see which one.
+	if result.Workflow != "" {
+		scope := "all pipelines"
+		if result.Pipeline != "" {
+			scope = fmt.Sprintf("pipeline '%s'", result.Pipeline)
+		}
+		fmt.Fprintf(&b, "Comparing %s with %s\n\n", scope, result.Workflow)
+	}
 
 	// Phases table
 	b.WriteString("Phases:\n")

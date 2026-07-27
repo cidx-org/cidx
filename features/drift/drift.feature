@@ -29,6 +29,14 @@ Feature: CI Drift Detection
       When I run "cidx check drift"
       Then job "test" should show "extra in CI"
 
+    Scenario: Phases of another pipeline are not expected in the CI workflow
+      Given cidx.toml defines pipeline "ci" with phases "security, code, test"
+      And cidx.toml defines pipeline "release" with phases "security, code, test, docker, release"
+      And the GitHub Actions workflow has jobs "security, code, test"
+      When I run "cidx check drift"
+      Then all phases should show "match"
+      And the exit code should be 0
+
   Rule: Drift detection compares triggers
 
     Scenario: Triggers match
