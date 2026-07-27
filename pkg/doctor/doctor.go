@@ -7,6 +7,13 @@ import (
 	"strings"
 
 	"github.com/cidx-org/cidx/pkg/config"
+	"github.com/cidx-org/cidx/pkg/executor"
+)
+
+// Package variables so tests can stub environment probes.
+var (
+	commandVersion = getCommandVersion
+	podmanUsable   = executor.PodmanUsable
 )
 
 // Status represents the result of a single check.
@@ -72,21 +79,29 @@ func Run() *Result {
 	return r
 }
 
-// checkContainerRuntime verifies Docker or Podman is available.
+// checkContainerRuntime verifies a container runtime cidx can actually use.
+// A runtime only passes when the executor would accept it: Docker's daemon
+// responding, or Podman's Docker-compatible API socket responding (#190).
 func checkContainerRuntime() Check {
 	check := Check{Name: "Container runtime"}
 
 	// Try Docker first
-	if version, err := getCommandVersion("docker", "version", "--format", "{{.Server.Version}}"); err == nil {
+	if version, err := commandVersion("docker", "version", "--format", "{{.Server.Version}}"); err == nil {
 		check.Status = StatusPass
 		check.Detail = fmt.Sprintf("Docker %s", version)
 		return check
 	}
 
-	// Try Podman
-	if version, err := getCommandVersion("podman", "version", "--format", "{{.Version}}"); err == nil {
-		check.Status = StatusPass
-		check.Detail = fmt.Sprintf("Podman %s", version)
+	// Try Podman — the CLI alone is not enough, cidx needs its API socket
+	if version, err := commandVersion("podman", "version", "--format", "{{.Version}}"); err == nil {
+		if podmanUsable() {
+			check.Status = StatusPass
+			check.Detail = fmt.Sprintf("Podman %s (Docker-compatible socket)", version)
+			return check
+		}
+		check.Status = StatusWarn
+		check.Detail = fmt.Sprintf("Podman %s detected, but cidx cannot use it — API socket not available", version)
+		check.Suggestion = fmt.Sprintf("Start Docker, or enable the Podman socket: %s", executor.PodmanSocketHint())
 		return check
 	}
 
