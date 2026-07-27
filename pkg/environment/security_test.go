@@ -3,7 +3,7 @@ package environment
 import (
 	"testing"
 
-	"github.com/cidx-org/cidx/pkg/presets"
+	"github.com/cidx-org/cidx/v2/pkg/presets"
 )
 
 func TestValidatePreset_CI(t *testing.T) {

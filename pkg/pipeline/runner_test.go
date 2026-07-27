@@ -3,8 +3,8 @@ package pipeline
 import (
 	"testing"
 
-	"github.com/cidx-org/cidx/pkg/config"
-	"github.com/cidx-org/cidx/pkg/executor"
+	"github.com/cidx-org/cidx/v2/pkg/config"
+	"github.com/cidx-org/cidx/v2/pkg/executor"
 )
 
 func TestRunnerOptions_Defaults(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cidx-org/cidx/pkg/config"
+	"github.com/cidx-org/cidx/v2/pkg/config"
 )
 
 func TestParseWorkflow(t *testing.T) {

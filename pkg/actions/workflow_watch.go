@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cidx-org/cidx/pkg/remote"
+	"github.com/cidx-org/cidx/v2/pkg/remote"
 	log "github.com/sirupsen/logrus"
 )
 

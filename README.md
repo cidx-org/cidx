@@ -12,7 +12,7 @@ Everything runs in Docker or Podman — nothing is installed on your machine. 40
 Install with Go (latest):
 
 ```bash
-go install github.com/cidx-org/cidx/cmd/cidx@latest
+go install github.com/cidx-org/cidx/v2/cmd/cidx@latest
 ```
 
 Or download a release binary from [Releases](https://github.com/cidx-org/cidx/releases).

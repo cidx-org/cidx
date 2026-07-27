@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cidx-org/cidx/pkg/remote"
+	"github.com/cidx-org/cidx/v2/pkg/remote"
 )
 
 // cpwFakeProvider extends fakeProvider with configurable PR lookup, checks

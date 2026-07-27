@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cidx-org/cidx/pkg/remote/github"
+	"github.com/cidx-org/cidx/v2/pkg/remote/github"
 )
 
 // Manager handles branch operations

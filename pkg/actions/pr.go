@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cidx-org/cidx/pkg/remote"
-	"github.com/cidx-org/cidx/pkg/vcs"
+	"github.com/cidx-org/cidx/v2/pkg/remote"
+	"github.com/cidx-org/cidx/v2/pkg/vcs"
 	log "github.com/sirupsen/logrus"
 )
 

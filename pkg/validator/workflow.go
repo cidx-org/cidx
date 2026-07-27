@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cidx-org/cidx/pkg/config"
+	"github.com/cidx-org/cidx/v2/pkg/config"
 	"gopkg.in/yaml.v3"
 )
 

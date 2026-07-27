@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Fix
+
+- **gomod**: move module path to `github.com/cidx-org/cidx/v2` so v2 releases are installable via `go install`; generated workflows now bootstrap the `/v2` path (#187). Effective from the next tag — v2.0.0 through v2.1.1 remain non-installable, and the old path's `@latest` still resolves to v1.8.0.
+
 ## v2.1.1 (2026-07-27)
 
 ### Fix

@@ -8,13 +8,13 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/cidx-org/cidx/pkg/config"
+	"github.com/cidx-org/cidx/v2/pkg/config"
 )
 
 // cidxModulePath is the canonical Go import path for cidx itself.
 // It is used both as the install target (`go install <cidxModulePath>/cmd/cidx@<version>`)
 // and as the marker that identifies cidx's own repo when reading go.mod.
-const cidxModulePath = "github.com/cidx-org/cidx"
+const cidxModulePath = "github.com/cidx-org/cidx/v2"
 
 // Version is the cidx build version, propagated from main at startup (same
 // pattern as executor.Version). Release builds inject it via ldflags

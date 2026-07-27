@@ -6,8 +6,8 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/cidx-org/cidx/pkg/branch"
-	"github.com/cidx-org/cidx/pkg/config"
+	"github.com/cidx-org/cidx/v2/pkg/branch"
+	"github.com/cidx-org/cidx/v2/pkg/config"
 	"github.com/urfave/cli/v2"
 )
 

@@ -5,9 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/cidx-org/cidx/pkg/config"
-	"github.com/cidx-org/cidx/pkg/generate"
-	"github.com/cidx-org/cidx/pkg/scaffold"
+	"github.com/cidx-org/cidx/v2/pkg/config"
+	"github.com/cidx-org/cidx/v2/pkg/generate"
+	"github.com/cidx-org/cidx/v2/pkg/scaffold"
 	"github.com/urfave/cli/v2"
 )
 

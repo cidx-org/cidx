@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/cidx-org/cidx/pkg/remote"
+	"github.com/cidx-org/cidx/v2/pkg/remote"
 )
 
 func (m mergeModel) renderTreeView(width int) string {

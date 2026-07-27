@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cidx-org/cidx/pkg/config"
-	"github.com/cidx-org/cidx/pkg/environment"
-	"github.com/cidx-org/cidx/pkg/executor"
-	"github.com/cidx-org/cidx/pkg/pipeline"
+	"github.com/cidx-org/cidx/v2/pkg/config"
+	"github.com/cidx-org/cidx/v2/pkg/environment"
+	"github.com/cidx-org/cidx/v2/pkg/executor"
+	"github.com/cidx-org/cidx/v2/pkg/pipeline"
 	"github.com/urfave/cli/v2"
 )
 

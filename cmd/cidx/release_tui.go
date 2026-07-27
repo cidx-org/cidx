@@ -12,11 +12,11 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/cidx-org/cidx/internal/tui"
-	"github.com/cidx-org/cidx/pkg/actions"
-	"github.com/cidx-org/cidx/pkg/config"
-	"github.com/cidx-org/cidx/pkg/remote"
-	"github.com/cidx-org/cidx/pkg/vcs"
+	"github.com/cidx-org/cidx/v2/internal/tui"
+	"github.com/cidx-org/cidx/v2/pkg/actions"
+	"github.com/cidx-org/cidx/v2/pkg/config"
+	"github.com/cidx-org/cidx/v2/pkg/remote"
+	"github.com/cidx-org/cidx/v2/pkg/vcs"
 )
 
 // Release TUI styles - aliased from shared tui package

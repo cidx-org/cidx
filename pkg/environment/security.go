@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cidx-org/cidx/pkg/presets"
+	"github.com/cidx-org/cidx/v2/pkg/presets"
 )
 
 // LocalBehavior defines how a preset behaves in local environment
