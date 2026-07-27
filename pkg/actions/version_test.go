@@ -169,6 +169,81 @@ func TestCountCommits_DetectsBreakingChanges(t *testing.T) {
 	}
 }
 
+func TestParseCommit(t *testing.T) {
+	tests := []struct {
+		name    string
+		subject string
+		body    string
+		want    CommitInfo
+	}{
+		{
+			name:    "plain type",
+			subject: "feat: add the thing",
+			want:    CommitInfo{Type: "feat", Subject: "add the thing"},
+		},
+		{
+			name:    "type with scope",
+			subject: "fix(release): stop guessing",
+			want:    CommitInfo{Type: "fix", Scope: "release", Subject: "stop guessing"},
+		},
+		{
+			// Issue #175: the "!" used to make the whole subject unparseable.
+			name:    "breaking marker",
+			subject: "feat!: drop the legacy flag",
+			want:    CommitInfo{Type: "feat", Subject: "drop the legacy flag", Breaking: true},
+		},
+		{
+			name:    "breaking marker with scope",
+			subject: "feat(api)!: drop the legacy flag",
+			want:    CommitInfo{Type: "feat", Scope: "api", Subject: "drop the legacy flag", Breaking: true},
+		},
+		{
+			name:    "breaking footer in the body",
+			subject: "fix: unrelated",
+			body:    "BREAKING CHANGE: config moved",
+			want:    CommitInfo{Type: "fix", Subject: "unrelated", Breaking: true},
+		},
+		{
+			name:    "squash merge keeps its PR number",
+			subject: "feat(release): share the parser (#226)",
+			want:    CommitInfo{Type: "feat", Scope: "release", Subject: "share the parser (#226)", PR: 226},
+		},
+		{
+			name:    "non-conventional subject",
+			subject: "Merge branch 'main'",
+			want:    CommitInfo{Type: "other", Subject: "Merge branch 'main'"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			want := tt.want
+			want.Body = tt.body
+			if got := ParseCommit(tt.subject, tt.body); got != want {
+				t.Errorf("ParseCommit(%q, %q)\n got %+v\nwant %+v", tt.subject, tt.body, got, want)
+			}
+		})
+	}
+}
+
+// A breaking commit must bump the major everywhere: release prepare reads its
+// own log format, the tag flow reads another, and they disagreed while only
+// one of them understood "!" (issue #175).
+func TestBreakingCommit_BumpsTheMajorInBothReleasePaths(t *testing.T) {
+	workDir, git := versionRepo(t, "1.0.0", "v1.0.0")
+	git.output["log"] = "feat(api)!: drop the legacy flag\x00\x1e"
+
+	prepared := ParseCommitLog("abcdef1234567890|feat(api)!: drop the legacy flag|<<<END>>>")
+	prepareNext := NextVersion(ResolveVersion(workDir).Current(), CountCommitInfos(prepared))
+
+	if prepareNext != "2.0.0" {
+		t.Errorf("release prepare must bump the major on a breaking commit, got %s", prepareNext)
+	}
+	if tagNext := SuggestTagVersion(workDir); tagNext != prepareNext {
+		t.Errorf("tag preview suggests %s but release prepare suggests %s", tagNext, prepareNext)
+	}
+}
+
 func TestSuggestTagVersion_AgreesWithTheReleasePreview(t *testing.T) {
 	workDir, git := versionRepo(t, "2.1.3", "v2.1.3")
 	git.output["log"] = "feat: something new\x00\x1efix: something broken\x00\x1e"
