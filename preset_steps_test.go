@@ -1,6 +1,10 @@
 package main
 
 import (
+	"fmt"
+
+	"github.com/BurntSushi/toml"
+	"github.com/cidx-org/cidx/v2/pkg/presets"
 	"github.com/cucumber/godog"
 )
 
@@ -22,8 +26,61 @@ func RegisterPresetSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Then(`^it should execute the "([^"]*)" container$`, tc.shouldExecuteContainer)
 	ctx.Then(`^the container should use the configuration from "([^"]*)"$`, tc.containerShouldUseConfig)
 	ctx.When(`^I validate the configuration$`, tc.validateConfiguration)
+	ctx.When(`^I load the custom presets$`, tc.loadCustomPresets)
 	ctx.Then(`^it should be valid$`, tc.configShouldBeValid)
 	ctx.Then(`^the tool "([^"]*)" should be available$`, tc.toolShouldBeAvailable)
+	ctx.Then(`^the preset "([^"]*)" should have "([^"]*)" set to "([^"]*)"$`, tc.presetFieldShouldEqual)
+}
+
+// loadCustomPresets decodes the preset file staged by `a file "..." with content:`
+// through the same types the loader uses, so a field the loader cannot decode is
+// a field this step cannot see (#203).
+func (tc *TestContext) loadCustomPresets() error {
+	content, ok := tc.Config["test_file_content"].(string)
+	if !ok {
+		return fmt.Errorf("no preset file content staged")
+	}
+
+	var file presets.PresetsFile
+	if err := toml.Unmarshal([]byte(content), &file); err != nil {
+		return fmt.Errorf("failed to parse staged preset file: %w", err)
+	}
+	tc.Config["loaded_presets"] = file.Presets
+	return nil
+}
+
+// presetFieldShouldEqual asserts a loaded preset carries the expected value for
+// one of its execution fields.
+func (tc *TestContext) presetFieldShouldEqual(presetName, field, want string) error {
+	loaded, ok := tc.Config["loaded_presets"].(map[string]presets.PresetTOML)
+	if !ok {
+		return fmt.Errorf("no presets loaded")
+	}
+	preset, ok := loaded[presetName]
+	if !ok {
+		return fmt.Errorf("preset %q not loaded", presetName)
+	}
+
+	var got string
+	switch field {
+	case "pull_policy":
+		got = preset.PullPolicy
+	case "timeout":
+		got = preset.Timeout
+	case "image":
+		got = preset.Image
+	case "command":
+		got = preset.Command
+	case "workdir":
+		got = preset.Workdir
+	default:
+		return fmt.Errorf("unsupported preset field %q", field)
+	}
+
+	if got != want {
+		return fmt.Errorf("preset %q field %q = %q, want %q", presetName, field, got, want)
+	}
+	return nil
 }
 
 // haveNoCustomConfigFiles sets up environment with no custom configs

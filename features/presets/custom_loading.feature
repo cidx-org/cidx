@@ -43,3 +43,18 @@ Feature: Custom Preset Loading
       When I validate the configuration
       Then it should be valid
       And the tool "custom-tool" should be available
+
+    Scenario: Execution fields set on a custom preset are kept
+      Given a file ".cidx/presets.toml" with content:
+        """
+        [presets.slow-scanner]
+        name = "slow-scanner"
+        image = "alpine:latest"
+        command = "scan ."
+        phase = "security"
+        pull_policy = "always"
+        timeout = "45m"
+        """
+      When I load the custom presets
+      Then the preset "slow-scanner" should have "pull_policy" set to "always"
+      And the preset "slow-scanner" should have "timeout" set to "45m"
