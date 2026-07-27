@@ -199,6 +199,12 @@ func TestRustupComponentPresetsInstallComponent(t *testing.T) {
 // on every pipeline run (minutes of compilation, and it can fail for reasons
 // unrelated to the audited project). The preset must download the pinned
 // prebuilt release binary instead. Regression guard for issue #161.
+//
+// It also locks down non-root compatibility (issue #188): the tarball must
+// extract into a world-writable directory — never /usr/local/bin, which is
+// root-owned and unwritable when the container runs as a non-root user (CI
+// runners, user-mapped local runs) — and HOME/CARGO_HOME must point at
+// writable locations so the advisory DB fetch works non-root too.
 func TestCargoAuditUsesPrebuiltBinary(t *testing.T) {
 	preset, err := Get("cargo-audit")
 	if err != nil {
@@ -212,8 +218,21 @@ func TestCargoAuditUsesPrebuiltBinary(t *testing.T) {
 		t.Errorf("preset %q Command = %q, expected a pinned prebuilt binary download from RustSec releases",
 			"cargo-audit", preset.Command)
 	}
-	if !strings.Contains(preset.Command, "cargo audit") {
-		t.Errorf("preset %q Command = %q, expected to run `cargo audit`",
+	if !strings.HasSuffix(preset.Command, "audit'") {
+		t.Errorf("preset %q Command = %q, expected the shell script to end with the audit invocation (options like deny append their command_flag after it)",
+			"cargo-audit", preset.Command)
+	}
+	// #188: never extract into /usr/local/bin — root-owned, unwritable non-root.
+	if strings.Contains(preset.Command, "/usr/local/bin") {
+		t.Errorf("preset %q Command = %q, must not extract into root-owned /usr/local/bin (fails non-root, see #188)",
+			"cargo-audit", preset.Command)
+	}
+	if !strings.Contains(preset.Command, "-C /tmp") {
+		t.Errorf("preset %q Command = %q, expected extraction into world-writable /tmp",
+			"cargo-audit", preset.Command)
+	}
+	if !strings.Contains(preset.Command, "HOME=/tmp") || !strings.Contains(preset.Command, "CARGO_HOME=/tmp/cargo") {
+		t.Errorf("preset %q Command = %q, expected HOME and CARGO_HOME pointed at writable dirs so the advisory DB fetch works non-root",
 			"cargo-audit", preset.Command)
 	}
 }
