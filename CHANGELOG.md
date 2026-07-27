@@ -1,8 +1,8 @@
-## [Unreleased]
+## v2.1.1 (2026-07-27)
 
 ### Fix
 
-- **doctor**: no longer passes on a Podman that cidx cannot use — the runtime check now probes Podman's Docker-compatible API socket the way the executor does, and reports a warning ("Podman X detected, but cidx cannot use it — API socket not available") when only the CLI is present. Selector errors tell the same story: `--backend podman` without the socket explains the missing socket instead of claiming "podman executor not yet implemented", and the no-runtime error describes the real Podman state with a platform-appropriate remedy instead of always suggesting `podman machine start` (#190)
+- **doctor**: warn instead of pass when only Podman is available (#191)
 
 ## v2.1.0 (2026-07-18)
 
