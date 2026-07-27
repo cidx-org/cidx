@@ -13,6 +13,10 @@ import (
 var Version = "dev"
 
 func main() {
+	// Resolve the version once, before any propagation: `go install` applies no
+	// ldflags, so the real version comes from the embedded build info (#205).
+	Version = resolveVersion(Version)
+
 	// Propagate the build version to the executor package so created
 	// containers carry the `cidx.version` label (issue #144).
 	executor.Version = Version

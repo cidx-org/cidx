@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Fix
+
+- **version**: resolve the version from the embedded build info when ldflags are absent, so `go install`ed binaries report their real release instead of `dev` and generated workflows pin the bootstrap instead of falling back to `@latest` (#205)
+
 ## v2.1.2 (2026-07-27)
 
 ### Fix
