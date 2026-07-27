@@ -42,6 +42,11 @@ Thumbs.db
 # Internal notes
 .cidx/ideas/
 
+# Tag staging files: local hand-off between `release tag prepare` and
+# `release tag create`, never committed (release notes are, so they stay)
+.cidx/tag-version
+.cidx/tag-message
+
 #AI
 .serena
 .claude
