@@ -1,10 +1,10 @@
-## [Unreleased]
+## v2.1.4 (2026-07-27)
 
 ### Fix
 
-- **release**: skip the editor when `release tag prepare` and `release prepare` run without a terminal. Both opened `$EDITOR` unconditionally, so in a non-interactive shell vim kept reading a stdin that never delivered a keystroke and painted escape sequences nobody saw -- the command hung with no output after writing its files. Both now share one editor helper that detects the absence of a TTY, keeps the generated version/notes as-is and says so; the tag staging files are gitignored so an interrupted run leaves nothing behind (#186)
-- **release**: reconcile the current version from the latest tag instead of the VERSION file. `release preview`, `release prepare`, `release create` and the `release tag` commands now share one resolution: the tag is the source of truth, and a VERSION file that trails it (suggesting a version _below_ the latest tag) or runs ahead of it (an untagged bump) is named explicitly and refused instead of silently used as a base. Commit analysis counts commits in the announced range rather than body lines (`Other: 131` for 9 commits), and the preview flags a CHANGELOG.md section without a matching tag before `cz bump` hard-fails on it (#185)
-- **release**: route the version bump through a pull request instead of pushing it straight to main, which any ruleset requiring PRs rejects (`GH013`) and which left a local-only bump commit and tag behind. `release create` now moves the bump commit onto a `chore/release-vX.Y.Z` branch, restores the base branch, opens the release PR, waits for CI and squash-merges it (reusing `cidx pr merge`), then tags the _merged_ commit and pushes the tag. CI failure stops before tagging with recovery steps, and a release branch already on the remote stops a second run instead of racing two bump PRs (#184)
+- **release**: skip the editor when prepare runs without a TTY (#221)
+- **release**: reconcile version from the latest tag across the release flow (#220)
+- **release**: route the version bump through a pull request (#219)
 
 ## v2.1.3 (2026-07-27)
 
