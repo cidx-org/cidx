@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/cidx-org/cidx/v2/pkg/config"
 	"github.com/cidx-org/cidx/v2/pkg/generate"
 	"github.com/urfave/cli/v2"
 )
@@ -44,9 +43,9 @@ func generateCommand() *cli.Command {
 }
 
 func generateGitHubAction(c *cli.Context) error {
-	cfg, err := config.Load("cidx.toml")
+	cfg, err := loadResolvedConfig(c)
 	if err != nil {
-		return fmt.Errorf("failed to load cidx.toml: %w", err)
+		return err
 	}
 
 	// Auto-detect cidx-repo vs. external project. cidx repo dogfoods its own
@@ -74,12 +73,12 @@ func generateGitHubAction(c *cli.Context) error {
 }
 
 func generateGitLabAction(c *cli.Context) error {
-	cfg, err := config.Load("cidx.toml")
+	cfg, err := loadResolvedConfig(c)
 	if err != nil {
-		return fmt.Errorf("failed to load cidx.toml: %w", err)
+		return err
 	}
 
-	output, err := generate.GitLab(cfg)
+	output, err := generate.GitLab(cfg, c.String("output"))
 	if err != nil {
 		return err
 	}

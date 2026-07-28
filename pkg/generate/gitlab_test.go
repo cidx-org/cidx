@@ -12,7 +12,7 @@ func TestGitLab_NoPipelines(t *testing.T) {
 		Pipelines: map[string]config.Pipeline{},
 	}
 
-	_, err := GitLab(cfg)
+	_, err := GitLab(cfg, "")
 	if err == nil {
 		t.Error("expected error for empty pipelines")
 	}
@@ -25,7 +25,7 @@ func TestGitLab_BasicCI(t *testing.T) {
 		},
 	}
 
-	output, err := GitLab(cfg)
+	output, err := GitLab(cfg, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestGitLab_PRPipeline(t *testing.T) {
 		},
 	}
 
-	output, err := GitLab(cfg)
+	output, err := GitLab(cfg, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestGitLab_ReleasePipeline(t *testing.T) {
 		},
 	}
 
-	output, err := GitLab(cfg)
+	output, err := GitLab(cfg, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestGitLab_MultiplePipelines(t *testing.T) {
 		},
 	}
 
-	output, err := GitLab(cfg)
+	output, err := GitLab(cfg, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestGitLab_PhasesDeduplication(t *testing.T) {
 		},
 	}
 
-	output, err := GitLab(cfg)
+	output, err := GitLab(cfg, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestGitLab_Artifacts(t *testing.T) {
 		},
 	}
 
-	output, err := GitLab(cfg)
+	output, err := GitLab(cfg, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

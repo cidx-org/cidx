@@ -14,6 +14,8 @@
 - **presets**: scan the catalogue only, and list vulnerability exceptions that match no image (#248)
 - **presets**: report a variant line upstream stopped publishing instead of calling it up to date (#252)
 - **monitor**: log into a registry only for the legs scanning one of its images (#254)
+- **checks**: leave workflow runs the pull request did not cause out of its checks (#240)
+- **cli**: stop five commands from reading past the scope they were given — `--config` in `generate` and `check drift`, the `-o` path in the GitLab header, the repository `gh` lists PRs for, the presets the image audit scans (#240)
 
 ## v2.3.0 (2026-07-28)
 

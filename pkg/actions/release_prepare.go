@@ -233,11 +233,12 @@ func (a *ReleasePrepareAction) getCommitsSince(tag string) ([]CommitInfo, error)
 
 // getMergedPRsSince returns PRs merged since a tag
 func (a *ReleasePrepareAction) getMergedPRsSince(ctx context.Context, tag string) ([]PRInfo, error) {
+	workDir, _ := a.repo.GetWorkDir()
+
 	// Get tag date
 	var since time.Time
 	if tag != "" {
 		cmd := exec.Command("git", "log", "-1", "--format=%ci", tag)
-		workDir, _ := a.repo.GetWorkDir()
 		cmd.Dir = workDir
 
 		output, err := cmd.Output()
@@ -249,13 +250,23 @@ func (a *ReleasePrepareAction) getMergedPRsSince(ctx context.Context, tag string
 	// Use gh CLI to get merged PRs (more reliable than API for this)
 	args := []string{"pr", "list", "--state", "merged", "--json", "number,title,author,mergedAt", "--limit", "100"}
 
-	cmd := exec.Command("gh", args...)
-	output, err := cmd.Output()
+	output, err := ghPRList(workDir, args).Output()
 	if err != nil {
 		return nil, ghCommandError(args, err)
 	}
 
 	return a.parsePRList(string(output), since)
+}
+
+// ghPRList builds the `gh pr list` invocation, rooted in the repository being
+// released. gh resolves which repository to query from its working directory,
+// so without Dir it listed the PRs of wherever the cidx process happened to be
+// started -- invisible when releasing the current directory, wrong the moment
+// the repository is elsewhere. Every other command here already sets Dir.
+func ghPRList(workDir string, args []string) *exec.Cmd {
+	cmd := exec.Command("gh", args...)
+	cmd.Dir = workDir
+	return cmd
 }
 
 // ghCommandError names the command that failed and quotes what it printed on

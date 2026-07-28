@@ -36,7 +36,9 @@ jobs:
       - name: Get unique images
         id: images
         run: |
-          IMAGES=$(./bin/cidx preset images --json | jq -c '[.[].image]')
+          # --catalogue: the audit governs the images presets.toml ships, not
+          # the ones a checked-out project's own presets happen to add (#248).
+          IMAGES=$(./bin/cidx preset images --catalogue --json | jq -c '[.[].image]')
           COUNT=$(echo "$IMAGES" | jq 'length')
           echo "images=$IMAGES" >> $GITHUB_OUTPUT
           echo "count=$COUNT" >> $GITHUB_OUTPUT

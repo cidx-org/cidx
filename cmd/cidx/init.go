@@ -192,8 +192,8 @@ func generateCIWorkflow(detection *scaffold.Detection, force bool) (string, erro
 			SelfBuild: selfBuild,
 		})
 	case "gitlab":
-		ciPath = ".gitlab-ci.yml"
-		output, err = generate.GitLab(cfg)
+		ciPath = generate.DefaultGitLabPath
+		output, err = generate.GitLab(cfg, ciPath)
 	default:
 		return "", nil
 	}
