@@ -1,3 +1,15 @@
+## [Unreleased]
+
+### Feat
+
+- **presets**: detect image updates on the OCI registries, and report a catalogue image deleted upstream (#245)
+
+  `cidx preset scan-targets`, `preset check-updates` and `preset audit` reached Docker Hub and Quay.io only; the other 9 of the 21 catalogue images — gcr.io, ghcr.io and every Docker Hardened Image — returned "registry not supported yet" and never produced a candidate. They are now read through `GET /v2/<repo>/tags/list`, behind the same authentication as the digest pinning of #244.
+
+  gcr.io dates its tags (`timeUploadedMs`), so its candidates go through the 14-day cooldown like any other. ghcr.io and dhi.io date nothing readable, and a candidate with no date is held for ever by a fail-closed cooldown — so a newer version found there is reported in a state of its own, `newer_version`, to be pinned by hand rather than queued as a candidate that can never be promoted.
+
+  The reference each catalogue image is pinned to is also verified: an image deleted upstream is reported `missing` and turns the weekly container monitor red, instead of surfacing when someone runs the preset.
+
 ## v2.2.0 (2026-07-28)
 
 ### Feat

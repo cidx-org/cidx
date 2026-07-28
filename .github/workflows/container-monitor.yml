@@ -25,6 +25,7 @@ jobs:
       scan_images: ${{ steps.targets.outputs.scan_images }}
       count: ${{ steps.targets.outputs.count }}
       has_updates: ${{ steps.targets.outputs.has_updates }}
+      missing: ${{ steps.targets.outputs.missing }}
 
     steps:
       - name: Checkout
@@ -37,6 +38,15 @@ jobs:
 
       - name: Build CIDX
         run: go build -o bin/cidx ./cmd/cidx
+
+      # dhi.io answers no anonymous token, so its tag listings and its manifest
+      # lookups need the same login the scan jobs perform (#245).
+      - name: Login to Docker Hardened Images
+        uses: docker/login-action@v4
+        with:
+          registry: dhi.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Get scan targets
         id: targets
@@ -54,9 +64,14 @@ jobs:
           echo "$TARGETS_JSON" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
+          # A pinned image the registry answers 404 for: the preset cannot run
+          # at all, and until #245 that only surfaced when someone ran it.
+          MISSING=$(echo "$TARGETS_JSON" | jq -r '[.[] | select(.missing == true)] | length')
+
           echo "scan_images=$SCAN_IMAGES" >> $GITHUB_OUTPUT
           echo "count=$COUNT" >> $GITHUB_OUTPUT
           echo "has_updates=$HAS_UPDATES" >> $GITHUB_OUTPUT
+          echo "missing=$MISSING" >> $GITHUB_OUTPUT
 
           echo "## Scan Targets" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -83,8 +98,28 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
 
+          # Versions found on a registry that dates none of its tags. They are
+          # deliberately not candidates: the cooldown could never be shown to
+          # have elapsed, so they would be held for ever (#245).
+          UNDATABLE=$(echo "$TARGETS_JSON" | jq -r '.[] | select(.newer_version != null) | "- \(.current_image) → \(.newer_version) — \(.policy_reason)"')
+          if [ -n "$UNDATABLE" ]; then
+            echo "### Newer version, not promotable automatically" >> $GITHUB_STEP_SUMMARY
+            echo "$UNDATABLE" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # An image that no longer exists upstream. Annotated as an error so it
+          # is visible on the run itself, and re-raised by the summary job.
+          GONE=$(echo "$TARGETS_JSON" | jq -r '.[] | select(.missing == true) | "\(.current_image) (used by \(.presets | join(", "))): \(.error)"')
+          if [ -n "$GONE" ]; then
+            echo "### Missing images" >> $GITHUB_STEP_SUMMARY
+            echo "$GONE" | sed 's/^/- /' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "$GONE" | while read -r line; do echo "::error::$line"; done
+          fi
+
           # Show current (nothing newer found)
-          CURRENT=$(echo "$TARGETS_JSON" | jq -r '.[] | select(.is_update == false and .candidate_image == null) | "- \(.scan_image)"')
+          CURRENT=$(echo "$TARGETS_JSON" | jq -r '.[] | select(.is_update == false and .candidate_image == null and .newer_version == null) | "- \(.scan_image)"')
           if [ -n "$CURRENT" ]; then
             echo "### Current (no updates)" >> $GITHUB_STEP_SUMMARY
             echo "$CURRENT" >> $GITHUB_STEP_SUMMARY
@@ -346,3 +381,12 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Images scanned: **${{ needs.get-scan-targets.outputs.count }}**" >> $GITHUB_STEP_SUMMARY
           echo "Updates available: **${{ needs.get-scan-targets.outputs.has_updates }}**" >> $GITHUB_STEP_SUMMARY
+
+      # A catalogue image deleted upstream breaks every preset using it, so the
+      # weekly run goes red rather than reporting it in a summary nobody opens
+      # (#245). It runs last so the scans and the promotion happen first.
+      - name: Fail on missing images
+        if: needs.get-scan-targets.outputs.missing != '0' && needs.get-scan-targets.outputs.missing != ''
+        run: |
+          echo "${{ needs.get-scan-targets.outputs.missing }} catalogue image(s) no longer exist upstream — see the Scan Targets summary"
+          exit 1

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -69,61 +70,100 @@ var manifestAcceptTypes = strings.Join([]string{
 // digestPattern matches the digest form the catalogue is pinned in.
 var digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
-// resolveDigest returns the digest a tag currently resolves to, so a promoted
-// version can be written back as `image:tag@sha256:...` rather than as a
-// mutable tag.
+// errImageNotFound reports a reference the registry says does not exist, as
+// opposed to one it merely would not serve us. The difference decides whether
+// `preset scan-targets` calls a catalogue image gone (#245): a 401 from a
+// registry we hold no credentials for is a lookup failure, not a deletion.
+var errImageNotFound = errors.New("not found in the registry")
+
+// resolveDigest returns the digest a reference currently resolves to, so a
+// promoted version can be written back as `image:tag@sha256:...` rather than as
+// a mutable tag.
+//
+// reference is a tag or a digest — the manifest endpoint accepts either, which
+// is what lets the same call verify that the digest the catalogue is pinned to
+// still exists.
 //
 // It speaks the registry v2 API directly instead of shelling out to Docker:
 // the commands that need this (`preset scan-targets`) are metadata commands and
 // must work on a runner that has no daemon.
-func resolveDigest(image, tag string) (string, error) {
+func resolveDigest(image, reference string) (string, error) {
 	reg, repo := parseRegistry(image)
+	manifestURL := fmt.Sprintf("%s://%s/v2/%s/manifests/%s", registryScheme, registryHost(reg), repo, reference)
 
-	host := reg
-	if host == "docker.io" {
-		host = "registry-1.docker.io"
-	}
-	manifestURL := fmt.Sprintf("https://%s/v2/%s/manifests/%s", host, repo, tag)
-
-	resp, err := headManifest(manifestURL, "")
+	resp, err := registryDo(http.MethodHead, manifestURL, manifestAcceptTypes, reg)
 	if err != nil {
 		return "", err
 	}
-
-	// Most registries answer 401 with a challenge describing where to get a
-	// token — including for public images, where the token is anonymous.
-	if resp.StatusCode == http.StatusUnauthorized {
-		challenge := resp.Header.Get("Www-Authenticate")
-		_ = resp.Body.Close()
-
-		token, err := fetchRegistryToken(challenge, reg)
-		if err != nil {
-			return "", err
-		}
-		if resp, err = headManifest(manifestURL, "Bearer "+token); err != nil {
-			return "", err
-		}
-	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if resp.StatusCode == http.StatusNotFound {
+		return "", fmt.Errorf("%s: %w", imageRef(image, reference), errImageNotFound)
+	}
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("registry %s returned HTTP %d for %s:%s", reg, resp.StatusCode, image, tag)
+		return "", fmt.Errorf("registry %s returned HTTP %d for %s", reg, resp.StatusCode, imageRef(image, reference))
 	}
 
 	digest := resp.Header.Get("Docker-Content-Digest")
 	if !digestPattern.MatchString(digest) {
-		return "", fmt.Errorf("registry %s returned no usable digest for %s:%s (got %q)", reg, image, tag, digest)
+		return "", fmt.Errorf("registry %s returned no usable digest for %s (got %q)", reg, imageRef(image, reference), digest)
 	}
 	return digest, nil
 }
 
-// headManifest issues the manifest HEAD request carrying the Accept types.
-func headManifest(manifestURL, authorization string) (*http.Response, error) {
-	req, err := http.NewRequest(http.MethodHead, manifestURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build manifest request: %w", err)
+// registryHost maps a registry name to the host serving its v2 API. Docker Hub
+// is the one place where the two differ.
+func registryHost(reg string) string {
+	if reg == "docker.io" {
+		return "registry-1.docker.io"
 	}
-	req.Header.Set("Accept", manifestAcceptTypes)
+	return reg
+}
+
+// imageRef rebuilds a printable reference, joining a digest with `@` and a tag
+// with `:` so an error message reads the way the catalogue is written.
+func imageRef(image, reference string) string {
+	if strings.HasPrefix(reference, "sha256:") {
+		return image + "@" + reference
+	}
+	return image + ":" + reference
+}
+
+// registryDo performs a registry v2 request, answering the Bearer challenge the
+// registry sends when it wants one — which is most of them, including for
+// public images where the token is anonymous.
+//
+// This is the single entry point to the v2 API: the manifest HEAD behind
+// digest pinning (#242) and the tag listing behind update detection (#245) are
+// the same endpoint family behind the same authentication, and one client is
+// enough for both. The caller closes the response body.
+func registryDo(method, requestURL, accept, reg string) (*http.Response, error) {
+	resp, err := registryRequest(method, requestURL, accept, "")
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusUnauthorized {
+		return resp, nil
+	}
+
+	challenge := resp.Header.Get("Www-Authenticate")
+	_ = resp.Body.Close()
+
+	token, err := fetchRegistryToken(challenge, reg)
+	if err != nil {
+		return nil, err
+	}
+	return registryRequest(method, requestURL, accept, "Bearer "+token)
+}
+
+// registryRequest issues one request, carrying the media types the endpoint
+// answers in.
+func registryRequest(method, requestURL, accept, authorization string) (*http.Response, error) {
+	req, err := http.NewRequest(method, requestURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build registry request: %w", err)
+	}
+	req.Header.Set("Accept", accept)
 	if authorization != "" {
 		req.Header.Set("Authorization", authorization)
 	}

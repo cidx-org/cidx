@@ -57,6 +57,54 @@ func RegisterPresetSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Then(`^the waiver should name "([^"]*)"$`, tc.waiverShouldName)
 	ctx.Then(`^no waiver should be reported$`, tc.noWaiverShouldBeReported)
 	ctx.Then(`^the candidate age should be unreported$`, tc.candidateAgeShouldBeUnreported)
+
+	// Update detection over a registry tag listing (#245)
+	ctx.Given(`^the registry lists the tags "([^"]*)"$`, tc.registryListsTags)
+	ctx.When(`^I look for a version newer than "([^"]*)"$`, tc.lookForVersionNewerThan)
+	ctx.Then(`^the newest version offered should be "([^"]*)"$`, tc.newestVersionOfferedShouldBe)
+	ctx.Then(`^no newer version should be offered$`, tc.noNewerVersionShouldBeOffered)
+}
+
+// registryListsTags stages the tag names a registry answers `tags/list` with.
+// The order is deliberately not the version order: the OCI API promises none.
+func (tc *TestContext) registryListsTags(tags string) error {
+	var listed []string
+	for _, tag := range strings.Split(tags, ",") {
+		listed = append(listed, strings.TrimSpace(tag))
+	}
+	tc.Config["listed_tags"] = listed
+	return nil
+}
+
+func (tc *TestContext) lookForVersionNewerThan(currentTag string) error {
+	listed, ok := tc.Config["listed_tags"].([]string)
+	if !ok {
+		return fmt.Errorf("no tag listing was staged")
+	}
+	tc.Config["newest_offered"] = presets.NewerTag(currentTag, listed)
+	return nil
+}
+
+func (tc *TestContext) newestVersionOfferedShouldBe(want string) error {
+	got, ok := tc.Config["newest_offered"].(string)
+	if !ok {
+		return fmt.Errorf("no version was looked for")
+	}
+	if got != want {
+		return fmt.Errorf("newest version offered = %q, want %q", got, want)
+	}
+	return nil
+}
+
+func (tc *TestContext) noNewerVersionShouldBeOffered() error {
+	got, ok := tc.Config["newest_offered"].(string)
+	if !ok {
+		return fmt.Errorf("no version was looked for")
+	}
+	if got != "" {
+		return fmt.Errorf("%q was offered although nothing newer qualifies", got)
+	}
+	return nil
 }
 
 // promotionClock is the fixed "now" the cooldown scenarios are written against,

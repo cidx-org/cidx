@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -128,8 +129,7 @@ func presetCheckUpdatesCommand() *cli.Command {
 // thing is the `created` field of the image config blob, which is a *build*
 // date and can predate publication by an arbitrary amount. It is not used here
 // — a wrong date would silently shorten the cooldown, which is worse than
-// having none. Registries below that answer with an error produce no candidate
-// at all today (#245), so the cooldown has nothing to act on for them.
+// having none. registryDatesTags names the registries that do publish one.
 func getLatestTag(image, currentTag string) (string, time.Time, error) {
 	// A reference pinned by digest alone carries no version to compare against.
 	if currentTag == "" {
@@ -147,11 +147,54 @@ func getLatestTag(image, currentTag string) (string, time.Time, error) {
 		return getDockerHubLatestTag(repo, variantSuffix)
 	case "quay.io":
 		return getQuayLatestTag(repo, variantSuffix)
-	case "gcr.io", "ghcr.io":
-		// GitHub/Google Container Registry - harder to query without auth
-		return "", time.Time{}, fmt.Errorf("registry %s not supported yet", registry)
+	case "gcr.io", "ghcr.io", "dhi.io":
+		return getV2LatestTag(image, currentTag)
 	default:
 		return "", time.Time{}, fmt.Errorf("unknown registry: %s", registry)
+	}
+}
+
+// getV2LatestTag finds the newest version on a registry that speaks the OCI
+// distribution API and nothing else: the tag listing gives names, and the
+// version has to be read out of them (#245).
+//
+// It returns currentTag when nothing newer is on offer — including for a tag
+// that carries no version at all, where an update would be a guess.
+func getV2LatestTag(image, currentTag string) (string, time.Time, error) {
+	listing, err := listTags(image)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+
+	newest := presets.NewerTag(currentTag, listing.Tags)
+	if newest == "" {
+		return currentTag, time.Time{}, nil
+	}
+	return newest, listing.Published[newest], nil
+}
+
+// registryDatesTags reports whether a registry says when a version became
+// publicly available — the date rule 2 of the image supply-chain policy
+// measures its cooldown against (docs/core-concepts/security.md).
+//
+// Docker Hub (`last_updated`), Quay.io (`start_ts`) and gcr.io
+// (`timeUploadedMs`) do. ghcr.io and dhi.io do not, and there is nothing left
+// to fall back on: ghcr.io's dates sit behind a GitHub Packages API call that
+// needs a `read:packages` token and answers 403 for another org's package,
+// dhi.io has no repository on hub.docker.com to ask, and the config blob's
+// `created` is a build date the policy rejects.
+//
+// This is what tells buildScanTargets that a newer version found there can
+// never clear the cooldown, so it must be reported as unpromotable instead of
+// becoming a candidate held for ever (#245).
+func registryDatesTags(image string) bool {
+	registry, _ := parseRegistry(image)
+
+	switch registry {
+	case "docker.io", "quay.io", "gcr.io":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -636,6 +679,18 @@ type scanTarget struct {
 	AgeDays        *int     `json:"age_days,omitempty"`
 	PolicyReason   string   `json:"policy_reason,omitempty"`
 	CVEWaiver      []string `json:"cve_waiver,omitempty"`
+
+	// NewerVersion names a version the registry lists but will not date (#245).
+	// It is deliberately not a CandidateImage: the cooldown could never be
+	// shown to have elapsed for it, so offering it as a candidate would hold
+	// it for ever and repeat the same line in every weekly run. It is reported
+	// as a version to look at by hand, which is a different thing.
+	NewerVersion string `json:"newer_version,omitempty"`
+
+	// Missing reports that the pinned reference no longer resolves — the
+	// preset cannot run at all. #244 found two catalogue images deleted
+	// upstream, and nothing had noticed until the presets failed.
+	Missing bool `json:"missing,omitempty"`
 }
 
 // The two network calls scan-targets makes, as package variables so the
@@ -706,13 +761,23 @@ func buildScanTargets(imagePresets map[string][]string, affectingUs map[string][
 		}
 
 		// Check for update
-		imageName, currentTag, _ := parseImageRef(currentImage)
+		imageName, currentTag, currentDigest := parseImageRef(currentImage)
+		imageRegistry, _ := parseRegistry(imageName)
 		latestTag, published, err := latestTagFunc(imageName, currentTag)
 
 		switch {
 		case err != nil:
 			target.Error = err.Error()
 			// Still scan current image on error
+		case latestTag != "" && latestTag != currentTag && !registryDatesTags(imageName):
+			// The registry lists this version but dates none of its tags, so
+			// the cooldown can never be shown to have elapsed for it (#245).
+			// Reported as a version to review by hand rather than as a
+			// candidate, which would be held in every run from now on.
+			target.NewerVersion = latestTag
+			target.PolicyReason = fmt.Sprintf(
+				"%s publishes no date for its tags, so the cooldown cannot be applied: review and pin %s by hand",
+				imageRegistry, latestTag)
 		case latestTag != "" && latestTag != currentTag:
 			// A candidate must be pinned before it is offered for
 			// promotion: container-monitor.yml writes scan_image
@@ -746,10 +811,50 @@ func buildScanTargets(imagePresets map[string][]string, affectingUs map[string][
 			}
 		}
 
+		// The other half of rule 1: the reference the catalogue runs must
+		// still exist. An image deleted upstream used to surface only when
+		// someone ran the preset — twice, in #244 — and it supersedes whatever
+		// the update lookup had to say, because nothing else matters until it
+		// is fixed.
+		if err := verifyPinnedImage(imageName, currentTag, currentDigest); err != nil {
+			if errors.Is(err, errImageNotFound) {
+				target.Missing = true
+				target.Error = err.Error()
+			} else if target.Error == "" {
+				target.Error = err.Error()
+			}
+		}
+
 		targets = append(targets, target)
 	}
 
 	return targets
+}
+
+// verifyPinnedImage checks that the exact reference the catalogue runs still
+// resolves: the digest when there is one, since that is what a runner pulls,
+// and the tag otherwise.
+//
+// A registry that answers 404 has deleted the image, which is the case worth
+// shouting about. Any other failure — a 401 from a registry we hold no
+// credentials for, a timeout — is reported as an unverified image, never as a
+// deleted one.
+func verifyPinnedImage(imageName, tag, digest string) error {
+	reference := digest
+	if reference == "" {
+		reference = tag
+	}
+	if reference == "" {
+		return nil
+	}
+
+	if _, err := resolveDigestFunc(imageName, reference); err != nil {
+		if errors.Is(err, errImageNotFound) {
+			return fmt.Errorf("pinned image is gone: %w", err)
+		}
+		return fmt.Errorf("could not verify the pinned image: %w", err)
+	}
+	return nil
 }
 
 // knownHighSeverityCVEs indexes known-vulnerabilities.toml by the image it
