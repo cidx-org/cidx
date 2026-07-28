@@ -1,30 +1,13 @@
-## [Unreleased]
-
-### Fix
-
-- **actions**: wait for a check of the repository's own workflows, not for any check (#257)
-
-  `cidx cpw` stopped waiting as soon as one check existed on the pushed commit. On a PR touching `.github/dependabot.yml`, GitHub attaches its config-validation check long before the workflows are queued, so cpw reported `1 total | 1 success` and `🎉 All checks passed!` on a commit whose CI had not started — the failure #167 set out to fix, from the other side.
-
-  The wait now ends on a check posted by the `github-actions` app, which the check-runs API already returns alongside each run; GitLab pipeline jobs count as such by construction. A repository without CI is unchanged: no check at all still means "no CI configured", reported after the same timeout. Checks from other apps only are no longer mistaken for CI — they come back at the end of the timeout, and cpw reports them as what they are rather than as a green pipeline.
-
-- **monitor**: gate promotion on the vulnerabilities a candidate actually introduces (#247)
-
-  Every scan step in `container-monitor.yml` wrapped `docker run` in an `if … then … else …`, so a vulnerable image exited 0 and the job always succeeded. `needs.trivy-scan.result` was therefore `success` by construction, and the promote job promoted whatever the cooldown had cleared — while the promotion PR claimed the images had passed a HIGH/CRITICAL check that never ran.
-
-  Failing the job on any finding was not an option: several catalogue images are knowingly vulnerable, which is what `known-vulnerabilities.toml` records, and a permanently red monitor is ignored exactly like a permanently green one. The verdict is now per candidate and differential — `cidx preset scan-verdicts` holds a candidate only for a HIGH/CRITICAL finding accepted neither for the image it replaces nor for its own reference. A candidate carrying the same vulnerabilities as the running image is not a regression and still ships.
-
-  The two gates are cumulative and ordered: the cooldown (#246) decides what gets scanned as a candidate, the scan gate decides what gets promoted. A cooldown waiver does not excuse a new finding. Missing or unreadable scan results hold the candidate, and a held candidate is annotated and reported rather than failing the run.
+## v2.3.0 (2026-07-28)
 
 ### Feat
 
-- **presets**: detect image updates on the OCI registries, and report a catalogue image deleted upstream (#245)
+- **presets**: detect image updates on OCI registries (#251)
 
-  `cidx preset scan-targets`, `preset check-updates` and `preset audit` reached Docker Hub and Quay.io only; the other 9 of the 21 catalogue images — gcr.io, ghcr.io and every Docker Hardened Image — returned "registry not supported yet" and never produced a candidate. They are now read through `GET /v2/<repo>/tags/list`, behind the same authentication as the digest pinning of #244.
+### Fix
 
-  gcr.io dates its tags (`timeUploadedMs`), so its candidates go through the 14-day cooldown like any other. ghcr.io and dhi.io date nothing readable, and a candidate with no date is held for ever by a fail-closed cooldown — so a newer version found there is reported in a state of its own, `newer_version`, to be pinned by hand rather than queued as a candidate that can never be promoted.
-
-  The reference each catalogue image is pinned to is also verified: an image deleted upstream is reported `missing` and turns the weekly container monitor red, instead of surfacing when someone runs the preset.
+- **actions**: wait for a workflow check, not any check (#258)
+- **monitor**: gate promotion on newly introduced vulnerabilities (#253)
 
 ## v2.2.0 (2026-07-28)
 
