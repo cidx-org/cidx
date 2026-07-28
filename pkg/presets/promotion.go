@@ -181,9 +181,13 @@ func EvaluateScan(found, accepted []string) ScanDecision {
 // scanPassReason distinguishes the two ways a candidate clears the gate, because
 // they are not the same news: nothing was found, or everything found was already
 // on our own record.
+//
+// Which scanners were consulted is deliberately not stated here — this function
+// weighs findings and does not know where they came from. The caller appends the
+// provenance, so a verdict never implies a scanner that did not run.
 func scanPassReason(found int) string {
 	if found == 0 {
-		return "no HIGH/CRITICAL finding reported by Trivy or Grype"
+		return "no HIGH/CRITICAL finding reported"
 	}
 	return fmt.Sprintf("%d HIGH/CRITICAL finding(s), all already accepted for the image we run today", found)
 }

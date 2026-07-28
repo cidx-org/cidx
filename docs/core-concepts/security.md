@@ -184,7 +184,7 @@ Why not "always stay one version behind"? An attacker publishing twice in a row 
 
 ### How the rules are applied
 
-`cidx preset scan-targets` decides, per image, what `container-monitor.yml` scans and what it may promote. The workflow only reads that verdict — the policy lives in code, where it is testable, rather than in shell scattered across a YAML file.
+`cidx preset scan-targets` decides, per image, what `container-monitor.yml` scans and which candidates are old enough to consider; `cidx preset scan-verdicts` then decides which of them the scan results allow. The workflow only reads those verdicts — the policy lives in code, where it is testable, rather than in shell scattered across a YAML file.
 
 **Where the age comes from.** The cooldown is measured against the date the registry reports for the candidate tag, taken from the same call that finds the tag, so it costs no extra request:
 
@@ -243,7 +243,9 @@ A candidate carrying the same vulnerabilities as the running image is not a regr
 
 **Two cumulative gates, in this order.** The cooldown runs first, in `cidx preset scan-targets`: only a candidate it clears becomes the image the monitor scans. The scan gate then judges what came back, in `cidx preset scan-verdicts`. Both must pass, and rule 3's waiver applies to the cooldown alone — a candidate promoted early because it fixes a CVE affecting us is still held if it brings a different one along.
 
-**Fail-closed, again.** A candidate whose scan results are missing or unreadable is held. An empty scanner output — what a failed pull leaves behind — parses as no JSON at all rather than as a clean image.
+**Fail-closed, again.** A candidate that neither scanner produced a readable result for is held. An empty scanner output — what a failed pull leaves behind — parses as no JSON at all rather than as a clean image.
+
+One scanner missing is not fatal: the other's findings are real evidence, and holding every promotion because a registry login flaked would rebuild the stuck gate this replaced. What the verdict must not do is imply a scan that never happened, so it names the scanners it actually read (`scanned by Trivy and Grype`, or just one of them). For the same reason the promote job runs even when a scan job failed — a lost matrix leg holds its own candidate, not everyone else's.
 
 **A held candidate is information, not a failure.** It is annotated on the run and listed in the summary under *Held by the scan gate*, and the monitor stays green. Red is reserved for what is actually broken — a catalogue image deleted upstream (#245) — so that signal keeps meaning something. The candidate returns next week, with the current pinned image still scanned and still running in the meantime.
 

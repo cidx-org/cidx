@@ -225,7 +225,17 @@ jobs:
   promote:
     name: Promote Updates
     needs: [get-scan-targets, trivy-scan, grype-scan]
-    if: needs.get-scan-targets.outputs.has_updates == 'true'
+    # Runs even when a scan job failed, because the verdict is per candidate:
+    # the very first end-to-end run of this gate lost one Trivy leg to a flaky
+    # registry login, and letting that skip the whole job would block every
+    # unrelated promotion — the coarse, always-stuck gate #247 replaced. A
+    # candidate whose results are missing is held on its own; the others are
+    # judged on the evidence that does exist, and the verdict names the scanners
+    # it actually read.
+    if: >-
+      !cancelled()
+      && needs.get-scan-targets.result == 'success'
+      && needs.get-scan-targets.outputs.has_updates == 'true'
     runs-on: ubuntu-latest
 
     steps:

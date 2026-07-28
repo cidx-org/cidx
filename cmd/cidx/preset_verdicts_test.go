@@ -198,6 +198,38 @@ func TestPromotionVerdictReadsBothScanners(t *testing.T) {
 	}
 }
 
+// TestPromotionVerdictNamesTheScannersItRead: the promotion PR states that both
+// scanners looked, so a verdict reached on one of them has to say so. The very
+// first end-to-end run of this gate lost a Trivy job to a flaky registry login,
+// which is exactly the case that would otherwise be claimed as a clean sweep.
+func TestPromotionVerdictNamesTheScannersItRead(t *testing.T) {
+	both := t.TempDir()
+	writeTrivyResult(t, both, candidateRef, nil)
+	writeGrypeResult(t, both, candidateRef, nil)
+
+	verdict := onlyVerdict(t, buildPromotionVerdicts([]scanTarget{promotableTarget()}, both, nil))
+	if !strings.Contains(verdict.Reason, "scanned by Trivy and Grype") {
+		t.Errorf("Reason = %q, want both scanners named", verdict.Reason)
+	}
+	if len(verdict.ScannedBy) != 2 {
+		t.Errorf("ScannedBy = %v, want both scanners", verdict.ScannedBy)
+	}
+
+	grypeOnly := t.TempDir()
+	writeGrypeResult(t, grypeOnly, candidateRef, nil)
+
+	verdict = onlyVerdict(t, buildPromotionVerdicts([]scanTarget{promotableTarget()}, grypeOnly, nil))
+	if !verdict.Promote {
+		t.Fatalf("one scanner's evidence still promotes, got: %s", verdict.Reason)
+	}
+	if strings.Contains(verdict.Reason, "Trivy") {
+		t.Errorf("Reason = %q, want it not to claim a Trivy scan that never ran", verdict.Reason)
+	}
+	if len(verdict.ScannedBy) != 1 || verdict.ScannedBy[0] != "Grype" {
+		t.Errorf("ScannedBy = %v, want Grype alone", verdict.ScannedBy)
+	}
+}
+
 // TestPromotionVerdictHoldsWithoutScanResults is the fail-closed case: no
 // evidence, no promotion. It is the state a failed pull or a skipped scan job
 // leaves behind, and before #247 it promoted regardless.
@@ -331,7 +363,7 @@ func TestPromotionVerdictJSONContract(t *testing.T) {
 
 	for _, field := range []string{
 		"current_image", "new_image", "presets", "promote", "reason",
-		"introduces", "policy_reason", "cve_waiver",
+		"introduces", "scanned_by", "policy_reason", "cve_waiver",
 	} {
 		if _, ok := decoded[field]; !ok {
 			t.Errorf("field %q missing from scan-verdicts JSON: container-monitor.yml reads it", field)

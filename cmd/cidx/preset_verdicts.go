@@ -37,6 +37,13 @@ type promotionVerdict struct {
 	// workflow annotation says which vulnerability rather than just "held".
 	Introduces []string `json:"introduces,omitempty"`
 
+	// ScannedBy names the scanners whose results actually backed this verdict.
+	// One of them failing to run is not rare — a flaky registry login took a
+	// Trivy job out on the very first end-to-end run of this gate — and a
+	// verdict reached on one scanner must say so rather than let the promotion
+	// PR claim both looked.
+	ScannedBy []string `json:"scanned_by,omitempty"`
+
 	// PolicyReason and CVEWaiver carry the cooldown's verdict (#242) through to
 	// the promotion PR, which has to state both gates: the candidate served its
 	// 14 days (or was waived out of them) *and* introduced nothing new.
@@ -136,7 +143,7 @@ func buildPromotionVerdicts(targets []scanTarget, resultsDir string, accepted ma
 			CVEWaiver:    target.CVEWaiver,
 		}
 
-		found, err := scanFindings(resultsDir, target.ScanImage)
+		found, scanners, err := scanFindings(resultsDir, target.ScanImage)
 		if err != nil {
 			verdict.Reason = fmt.Sprintf("held: %v", err)
 			verdicts = append(verdicts, verdict)
@@ -145,8 +152,9 @@ func buildPromotionVerdicts(targets []scanTarget, resultsDir string, accepted ma
 
 		decision := presets.EvaluateScan(found, acceptedFor(accepted, target))
 		verdict.Promote = decision.Promote
-		verdict.Reason = decision.Reason
+		verdict.Reason = fmt.Sprintf("%s (scanned by %s)", decision.Reason, strings.Join(scanners, " and "))
 		verdict.Introduces = decision.Introduces
+		verdict.ScannedBy = scanners
 		verdicts = append(verdicts, verdict)
 	}
 
@@ -189,25 +197,30 @@ func scanResultFile(scanner, image string) string {
 // workflow.
 var imageFileName = strings.NewReplacer("/", "_", ":", "_", "@", "_")
 
-// scanFindings collects the HIGH/CRITICAL vulnerabilities both scanners reported
-// for one image.
+// scanFindings collects the HIGH/CRITICAL vulnerabilities the scanners reported
+// for one image, and names the ones that actually produced a result.
 //
 // A result file that is absent is not the same as one that is unreadable, but
-// the consequence is: either way the candidate is held, because a promotion
-// needs positive evidence, not the absence of bad news. An empty scanner output
-// — which is what a failed pull leaves behind — parses as no JSON at all rather
-// than as a clean image.
-func scanFindings(dir, image string) ([]string, error) {
+// the consequence is: with neither scanner heard from the candidate is held,
+// because a promotion needs positive evidence, not the absence of bad news. An
+// empty scanner output — which is what a failed pull leaves behind — parses as
+// no JSON at all rather than as a clean image.
+//
+// One scanner missing is not fatal: the other one's findings are real evidence,
+// and holding every promotion because a registry login flaked would rebuild the
+// permanently-stuck gate this replaced. What the verdict must not do is imply a
+// scanner that never ran, which is what the returned names are for.
+func scanFindings(dir, image string) ([]string, []string, error) {
 	scanners := []struct {
-		name  string
+		name  string // as the result file spells it
+		title string // as a human reading the verdict spells it
 		parse func([]byte) ([]string, error)
 	}{
-		{"trivy", trivyFindings},
-		{"grype", grypeFindings},
+		{"trivy", "Trivy", trivyFindings},
+		{"grype", "Grype", grypeFindings},
 	}
 
-	var found []string
-	read := 0
+	var found, read []string
 
 	for _, scanner := range scanners {
 		data, err := os.ReadFile(filepath.Join(dir, scanResultFile(scanner.name, image)))
@@ -215,22 +228,22 @@ func scanFindings(dir, image string) ([]string, error) {
 			continue
 		}
 		if err != nil {
-			return nil, fmt.Errorf("%s result could not be read: %w", scanner.name, err)
+			return nil, nil, fmt.Errorf("%s result could not be read: %w", scanner.name, err)
 		}
 
 		ids, err := scanner.parse(data)
 		if err != nil {
-			return nil, fmt.Errorf("%s result could not be read: %w", scanner.name, err)
+			return nil, nil, fmt.Errorf("%s result could not be read: %w", scanner.name, err)
 		}
 
-		read++
+		read = append(read, scanner.title)
 		found = append(found, ids...)
 	}
 
-	if read == 0 {
-		return nil, errNoScanResults
+	if len(read) == 0 {
+		return nil, nil, errNoScanResults
 	}
-	return found, nil
+	return found, read, nil
 }
 
 // trivyFindings reads the vulnerability identifiers out of `trivy image
