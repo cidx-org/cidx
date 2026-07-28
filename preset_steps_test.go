@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/cidx-org/cidx/v2/pkg/presets"
@@ -43,6 +44,143 @@ func RegisterPresetSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Then(`^the resolved image should be pinned by digest$`, tc.resolvedImageShouldBePinned)
 	ctx.Then(`^the resolved image tag should be "([^"]*)"$`, tc.resolvedImageTagShouldBe)
 	ctx.Then(`^the presets "([^"]*)" and "([^"]*)" should resolve the same image$`, tc.presetsShouldResolveSameImage)
+
+	// Promotion cooldown and its CVE exception (#242)
+	ctx.Given(`^the running image has no known vulnerabilities$`, tc.runningImageIsClean)
+	ctx.Given(`^the running image is affected by "([^"]*)"$`, tc.runningImageIsAffectedBy)
+	ctx.Given(`^a candidate version published (\d+) days ago$`, tc.candidatePublishedDaysAgo)
+	ctx.Given(`^a candidate version with no publication date$`, tc.candidateWithoutPublicationDate)
+	ctx.When(`^the promotion policy is applied$`, tc.applyPromotionPolicy)
+	ctx.Then(`^the candidate should be promoted$`, tc.candidateShouldBePromoted)
+	ctx.Then(`^the candidate should be held$`, tc.candidateShouldBeHeld)
+	ctx.Then(`^the promotion reason should mention "([^"]*)"$`, tc.promotionReasonShouldMention)
+	ctx.Then(`^the waiver should name "([^"]*)"$`, tc.waiverShouldName)
+	ctx.Then(`^no waiver should be reported$`, tc.noWaiverShouldBeReported)
+	ctx.Then(`^the candidate age should be unreported$`, tc.candidateAgeShouldBeUnreported)
+}
+
+// promotionClock is the fixed "now" the cooldown scenarios are written against,
+// so a scenario states an age rather than a date that would rot.
+var promotionClock = time.Date(2026, 7, 28, 9, 0, 0, 0, time.UTC)
+
+// runningImageIsClean states that nothing known affects what the catalogue runs
+// today, which is what makes the cooldown the only rule in play.
+func (tc *TestContext) runningImageIsClean() error {
+	tc.Config["affecting_us"] = []string(nil)
+	return nil
+}
+
+// runningImageIsAffectedBy records a vulnerability of the image the catalogue
+// runs today — rule 3's input, read from known-vulnerabilities.toml in
+// production.
+func (tc *TestContext) runningImageIsAffectedBy(cve string) error {
+	affecting, _ := tc.Config["affecting_us"].([]string)
+	tc.Config["affecting_us"] = append(affecting, cve)
+	return nil
+}
+
+func (tc *TestContext) candidatePublishedDaysAgo(days int) error {
+	tc.Config["candidate_published"] = promotionClock.AddDate(0, 0, -days)
+	return nil
+}
+
+// candidateWithoutPublicationDate is the case a registry that will not say when
+// a tag appeared leaves us in.
+func (tc *TestContext) candidateWithoutPublicationDate() error {
+	tc.Config["candidate_published"] = time.Time{}
+	return nil
+}
+
+func (tc *TestContext) applyPromotionPolicy() error {
+	published, ok := tc.Config["candidate_published"].(time.Time)
+	if !ok {
+		return fmt.Errorf("no candidate version was staged")
+	}
+	affecting, _ := tc.Config["affecting_us"].([]string)
+	tc.Config["promotion_decision"] = presets.EvaluatePromotion(published, promotionClock, affecting)
+	return nil
+}
+
+func (tc *TestContext) promotionDecision() (presets.PromotionDecision, error) {
+	decision, ok := tc.Config["promotion_decision"].(presets.PromotionDecision)
+	if !ok {
+		return presets.PromotionDecision{}, fmt.Errorf("the promotion policy was not applied")
+	}
+	return decision, nil
+}
+
+func (tc *TestContext) candidateShouldBePromoted() error {
+	decision, err := tc.promotionDecision()
+	if err != nil {
+		return err
+	}
+	if !decision.Promote {
+		return fmt.Errorf("candidate was held: %s", decision.Reason)
+	}
+	return nil
+}
+
+func (tc *TestContext) candidateShouldBeHeld() error {
+	decision, err := tc.promotionDecision()
+	if err != nil {
+		return err
+	}
+	if decision.Promote {
+		return fmt.Errorf("candidate was promoted: %s", decision.Reason)
+	}
+	if decision.Reason == "" {
+		return fmt.Errorf("candidate was held without a stated reason")
+	}
+	return nil
+}
+
+func (tc *TestContext) promotionReasonShouldMention(fragment string) error {
+	decision, err := tc.promotionDecision()
+	if err != nil {
+		return err
+	}
+	if !strings.Contains(decision.Reason, fragment) {
+		return fmt.Errorf("reason %q does not mention %q", decision.Reason, fragment)
+	}
+	return nil
+}
+
+func (tc *TestContext) waiverShouldName(cve string) error {
+	decision, err := tc.promotionDecision()
+	if err != nil {
+		return err
+	}
+	for _, waived := range decision.WaivedFor {
+		if waived == cve {
+			if !strings.Contains(decision.Reason, cve) {
+				return fmt.Errorf("waiver for %s is not stated in the reason %q", cve, decision.Reason)
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("waiver %v does not name %s", decision.WaivedFor, cve)
+}
+
+func (tc *TestContext) noWaiverShouldBeReported() error {
+	decision, err := tc.promotionDecision()
+	if err != nil {
+		return err
+	}
+	if len(decision.WaivedFor) != 0 {
+		return fmt.Errorf("a waiver was claimed for %v although none was needed", decision.WaivedFor)
+	}
+	return nil
+}
+
+func (tc *TestContext) candidateAgeShouldBeUnreported() error {
+	decision, err := tc.promotionDecision()
+	if err != nil {
+		return err
+	}
+	if decision.AgeDays != nil {
+		return fmt.Errorf("age reported as %d days although no publication date was known", *decision.AgeDays)
+	}
+	return nil
 }
 
 // pinnedImageRef is the reference form rule 1 of the image supply-chain policy

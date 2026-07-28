@@ -5,6 +5,11 @@ on:
     # Run weekly on Mondays at 9:00 UTC
     - cron: "0 9 * * 1"
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Compute targets and scan, but do not open a promotion PR"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -58,16 +63,28 @@ jobs:
           echo "Found **$COUNT** unique images to scan" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          # Show updates
-          UPDATES=$(echo "$TARGETS_JSON" | jq -r '.[] | select(.is_update == true) | "- \(.current_image) → \(.scan_image)"')
+          # Candidates cleared for promotion: either past the 14-day cooldown,
+          # or waived out of it because the running image is knowingly
+          # vulnerable. policy_reason says which (#242).
+          UPDATES=$(echo "$TARGETS_JSON" | jq -r '.[] | select(.is_update == true) | "- \(.current_image) → \(.scan_image) — \(.policy_reason)"')
           if [ -n "$UPDATES" ]; then
             echo "### Updates Available" >> $GITHUB_STEP_SUMMARY
             echo "$UPDATES" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
 
-          # Show current (no updates)
-          CURRENT=$(echo "$TARGETS_JSON" | jq -r '.[] | select(.is_update == false) | "- \(.scan_image)"')
+          # Candidates the cooldown holds back, or that could not be dated.
+          # Reported rather than dropped: the current image keeps being scanned
+          # and run in the meantime, and the candidate returns next week.
+          HELD=$(echo "$TARGETS_JSON" | jq -r '.[] | select(.candidate_image != null and .is_update == false) | "- \(.current_image) → \(.candidate_image) — \(.policy_reason)"')
+          if [ -n "$HELD" ]; then
+            echo "### Held by the cooldown" >> $GITHUB_STEP_SUMMARY
+            echo "$HELD" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Show current (nothing newer found)
+          CURRENT=$(echo "$TARGETS_JSON" | jq -r '.[] | select(.is_update == false and .candidate_image == null) | "- \(.scan_image)"')
           if [ -n "$CURRENT" ]; then
             echo "### Current (no updates)" >> $GITHUB_STEP_SUMMARY
             echo "$CURRENT" >> $GITHUB_STEP_SUMMARY
@@ -190,13 +207,16 @@ jobs:
           PROMOTED=0
           SKIPPED=0
 
-          # Process each target with is_update=true
+          # Process each target with is_update=true. cidx preset scan-targets
+          # has already applied the 14-day cooldown and its CVE exception
+          # (#242): anything still marked is_update is cleared for promotion.
           echo "$TARGETS_JSON" | jq -c '.[] | select(.is_update == true)' | while read -r target; do
             CURRENT=$(echo "$target" | jq -r '.current_image')
             NEW=$(echo "$target" | jq -r '.scan_image')
             PRESETS=$(echo "$target" | jq -r '.presets | join(", ")')
+            REASON=$(echo "$target" | jq -r '.policy_reason // "no policy verdict"')
 
-            echo "Promoting: $CURRENT → $NEW (used by: $PRESETS)"
+            echo "Promoting: $CURRENT → $NEW (used by: $PRESETS) — $REASON"
 
             # Update presets.toml. `scan_image` is already digest-pinned
             # (image:tag@sha256:..., issue #242) — cidx preset scan-targets
@@ -205,7 +225,7 @@ jobs:
             # mutable tag. The "Test build" step below re-checks the invariant.
             sed -i "s|image = \"$CURRENT\"|image = \"$NEW\"|g" pkg/presets/presets.toml
 
-            echo "- **$CURRENT** → **$NEW** (presets: $PRESETS)" >> $GITHUB_STEP_SUMMARY
+            echo "- **$CURRENT** → **$NEW** (presets: $PRESETS) — $REASON" >> $GITHUB_STEP_SUMMARY
             echo $(($(cat /tmp/promoted_count 2>/dev/null || echo 0) + 1)) > /tmp/promoted_count
           done
 
@@ -213,6 +233,18 @@ jobs:
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Total promoted: $PROMOTED**" >> $GITHUB_STEP_SUMMARY
+
+          # Rule 3 requires the waiver to be visible in the promotion PR:
+          # which vulnerability, on which image, fixed by which version.
+          WAIVERS=$(echo "$TARGETS_JSON" | jq -r '.[] | select(.is_update == true and .cve_waiver != null) | "- `\(.current_image)` is affected by \(.cve_waiver | join(", ")) — promoted to `\(.scan_image)` without waiting out the cooldown"')
+          if [ -z "$WAIVERS" ]; then
+            WAIVERS="_None: every promoted version served the full 14-day cooldown._"
+          fi
+          {
+            echo "waivers<<WAIVERS_EOF"
+            echo "$WAIVERS"
+            echo "WAIVERS_EOF"
+          } >> $GITHUB_OUTPUT
 
           # Check for changes
           if git diff --quiet pkg/presets/presets.toml; then
@@ -236,8 +268,17 @@ jobs:
           ./bin/cidx preset list > /dev/null
           echo "Build and tests passed" >> $GITHUB_STEP_SUMMARY
 
+      # A manual run is how the promotion policy gets exercised end to end, and
+      # it must not leave a stray PR behind to do it. The scheduled run leaves
+      # inputs empty, so it is never a dry run.
+      - name: Report dry run
+        if: steps.promote.outputs.has_changes == 'true' && inputs.dry_run
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Dry run**: the promotion above was computed and applied to the working tree, but no version bump and no pull request were made." >> $GITHUB_STEP_SUMMARY
+
       - name: Bump version
-        if: steps.promote.outputs.has_changes == 'true'
+        if: steps.promote.outputs.has_changes == 'true' && !inputs.dry_run
         id: bump
         run: |
           pip install commitizen
@@ -248,7 +289,7 @@ jobs:
           echo "**Version: $CURRENT → $NEW**" >> $GITHUB_STEP_SUMMARY
 
       - name: Create Pull Request
-        if: steps.promote.outputs.has_changes == 'true'
+        if: steps.promote.outputs.has_changes == 'true' && !inputs.dry_run
         uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -261,11 +302,22 @@ jobs:
 
             **Version: `${{ steps.bump.outputs.new_version }}`**
 
+            ### Supply-chain policy (#242)
+
+            Every version below is pinned by digest (rule 1) and has been
+            publicly available for at least 14 days (rule 2), unless it appears
+            under the waivers.
+
+            #### Cooldown waivers (rule 3)
+
+            ${{ steps.promote.outputs.waivers }}
+
             ### Security Validation
             - Trivy: ${{ needs.trivy-scan.result }}
             - Grype: ${{ needs.grype-scan.result }}
 
-            All updated images passed HIGH/CRITICAL vulnerability checks.
+            Trivy and Grype ran against every scan target; the per-image
+            verdicts are in the run log.
 
             See [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.
 

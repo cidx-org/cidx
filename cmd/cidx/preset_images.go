@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -54,7 +55,7 @@ func presetCheckUpdatesCommand() *cli.Command {
 				imageName, currentTag, _ := parseImageRef(preset.Image)
 
 				// Get latest tag
-				latestTag, err := getLatestTag(imageName, currentTag)
+				latestTag, _, err := getLatestTag(imageName, currentTag)
 
 				result := updateResult{
 					Name:      name,
@@ -112,12 +113,27 @@ func presetCheckUpdatesCommand() *cli.Command {
 	}
 }
 
-// getLatestTag fetches the latest tag for an image from its registry
-// currentTag is used to preserve variant suffixes (e.g., -alpine, -slim)
-func getLatestTag(image, currentTag string) (string, error) {
+// getLatestTag fetches the latest tag for an image from its registry, together
+// with the date that version was published.
+//
+// currentTag is used to preserve variant suffixes (e.g., -alpine, -slim).
+//
+// The date is what rule 2 of the image supply-chain policy (#242) measures the
+// cooldown against, and it comes from the registry's own tag listing — the same
+// call that finds the tag, so the cooldown costs no extra request. A zero time
+// means this registry does not publish one; callers must treat that as "not
+// promotable" rather than as "old enough".
+//
+// The OCI distribution API itself carries no publication date: the closest
+// thing is the `created` field of the image config blob, which is a *build*
+// date and can predate publication by an arbitrary amount. It is not used here
+// — a wrong date would silently shorten the cooldown, which is worse than
+// having none. Registries below that answer with an error produce no candidate
+// at all today (#245), so the cooldown has nothing to act on for them.
+func getLatestTag(image, currentTag string) (string, time.Time, error) {
 	// A reference pinned by digest alone carries no version to compare against.
 	if currentTag == "" {
-		return "", fmt.Errorf("no tag to compare (reference is pinned by digest only)")
+		return "", time.Time{}, fmt.Errorf("no tag to compare (reference is pinned by digest only)")
 	}
 
 	// Determine registry and repository
@@ -133,9 +149,9 @@ func getLatestTag(image, currentTag string) (string, error) {
 		return getQuayLatestTag(repo, variantSuffix)
 	case "gcr.io", "ghcr.io":
 		// GitHub/Google Container Registry - harder to query without auth
-		return "", fmt.Errorf("registry %s not supported yet", registry)
+		return "", time.Time{}, fmt.Errorf("registry %s not supported yet", registry)
 	default:
-		return "", fmt.Errorf("unknown registry: %s", registry)
+		return "", time.Time{}, fmt.Errorf("unknown registry: %s", registry)
 	}
 }
 
@@ -170,30 +186,38 @@ func parseRegistry(image string) (registry, repo string) {
 	return "docker.io", image
 }
 
-// getDockerHubLatestTag gets the latest tag from Docker Hub
+// getDockerHubLatestTag gets the latest tag from Docker Hub, with the date the
+// tag last received content.
+//
+// `last_updated` is when that tag was last pushed, which is exactly the moment
+// the version became publicly available. A tag republished with new content
+// resets it, and for the cooldown that is the right behaviour: new content,
+// new wait.
+//
 // variantSuffix is the variant to match (e.g., "-alpine", "" for pure semver)
-func getDockerHubLatestTag(repo, variantSuffix string) (string, error) {
+func getDockerHubLatestTag(repo, variantSuffix string) (string, time.Time, error) {
 	url := fmt.Sprintf("https://hub.docker.com/v2/repositories/%s/tags?page_size=100&ordering=last_updated", repo)
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
+		return "", time.Time{}, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
 	var result struct {
 		Results []struct {
-			Name string `json:"name"`
+			Name        string `json:"name"`
+			LastUpdated string `json:"last_updated"`
 		} `json:"results"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
 
 	// Build regex based on variant suffix
@@ -212,38 +236,45 @@ func getDockerHubLatestTag(repo, variantSuffix string) (string, error) {
 	for _, tag := range result.Results {
 		if tag.Name != "latest" && !strings.Contains(tag.Name, "sha") &&
 			!strings.Contains(tag.Name, "nightly") && semverRegex.MatchString(tag.Name) {
-			return tag.Name, nil
+			// An unparseable date yields the zero time, not an error: the tag
+			// is still a real candidate, it just cannot serve the cooldown.
+			published, _ := time.Parse(time.RFC3339, tag.LastUpdated)
+			return tag.Name, published, nil
 		}
 	}
 
 	// No matching semver tag found
-	return "", fmt.Errorf("no semver tags found with suffix '%s'", variantSuffix)
+	return "", time.Time{}, fmt.Errorf("no semver tags found with suffix '%s'", variantSuffix)
 }
 
-// getQuayLatestTag gets the latest tag from Quay.io
+// getQuayLatestTag gets the latest tag from Quay.io, with the date it was
+// pushed (`start_ts`, seconds since the epoch — when the tag started pointing
+// at its current content).
+//
 // variantSuffix is the variant to match (e.g., "-alpine", "" for pure semver)
-func getQuayLatestTag(repo, variantSuffix string) (string, error) {
+func getQuayLatestTag(repo, variantSuffix string) (string, time.Time, error) {
 	url := fmt.Sprintf("https://quay.io/api/v1/repository/%s/tag/?limit=50", repo)
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
+		return "", time.Time{}, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
 	var result struct {
 		Tags []struct {
-			Name string `json:"name"`
+			Name    string `json:"name"`
+			StartTS int64  `json:"start_ts"`
 		} `json:"tags"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
 
 	// Build regex based on variant suffix
@@ -257,11 +288,15 @@ func getQuayLatestTag(repo, variantSuffix string) (string, error) {
 
 	for _, tag := range result.Tags {
 		if tag.Name != "latest" && semverRegex.MatchString(tag.Name) {
-			return tag.Name, nil
+			var published time.Time
+			if tag.StartTS > 0 {
+				published = time.Unix(tag.StartTS, 0).UTC()
+			}
+			return tag.Name, published, nil
 		}
 	}
 
-	return "", fmt.Errorf("no semver tags found with suffix '%s'", variantSuffix)
+	return "", time.Time{}, fmt.Errorf("no semver tags found with suffix '%s'", variantSuffix)
 }
 
 // presetScanCommand scans all preset container images for security vulnerabilities
@@ -580,6 +615,37 @@ func presetImagesCommand() *cli.Command {
 	}
 }
 
+// scanTarget is one line of the contract between `cidx preset scan-targets` and
+// container-monitor.yml: what the workflow scans, and whether it may promote it.
+//
+// The JSON names are consumed by jq expressions in that workflow;
+// TestScanTargetJSONContract pins them.
+type scanTarget struct {
+	CurrentImage string   `json:"current_image"`
+	ScanImage    string   `json:"scan_image"`
+	IsUpdate     bool     `json:"is_update"`
+	Presets      []string `json:"presets"`
+	Error        string   `json:"error,omitempty"`
+
+	// Rules 2 and 3 of the image supply-chain policy (#242). CandidateImage is
+	// set whenever a newer version exists and could be pinned, promoted or not
+	// — a version held by the cooldown has to stay visible, or the policy
+	// quietly swallows it. PolicyReason says which of the two happened.
+	CandidateImage string   `json:"candidate_image,omitempty"`
+	PublishedAt    string   `json:"published_at,omitempty"`
+	AgeDays        *int     `json:"age_days,omitempty"`
+	PolicyReason   string   `json:"policy_reason,omitempty"`
+	CVEWaiver      []string `json:"cve_waiver,omitempty"`
+}
+
+// The two network calls scan-targets makes, as package variables so the
+// promotion policy can be exercised without a registry — the seam convention
+// already used for listRunsFunc (#170).
+var (
+	latestTagFunc     = getLatestTag
+	resolveDigestFunc = resolveDigest
+)
+
 // presetScanTargetsCommand returns deduplicated list of images to scan (with updates resolved)
 func presetScanTargetsCommand() *cli.Command {
 	return &cli.Command{
@@ -591,16 +657,13 @@ func presetScanTargetsCommand() *cli.Command {
 				Usage: "Output as JSON (required for CI)",
 				Value: true,
 			},
+			&cli.StringFlag{
+				Name:  "vuln-file",
+				Value: defaultVulnFile,
+				Usage: "Path to known-vulnerabilities.toml (source of the cooldown's CVE exception)",
+			},
 		},
 		Action: func(c *cli.Context) error {
-			type scanTarget struct {
-				CurrentImage string   `json:"current_image"`
-				ScanImage    string   `json:"scan_image"`
-				IsUpdate     bool     `json:"is_update"`
-				Presets      []string `json:"presets"`
-				Error        string   `json:"error,omitempty"`
-			}
-
 			// Build map of current image -> presets using it
 			imagePresets := make(map[string][]string)
 			for _, name := range presets.List() {
@@ -608,56 +671,113 @@ func presetScanTargetsCommand() *cli.Command {
 				imagePresets[preset.Image] = append(imagePresets[preset.Image], name)
 			}
 
-			// Get sorted unique current images
-			currentImages := make([]string, 0, len(imagePresets))
-			for img := range imagePresets {
-				currentImages = append(currentImages, img)
-			}
-			sort.Strings(currentImages)
-
-			var targets []scanTarget
-
-			for _, currentImage := range currentImages {
-				presetsUsing := imagePresets[currentImage]
-				sort.Strings(presetsUsing)
-
-				target := scanTarget{
-					CurrentImage: currentImage,
-					ScanImage:    currentImage, // Default: scan current
-					IsUpdate:     false,
-					Presets:      presetsUsing,
-				}
-
-				// Check for update
-				imageName, currentTag, _ := parseImageRef(currentImage)
-				latestTag, err := getLatestTag(imageName, currentTag)
-
-				switch {
-				case err != nil:
-					target.Error = err.Error()
-					// Still scan current image on error
-				case latestTag != "" && latestTag != currentTag:
-					// A candidate must be pinned before it is offered for
-					// promotion: container-monitor.yml writes scan_image
-					// verbatim into presets.toml, so a bare tag here would
-					// undo the digest pinning on the first promotion (#242).
-					// Failing to resolve the digest means no promotion — the
-					// current, pinned image is scanned instead.
-					digest, digestErr := resolveDigest(imageName, latestTag)
-					if digestErr != nil {
-						target.Error = fmt.Sprintf("update %s available but not pinnable: %v", latestTag, digestErr)
-						break
-					}
-					target.ScanImage = fmt.Sprintf("%s:%s@%s", imageName, latestTag, digest)
-					target.IsUpdate = true
-				}
-
-				targets = append(targets, target)
-			}
+			targets := buildScanTargets(imagePresets, knownHighSeverityCVEs(c.String("vuln-file")), time.Now())
 
 			encoder := json.NewEncoder(os.Stdout)
 			encoder.SetIndent("", "  ")
 			return encoder.Encode(targets)
 		},
 	}
+}
+
+// buildScanTargets resolves, for every distinct catalogue image, what to scan
+// and whether a newer version may replace it.
+//
+// affectingUs maps an image reference (`repo:tag`, as known-vulnerabilities.toml
+// records them) to the vulnerabilities already known to affect it.
+func buildScanTargets(imagePresets map[string][]string, affectingUs map[string][]string, now time.Time) []scanTarget {
+	currentImages := make([]string, 0, len(imagePresets))
+	for img := range imagePresets {
+		currentImages = append(currentImages, img)
+	}
+	sort.Strings(currentImages)
+
+	targets := make([]scanTarget, 0, len(currentImages))
+
+	for _, currentImage := range currentImages {
+		presetsUsing := imagePresets[currentImage]
+		sort.Strings(presetsUsing)
+
+		target := scanTarget{
+			CurrentImage: currentImage,
+			ScanImage:    currentImage, // Default: scan what we run today
+			IsUpdate:     false,
+			Presets:      presetsUsing,
+		}
+
+		// Check for update
+		imageName, currentTag, _ := parseImageRef(currentImage)
+		latestTag, published, err := latestTagFunc(imageName, currentTag)
+
+		switch {
+		case err != nil:
+			target.Error = err.Error()
+			// Still scan current image on error
+		case latestTag != "" && latestTag != currentTag:
+			// A candidate must be pinned before it is offered for
+			// promotion: container-monitor.yml writes scan_image
+			// verbatim into presets.toml, so a bare tag here would
+			// undo the digest pinning on the first promotion (#242).
+			// Failing to resolve the digest means no promotion — the
+			// current, pinned image is scanned instead.
+			digest, digestErr := resolveDigestFunc(imageName, latestTag)
+			if digestErr != nil {
+				target.Error = fmt.Sprintf("update %s available but not pinnable: %v", latestTag, digestErr)
+				break
+			}
+
+			target.CandidateImage = fmt.Sprintf("%s:%s@%s", imageName, latestTag, digest)
+			if !published.IsZero() {
+				target.PublishedAt = published.UTC().Format(time.RFC3339)
+			}
+
+			// Rules 2 and 3. The vulnerabilities that let a candidate skip the
+			// wait are the ones already recorded against what we run today —
+			// no second scan is needed to learn them, and the monitor's scan of
+			// the promoted candidate is what shows the fix landed.
+			decision := presets.EvaluatePromotion(published, now, affectingUs[refWithoutDigest(currentImage)])
+			target.AgeDays = decision.AgeDays
+			target.PolicyReason = decision.Reason
+			target.CVEWaiver = decision.WaivedFor
+
+			if decision.Promote {
+				target.ScanImage = target.CandidateImage
+				target.IsUpdate = true
+			}
+		}
+
+		targets = append(targets, target)
+	}
+
+	return targets
+}
+
+// knownHighSeverityCVEs indexes known-vulnerabilities.toml by the image it
+// records exceptions against (`repo:tag`, digest excluded — re-pinning a tag
+// must not orphan its entries).
+//
+// These are rule 3's input: the vulnerabilities demonstrably affecting what the
+// catalogue runs today, already produced by the security audit, so the cooldown
+// exception costs no extra scan.
+//
+// An absent or unreadable file yields no waivers, which leaves the cooldown in
+// force — the exception is never granted on missing evidence.
+func knownHighSeverityCVEs(path string) map[string][]string {
+	vulns, err := loadVulnerabilities(path)
+	if err != nil {
+		return nil
+	}
+
+	byImage := make(map[string][]string)
+	for _, v := range vulns.Vulnerabilities {
+		switch strings.ToUpper(v.Severity) {
+		case "HIGH", "CRITICAL":
+			byImage[v.Image] = append(byImage[v.Image], v.CVE)
+		}
+	}
+	for image := range byImage {
+		sort.Strings(byImage[image])
+		byImage[image] = slices.Compact(byImage[image])
+	}
+	return byImage
 }

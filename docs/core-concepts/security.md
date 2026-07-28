@@ -182,6 +182,28 @@ Why not "always stay one version behind"? An attacker publishing twice in a row 
 
 **3. Waive the wait for a real fix.** When a new version fixes a vulnerability that actually affects us, it is promoted immediately — deliberately running a known-vulnerable image to guard against a hypothetical one is the worse trade. The waiver is stated in the promotion PR: which CVE, affecting which image, fixed by which version.
 
+### How the rules are applied
+
+`cidx preset scan-targets` decides, per image, what `container-monitor.yml` scans and what it may promote. The workflow only reads that verdict — the policy lives in code, where it is testable, rather than in shell scattered across a YAML file.
+
+**Where the age comes from.** The cooldown is measured against the date the registry reports for the candidate tag, taken from the same call that finds the tag, so it costs no extra request:
+
+| Registry                    | Date used                | Meaning                                              |
+| --------------------------- | ------------------------ | ---------------------------------------------------- |
+| Docker Hub                   | `last_updated` on the tag | when that tag last received content                  |
+| Quay.io                      | `start_ts` on the tag     | when that tag started pointing at its current content |
+| ghcr.io, gcr.io, dhi.io      | none                     | no candidate is detected there at all today (#245)   |
+
+Both dates restart if a tag is republished with new content, which is what the cooldown wants: new content, new wait.
+
+The OCI distribution API itself carries no publication date. The nearest substitute is the `created` field of the image config blob, and it is deliberately **not** used: that is a _build_ date, which can precede publication by an arbitrary amount. A date that is too old would silently shorten the cooldown, which is worse than having none.
+
+**Fail-closed.** A candidate whose publication date cannot be determined is not promoted — the same posture as rule 1's unresolvable digest. It is reported in the workflow summary with the reason, not silently discarded, and the current pinned image keeps being scanned in the meantime.
+
+**How rule 3 knows what affects us.** `known-vulnerabilities.toml` already records the HIGH/CRITICAL findings accepted against the images the catalogue runs today — that is the list of vulnerabilities demonstrably affecting us, produced by the security audit. A candidate replacing an image with entries in that file is promoted without waiting, and the promotion PR names them. No second scan is run to obtain this: the current image's vulnerabilities are on file, and the monitor already scans the candidate.
+
+A candidate that has served the full 14 days claims no waiver, even when the running image is vulnerable — a waiver line in the PR means the cooldown was actually bypassed, or the record stops being worth reading.
+
 ### What this costs
 
 Security fixes reach the catalogue up to two weeks later than upstream publishes them, unless rule 3 applies. That is the deliberate price of rule 2. If that lag ever hurts more than it helps, the honest fix is to shorten the window — not to quietly bypass it.
