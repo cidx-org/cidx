@@ -78,6 +78,17 @@ func withRepoAndProvider(fn func(repo *vcs.Repository, provider remote.Provider)
 	})
 }
 
+// withRepoAndLazyProvider opens the repository and hands the callback a
+// resolver instead of a provider. Use it for commands that do local work
+// before -- or instead of -- touching the remote: creating the provider up
+// front made them fail on `failed to get remote URL` before any of that work
+// ran, dry-runs included (issue #227).
+func withRepoAndLazyProvider(fn func(repo *vcs.Repository, resolveProvider remote.ProviderFunc) error) error {
+	return withRepo(func(repo *vcs.Repository) error {
+		return fn(repo, func() (remote.Provider, error) { return createProvider(repo) })
+	})
+}
+
 // getGitHubToken retrieves GitHub token from env var or gh CLI auth
 func getGitHubToken(host string) (string, error) {
 	// 1. Try environment variable first

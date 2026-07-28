@@ -57,7 +57,10 @@ func generateGitHubAction(c *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to resolve current directory: %w", err)
 	}
-	opts := generate.GitHubOptions{SelfBuild: generate.IsCidxRepo(cwd)}
+	opts := generate.GitHubOptions{
+		SelfBuild:  generate.IsCidxRepo(cwd),
+		OutputPath: c.String("output"),
+	}
 	if !opts.SelfBuild && generate.BootstrapVersion() == "latest" {
 		fmt.Fprintln(os.Stderr, "Warning: this cidx is not a release build; the generated bootstrap uses @latest and CI may run different presets than this binary")
 	}

@@ -5,6 +5,12 @@ import (
 	"time"
 )
 
+// ProviderFunc resolves a Provider on demand. Creating one reads the git
+// remote, so a command whose local-only steps -- commit analysis, version
+// computation, dry-run output -- never reach the remote must take a
+// ProviderFunc and call it only at the step that does (issue #227).
+type ProviderFunc func() (Provider, error)
+
 // Provider is the interface for CI/CD providers (GitHub, GitLab, etc.)
 type Provider interface {
 	// GetLatestWorkflow returns the most recent workflow run for a branch

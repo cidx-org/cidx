@@ -550,3 +550,52 @@ func TestGitHub_Hardening(t *testing.T) {
 		t.Errorf("expected fetch-depth: 0 on bootstrap + security + code, found %d", got)
 	}
 }
+
+// TestGitHubWithOptions_RegenerateHintNamesOutputPath covers the hint half of
+// #229: the header always pointed at .github/workflows/cidx.yml, so following
+// it from a workflow generated with -o ci.yml regenerated into a *different*
+// file — two workflows, no error.
+func TestGitHubWithOptions_RegenerateHintNamesOutputPath(t *testing.T) {
+	cfg := &config.Config{
+		Pipelines: map[string]config.Pipeline{"ci": {Phases: []string{"security"}}},
+	}
+
+	output, err := GitHubWithOptions(cfg, GitHubOptions{OutputPath: ".github/workflows/ci.yml"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(output, "# Regenerate with: cidx generate github -o .github/workflows/ci.yml") {
+		t.Errorf("hint must name the file being written:\n%s", firstLines(output, 5))
+	}
+	if strings.Contains(output, "-o "+DefaultGitHubWorkflowPath) {
+		t.Errorf("hint must not point at the default path when -o was given:\n%s", firstLines(output, 5))
+	}
+}
+
+// TestGitHubWithOptions_RegenerateHintDefaultsToConventionalPath keeps the
+// flagless case (output to stdout, or `cidx init`) naming the file cidx
+// itself writes.
+func TestGitHubWithOptions_RegenerateHintDefaultsToConventionalPath(t *testing.T) {
+	cfg := &config.Config{
+		Pipelines: map[string]config.Pipeline{"ci": {Phases: []string{"security"}}},
+	}
+
+	output, err := GitHubWithOptions(cfg, GitHubOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(output, "# Regenerate with: cidx generate github -o "+DefaultGitHubWorkflowPath) {
+		t.Errorf("default hint changed:\n%s", firstLines(output, 5))
+	}
+}
+
+// firstLines returns the first n lines of s, for readable failure messages.
+func firstLines(s string, n int) string {
+	lines := strings.Split(s, "\n")
+	if len(lines) > n {
+		lines = lines[:n]
+	}
+	return strings.Join(lines, "\n")
+}

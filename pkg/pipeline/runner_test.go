@@ -1,12 +1,14 @@
 package pipeline
 
 import (
+	"bytes"
 	"context"
 	"strings"
 	"testing"
 
 	"github.com/cidx-org/cidx/v2/pkg/config"
 	"github.com/cidx-org/cidx/v2/pkg/executor"
+	"github.com/sirupsen/logrus"
 )
 
 func TestRunnerOptions_Defaults(t *testing.T) {
@@ -225,5 +227,40 @@ func TestRun_TargetResolution(t *testing.T) {
 		if !strings.Contains(err.Error(), "unknown target") || !strings.Contains(err.Error(), target) {
 			t.Errorf("Run(%q) error should name the unknown target, got: %v", target, err)
 		}
+	}
+}
+
+// TestPrintLocalSafetyDryRun_EnvironmentOrderIsStable is the local-safety
+// counterpart of the executor dry-run: same map, same phantom-diff problem
+// (issue #230).
+func TestPrintLocalSafetyDryRun_EnvironmentOrderIsStable(t *testing.T) {
+	logger := logrus.New()
+	logger.SetFormatter(&logrus.TextFormatter{DisableTimestamp: true})
+	r := &Runner{logger: logger}
+
+	cfg := &config.ContainerConfig{
+		Name:  "envy",
+		Image: "alpine:latest",
+		Env: map[string]string{
+			"ZULU": "1", "ALPHA": "2", "MIKE": "3", "BRAVO": "4",
+			"YANKEE": "5", "CHARLIE": "6", "DELTA": "7", "ECHO": "8",
+		},
+	}
+
+	render := func() string {
+		var buf bytes.Buffer
+		logger.SetOutput(&buf)
+		r.printLocalSafetyDryRun(cfg)
+		return buf.String()
+	}
+
+	first := render()
+	for i := range 20 {
+		if again := render(); again != first {
+			t.Fatalf("run %d differs on identical input:\n%s\n---\n%s", i, first, again)
+		}
+	}
+	if !strings.Contains(first, "ALPHA=2") || strings.Index(first, "ALPHA=2") > strings.Index(first, "ZULU=1") {
+		t.Errorf("environment should be printed in key order:\n%s", first)
 	}
 }

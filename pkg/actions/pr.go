@@ -339,6 +339,17 @@ func (a *PRAction) markReady(ctx context.Context) error {
 	return nil
 }
 
+// preMergeChecksSummary reports what actually passed. "All checks passed"
+// claimed a validation the repository's CI never performed when the only
+// checks on the commit came from another app -- GitHub's own dependabot config
+// check, an external bot (issue #259). WorkflowChecks tells the two apart.
+func preMergeChecksSummary(checks *remote.PRChecks) string {
+	if checks.WorkflowChecks == 0 {
+		return fmt.Sprintf("⚠️  No workflow checks on this commit — %d third-party check(s) passed", checks.TotalCount)
+	}
+	return fmt.Sprintf("✅ All checks passed (%d workflow check(s))! Ready to merge", checks.WorkflowChecks)
+}
+
 // mergePR merges a pull request and watches the workflow
 func (a *PRAction) mergePR(ctx context.Context) error {
 	log.Info("🔀 Merging pull request...")
@@ -431,7 +442,7 @@ func (a *PRAction) mergePR(ctx context.Context) error {
 				return fmt.Errorf("PR checks failed: %d/%d checks failed", checks.Failure, checks.TotalCount)
 			}
 
-			log.Info("✅ All checks passed! Ready to merge")
+			log.Info(preMergeChecksSummary(checks))
 			fmt.Println() // Separator
 		}
 	}

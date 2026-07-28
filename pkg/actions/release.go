@@ -45,22 +45,42 @@ var mergeReleasePR = func(ctx context.Context, repo *vcs.Repository, provider re
 
 // ReleaseAction orchestrates the release process using dynamic action configuration
 type ReleaseAction struct {
-	repo          *vcs.Repository
-	provider      remote.Provider
-	releaseConfig config.ReleaseConfig
-	actionName    string
-	dryRun        bool
+	repo            *vcs.Repository
+	provider        remote.Provider
+	resolveProvider remote.ProviderFunc
+	releaseConfig   config.ReleaseConfig
+	actionName      string
+	dryRun          bool
 }
 
-// NewRelease creates a new release action
-func NewRelease(repo *vcs.Repository, provider remote.Provider, releaseConfig config.ReleaseConfig, actionName string, dryRun bool) *ReleaseAction {
+// NewRelease creates a new release action. The provider is passed as a
+// resolver, not a value: everything up to the push -- prepared-notes lookup,
+// version divergence check, the whole dry-run -- is local, and used to be
+// unreachable in a repository without a remote (issue #227).
+func NewRelease(repo *vcs.Repository, resolveProvider remote.ProviderFunc, releaseConfig config.ReleaseConfig, actionName string, dryRun bool) *ReleaseAction {
 	return &ReleaseAction{
-		repo:          repo,
-		provider:      provider,
-		releaseConfig: releaseConfig,
-		actionName:    actionName,
-		dryRun:        dryRun,
+		repo:            repo,
+		resolveProvider: resolveProvider,
+		releaseConfig:   releaseConfig,
+		actionName:      actionName,
+		dryRun:          dryRun,
 	}
+}
+
+// remoteProvider resolves the remote provider on first use and caches it.
+func (a *ReleaseAction) remoteProvider() (remote.Provider, error) {
+	if a.provider != nil {
+		return a.provider, nil
+	}
+	if a.resolveProvider == nil {
+		return nil, fmt.Errorf("no remote provider configured")
+	}
+	provider, err := a.resolveProvider()
+	if err != nil {
+		return nil, err
+	}
+	a.provider = provider
+	return a.provider, nil
 }
 
 // Execute runs the release workflow using dynamic action configuration
@@ -269,7 +289,11 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 	log.Infof("🔗 %s", workflow.URL)
 
 	// 8. Watch workflow
-	updates, err := a.provider.WatchWorkflow(ctx, workflow.ID)
+	provider, err := a.remoteProvider()
+	if err != nil {
+		return err
+	}
+	updates, err := provider.WatchWorkflow(ctx, workflow.ID)
 	if err != nil {
 		log.Warnf("⚠️  Could not watch workflow: %v", err)
 		log.Infof("🔗 Check release status at: %s", workflow.URL)
@@ -311,10 +335,15 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 // also needs a few seconds to register the run after the push returns, hence
 // the bounded polling instead of a single lookup.
 func (a *ReleaseAction) waitForTagWorkflow(ctx context.Context, tagName string) (*remote.Workflow, error) {
+	provider, err := a.remoteProvider()
+	if err != nil {
+		return nil, err
+	}
+
 	deadline := time.Now().Add(tagWorkflowWaitTimeout)
 
 	for {
-		workflow, err := a.provider.GetLatestRunForTag(ctx, tagName)
+		workflow, err := provider.GetLatestRunForTag(ctx, tagName)
 		if err == nil {
 			return workflow, nil
 		}
@@ -342,8 +371,10 @@ func (a *ReleaseAction) checkNoReleaseInFlight(ctx context.Context, workDir stri
 	}
 
 	log.Errorf("❌ A release is already in flight on branch '%s'", branch)
-	if _, prURL, err := a.provider.GetPullRequestByBranch(ctx, branch); err == nil {
-		log.Infof("🔗 %s", prURL)
+	if provider, err := a.remoteProvider(); err == nil {
+		if _, prURL, err := provider.GetPullRequestByBranch(ctx, branch); err == nil {
+			log.Infof("🔗 %s", prURL)
+		}
 	}
 	log.Info("📌 Finish it, or drop it and start over:")
 	log.Info("   - finish: check out that branch, then cidx pr merge")
@@ -403,8 +434,12 @@ func (a *ReleaseAction) releaseViaPR(ctx context.Context, workDir, baseBranch, b
 	}
 
 	log.Info("📝 Opening the release pull request...")
+	provider, err := a.remoteProvider()
+	if err != nil {
+		return err
+	}
 	body := fmt.Sprintf("Version bump to %s.\n\n---\n🤖 Created with [CIDX](https://github.com/cidx-org/cidx)", tagName)
-	_, prURL, err := a.provider.CreatePullRequest(
+	_, prURL, err := provider.CreatePullRequest(
 		ctx,
 		fmt.Sprintf("chore(release): bump version to %s", tagName),
 		body,
@@ -417,7 +452,7 @@ func (a *ReleaseAction) releaseViaPR(ctx context.Context, workDir, baseBranch, b
 	}
 	log.Infof("🔗 %s", prURL)
 
-	if err := mergeReleasePR(ctx, a.repo, a.provider); err != nil {
+	if err := mergeReleasePR(ctx, a.repo, provider); err != nil {
 		log.Errorf("❌ Release PR was not merged -- no tag was created")
 		log.Infof("🔗 %s", prURL)
 		log.Info("📌 The version bump is safe on the PR branch. To finish the release:")

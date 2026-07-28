@@ -3,6 +3,8 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -525,10 +527,12 @@ func (r *Runner) printLocalSafetyDryRun(containerConfig *config.ContainerConfig)
 		}
 	}
 
+	// Sorted for the same reason as the executor dry-run: identical input must
+	// produce identical output (issue #230).
 	if len(containerConfig.Env) > 0 {
 		r.logger.Infof("     Environment:")
-		for k, v := range containerConfig.Env {
-			r.logger.Infof("       %s=%s", k, v)
+		for _, k := range slices.Sorted(maps.Keys(containerConfig.Env)) {
+			r.logger.Infof("       %s=%s", k, containerConfig.Env[k])
 		}
 	}
 

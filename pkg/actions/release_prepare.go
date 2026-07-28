@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,15 +13,19 @@ import (
 	"time"
 
 	"github.com/cidx-org/cidx/v2/pkg/config"
-	"github.com/cidx-org/cidx/v2/pkg/remote"
 	"github.com/cidx-org/cidx/v2/pkg/vcs"
 	log "github.com/sirupsen/logrus"
 )
 
-// ReleasePrepareAction prepares release notes for human review
+// ReleasePrepareAction prepares release notes for human review.
+//
+// It carries no remote provider: every step reads the local repository (git
+// log, tags, version files) and the merged-PR list comes from the gh CLI, so
+// preparing release notes must work in a repository without a remote --
+// building the provider up front made it fail before any of that ran
+// (issue #227).
 type ReleasePrepareAction struct {
 	repo          *vcs.Repository
-	provider      remote.Provider
 	releaseConfig config.ReleaseConfig
 	dryRun        bool
 }
@@ -112,10 +117,9 @@ func ParseCommitLog(output string) []CommitInfo {
 }
 
 // NewReleasePrepare creates a new release prepare action
-func NewReleasePrepare(repo *vcs.Repository, provider remote.Provider, releaseConfig config.ReleaseConfig, dryRun bool) *ReleasePrepareAction {
+func NewReleasePrepare(repo *vcs.Repository, releaseConfig config.ReleaseConfig, dryRun bool) *ReleasePrepareAction {
 	return &ReleasePrepareAction{
 		repo:          repo,
-		provider:      provider,
 		releaseConfig: releaseConfig,
 		dryRun:        dryRun,
 	}
@@ -248,10 +252,26 @@ func (a *ReleasePrepareAction) getMergedPRsSince(ctx context.Context, tag string
 	cmd := exec.Command("gh", args...)
 	output, err := cmd.Output()
 	if err != nil {
-		return nil, err
+		return nil, ghCommandError(args, err)
 	}
 
 	return a.parsePRList(string(output), since)
+}
+
+// ghCommandError names the command that failed and quotes what it printed on
+// stderr. Bare "exit status 1" said neither which tool broke nor why -- not
+// logged in, no remote, rate limited all looked identical (issue #227).
+func ghCommandError(args []string, err error) error {
+	invocation := "gh " + strings.Join(args, " ")
+
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		if stderr := strings.TrimSpace(string(exitErr.Stderr)); stderr != "" {
+			return fmt.Errorf("%s: %w: %s", invocation, err, stderr)
+		}
+	}
+
+	return fmt.Errorf("%s: %w", invocation, err)
 }
 
 // PRInfo holds PR information
