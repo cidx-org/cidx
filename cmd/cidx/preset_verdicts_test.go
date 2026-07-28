@@ -1,0 +1,371 @@
+package main
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// candidateRef and runningRef are the two references every verdict weighs
+// against each other: what the catalogue runs today, and what the cooldown has
+// already cleared for promotion.
+const (
+	runningRef   = "tmknom/prettier:3.6.2@sha256:" + zeroDigest
+	candidateRef = "tmknom/prettier:3.7.0@sha256:" + zeroDigest
+)
+
+// writeTrivyResult writes the scanner output the monitor's Trivy job uploads,
+// under the name the promote job looks it up by. No Docker, no network — the
+// file is the whole interface.
+func writeTrivyResult(t *testing.T, dir, image string, findings map[string]string) {
+	t.Helper()
+
+	type vuln struct {
+		VulnerabilityID string
+		Severity        string
+	}
+	var vulns []vuln
+	for id, severity := range findings {
+		vulns = append(vulns, vuln{VulnerabilityID: id, Severity: severity})
+	}
+
+	report := map[string]any{
+		"ArtifactName": image,
+		"Results":      []any{map[string]any{"Vulnerabilities": vulns}},
+	}
+	writeJSON(t, filepath.Join(dir, scanResultFile("trivy", image)), report)
+}
+
+// writeGrypeResult does the same for Grype, whose document shape and severity
+// spelling differ from Trivy's.
+func writeGrypeResult(t *testing.T, dir, image string, findings map[string]string) {
+	t.Helper()
+
+	var matches []any
+	for id, severity := range findings {
+		matches = append(matches, map[string]any{
+			"vulnerability": map[string]any{"id": id, "severity": severity},
+		})
+	}
+	writeJSON(t, filepath.Join(dir, scanResultFile("grype", image)), map[string]any{"matches": matches})
+}
+
+func writeJSON(t *testing.T, path string, document any) {
+	t.Helper()
+
+	data, err := json.Marshal(document)
+	if err != nil {
+		t.Fatalf("failed to encode the scanner result: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("failed to write %s: %v", path, err)
+	}
+}
+
+// promotableTarget is a candidate the cooldown has already cleared — the only
+// kind the scan gate has anything to say about.
+func promotableTarget() scanTarget {
+	return scanTarget{
+		CurrentImage:   runningRef,
+		ScanImage:      candidateRef,
+		CandidateImage: candidateRef,
+		IsUpdate:       true,
+		Presets:        []string{"prettier"},
+		PolicyReason:   "published 20 days ago, past the 14-day cooldown",
+	}
+}
+
+func onlyVerdict(t *testing.T, verdicts []promotionVerdict) promotionVerdict {
+	t.Helper()
+	if len(verdicts) != 1 {
+		t.Fatalf("got %d verdicts, want 1", len(verdicts))
+	}
+	return verdicts[0]
+}
+
+// TestPromotionVerdictClearsACleanCandidate: both scanners ran, neither found
+// anything, the promotion goes ahead.
+func TestPromotionVerdictClearsACleanCandidate(t *testing.T) {
+	dir := t.TempDir()
+	writeTrivyResult(t, dir, candidateRef, nil)
+	writeGrypeResult(t, dir, candidateRef, nil)
+
+	verdict := onlyVerdict(t, buildPromotionVerdicts([]scanTarget{promotableTarget()}, dir, nil))
+
+	if !verdict.Promote {
+		t.Fatalf("a clean candidate should be promoted, got: %s", verdict.Reason)
+	}
+	if verdict.NewImage != candidateRef {
+		t.Errorf("NewImage = %q, want the pinned candidate %q", verdict.NewImage, candidateRef)
+	}
+	if verdict.PolicyReason == "" {
+		t.Error("PolicyReason is empty: the promotion PR still has to state the cooldown verdict")
+	}
+}
+
+// TestPromotionVerdictClearsAnInheritedFinding is the differential case: the
+// candidate carries a vulnerability the running image already carries and that
+// is on record, so the update is not a regression and must not be blocked
+// (#247).
+func TestPromotionVerdictClearsAnInheritedFinding(t *testing.T) {
+	dir := t.TempDir()
+	writeTrivyResult(t, dir, candidateRef, map[string]string{"CVE-2026-0001": "HIGH"})
+	writeGrypeResult(t, dir, candidateRef, map[string]string{"CVE-2026-0001": "High"})
+
+	accepted := map[string][]string{"tmknom/prettier:3.6.2": {"CVE-2026-0001"}}
+
+	verdict := onlyVerdict(t, buildPromotionVerdicts([]scanTarget{promotableTarget()}, dir, accepted))
+
+	if !verdict.Promote {
+		t.Fatalf("a finding inherited from the running image must not block, got: %s", verdict.Reason)
+	}
+	if len(verdict.Introduces) != 0 {
+		t.Errorf("Introduces = %v, want none", verdict.Introduces)
+	}
+}
+
+// TestPromotionVerdictHoldsANewFinding: what the gate is for. The candidate is
+// otherwise legitimate — past the cooldown, pinned by digest — and is still held.
+func TestPromotionVerdictHoldsANewFinding(t *testing.T) {
+	dir := t.TempDir()
+	writeTrivyResult(t, dir, candidateRef, map[string]string{
+		"CVE-2026-0001": "HIGH",
+		"CVE-2026-0002": "CRITICAL",
+	})
+	writeGrypeResult(t, dir, candidateRef, nil)
+
+	accepted := map[string][]string{"tmknom/prettier:3.6.2": {"CVE-2026-0001"}}
+
+	verdict := onlyVerdict(t, buildPromotionVerdicts([]scanTarget{promotableTarget()}, dir, accepted))
+
+	if verdict.Promote {
+		t.Fatalf("a candidate introducing CVE-2026-0002 must be held, got: %s", verdict.Reason)
+	}
+	if len(verdict.Introduces) != 1 || verdict.Introduces[0] != "CVE-2026-0002" {
+		t.Errorf("Introduces = %v, want CVE-2026-0002 alone", verdict.Introduces)
+	}
+	if !strings.Contains(verdict.Reason, "CVE-2026-0002") {
+		t.Errorf("Reason = %q, want it to name the finding that held the promotion", verdict.Reason)
+	}
+}
+
+// TestPromotionVerdictClearsAFindingAcceptedOnTheCandidate: an exception filed
+// against the candidate's own reference is a reviewed decision, and the gate
+// honours it like any other.
+func TestPromotionVerdictClearsAFindingAcceptedOnTheCandidate(t *testing.T) {
+	dir := t.TempDir()
+	writeTrivyResult(t, dir, candidateRef, map[string]string{"CVE-2026-0002": "HIGH"})
+
+	accepted := map[string][]string{"tmknom/prettier:3.7.0": {"CVE-2026-0002"}}
+
+	verdict := onlyVerdict(t, buildPromotionVerdicts([]scanTarget{promotableTarget()}, dir, accepted))
+
+	if !verdict.Promote {
+		t.Fatalf("an accepted finding must not hold the promotion, got: %s", verdict.Reason)
+	}
+}
+
+// TestPromotionVerdictIgnoresLowSeverityFindings: Grype reports every severity
+// whatever --fail-on says, and the policy acts on HIGH/CRITICAL only.
+func TestPromotionVerdictIgnoresLowSeverityFindings(t *testing.T) {
+	dir := t.TempDir()
+	writeTrivyResult(t, dir, candidateRef, map[string]string{"CVE-2026-0003": "MEDIUM"})
+	writeGrypeResult(t, dir, candidateRef, map[string]string{"CVE-2026-0004": "Negligible"})
+
+	verdict := onlyVerdict(t, buildPromotionVerdicts([]scanTarget{promotableTarget()}, dir, nil))
+
+	if !verdict.Promote {
+		t.Fatalf("only HIGH/CRITICAL findings gate a promotion, got: %s", verdict.Reason)
+	}
+}
+
+// TestPromotionVerdictReadsBothScanners: a finding only Grype knows about still
+// holds the candidate, or running two scanners buys nothing.
+func TestPromotionVerdictReadsBothScanners(t *testing.T) {
+	dir := t.TempDir()
+	writeTrivyResult(t, dir, candidateRef, nil)
+	writeGrypeResult(t, dir, candidateRef, map[string]string{"GHSA-cgrx-mc8f-2prm": "Critical"})
+
+	verdict := onlyVerdict(t, buildPromotionVerdicts([]scanTarget{promotableTarget()}, dir, nil))
+
+	if verdict.Promote {
+		t.Fatal("a finding reported by Grype alone must hold the candidate")
+	}
+	if len(verdict.Introduces) != 1 || verdict.Introduces[0] != "GHSA-cgrx-mc8f-2prm" {
+		t.Errorf("Introduces = %v, want the Grype finding", verdict.Introduces)
+	}
+}
+
+// TestPromotionVerdictHoldsWithoutScanResults is the fail-closed case: no
+// evidence, no promotion. It is the state a failed pull or a skipped scan job
+// leaves behind, and before #247 it promoted regardless.
+func TestPromotionVerdictHoldsWithoutScanResults(t *testing.T) {
+	verdict := onlyVerdict(t, buildPromotionVerdicts([]scanTarget{promotableTarget()}, t.TempDir(), nil))
+
+	if verdict.Promote {
+		t.Fatal("a candidate nobody scanned must not be promoted")
+	}
+	if !strings.Contains(verdict.Reason, "no scanner result") {
+		t.Errorf("Reason = %q, want it to say no result was produced", verdict.Reason)
+	}
+}
+
+// TestPromotionVerdictHoldsOnUnreadableResults: an empty file is what a scanner
+// that failed to pull the image leaves behind, and it must not read as a clean
+// scan.
+func TestPromotionVerdictHoldsOnUnreadableResults(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, scanResultFile("trivy", candidateRef)), nil, 0o600); err != nil {
+		t.Fatalf("failed to write the empty result: %v", err)
+	}
+
+	verdict := onlyVerdict(t, buildPromotionVerdicts([]scanTarget{promotableTarget()}, dir, nil))
+
+	if verdict.Promote {
+		t.Fatal("an unreadable scanner result must not be taken for a clean image")
+	}
+	if !strings.Contains(verdict.Reason, "could not be read") {
+		t.Errorf("Reason = %q, want it to report the unreadable result", verdict.Reason)
+	}
+}
+
+// TestPromotionVerdictSkipsWhatTheCooldownHeld pins the order of the two gates:
+// the cooldown runs first, in `cidx preset scan-targets`, and a candidate it
+// held is not scanned as a candidate at all. The scan gate has nothing to judge
+// and must not report it a second time.
+func TestPromotionVerdictSkipsWhatTheCooldownHeld(t *testing.T) {
+	held := scanTarget{
+		CurrentImage:   runningRef,
+		ScanImage:      runningRef, // the cooldown left the running image in place
+		CandidateImage: candidateRef,
+		IsUpdate:       false,
+		Presets:        []string{"prettier"},
+		PolicyReason:   "held: published 3 days ago, 11 days of the 14-day cooldown left",
+	}
+
+	if verdicts := buildPromotionVerdicts([]scanTarget{held}, t.TempDir(), nil); len(verdicts) != 0 {
+		t.Errorf("got %d verdicts, want none: the cooldown already held this candidate", len(verdicts))
+	}
+}
+
+// TestPromotionVerdictDoesNotLetAWaiverExcuseANewFinding: the two gates are
+// cumulative. Rule 3 waives the *cooldown* when the running image is knowingly
+// vulnerable (#242); it says nothing about what the candidate itself brings, and
+// a candidate promoted for fixing one CVE must not smuggle in another.
+func TestPromotionVerdictDoesNotLetAWaiverExcuseANewFinding(t *testing.T) {
+	dir := t.TempDir()
+	writeTrivyResult(t, dir, candidateRef, map[string]string{"CVE-2026-0009": "CRITICAL"})
+
+	waived := promotableTarget()
+	waived.PolicyReason = "14-day cooldown waived: the running image is affected by CVE-2026-0001"
+	waived.CVEWaiver = []string{"CVE-2026-0001"}
+
+	accepted := map[string][]string{"tmknom/prettier:3.6.2": {"CVE-2026-0001"}}
+
+	verdict := onlyVerdict(t, buildPromotionVerdicts([]scanTarget{waived}, dir, accepted))
+
+	if verdict.Promote {
+		t.Fatalf("a cooldown waiver must not excuse a new finding, got: %s", verdict.Reason)
+	}
+	if len(verdict.CVEWaiver) != 1 {
+		t.Errorf("CVEWaiver = %v, want the cooldown waiver carried through for the report", verdict.CVEWaiver)
+	}
+}
+
+// TestPromotionVerdictClearsAWaivedCandidateThatFixesTheCVE is the same
+// interaction the other way round, and the case rule 3 exists for: the candidate
+// skipped the cooldown because we are knowingly vulnerable, and it brings
+// nothing new, so it ships.
+func TestPromotionVerdictClearsAWaivedCandidateThatFixesTheCVE(t *testing.T) {
+	dir := t.TempDir()
+	writeTrivyResult(t, dir, candidateRef, nil)
+	writeGrypeResult(t, dir, candidateRef, nil)
+
+	waived := promotableTarget()
+	waived.PolicyReason = "14-day cooldown waived: the running image is affected by CVE-2026-0001"
+	waived.CVEWaiver = []string{"CVE-2026-0001"}
+
+	accepted := map[string][]string{"tmknom/prettier:3.6.2": {"CVE-2026-0001"}}
+
+	verdict := onlyVerdict(t, buildPromotionVerdicts([]scanTarget{waived}, dir, accepted))
+
+	if !verdict.Promote {
+		t.Fatalf("the fix we waived the cooldown for should be promoted, got: %s", verdict.Reason)
+	}
+}
+
+// TestScanResultFileMatchesTheWorkflowConvention pins the one coupling between
+// the scan jobs and the promote job: `tr '/:@' '___'` in container-monitor.yml
+// has to produce the name looked up here.
+func TestScanResultFileMatchesTheWorkflowConvention(t *testing.T) {
+	got := scanResultFile("trivy", "dhi.io/golang:1.24-alpine3.21@sha256:"+zeroDigest)
+	want := "trivy-dhi.io_golang_1.24-alpine3.21_sha256_" + zeroDigest + ".json"
+
+	if got != want {
+		t.Errorf("scanResultFile = %q, want %q", got, want)
+	}
+}
+
+// TestPromotionVerdictJSONContract pins the field names container-monitor.yml
+// reads with jq. Renaming one here breaks the workflow, not the build.
+func TestPromotionVerdictJSONContract(t *testing.T) {
+	dir := t.TempDir()
+	writeTrivyResult(t, dir, candidateRef, map[string]string{"CVE-2026-0002": "HIGH"})
+
+	waived := promotableTarget()
+	waived.CVEWaiver = []string{"CVE-2026-0001"}
+
+	verdicts := buildPromotionVerdicts([]scanTarget{waived}, dir, nil)
+
+	encoded, err := json.Marshal(verdicts[0])
+	if err != nil {
+		t.Fatalf("failed to encode the verdict: %v", err)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("failed to decode the verdict: %v", err)
+	}
+
+	for _, field := range []string{
+		"current_image", "new_image", "presets", "promote", "reason",
+		"introduces", "policy_reason", "cve_waiver",
+	} {
+		if _, ok := decoded[field]; !ok {
+			t.Errorf("field %q missing from scan-verdicts JSON: container-monitor.yml reads it", field)
+		}
+	}
+
+	if got := decoded["promote"]; got != false {
+		t.Errorf("promote = %v, want false", got)
+	}
+}
+
+// TestReadScanTargetsRoundTripsTheWorkflowHandover: the promote job pipes the
+// scan-targets output straight in, so the two commands have to agree on the
+// document.
+func TestReadScanTargetsRoundTripsTheWorkflowHandover(t *testing.T) {
+	now := scanNow(t)
+	stubRegistry(t, "3.7.0", now.AddDate(0, 0, -20), nil)
+
+	targets := buildScanTargets(map[string][]string{runningRef: {"prettier"}}, nil, now)
+	encoded, err := json.Marshal(targets)
+	if err != nil {
+		t.Fatalf("failed to encode the targets: %v", err)
+	}
+
+	path := filepath.Join(t.TempDir(), "targets.json")
+	if err := os.WriteFile(path, encoded, 0o600); err != nil {
+		t.Fatalf("failed to write the targets: %v", err)
+	}
+
+	got, err := readScanTargets(path)
+	if err != nil {
+		t.Fatalf("readScanTargets: %v", err)
+	}
+	if len(got) != 1 || !got[0].IsUpdate || got[0].ScanImage != candidateRef {
+		t.Errorf("readScanTargets = %+v, want the promotable candidate back", got)
+	}
+}

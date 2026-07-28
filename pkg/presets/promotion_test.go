@@ -148,3 +148,96 @@ func TestPromotionCooldownIsTheDocumentedWindow(t *testing.T) {
 		t.Errorf("PromotionCooldown = %d days, want 14 as documented", got)
 	}
 }
+
+// TestEvaluateScanPromotesACleanCandidate: nothing found, nothing to weigh.
+func TestEvaluateScanPromotesACleanCandidate(t *testing.T) {
+	got := EvaluateScan(nil, nil)
+
+	if !got.Promote {
+		t.Fatalf("a candidate with no finding should be promoted, got: %s", got.Reason)
+	}
+	if len(got.Introduces) != 0 {
+		t.Errorf("Introduces = %v, want none", got.Introduces)
+	}
+	if !strings.Contains(got.Reason, "no HIGH/CRITICAL finding") {
+		t.Errorf("Reason = %q, want it to state that nothing was found", got.Reason)
+	}
+}
+
+// TestEvaluateScanPromotesAnInheritedFinding is the point of the whole gate
+// being differential: the candidate carries what the running image already
+// carries, so it is not a regression and must not block an otherwise legitimate
+// update (#247).
+func TestEvaluateScanPromotesAnInheritedFinding(t *testing.T) {
+	got := EvaluateScan([]string{"CVE-2026-0001"}, []string{"CVE-2026-0001"})
+
+	if !got.Promote {
+		t.Fatalf("a finding the running image already has must not block, got: %s", got.Reason)
+	}
+	if len(got.Introduces) != 0 {
+		t.Errorf("Introduces = %v, want none: the finding was inherited, not introduced", got.Introduces)
+	}
+	if !strings.Contains(got.Reason, "already accepted") {
+		t.Errorf("Reason = %q, want it to say the findings were already accepted", got.Reason)
+	}
+}
+
+// TestEvaluateScanHoldsANewFinding: the case the gate exists for.
+func TestEvaluateScanHoldsANewFinding(t *testing.T) {
+	got := EvaluateScan([]string{"CVE-2026-0001", "CVE-2026-0002"}, []string{"CVE-2026-0001"})
+
+	if got.Promote {
+		t.Fatalf("a candidate introducing a new finding must be held, got: %s", got.Reason)
+	}
+	if len(got.Introduces) != 1 || got.Introduces[0] != "CVE-2026-0002" {
+		t.Errorf("Introduces = %v, want only the new CVE-2026-0002", got.Introduces)
+	}
+	if !strings.Contains(got.Reason, "CVE-2026-0002") {
+		t.Errorf("Reason = %q, want it to name the finding that held the promotion", got.Reason)
+	}
+	if strings.Contains(got.Reason, "CVE-2026-0001") {
+		t.Errorf("Reason = %q, want it not to blame an inherited finding", got.Reason)
+	}
+}
+
+// TestEvaluateScanPromotesAnAcceptedNewFinding: a finding absent from the
+// running image but on record — reviewed and accepted ahead of the promotion —
+// is not what the gate is for.
+func TestEvaluateScanPromotesAnAcceptedNewFinding(t *testing.T) {
+	got := EvaluateScan([]string{"CVE-2026-0009"}, []string{"CVE-2026-0009"})
+
+	if !got.Promote {
+		t.Fatalf("an accepted finding must not hold a promotion, got: %s", got.Reason)
+	}
+}
+
+// TestEvaluateScanCountsTheSameCVEOnce: Trivy and Grype both report it, and a
+// duplicate must neither be listed twice nor inflate the count.
+func TestEvaluateScanCountsTheSameCVEOnce(t *testing.T) {
+	held := EvaluateScan([]string{"CVE-2026-0002", "cve-2026-0002"}, nil)
+	if len(held.Introduces) != 1 {
+		t.Errorf("Introduces = %v, want the CVE listed once", held.Introduces)
+	}
+
+	passed := EvaluateScan([]string{"CVE-2026-0001", "CVE-2026-0001"}, []string{"cve-2026-0001"})
+	if !passed.Promote {
+		t.Fatalf("a case-different match on record must still count as accepted, got: %s", passed.Reason)
+	}
+	if !strings.Contains(passed.Reason, "1 HIGH/CRITICAL") {
+		t.Errorf("Reason = %q, want one finding counted, not two", passed.Reason)
+	}
+}
+
+// TestEvaluateScanReportsFindingsInAStableOrder: the reason string lands in a
+// PR body and a workflow summary, where a set iterated at random would produce
+// a different text on every run.
+func TestEvaluateScanReportsFindingsInAStableOrder(t *testing.T) {
+	got := EvaluateScan([]string{"CVE-2026-0009", "CVE-2026-0002", "CVE-2026-0005"}, nil)
+
+	want := []string{"CVE-2026-0002", "CVE-2026-0005", "CVE-2026-0009"}
+	for i, id := range want {
+		if got.Introduces[i] != id {
+			t.Fatalf("Introduces = %v, want %v in order", got.Introduces, want)
+		}
+	}
+}

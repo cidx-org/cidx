@@ -58,6 +58,17 @@ func RegisterPresetSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Then(`^no waiver should be reported$`, tc.noWaiverShouldBeReported)
 	ctx.Then(`^the candidate age should be unreported$`, tc.candidateAgeShouldBeUnreported)
 
+	// The scan gate the promotion actually depends on (#247)
+	ctx.Given(`^the scanners report no finding on the candidate$`, tc.scannersReportNoFinding)
+	ctx.Given(`^the scanners report "([^"]*)" on the candidate$`, tc.scannersReportFinding)
+	ctx.Given(`^the finding "([^"]*)" is accepted for the candidate$`, tc.findingAcceptedForCandidate)
+	ctx.When(`^the scan gate is applied$`, tc.applyScanGate)
+	ctx.Then(`^the candidate should clear the scan gate$`, tc.candidateShouldClearTheScanGate)
+	ctx.Then(`^the candidate should be held by the scan gate$`, tc.candidateShouldBeHeldByTheScanGate)
+	ctx.Then(`^the scan verdict should mention "([^"]*)"$`, tc.scanVerdictShouldMention)
+	ctx.Then(`^the scan verdict should name "([^"]*)"$`, tc.scanVerdictShouldName)
+	ctx.Then(`^the scan verdict should not name "([^"]*)"$`, tc.scanVerdictShouldNotName)
+
 	// Update detection over a registry tag listing (#245)
 	ctx.Given(`^the registry lists the tags "([^"]*)"$`, tc.registryListsTags)
 	ctx.When(`^I look for a version newer than "([^"]*)"$`, tc.lookForVersionNewerThan)
@@ -227,6 +238,129 @@ func (tc *TestContext) candidateAgeShouldBeUnreported() error {
 	}
 	if decision.AgeDays != nil {
 		return fmt.Errorf("age reported as %d days although no publication date was known", *decision.AgeDays)
+	}
+	return nil
+}
+
+// scannersReportNoFinding is the candidate Trivy and Grype both came back clean
+// on — stated explicitly rather than left implicit, so a scenario never passes
+// because nothing was staged.
+func (tc *TestContext) scannersReportNoFinding() error {
+	tc.Config["scan_findings"] = []string(nil)
+	return nil
+}
+
+// scannersReportFinding stages one HIGH/CRITICAL identifier the monitor's
+// scanners reported against the candidate.
+func (tc *TestContext) scannersReportFinding(id string) error {
+	found, _ := tc.Config["scan_findings"].([]string)
+	tc.Config["scan_findings"] = append(found, id)
+	return nil
+}
+
+// findingAcceptedForCandidate is an exception filed against the candidate's own
+// reference: reviewed and accepted before the promotion, rather than inherited
+// from the running image.
+func (tc *TestContext) findingAcceptedForCandidate(id string) error {
+	accepted, _ := tc.Config["accepted_findings"].([]string)
+	tc.Config["accepted_findings"] = append(accepted, id)
+	return nil
+}
+
+// applyScanGate weighs what the scanners found against everything on record —
+// the running image's vulnerabilities and the candidate's own exceptions, both
+// read from known-vulnerabilities.toml in production.
+func (tc *TestContext) applyScanGate() error {
+	found, ok := tc.Config["scan_findings"].([]string)
+	if !ok && tc.Config["scan_findings"] == nil {
+		return fmt.Errorf("no scanner findings were staged for the candidate")
+	}
+
+	affecting, _ := tc.Config["affecting_us"].([]string)
+	candidate, _ := tc.Config["accepted_findings"].([]string)
+
+	accepted := make([]string, 0, len(affecting)+len(candidate))
+	accepted = append(accepted, affecting...)
+	accepted = append(accepted, candidate...)
+
+	tc.Config["scan_decision"] = presets.EvaluateScan(found, accepted)
+	return nil
+}
+
+func (tc *TestContext) scanDecision() (presets.ScanDecision, error) {
+	decision, ok := tc.Config["scan_decision"].(presets.ScanDecision)
+	if !ok {
+		return presets.ScanDecision{}, fmt.Errorf("the scan gate was not applied")
+	}
+	return decision, nil
+}
+
+func (tc *TestContext) candidateShouldClearTheScanGate() error {
+	decision, err := tc.scanDecision()
+	if err != nil {
+		return err
+	}
+	if !decision.Promote {
+		return fmt.Errorf("candidate was held by the scan gate: %s", decision.Reason)
+	}
+	return nil
+}
+
+func (tc *TestContext) candidateShouldBeHeldByTheScanGate() error {
+	decision, err := tc.scanDecision()
+	if err != nil {
+		return err
+	}
+	if decision.Promote {
+		return fmt.Errorf("candidate cleared the scan gate: %s", decision.Reason)
+	}
+	if decision.Reason == "" {
+		return fmt.Errorf("candidate was held without a stated reason")
+	}
+	return nil
+}
+
+func (tc *TestContext) scanVerdictShouldMention(fragment string) error {
+	decision, err := tc.scanDecision()
+	if err != nil {
+		return err
+	}
+	if !strings.Contains(decision.Reason, fragment) {
+		return fmt.Errorf("scan verdict %q does not mention %q", decision.Reason, fragment)
+	}
+	return nil
+}
+
+// scanVerdictShouldName checks both halves of a hold: the finding is listed for
+// the workflow annotation, and stated in the reason a human reads.
+func (tc *TestContext) scanVerdictShouldName(id string) error {
+	decision, err := tc.scanDecision()
+	if err != nil {
+		return err
+	}
+	for _, introduced := range decision.Introduces {
+		if introduced == id {
+			if !strings.Contains(decision.Reason, id) {
+				return fmt.Errorf("%s is not stated in the verdict %q", id, decision.Reason)
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("introduced findings %v do not name %s", decision.Introduces, id)
+}
+
+func (tc *TestContext) scanVerdictShouldNotName(id string) error {
+	decision, err := tc.scanDecision()
+	if err != nil {
+		return err
+	}
+	for _, introduced := range decision.Introduces {
+		if introduced == id {
+			return fmt.Errorf("%s was blamed although it is already on record", id)
+		}
+	}
+	if strings.Contains(decision.Reason, id) {
+		return fmt.Errorf("verdict %q blames %s although it is already on record", decision.Reason, id)
 	}
 	return nil
 }
