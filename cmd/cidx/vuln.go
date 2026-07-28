@@ -66,6 +66,10 @@ func vulnListCommand() *cli.Command {
 				Name:  "image",
 				Usage: "Filter by image",
 			},
+			&cli.BoolFlag{
+				Name:  "stale",
+				Usage: "List only entries recorded against an image the catalogue no longer runs",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			vulns, err := loadVulnerabilities(c.String("file"))
@@ -75,12 +79,24 @@ func vulnListCommand() *cli.Command {
 
 			statusFilter := c.String("status")
 			imageFilter := c.String("image")
+			stale := c.Bool("stale")
 
-			fmt.Printf("Known Vulnerability Exceptions\n")
-			fmt.Printf("==============================\n\n")
+			entries := vulns.Vulnerabilities
+			if stale {
+				running, err := catalogueImageRefs()
+				if err != nil {
+					return err
+				}
+				entries = staleVulnerabilities(entries, running)
+				fmt.Printf("Stale Vulnerability Exceptions\n")
+				fmt.Printf("==============================\n\n")
+			} else {
+				fmt.Printf("Known Vulnerability Exceptions\n")
+				fmt.Printf("==============================\n\n")
+			}
 
 			count := 0
-			for _, v := range vulns.Vulnerabilities {
+			for _, v := range entries {
 				if statusFilter != "" && v.Status != statusFilter {
 					continue
 				}
@@ -98,9 +114,51 @@ func vulnListCommand() *cli.Command {
 				fmt.Printf("\nTotal: %d vulnerability exception(s)\n", count)
 			}
 
+			if stale && count > 0 {
+				fmt.Printf("\nThese record an image no catalogue preset runs, so they match nothing\n")
+				fmt.Printf("and waive nothing. Nothing is removed automatically: delete the entries\n")
+				fmt.Printf("you have reviewed from %s.\n", c.String("file"))
+			}
+
 			return nil
 		},
 	}
+}
+
+// staleVulnerabilities returns the exceptions recorded against an image the
+// catalogue no longer runs.
+//
+// Entries are keyed by `repo:tag`, so promoting an image leaves its exceptions
+// behind pointing at the version it replaced — `golangci-lint:v2.6.2` while the
+// catalogue runs v2.12.2. They stop matching, which is correct, and then nothing
+// ever says so: the file accumulates dead records and rule 3's CVE waiver goes
+// quiet along with them (#248).
+//
+// Deciding a record is dead is a judgement call — the CVE may still be
+// unfixed — so this only reports. Pruning stays a deliberate edit.
+func staleVulnerabilities(vulns []Vulnerability, running map[string]bool) []Vulnerability {
+	var stale []Vulnerability
+	for _, v := range vulns {
+		if !running[refWithoutDigest(v.Image)] {
+			stale = append(stale, v)
+		}
+	}
+	return stale
+}
+
+// catalogueImageRefs is the set of `repo:tag` the catalogue runs today, in the
+// digest-free form known-vulnerabilities.toml records exceptions against.
+func catalogueImageRefs() (map[string]bool, error) {
+	images, err := catalogueImages()
+	if err != nil {
+		return nil, err
+	}
+
+	refs := make(map[string]bool, len(images))
+	for image := range images {
+		refs[refWithoutDigest(image)] = true
+	}
+	return refs, nil
 }
 
 func vulnCheckCommand() *cli.Command {

@@ -60,3 +60,20 @@ Feature: Catalogue Image Update Detection
       Given the registry lists the tags "3.21, 3.22"
       When I look for a version newer than "latest"
       Then no newer version should be offered
+
+  Rule: A variant line the registry stopped publishing is not up to date
+
+    Scenario: A frozen variant line names the family that replaced it
+      Given the registry lists the tags "1.25-alpine3.23-dev, 1.25-alpine3.24-dev, 1.26-alpine3.24-dev"
+      When I look for the family that superseded "1.23-alpine3.21-dev"
+      Then the superseding variant family should be "-alpine3.24-dev"
+
+    Scenario: A family still published is not frozen, even at its own head
+      Given the registry lists the tags "1.25-alpine3.23-dev, 1.26-alpine3.23-dev, 1.26-alpine3.24-dev"
+      When I look for the family that superseded "1.26-alpine3.23-dev"
+      Then no superseding variant family should be reported
+
+    Scenario: A variant carrying no version names no line to lose
+      Given the registry lists the tags "30-cli-dev, 31-alpine3.24"
+      When I look for the family that superseded "29-cli"
+      Then no superseding variant family should be reported

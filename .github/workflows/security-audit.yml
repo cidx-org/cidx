@@ -102,8 +102,10 @@ jobs:
         with:
           go-version-file: go.mod
 
-      # Login to DHI for scanning hardened images
+      # Login to DHI, and only for the legs that scan a hardened image: a leg
+      # scanning docker.io has no business dying of a dhi.io outage (#254).
       - name: Login to Docker Hardened Images
+        if: startsWith(matrix.image, 'dhi.io/')
         uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
         with:
           registry: dhi.io
@@ -212,8 +214,9 @@ jobs:
         with:
           go-version-file: go.mod
 
-      # Login to DHI for scanning hardened images
+      # Same as the Trivy job: only the legs that scan a hardened image (#254).
       - name: Login to Docker Hardened Images
+        if: startsWith(matrix.image, 'dhi.io/')
         uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
         with:
           registry: dhi.io

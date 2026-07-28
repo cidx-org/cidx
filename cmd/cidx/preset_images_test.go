@@ -21,11 +21,23 @@ func stubRegistry(t *testing.T, latestTag string, published time.Time, tagErr er
 		latestTagFunc, resolveDigestFunc = originalLatest, originalDigest
 	})
 
-	latestTagFunc = func(image, currentTag string) (string, time.Time, error) {
-		return latestTag, published, tagErr
+	latestTagFunc = func(image, currentTag string) (tagUpdate, error) {
+		return tagUpdate{Latest: latestTag, Published: published}, tagErr
 	}
 	resolveDigestFunc = func(image, tag string) (string, error) {
 		return "sha256:" + zeroDigest, nil
+	}
+}
+
+// stubFrozenVariant stands in a registry that has stopped publishing the
+// variant family the catalogue pins and moved to another one (#252).
+func stubFrozenVariant(t *testing.T, currentTag, superseding string) {
+	t.Helper()
+
+	original := latestTagFunc
+	t.Cleanup(func() { latestTagFunc = original })
+	latestTagFunc = func(image, tag string) (tagUpdate, error) {
+		return tagUpdate{Latest: currentTag, Superseding: superseding}, nil
 	}
 }
 
@@ -264,6 +276,115 @@ func TestBuildScanTargetsDoesNotCallAnUnverifiableImageMissing(t *testing.T) {
 	}
 	if target.Error == "" {
 		t.Error("the failed verification must still be reported")
+	}
+}
+
+// TestBuildScanTargetsReportsAFrozenVariantLine: the pinned variant family has
+// no successor and never will, because the repository stopped publishing it.
+// Within the family that reads as up to date, which is how the catalogue sat on
+// an abandoned line without anything noticing (#252).
+func TestBuildScanTargetsReportsAFrozenVariantLine(t *testing.T) {
+	now := scanNow(t)
+	current := "dhi.io/golang:1.23-alpine3.21-dev@sha256:" + zeroDigest
+	stubRegistry(t, "1.23-alpine3.21-dev", time.Time{}, nil)
+	stubFrozenVariant(t, "1.23-alpine3.21-dev", "-alpine3.24-dev")
+
+	target := onlyTarget(t, buildScanTargets(
+		map[string][]string{current: {"golang-build"}}, nil, now))
+
+	if target.FrozenVariant != "-alpine3.24-dev" {
+		t.Errorf("FrozenVariant = %q, want the family that replaced the pinned one", target.FrozenVariant)
+	}
+	if target.CandidateImage != "" || target.NewerVersion != "" {
+		t.Error("a frozen line offers no candidate: repinning across variant families changes the base image")
+	}
+	if target.IsUpdate || target.ScanImage != current {
+		t.Errorf("ScanImage = %q, IsUpdate = %v; want the current image and no promotion", target.ScanImage, target.IsUpdate)
+	}
+	if target.Missing {
+		t.Error("a frozen line still pulls: it is abandoned, not deleted")
+	}
+	if !strings.Contains(target.PolicyReason, "-alpine3.24-dev") {
+		t.Errorf("PolicyReason = %q, want it to name the family upstream moved to", target.PolicyReason)
+	}
+
+	// container-monitor.yml selects this state with jq, so the field name is
+	// part of the contract.
+	encoded, err := json.Marshal(target)
+	if err != nil {
+		t.Fatalf("failed to encode scan target: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"frozen_variant":"-alpine3.24-dev"`) {
+		t.Errorf("scan target JSON = %s, want a frozen_variant field container-monitor.yml can select", encoded)
+	}
+}
+
+// TestBuildScanTargetsLeavesAHealthyLineAlone: an image whose family is simply
+// current must carry no frozen verdict, or the summary fills with a line that
+// never resolves.
+func TestBuildScanTargetsLeavesAHealthyLineAlone(t *testing.T) {
+	now := scanNow(t)
+	current := "dhi.io/trivy:0.68@sha256:" + zeroDigest
+	stubRegistry(t, "0.68", time.Time{}, nil)
+
+	target := onlyTarget(t, buildScanTargets(
+		map[string][]string{current: {"trivy"}}, nil, now))
+
+	if target.FrozenVariant != "" || target.PolicyReason != "" {
+		t.Errorf("FrozenVariant = %q, PolicyReason = %q; want an up-to-date image to claim neither",
+			target.FrozenVariant, target.PolicyReason)
+	}
+}
+
+// TestCatalogueImagesIgnoresProjectPresets: `cidx preset scan-targets` governs
+// the built-in catalogue. A project's own .cidx/presets.toml is nobody else's
+// business, and letting one in had the promote job run a `sed` against
+// pkg/presets/presets.toml for an image that is not in it (#248).
+func TestCatalogueImagesIgnoresProjectPresets(t *testing.T) {
+	// presets.Catalogue reads the catalogue file relative to the working
+	// directory, so staging one is enough to stand in for the real thing.
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "pkg", "presets"), 0o750); err != nil {
+		t.Fatalf("failed to stage the catalogue directory: %v", err)
+	}
+	catalogue := `
+[presets.trivy]
+name = "trivy"
+image = "dhi.io/trivy:0.68@sha256:` + zeroDigest + `"
+phase = "security"
+`
+	if err := os.WriteFile(filepath.Join(root, "pkg", "presets", "presets.toml"), []byte(catalogue), 0o600); err != nil {
+		t.Fatalf("failed to stage the catalogue: %v", err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(root, ".cidx"), 0o750); err != nil {
+		t.Fatalf("failed to stage the project directory: %v", err)
+	}
+	project := `
+[presets.dogfood-check]
+name = "dogfood-check"
+image = "alpine:latest"
+phase = "test"
+`
+	if err := os.WriteFile(filepath.Join(root, ".cidx", "presets.toml"), []byte(project), 0o600); err != nil {
+		t.Fatalf("failed to stage the project presets: %v", err)
+	}
+
+	t.Chdir(root)
+
+	images, err := catalogueImages()
+	if err != nil {
+		t.Fatalf("catalogueImages() error = %v", err)
+	}
+
+	if _, ok := images["alpine:latest"]; ok {
+		t.Error("a project preset reached the scan targets: the policy governs the catalogue only")
+	}
+	if len(images) != 1 {
+		t.Errorf("catalogueImages() = %v, want the catalogue image alone", images)
+	}
+	if got := images["dhi.io/trivy:0.68@sha256:"+zeroDigest]; len(got) != 1 || got[0] != "trivy" {
+		t.Errorf("presets for the catalogue image = %v, want [trivy]", got)
 	}
 }
 

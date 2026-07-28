@@ -5,6 +5,9 @@
 - **release**: resolve the git remote lazily so local-only steps run without one (#227)
 - **cli**: drop the empty phase bracket, honour --config in `check workflow`, sort dry-run environment (#230)
 - **actions**: say which checks actually ran before merging instead of claiming all passed (#259)
+- **presets**: scan the catalogue only, and list vulnerability exceptions that match no image (#248)
+- **presets**: report a variant line upstream stopped publishing instead of calling it up to date (#252)
+- **monitor**: log into a registry only for the legs scanning one of its images (#254)
 
 ## v2.3.0 (2026-07-28)
 

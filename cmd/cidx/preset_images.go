@@ -56,7 +56,7 @@ func presetCheckUpdatesCommand() *cli.Command {
 				imageName, currentTag, _ := parseImageRef(preset.Image)
 
 				// Get latest tag
-				latestTag, _, err := getLatestTag(imageName, currentTag)
+				update, err := getLatestTag(imageName, currentTag)
 
 				result := updateResult{
 					Name:      name,
@@ -69,8 +69,8 @@ func presetCheckUpdatesCommand() *cli.Command {
 					result.Error = err.Error()
 					result.Latest = "?"
 				} else {
-					result.Latest = latestTag
-					result.HasUpdate = latestTag != currentTag && latestTag != ""
+					result.Latest = update.Latest
+					result.HasUpdate = update.Latest != currentTag && update.Latest != ""
 					if result.HasUpdate {
 						updatesAvailable++
 					}
@@ -114,6 +114,25 @@ func presetCheckUpdatesCommand() *cli.Command {
 	}
 }
 
+// tagUpdate is what a registry has to say about the versions of one image:
+// the newest tag worth pinning, when it was published, and — when there is no
+// newer tag at all — whether the variant line the catalogue pins still exists.
+type tagUpdate struct {
+	// Latest is the newest tag in the pinned variant family, or currentTag when
+	// nothing newer is on offer.
+	Latest string
+
+	// Published is when Latest became publicly available. The zero time means
+	// the registry does not say; see registryDatesTags.
+	Published time.Time
+
+	// Superseding names the variant family that replaced the pinned one, on a
+	// repository that stopped publishing it entirely (#252). Empty in every
+	// other case, including the ordinary one where the family is simply at its
+	// own head.
+	Superseding string
+}
+
 // getLatestTag fetches the latest tag for an image from its registry, together
 // with the date that version was published.
 //
@@ -130,10 +149,10 @@ func presetCheckUpdatesCommand() *cli.Command {
 // date and can predate publication by an arbitrary amount. It is not used here
 // — a wrong date would silently shorten the cooldown, which is worse than
 // having none. registryDatesTags names the registries that do publish one.
-func getLatestTag(image, currentTag string) (string, time.Time, error) {
+func getLatestTag(image, currentTag string) (tagUpdate, error) {
 	// A reference pinned by digest alone carries no version to compare against.
 	if currentTag == "" {
-		return "", time.Time{}, fmt.Errorf("no tag to compare (reference is pinned by digest only)")
+		return tagUpdate{}, fmt.Errorf("no tag to compare (reference is pinned by digest only)")
 	}
 
 	// Determine registry and repository
@@ -144,13 +163,15 @@ func getLatestTag(image, currentTag string) (string, time.Time, error) {
 
 	switch registry {
 	case "docker.io":
-		return getDockerHubLatestTag(repo, variantSuffix)
+		tag, published, err := getDockerHubLatestTag(repo, variantSuffix)
+		return tagUpdate{Latest: tag, Published: published}, err
 	case "quay.io":
-		return getQuayLatestTag(repo, variantSuffix)
+		tag, published, err := getQuayLatestTag(repo, variantSuffix)
+		return tagUpdate{Latest: tag, Published: published}, err
 	case "gcr.io", "ghcr.io", "dhi.io":
 		return getV2LatestTag(image, currentTag)
 	default:
-		return "", time.Time{}, fmt.Errorf("unknown registry: %s", registry)
+		return tagUpdate{}, fmt.Errorf("unknown registry: %s", registry)
 	}
 }
 
@@ -160,17 +181,24 @@ func getLatestTag(image, currentTag string) (string, time.Time, error) {
 //
 // It returns currentTag when nothing newer is on offer — including for a tag
 // that carries no version at all, where an update would be a guess.
-func getV2LatestTag(image, currentTag string) (string, time.Time, error) {
+//
+// "Nothing newer" is not always good news, so the same listing answers the
+// second question while it is in hand, at no extra request: is the variant line
+// still published at all (#252)?
+func getV2LatestTag(image, currentTag string) (tagUpdate, error) {
 	listing, err := listTags(image)
 	if err != nil {
-		return "", time.Time{}, err
+		return tagUpdate{}, err
 	}
 
 	newest := presets.NewerTag(currentTag, listing.Tags)
 	if newest == "" {
-		return currentTag, time.Time{}, nil
+		return tagUpdate{
+			Latest:      currentTag,
+			Superseding: presets.SupersedingVariant(currentTag, listing.Tags),
+		}, nil
 	}
-	return newest, listing.Published[newest], nil
+	return tagUpdate{Latest: newest, Published: listing.Published[newest]}, nil
 }
 
 // registryDatesTags reports whether a registry says when a version became
@@ -691,6 +719,12 @@ type scanTarget struct {
 	// preset cannot run at all. #244 found two catalogue images deleted
 	// upstream, and nothing had noticed until the presets failed.
 	Missing bool `json:"missing,omitempty"`
+
+	// FrozenVariant names the variant family that replaced the pinned one, on a
+	// repository that publishes the pinned family no more (#252). The image
+	// still pulls, so it is neither missing nor a candidate — it is a line that
+	// will never receive another fix, which "up to date" hid.
+	FrozenVariant string `json:"frozen_variant,omitempty"`
 }
 
 // The two network calls scan-targets makes, as package variables so the
@@ -719,11 +753,9 @@ func presetScanTargetsCommand() *cli.Command {
 			},
 		},
 		Action: func(c *cli.Context) error {
-			// Build map of current image -> presets using it
-			imagePresets := make(map[string][]string)
-			for _, name := range presets.List() {
-				preset, _ := presets.Get(name)
-				imagePresets[preset.Image] = append(imagePresets[preset.Image], name)
+			imagePresets, err := catalogueImages()
+			if err != nil {
+				return err
 			}
 
 			targets := buildScanTargets(imagePresets, knownHighSeverityCVEs(c.String("vuln-file")), time.Now())
@@ -733,6 +765,26 @@ func presetScanTargetsCommand() *cli.Command {
 			return encoder.Encode(targets)
 		},
 	}
+}
+
+// catalogueImages maps each distinct image of the built-in catalogue to the
+// presets running it.
+//
+// It reads the catalogue rather than the resolved registry, which also carries
+// the user's and the project's own presets: those are governed by nobody but
+// their author, and the promotion job's `sed` against pkg/presets/presets.toml
+// silently matched nothing for them while inflating the candidate count (#248).
+func catalogueImages() (map[string][]string, error) {
+	catalogue, err := presets.Catalogue()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load the preset catalogue: %w", err)
+	}
+
+	imagePresets := make(map[string][]string)
+	for name, preset := range catalogue {
+		imagePresets[preset.Image] = append(imagePresets[preset.Image], name)
+	}
+	return imagePresets, nil
 }
 
 // buildScanTargets resolves, for every distinct catalogue image, what to scan
@@ -763,12 +815,25 @@ func buildScanTargets(imagePresets map[string][]string, affectingUs map[string][
 		// Check for update
 		imageName, currentTag, currentDigest := parseImageRef(currentImage)
 		imageRegistry, _ := parseRegistry(imageName)
-		latestTag, published, err := latestTagFunc(imageName, currentTag)
+		update, err := latestTagFunc(imageName, currentTag)
+		latestTag, published := update.Latest, update.Published
 
 		switch {
 		case err != nil:
 			target.Error = err.Error()
 			// Still scan current image on error
+		case update.Superseding != "":
+			// No successor inside the pinned variant family — and none will
+			// ever come, because the repository stopped publishing that family
+			// (#252). Reporting it as up to date, which is what the family
+			// comparison alone says, leaves the catalogue on a line upstream
+			// abandoned. Repinning across variant families changes the base
+			// image, so it is a deliberate act with a human behind it, never a
+			// candidate.
+			target.FrozenVariant = update.Superseding
+			target.PolicyReason = fmt.Sprintf(
+				"the variant line of %q has no successor: %s publishes no tag in that family any more and has moved to %q — review and repin by hand",
+				currentTag, imageRegistry, update.Superseding)
 		case latestTag != "" && latestTag != currentTag && !registryDatesTags(imageName):
 			// The registry lists this version but dates none of its tags, so
 			// the cooldown can never be shown to have elapsed for it (#245).
