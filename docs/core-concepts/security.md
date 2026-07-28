@@ -226,9 +226,21 @@ Rule 1 makes a reference immutable; it does not make it eternal. Two catalogue i
 
 `cidx preset scan-targets` now resolves the exact reference each catalogue image is pinned to, digest included, and marks it `missing` when the registry says it does not exist. `container-monitor.yml` annotates the run with an error and fails its summary job, so the weekly run goes red. A 401 from a registry we hold no credentials for is reported as an unverified image, never as a deleted one — the loudest signal the command has must not cry wolf.
 
+### A variant line that froze
+
+A reference can also stop receiving fixes without ever answering 404. `dhi.io/golang:1.23-alpine3.21-dev` and `dhi.io/python:3.13-alpine3.21` still pull, and inside their own variant family they are genuinely up to date — because DHI publishes no `alpine3.21` tag at all any more, having moved to `alpine3.23` and `alpine3.24`. No successor will ever appear in the pinned family, so the family comparison correctly offers nothing and the catalogue silently sat on an abandoned line (#252). Same rot as the deleted images above, one step quieter.
+
+`cidx preset scan-targets` reads the version the variant suffix itself carries — `-alpine3.21-dev` is version 3.21 of the `-alpine…-dev` line — and reports `frozen_variant` when the repository lists **no** tag in the pinned family while publishing a newer one. A family still published, even sitting at its own head, is alive and says nothing; the check costs no extra request, since it reads the listing update detection already fetched.
+
+It is deliberately not a candidate. Moving from `alpine3.21` to `alpine3.24` changes the base image, which is a decision, not a version bump. The workflow summary lists it under **Frozen variant line** with a warning annotation, and repinning stays a human act.
+
 **How rule 3 knows what affects us.** `known-vulnerabilities.toml` already records the HIGH/CRITICAL findings accepted against the images the catalogue runs today — that is the list of vulnerabilities demonstrably affecting us, produced by the security audit. A candidate replacing an image with entries in that file is promoted without waiting, and the promotion PR names them. No second scan is run to obtain this: the current image's vulnerabilities are on file, and the monitor already scans the candidate.
 
 A candidate that has served the full 14 days claims no waiver, even when the running image is vulnerable — a waiver line in the PR means the cooldown was actually bypassed, or the record stops being worth reading.
+
+That record only works while it points at what we actually run. Entries are keyed `repo:tag`, so every promotion leaves the ones recorded against the replaced version behind: they stop matching, which is correct, and then nothing says so — 138 of the file's 155 entries were keyed to tags the catalogue had passed, and rule 3's waiver had gone quiet with them (#248). `cidx security vuln list --stale` lists the entries matching no catalogue image. It only reports: whether a record is dead is a judgement — the CVE may still be unfixed upstream — so pruning stays a deliberate edit.
+
+**The catalogue, and only the catalogue.** These rules govern the built-in preset catalogue. `cidx preset scan-targets` therefore reads `pkg/presets/presets.toml` rather than the resolved preset registry, which also carries whatever the user and the project declared in their own `presets.toml` — images the policy does not govern and the promotion job could not update anyway (guardrail 1, #248).
 
 ### The scan gate is differential
 

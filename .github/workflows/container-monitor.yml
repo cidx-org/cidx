@@ -118,8 +118,19 @@ jobs:
             echo "$GONE" | while read -r line; do echo "::error::$line"; done
           fi
 
+          # A variant line the repository stopped publishing altogether. The
+          # image still pulls, so it is not missing — it just will never get
+          # another fix, which "up to date" used to hide (#252).
+          FROZEN=$(echo "$TARGETS_JSON" | jq -r '.[] | select(.frozen_variant != null) | "- \(.current_image) — \(.policy_reason)"')
+          if [ -n "$FROZEN" ]; then
+            echo "### Frozen variant line" >> $GITHUB_STEP_SUMMARY
+            echo "$FROZEN" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "$TARGETS_JSON" | jq -r '.[] | select(.frozen_variant != null) | "::warning::frozen variant line: \(.current_image) — \(.policy_reason)"'
+          fi
+
           # Show current (nothing newer found)
-          CURRENT=$(echo "$TARGETS_JSON" | jq -r '.[] | select(.is_update == false and .candidate_image == null and .newer_version == null) | "- \(.scan_image)"')
+          CURRENT=$(echo "$TARGETS_JSON" | jq -r '.[] | select(.is_update == false and .candidate_image == null and .newer_version == null and .frozen_variant == null) | "- \(.scan_image)"')
           if [ -n "$CURRENT" ]; then
             echo "### Current (no updates)" >> $GITHUB_STEP_SUMMARY
             echo "$CURRENT" >> $GITHUB_STEP_SUMMARY
@@ -136,7 +147,12 @@ jobs:
         image: ${{ fromJson(needs.get-scan-targets.outputs.scan_images) }}
 
     steps:
+      # Only when the image under scan is actually a hardened one. Every leg
+      # used to log in regardless, so a transient dhi.io failure killed a leg
+      # scanning a docker.io image — and since promote depends on the scan jobs,
+      # that unrelated flake blocked every promotion of the cycle (#254).
       - name: Login to Docker Hardened Images
+        if: startsWith(matrix.image, 'dhi.io/')
         uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
         with:
           registry: dhi.io
@@ -188,7 +204,10 @@ jobs:
         image: ${{ fromJson(needs.get-scan-targets.outputs.scan_images) }}
 
     steps:
+      # Same reasoning as the Trivy job: log in only for the registry the image
+      # under scan belongs to (#254).
       - name: Login to Docker Hardened Images
+        if: startsWith(matrix.image, 'dhi.io/')
         uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
         with:
           registry: dhi.io

@@ -59,6 +59,80 @@ func NewerTag(currentTag string, available []string) string {
 	return newest
 }
 
+// SupersedingVariant returns the variant family that replaced the one
+// currentTag pins, or "" when nothing has (issue #252).
+//
+// A variant line does not always die by 404. `dhi.io/golang:1.23-alpine3.21-dev`
+// still pulls, but DHI publishes no `-alpine3.21-dev` tag at all any more — it
+// moved to `-alpine3.24-dev`. No successor will ever appear inside the pinned
+// family, so NewerTag correctly offers nothing, and reporting that as up to date
+// leaves the catalogue on a line upstream abandoned: the quieter cousin of the
+// images deleted outright in #244.
+//
+// The line counts as frozen only when the repository lists no tag whatsoever in
+// the pinned family. A family still published, even sitting at its own head, is
+// alive and still receives fixes — saying otherwise would fire every week on
+// every image that is merely current.
+//
+// The successor is found by reading the version the suffix itself carries:
+// `-alpine3.21-dev` is version 3.21 of the `-alpine…-dev` line, so
+// `-alpine3.24-dev` supersedes it while `-alpine3.24-fips-dev` is a different
+// line altogether.
+func SupersedingVariant(currentTag string, available []string) string {
+	_, _, suffix, ok := splitTagVersion(currentTag)
+	if !ok {
+		return ""
+	}
+	prefix, current, rest, ok := splitSuffixVersion(suffix)
+	if !ok {
+		return ""
+	}
+
+	newest, newestVersion := "", current
+	for _, tag := range available {
+		_, _, tagSuffix, ok := splitTagVersion(tag)
+		if !ok {
+			continue
+		}
+		if tagSuffix == suffix {
+			return "" // the pinned family is still published, so it is not frozen
+		}
+
+		tagPrefix, version, tagRest, ok := splitSuffixVersion(tagSuffix)
+		if !ok || tagPrefix != prefix || tagRest != rest || len(version) != len(current) {
+			continue
+		}
+		if compareVersions(version, newestVersion) > 0 {
+			newest, newestVersion = tagSuffix, version
+		}
+	}
+	return newest
+}
+
+// suffixVersionPattern splits a variant suffix around the version it carries:
+// `-alpine3.21-dev` is version 3.21 of the `-alpine…-dev` line. The prefix is
+// non-greedy so the first version in the suffix is the one that names the line.
+var suffixVersionPattern = regexp.MustCompile(`^(.*?)([0-9]+(?:\.[0-9]+)*)(.*)$`)
+
+// splitSuffixVersion reads a variant suffix as (prefix, version, rest). ok is
+// false for a suffix carrying no version — `-dev`, `-cli`, or none at all —
+// which names no line that could be superseded.
+func splitSuffixVersion(suffix string) (prefix string, version []int, rest string, ok bool) {
+	match := suffixVersionPattern.FindStringSubmatch(suffix)
+	if match == nil {
+		return "", nil, "", false
+	}
+
+	for _, part := range strings.Split(match[2], ".") {
+		number, err := strconv.Atoi(part)
+		if err != nil {
+			return "", nil, "", false
+		}
+		version = append(version, number)
+	}
+	return match[1], version, match[3], true
+}
+
 // splitTagVersion reads a tag as (prefix, version, variant suffix). ok is false
 // for a tag that carries no leading version at all.
 func splitTagVersion(tag string) (prefix string, version []int, suffix string, ok bool) {

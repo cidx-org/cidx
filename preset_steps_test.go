@@ -74,6 +74,11 @@ func RegisterPresetSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.When(`^I look for a version newer than "([^"]*)"$`, tc.lookForVersionNewerThan)
 	ctx.Then(`^the newest version offered should be "([^"]*)"$`, tc.newestVersionOfferedShouldBe)
 	ctx.Then(`^no newer version should be offered$`, tc.noNewerVersionShouldBeOffered)
+
+	// A variant line upstream stopped publishing (#252)
+	ctx.When(`^I look for the family that superseded "([^"]*)"$`, tc.lookForSupersedingFamily)
+	ctx.Then(`^the superseding variant family should be "([^"]*)"$`, tc.supersedingFamilyShouldBe)
+	ctx.Then(`^no superseding variant family should be reported$`, tc.noSupersedingFamilyShouldBeReported)
 }
 
 // registryListsTags stages the tag names a registry answers `tags/list` with.
@@ -114,6 +119,37 @@ func (tc *TestContext) noNewerVersionShouldBeOffered() error {
 	}
 	if got != "" {
 		return fmt.Errorf("%q was offered although nothing newer qualifies", got)
+	}
+	return nil
+}
+
+func (tc *TestContext) lookForSupersedingFamily(currentTag string) error {
+	listed, ok := tc.Config["listed_tags"].([]string)
+	if !ok {
+		return fmt.Errorf("no tag listing was staged")
+	}
+	tc.Config["superseding_family"] = presets.SupersedingVariant(currentTag, listed)
+	return nil
+}
+
+func (tc *TestContext) supersedingFamilyShouldBe(want string) error {
+	got, ok := tc.Config["superseding_family"].(string)
+	if !ok {
+		return fmt.Errorf("no superseding family was looked for")
+	}
+	if got != want {
+		return fmt.Errorf("superseding variant family = %q, want %q", got, want)
+	}
+	return nil
+}
+
+func (tc *TestContext) noSupersedingFamilyShouldBeReported() error {
+	got, ok := tc.Config["superseding_family"].(string)
+	if !ok {
+		return fmt.Errorf("no superseding family was looked for")
+	}
+	if got != "" {
+		return fmt.Errorf("%q was reported although the pinned family is still published", got)
 	}
 	return nil
 }

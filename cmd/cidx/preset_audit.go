@@ -81,12 +81,12 @@ func presetAuditCommand() *cli.Command {
 				}
 
 				// Check for updates
-				latestTag, _, err := getLatestTag(imageName, currentTag)
+				update, err := getLatestTag(imageName, currentTag)
 				if err != nil {
 					result.UpdateErr = err.Error()
-				} else if latestTag != currentTag && latestTag != "" {
+				} else if update.Latest != currentTag && update.Latest != "" {
 					result.HasUpdate = true
-					result.LatestTag = latestTag
+					result.LatestTag = update.Latest
 				}
 
 				// Determine status
