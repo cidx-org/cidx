@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -180,7 +182,7 @@ func (e *DockerExecutor) SetTimeout(d time.Duration) {
 // Run executes a tool configuration
 func (e *DockerExecutor) Run(ctx context.Context, containerConfig *config.ContainerConfig) error {
 	if !e.quiet {
-		e.logger.Infof("  ▸ Running [%s] %s", containerConfig.Phase, containerConfig.Name)
+		e.logger.Infof("  ▸ Running %s", runLabel(containerConfig))
 	}
 
 	// Expand environment variables in volumes and command
@@ -627,6 +629,17 @@ func (e *DockerExecutor) reclaimContainerName(ctx context.Context, containerName
 	return nil
 }
 
+// runLabel names the container in the run line: "[phase] name", or just the
+// name when there is no phase. A custom [containers.x] declaration has no
+// phase field, and the bracket rendered empty -- "▸ Running [] my-tool" reads
+// like a bug (issue #230).
+func runLabel(containerConfig *config.ContainerConfig) string {
+	if containerConfig.Phase == "" {
+		return containerConfig.Name
+	}
+	return fmt.Sprintf("[%s] %s", containerConfig.Phase, containerConfig.Name)
+}
+
 // printDryRun prints what would be executed
 func (e *DockerExecutor) printDryRun(containerConfig *config.ContainerConfig, volumes []string, command string) {
 	containerName := e.containerName(containerConfig)
@@ -649,10 +662,13 @@ func (e *DockerExecutor) printDryRun(containerConfig *config.ContainerConfig, vo
 	for _, vol := range volumes {
 		fmt.Printf("    - %s\n", vol)
 	}
+	// Sorted, not map order: two dry-runs of the same config must produce the
+	// same text, or diffing them to review a config change shows phantom
+	// changes (issue #230).
 	if len(containerConfig.Env) > 0 {
 		fmt.Printf("  Environment:\n")
-		for k, v := range containerConfig.Env {
-			fmt.Printf("    %s=%s\n", k, v)
+		for _, k := range slices.Sorted(maps.Keys(containerConfig.Env)) {
+			fmt.Printf("    %s=%s\n", k, containerConfig.Env[k])
 		}
 	}
 	fmt.Println()

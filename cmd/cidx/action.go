@@ -19,8 +19,8 @@ func commitPushWatchAction(c *cli.Context) error {
 }
 
 func releaseCreateAction(c *cli.Context) error {
-	return withRepoAndProvider(func(repo *vcs.Repository, provider remote.Provider) error {
-		action := actions.NewRelease(repo, provider, loadReleaseConfig(), "release-create", c.Bool("dry-run"))
+	return withRepoAndLazyProvider(func(repo *vcs.Repository, resolveProvider remote.ProviderFunc) error {
+		action := actions.NewRelease(repo, resolveProvider, loadReleaseConfig(), "release-create", c.Bool("dry-run"))
 		return action.Execute(context.Background())
 	})
 }
@@ -59,8 +59,8 @@ func prMergeAction(c *cli.Context) error {
 }
 
 func releasePrepareAction(c *cli.Context) error {
-	return withRepoAndProvider(func(repo *vcs.Repository, provider remote.Provider) error {
-		action := actions.NewReleasePrepare(repo, provider, loadReleaseConfig(), c.Bool("dry-run"))
+	return withRepo(func(repo *vcs.Repository) error {
+		action := actions.NewReleasePrepare(repo, loadReleaseConfig(), c.Bool("dry-run"))
 		return action.Execute(context.Background())
 	})
 }

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cidx-org/cidx/v2/pkg/config"
 	"github.com/cidx-org/cidx/v2/pkg/remote"
 	"github.com/cidx-org/cidx/v2/pkg/vcs"
 )
@@ -367,5 +368,61 @@ func TestReleaseBranchInFlight_IgnoresUnrelatedOutput(t *testing.T) {
 
 	if branch := releaseBranchInFlight("/repo"); branch != "" {
 		t.Errorf("a failed remote lookup must not block the release, got %q", branch)
+	}
+}
+
+// TestRelease_ProviderIsNotResolvedUntilNeeded covers #227: creating the
+// remote provider reads `origin`, so doing it up front made every release step
+// -- including the ones that only read the local repository -- fail on a repo
+// without a remote. Nothing must resolve it while no release is in flight.
+func TestRelease_ProviderIsNotResolvedUntilNeeded(t *testing.T) {
+	git := &gitRecorder{}
+	git.install(t)
+
+	resolved := 0
+	action := NewRelease(nil, func() (remote.Provider, error) {
+		resolved++
+		return nil, errors.New("failed to get remote URL: remote not found")
+	}, config.ReleaseConfig{}, "release-create", true)
+
+	if err := action.checkNoReleaseInFlight(context.Background(), "/repo"); err != nil {
+		t.Fatalf("expected no in-flight release, got: %v", err)
+	}
+	if resolved != 0 {
+		t.Errorf("the remote must not be resolved when no step needs it, resolved %d time(s)", resolved)
+	}
+}
+
+// TestRelease_ProviderResolvedOnceWhenNeeded checks the other half: a step that
+// does need the remote gets it, and repeated steps reuse the same instance.
+func TestRelease_ProviderResolvedOnceWhenNeeded(t *testing.T) {
+	resolved := 0
+	provider := &tagRunProvider{run: &remote.Workflow{ID: "42"}}
+	action := NewRelease(nil, func() (remote.Provider, error) {
+		resolved++
+		return provider, nil
+	}, config.ReleaseConfig{}, "release-create", false)
+
+	for i := range 2 {
+		if _, err := action.waitForTagWorkflow(context.Background(), "v2.1.4"); err != nil {
+			t.Fatalf("lookup %d: %v", i, err)
+		}
+	}
+
+	if resolved != 1 {
+		t.Errorf("expected the provider to be resolved once and cached, got %d", resolved)
+	}
+}
+
+// TestRelease_ProviderErrorSurfacesAtTheStepThatNeedsIt keeps the failure
+// honest: deferring resolution must not swallow it.
+func TestRelease_ProviderErrorSurfacesAtTheStepThatNeedsIt(t *testing.T) {
+	action := NewRelease(nil, func() (remote.Provider, error) {
+		return nil, errors.New("failed to get remote URL: remote not found")
+	}, config.ReleaseConfig{}, "release-create", false)
+
+	_, err := action.waitForTagWorkflow(context.Background(), "v2.1.4")
+	if err == nil || !strings.Contains(err.Error(), "remote not found") {
+		t.Fatalf("expected the resolver error, got: %v", err)
 	}
 }

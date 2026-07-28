@@ -53,12 +53,27 @@ var checkCommand = &cli.Command{
 	},
 }
 
+// resolveConfigPath returns the config file to read: the global --config when
+// one is given, otherwise the auto-detected one. `run` has always honoured the
+// flag; `check workflow` hardcoded cidx.toml, so a project whose config is
+// named differently could not check its workflows (issue #230).
+func resolveConfigPath(c *cli.Context) (string, error) {
+	if path := c.String("config"); path != "" {
+		return path, nil
+	}
+	return config.FindConfig()
+}
+
 func checkWorkflowAction(c *cli.Context) error {
 	// Load configuration
-	cfg, err := config.Load("cidx.toml")
+	configPath, err := resolveConfigPath(c)
 	if err != nil {
-		logrus.Fatalf("Failed to load configuration: %v", err)
 		return err
+	}
+
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to load %s: %w", configPath, err)
 	}
 
 	workflowDir := c.String("workflow-dir")

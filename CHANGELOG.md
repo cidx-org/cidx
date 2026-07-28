@@ -1,3 +1,11 @@
+## [Unreleased]
+
+### Fix
+
+- **release**: resolve the git remote lazily so local-only steps run without one (#227)
+- **cli**: drop the empty phase bracket, honour --config in `check workflow`, sort dry-run environment (#230)
+- **actions**: say which checks actually ran before merging instead of claiming all passed (#259)
+
 ## v2.3.0 (2026-07-28)
 
 ### Feat
