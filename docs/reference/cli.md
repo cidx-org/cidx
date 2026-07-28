@@ -63,11 +63,21 @@ cidx info <container>
 
 ### `cidx validate`
 
-Validate the syntax and structure of the configuration file.
+Validate the syntax and structure of the configuration file, then resolve every
+`cidx` invocation found in the CI workflows against the current command tree — a
+workflow calling a subcommand that has moved or disappeared fails validation
+(issue #239).
 
 ```bash
 cidx validate
+cidx validate --workflow-dir .github/workflows
 ```
+
+The invocation check reads the `run:` steps of the workflow files. It stays
+silent on what it cannot read with certainty: invocations through a variable
+(`$CIDX run ci`) or an expanded token (`cidx ${{ matrix.cmd }}`), heredoc
+bodies, comments, quoted command names, and arguments of a command that handles
+its own arguments. It reports nothing rather than accuse wrongly.
 
 ### `cidx release tag`
 
