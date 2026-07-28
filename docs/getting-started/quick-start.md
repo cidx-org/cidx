@@ -174,12 +174,15 @@ cidx preset info megalinter
 
 #### `cidx validate`
 
-Validate your configuration:
+Validate your configuration, and the cidx invocations your CI workflows make:
 
 ```bash
 cidx validate
 cidx -c path/to/cidx.toml validate
 ```
+
+A workflow step calling a subcommand that has moved or disappeared fails
+validation, with the file, the line and where the command went.
 
 #### `cidx run <target>`
 

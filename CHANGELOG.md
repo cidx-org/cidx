@@ -1,6 +1,12 @@
 ## [Unreleased]
 
+### Feat
+
+- **validate**: catch workflow steps calling a cidx subcommand that no longer exists (#239)
+
 ### Fix
+
+- **validator**: extract workflow phases in declaration order so `check workflow` stops flapping (#233)
 
 - **release**: resolve the git remote lazily so local-only steps run without one (#227)
 - **cli**: drop the empty phase bracket, honour --config in `check workflow`, sort dry-run environment (#230)

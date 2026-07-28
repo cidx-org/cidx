@@ -25,7 +25,17 @@ func main() {
 	// workflows pin the bootstrap to the generating release (issue #163).
 	generate.Version = Version
 
-	app := &cli.App{
+	if err := newApp().Run(os.Args); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// newApp builds the command tree. It is a function, not an inline literal, so
+// the tree can be walked outside of a run — `cidx validate` resolves the
+// invocations it finds in the workflows against it (issue #239).
+func newApp() *cli.App {
+	return &cli.App{
 		Name:                   "cidx",
 		Usage:                  "CI with Declarative eXecution - Integrate any project in two commands",
 		Version:                Version,
@@ -128,10 +138,5 @@ func main() {
 				Usage: "Enable verbose output",
 			},
 		},
-	}
-
-	if err := app.Run(os.Args); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
 	}
 }

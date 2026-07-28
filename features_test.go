@@ -77,6 +77,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	RegisterDoctorSteps(ctx, testCtx)
 	RegisterGenerateSteps(ctx, testCtx)
 	RegisterDriftSteps(ctx, testCtx)
+	RegisterValidateSteps(ctx, testCtx)
 	RegisterPullPolicySteps(ctx, testCtx)
 
 	// Hooks

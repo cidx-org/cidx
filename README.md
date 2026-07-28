@@ -110,7 +110,7 @@ cidx run --dry-run ci          # Preview without executing
 cidx run --parallel security   # Parallel execution (local)
 cidx generate github           # Generate GitHub Actions workflow
 cidx generate gitlab           # Generate GitLab CI config
-cidx validate                  # Validate config file
+cidx validate                  # Validate config + the cidx calls in CI workflows
 cidx check drift               # Compare cidx.toml vs CI workflow
 cidx doctor                    # Validate environment
 cidx preset list               # List all 40+ presets by phase

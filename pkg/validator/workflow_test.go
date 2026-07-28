@@ -84,6 +84,52 @@ jobs:
 	}
 }
 
+// TestParseWorkflow_PhaseOrderIsDeterministic covers the first half of #233:
+// `check workflow` reported "Phase execution order differs" intermittently on
+// cidx's own repo, because the order of jobs that no dependency separates came
+// out of a Go map. Same file, same answer — every time.
+func TestParseWorkflow_PhaseOrderIsDeterministic(t *testing.T) {
+	// The shape of the repo's own ci.yml: three jobs run in parallel after the
+	// bootstrap, so only the declaration order can order them.
+	workflowPath := filepath.Join(t.TempDir(), "ci.yml")
+	workflowContent := `name: CI
+jobs:
+  bootstrap:
+    steps:
+      - run: go build -o bin/cidx ./cmd/cidx
+  security:
+    needs: [bootstrap]
+    steps:
+      - run: ./bin/cidx run security
+  code:
+    needs: [bootstrap]
+    steps:
+      - run: ./bin/cidx run code
+  test:
+    needs: [bootstrap]
+    steps:
+      - run: ./bin/cidx run test
+  build:
+    needs: [security, code, test]
+    steps:
+      - run: ./bin/cidx run build
+`
+	if err := os.WriteFile(workflowPath, []byte(workflowContent), 0644); err != nil {
+		t.Fatalf("Failed to create test workflow file: %v", err)
+	}
+
+	want := []string{"security", "code", "test", "build"}
+	for i := 0; i < 30; i++ {
+		workflow, err := ParseWorkflow(workflowPath)
+		if err != nil {
+			t.Fatalf("Failed to parse workflow: %v", err)
+		}
+		if !equalOrder(workflow.Phases, want) {
+			t.Fatalf("run %d extracted %v, want %v", i, workflow.Phases, want)
+		}
+	}
+}
+
 func TestValidateWorkflow(t *testing.T) {
 	// Create temporary files
 	tmpDir := t.TempDir()
@@ -258,7 +304,7 @@ func TestTopologicalSort(t *testing.T) {
 		"build":    "build",
 	}
 
-	phases := topologicalSort(jobs, jobPhases)
+	phases := topologicalSort(jobs, jobPhases, []string{"setup", "security", "code", "test", "build"})
 
 	// Expected order: security, code (parallel after setup), test, build
 	// Note: security and code can be in any order since they're parallel

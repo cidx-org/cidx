@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/cidx-org/cidx/v2/pkg/config"
@@ -122,7 +123,7 @@ func ParseWorkflow(workflowPath string) (*WorkflowDefinition, error) {
 	}
 
 	// Perform topological sort to get execution order
-	phases := topologicalSort(jobs, jobPhases)
+	phases := topologicalSort(jobs, jobPhases, jobOrder(data))
 
 	return &WorkflowDefinition{
 		Name:   workflowName,
@@ -178,13 +179,11 @@ func ValidateWorkflow(cfg *config.Config, pipelineName string, workflowPath stri
 func ValidateAllWorkflows(cfg *config.Config, workflowDir string) ([]*ValidationResult, error) {
 	results := []*ValidationResult{}
 
-	// Map pipeline names to workflow files
-	workflowMap := map[string]string{
-		"ci":      filepath.Join(workflowDir, "ci.yml"),
-		"release": filepath.Join(workflowDir, "release.yml"),
-	}
+	// Pipelines and their workflow file, in a fixed order: a Go map would
+	// report the same repository in a different order on every run (#233).
+	for _, pipelineName := range []string{"ci", "release"} {
+		workflowPath := filepath.Join(workflowDir, pipelineName+".yml")
 
-	for pipelineName, workflowPath := range workflowMap {
 		// Check if workflow file exists
 		if _, err := os.Stat(workflowPath); os.IsNotExist(err) {
 			continue // Skip if workflow doesn't exist
@@ -229,22 +228,53 @@ func equalOrder(a, b []string) bool {
 	return true
 }
 
+// jobOrder returns the job IDs in the order the YAML document declares them.
+// The parsed jobs live in a Go map, whose iteration order is randomised, so
+// the declaration order is the only stable tie-break between jobs that no
+// dependency separates (issue #233).
+func jobOrder(data []byte) []string {
+	var doc struct {
+		Jobs yaml.Node `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil
+	}
+
+	order := make([]string, 0, len(doc.Jobs.Content)/2)
+	for i := 0; i+1 < len(doc.Jobs.Content); i += 2 {
+		order = append(order, doc.Jobs.Content[i].Value)
+	}
+	return order
+}
+
 // topologicalSort performs a topological sort of jobs based on dependencies
-// and returns the phases in execution order
-func topologicalSort(jobs map[string]Job, jobPhases map[string]string) []string {
+// and returns the phases in execution order. Jobs are visited in declaration
+// order, so jobs that run in parallel keep the order the workflow lists them
+// in and the result is the same on every run (issue #233).
+func topologicalSort(jobs map[string]Job, jobPhases map[string]string, order []string) []string {
+	// Fall back to a sorted job list rather than a randomised map iteration
+	// when the declaration order is unavailable.
+	if len(order) != len(jobs) {
+		order = make([]string, 0, len(jobs))
+		for jobID := range jobs {
+			order = append(order, jobID)
+		}
+		sort.Strings(order)
+	}
+
 	// Build adjacency list and in-degree map
 	inDegree := make(map[string]int)
 	graph := make(map[string][]string)
 
 	// Initialize all jobs with in-degree 0
-	for jobID := range jobs {
+	for _, jobID := range order {
 		inDegree[jobID] = 0
 		graph[jobID] = []string{}
 	}
 
 	// Build graph and calculate in-degrees
-	for jobID, job := range jobs {
-		for _, dep := range job.Needs {
+	for _, jobID := range order {
+		for _, dep := range jobs[jobID].Needs {
 			graph[dep] = append(graph[dep], jobID)
 			inDegree[jobID]++
 		}
@@ -252,8 +282,8 @@ func topologicalSort(jobs map[string]Job, jobPhases map[string]string) []string 
 
 	// Find all jobs with in-degree 0 (no dependencies)
 	queue := []string{}
-	for jobID, degree := range inDegree {
-		if degree == 0 {
+	for _, jobID := range order {
+		if inDegree[jobID] == 0 {
 			queue = append(queue, jobID)
 		}
 	}
