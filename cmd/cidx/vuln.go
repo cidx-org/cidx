@@ -460,7 +460,10 @@ func vulnAddCommand() *cli.Command {
 			}
 
 			cve := c.Args().Get(0)
-			image := c.Args().Get(1)
+			// Exceptions are recorded against `repo:tag`. Scanners paste back
+			// the digest-pinned reference (#242); keeping the digest would
+			// file the exception under a key nothing ever looks up.
+			image := refWithoutDigest(c.Args().Get(1))
 
 			vulns, err := loadVulnerabilities(c.String("file"))
 			if err != nil {
@@ -536,7 +539,9 @@ func vulnIgnoreCommand() *cli.Command {
 				return cli.Exit("Usage: cidx vuln ignore [--format trivy|grype] <IMAGE>", 1)
 			}
 
-			image := c.Args().Get(0)
+			// security-audit.yml passes the catalogue reference straight
+			// through, digest included (#242) — match on `repo:tag`.
+			image := refWithoutDigest(c.Args().Get(0))
 			format := c.String("format")
 
 			vulns, err := loadVulnerabilities(c.String("file"))

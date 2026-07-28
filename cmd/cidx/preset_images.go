@@ -51,7 +51,7 @@ func presetCheckUpdatesCommand() *cli.Command {
 				preset, _ := presets.Get(name)
 
 				// Parse image
-				imageName, currentTag := parseImageTag(preset.Image)
+				imageName, currentTag, _ := parseImageRef(preset.Image)
 
 				// Get latest tag
 				latestTag, err := getLatestTag(imageName, currentTag)
@@ -112,28 +112,14 @@ func presetCheckUpdatesCommand() *cli.Command {
 	}
 }
 
-// parseImageTag splits an image reference into name and tag
-func parseImageTag(image string) (name, tag string) {
-	// Handle images with digest
-	if idx := strings.Index(image, "@"); idx != -1 {
-		return image[:idx], image[idx+1:]
-	}
-
-	// Handle images with tag
-	if idx := strings.LastIndex(image, ":"); idx != -1 {
-		// Make sure it's not a port number (registry:port/image)
-		afterColon := image[idx+1:]
-		if !strings.Contains(afterColon, "/") {
-			return image[:idx], afterColon
-		}
-	}
-
-	return image, "latest"
-}
-
 // getLatestTag fetches the latest tag for an image from its registry
 // currentTag is used to preserve variant suffixes (e.g., -alpine, -slim)
 func getLatestTag(image, currentTag string) (string, error) {
+	// A reference pinned by digest alone carries no version to compare against.
+	if currentTag == "" {
+		return "", fmt.Errorf("no tag to compare (reference is pinned by digest only)")
+	}
+
 	// Determine registry and repository
 	registry, repo := parseRegistry(image)
 
@@ -643,15 +629,26 @@ func presetScanTargetsCommand() *cli.Command {
 				}
 
 				// Check for update
-				imageName, currentTag := parseImageTag(currentImage)
+				imageName, currentTag, _ := parseImageRef(currentImage)
 				latestTag, err := getLatestTag(imageName, currentTag)
 
-				if err != nil {
+				switch {
+				case err != nil:
 					target.Error = err.Error()
 					// Still scan current image on error
-				} else if latestTag != currentTag && latestTag != "" {
-					// Update available - scan the new version
-					target.ScanImage = imageName + ":" + latestTag
+				case latestTag != "" && latestTag != currentTag:
+					// A candidate must be pinned before it is offered for
+					// promotion: container-monitor.yml writes scan_image
+					// verbatim into presets.toml, so a bare tag here would
+					// undo the digest pinning on the first promotion (#242).
+					// Failing to resolve the digest means no promotion — the
+					// current, pinned image is scanned instead.
+					digest, digestErr := resolveDigest(imageName, latestTag)
+					if digestErr != nil {
+						target.Error = fmt.Sprintf("update %s available but not pinnable: %v", latestTag, digestErr)
+						break
+					}
+					target.ScanImage = fmt.Sprintf("%s:%s@%s", imageName, latestTag, digest)
 					target.IsUpdate = true
 				}
 

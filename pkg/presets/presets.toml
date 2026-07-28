@@ -42,7 +42,7 @@
 [presets.prettier]
 name = "prettier"
 phase = "code"
-image = "tmknom/prettier:3.6.2"
+image = "tmknom/prettier:3.6.2@sha256:31684fd957f78ddebd0fc003f2790da08bd7a41cfe1146912da43a114fbeebf9"
 command = "prettier --check ."
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -69,7 +69,7 @@ command_flag = "--write"
 [presets.trivy]
 name = "trivy"
 phase = "security"
-image = "dhi.io/trivy:0.68"
+image = "dhi.io/trivy:0.68@sha256:488478898f58e97d81c2ab37bb9e51d17cac8c90ac6e94f82afa1a0e6066cc97"
 hardened = true
 command = "fs /work"
 workdir = "/work"
@@ -95,7 +95,7 @@ command_flag = "--exit-code"
 [presets.gitleaks]
 name = "gitleaks"
 phase = "security"
-image = "zricethezav/gitleaks:v8.30.1"
+image = "zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f"
 command = "git ."
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -108,7 +108,7 @@ config_files = [".gitleaks.toml"]
 [presets.commitlint]
 name = "commitlint"
 phase = "code"
-image = "commitlint/commitlint:21.0.0"
+image = "commitlint/commitlint:21.0.0@sha256:f607550f066a09d5c3ef065495c7c7460535139977566ea3b1dac9f8c6afb430"
 command = "commitlint --from ${FROM} --to ${TO}"
 workdir = "/work"
 volumes = [
@@ -134,7 +134,7 @@ TO = "HEAD"
 [presets.commitizen]
 name = "commitizen"
 phase = "code"
-image = "commitizen/commitizen:4.15.1"
+image = "commitizen/commitizen:4.15.1@sha256:0d3ff80420a972e6966417c32a02340bfbd7ade2d6fdad9b162d4ce6cfb74a6a"
 command = "sh -c 'export GIT_CONFIG_GLOBAL=/tmp/.gitconfig && git config --global --add safe.directory /work && BASE=$(git merge-base HEAD origin/main 2>/dev/null || git describe --tags --abbrev=0 2>/dev/null || echo HEAD~10) && COMMITS=$(git rev-list ${BASE}..HEAD --count 2>/dev/null || echo 0) && if [ \"$COMMITS\" = \"0\" ]; then echo \"No commits to validate\"; exit 0; fi && cz check --rev-range ${BASE}..HEAD'"
 entrypoint = [""]
 workdir = "/work"
@@ -151,7 +151,7 @@ config_files = [
 [presets.ansible-lint]
 name = "ansible-lint"
 phase = "code"
-image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0@sha256:83de707daf00cc415f7213132de09715cfdf66834232dbdb842f7196a70b846e"
 command = "ansible-lint"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -160,7 +160,7 @@ config_files = [".ansible-lint"]
 [presets.molecule]
 name = "molecule"
 phase = "test"
-image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0@sha256:83de707daf00cc415f7213132de09715cfdf66834232dbdb842f7196a70b846e"
 command = "molecule test -s ${SCENARIO}"
 workdir = "/work"
 volumes = [
@@ -183,7 +183,7 @@ env_var = "SCENARIO"
 [presets.yamllint]
 name = "yamllint"
 phase = "code"
-image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0@sha256:83de707daf00cc415f7213132de09715cfdf66834232dbdb842f7196a70b846e"
 command = "yamllint ."
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -206,7 +206,7 @@ command_flag = "--format"
 [presets.ansible-syntax]
 name = "ansible-syntax"
 phase = "code"
-image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0@sha256:83de707daf00cc415f7213132de09715cfdf66834232dbdb842f7196a70b846e"
 command = "ansible-playbook --syntax-check ${PLAYBOOK}"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -225,7 +225,7 @@ env_var = "PLAYBOOK"
 [presets.ansible-test]
 name = "ansible-test"
 phase = "test"
-image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0@sha256:83de707daf00cc415f7213132de09715cfdf66834232dbdb842f7196a70b846e"
 command = "ansible-test ${TEST_TYPE} --docker"
 workdir = "/work"
 volumes = [
@@ -253,7 +253,7 @@ command_flag = "--python"
 [presets.ansible-galaxy-build]
 name = "ansible-galaxy-build"
 phase = "build"
-image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0@sha256:83de707daf00cc415f7213132de09715cfdf66834232dbdb842f7196a70b846e"
 command = "ansible-galaxy collection build --output-path ${OUTPUT_PATH}"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -273,7 +273,7 @@ command_flag = "--force"
 [presets.ansible-galaxy-publish]
 name = "ansible-galaxy-publish"
 phase = "release"
-image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0@sha256:83de707daf00cc415f7213132de09715cfdf66834232dbdb842f7196a70b846e"
 command = "ansible-galaxy collection publish ${ARTIFACT}"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -292,7 +292,7 @@ command_flag = "--server"
 [presets.test-hot-reload]
 name = "test-hot-reload"
 phase = "test"
-image = "dhi.io/alpine-base:3.21"
+image = "dhi.io/alpine-base:3.24@sha256:84a21d3dfb87eb1c0bf1b532350f2aa0bf7d0df6246c398cc5c14b29002b7310"
 hardened = true
 command = "echo 'Hot reload works!'"
 workdir = "/work"
@@ -308,7 +308,7 @@ volumes = ["${WORKSPACE}:/work"]
 [presets.gosec]
 name = "gosec"
 phase = "security"
-image = "securego/gosec:2.24.6"
+image = "securego/gosec:2.24.6@sha256:2cf71ea78210c496c65e3a987576a9c8317b68e20f2960520b3f6f8f9f539be5"
 command = "./..."
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -341,7 +341,7 @@ command_flag = "-fmt"
 [presets.govulncheck]
 name = "govulncheck"
 phase = "security"
-image = "dhi.io/golang:1.23-alpine3.21-dev"
+image = "dhi.io/golang:1.23-alpine3.21-dev@sha256:7563e8b20d15a6240a946d7e35fda1f1b31cb48dd307d9f877355fa81865ea7b"
 hardened = true
 command = "sh -c 'go install golang.org/x/vuln/cmd/govulncheck@latest && PATH=$PATH:/tmp/go/bin govulncheck ./...'"
 workdir = "/work"
@@ -362,7 +362,7 @@ GOTOOLCHAIN = "auto"
 [presets.go-mod-tidy]
 name = "go-mod-tidy"
 phase = "code"
-image = "dhi.io/golang:1.23-alpine3.21-dev"
+image = "dhi.io/golang:1.23-alpine3.21-dev@sha256:7563e8b20d15a6240a946d7e35fda1f1b31cb48dd307d9f877355fa81865ea7b"
 hardened = true
 command = "sh -c 'cp go.mod go.mod.bak && cp go.sum go.sum.bak && go mod tidy && diff go.mod go.mod.bak && diff go.sum go.sum.bak && echo \"go.mod is tidy\"'"
 workdir = "/work"
@@ -379,7 +379,7 @@ GOTOOLCHAIN = "auto"
 [presets.golangci-lint]
 name = "golangci-lint"
 phase = "code"
-image = "golangci/golangci-lint:v2.12.2"
+image = "golangci/golangci-lint:v2.12.2@sha256:5cceeef04e53efe1470638d4b4b4f5ceefd574955ab3941b2d9a68a8c9ad5240"
 command = "golangci-lint run --timeout 5m"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -399,7 +399,7 @@ command_flag = "--fix"
 [presets.shellcheck]
 name = "shellcheck"
 phase = "code"
-image = "koalaman/shellcheck:stable"
+image = "koalaman/shellcheck:stable@sha256:bb596a0d169b85ddd81d8b6d3a2ff6d5baf5fca10b97f575ebc647c3dff62b3d"
 entrypoint = ["sh", "-c"]
 command = "find . -type f -name \"*.sh\" | xargs -r shellcheck || true"
 workdir = "/work"
@@ -414,7 +414,7 @@ command_flag = "--severity"
 [presets.gofmt]
 name = "gofmt"
 phase = "code"
-image = "dhi.io/golang:1.23-alpine3.21-dev"
+image = "dhi.io/golang:1.23-alpine3.21-dev@sha256:7563e8b20d15a6240a946d7e35fda1f1b31cb48dd307d9f877355fa81865ea7b"
 hardened = true
 command = "gofmt -l ."
 workdir = "/work"
@@ -430,7 +430,7 @@ GOTOOLCHAIN = "auto"
 [presets.go-test]
 name = "go-test"
 phase = "test"
-image = "dhi.io/golang:1.23-alpine3.21-dev"
+image = "dhi.io/golang:1.23-alpine3.21-dev@sha256:7563e8b20d15a6240a946d7e35fda1f1b31cb48dd307d9f877355fa81865ea7b"
 hardened = true
 command = "go test -v ./pkg/... ./cmd/..."
 workdir = "/work"
@@ -458,7 +458,7 @@ command_flag = "-race"
 [presets.godog]
 name = "godog"
 phase = "test"
-image = "dhi.io/golang:1.23-alpine3.21-dev"
+image = "dhi.io/golang:1.23-alpine3.21-dev@sha256:7563e8b20d15a6240a946d7e35fda1f1b31cb48dd307d9f877355fa81865ea7b"
 hardened = true
 command = "go test -v ./features_test.go"
 workdir = "/work"
@@ -491,7 +491,7 @@ command_flag = "-tags"
 [presets.go-build]
 name = "go-build"
 phase = "build"
-image = "dhi.io/golang:1.23-alpine3.21-dev"
+image = "dhi.io/golang:1.23-alpine3.21-dev@sha256:7563e8b20d15a6240a946d7e35fda1f1b31cb48dd307d9f877355fa81865ea7b"
 hardened = true
 command = "sh -c 'VERSION=$(cat VERSION 2>/dev/null || echo dev); go build -ldflags \"-X main.Version=${VERSION} ${LDFLAGS}\" -o bin/cidx ./cmd/cidx'"
 workdir = "/work"
@@ -518,7 +518,7 @@ env_var = "LDFLAGS"
 [presets.kaniko]
 name = "kaniko"
 phase = "docker"
-image = "gcr.io/kaniko-project/executor:v1.24.0"
+image = "gcr.io/kaniko-project/executor:v1.24.0@sha256:4e7a52dd1f14872430652bb3b027405b8dfd17c4538751c620ac005741ef9698"
 command = "--context=/work --dockerfile=Dockerfile --destination=${IMAGE_NAME}:${IMAGE_TAG} --cache=true"
 workdir = "/work"
 volumes = [
@@ -554,7 +554,7 @@ command_flag = "--cache"
 [presets.docker-buildx]
 name = "docker-buildx"
 phase = "docker"
-image = "dhi.io/docker:27-cli"
+image = "dhi.io/docker:29-cli@sha256:5962df1dad91fbf81be7c795c00d6137c6a46ac28acada6af9f0af7c92133966"
 hardened = true
 command = "sh -c 'docker buildx build --platform linux/amd64,linux/arm64 -t ${IMAGE_NAME}:${IMAGE_TAG} --push .'"
 workdir = "/work"
@@ -577,7 +577,7 @@ IMAGE_TAG = "latest"
 [presets.gh-release]
 name = "gh-release"
 phase = "release"
-image = "maniator/gh:v2.92.0"
+image = "maniator/gh:v2.92.0@sha256:63c7b3b8610ed9eab086b2b71fc415e74734e0ed83ba95a76bf9165c279f2dd3"
 entrypoint = [""]  # Override image entrypoint (gh) to allow shell commands
 # Smart command: uses prepared release notes if available (versioned filename), otherwise auto-generates
 command = "sh -c 'if [ -f .cidx/release-version ]; then VERSION=$(cat .cidx/release-version | tr -d \"\\n\"); NOTES_FILE=\".cidx/release-notes-v${VERSION}.md\"; if [ -f \"$NOTES_FILE\" ]; then echo \"Using prepared release notes: $NOTES_FILE\"; gh release create ${TAG} ${ARTIFACTS} --notes-file \"$NOTES_FILE\"; exit 0; fi; fi; echo \"Auto-generating release notes...\"; gh release create ${TAG} ${ARTIFACTS} --generate-notes'"
@@ -612,7 +612,7 @@ command_flag = "--notes-file"
 [presets.goreleaser]
 name = "goreleaser"
 phase = "release"
-image = "goreleaser/goreleaser:v2.15.4"
+image = "goreleaser/goreleaser:v2.15.4@sha256:579eee23514fa647adcc669b5875f866f1c1faf5a0464aec4614a9121684c06c"
 command = "goreleaser release --clean"
 workdir = "/work"
 volumes = [
@@ -647,7 +647,7 @@ command_flag = "--skip=publish"
 [presets.ruff]
 name = "ruff"
 phase = "code"
-image = "ghcr.io/astral-sh/ruff:0.8.2"
+image = "ghcr.io/astral-sh/ruff:0.8.2@sha256:84b0ad0023906db70b759b3b29e455dad0638159bf2de2b95086db1ab175917b"
 command = "check ."
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -670,7 +670,7 @@ command_flag = "format"
 [presets.black]
 name = "black"
 phase = "code"
-image = "pyfound/black:26.3.1"
+image = "pyfound/black:26.3.1@sha256:6ef96489dd2af4cf66aa4f1f04bca5b0dd6afef5b38de26b8cf921d10ff0b67d"
 command = "black --check ."
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -687,7 +687,7 @@ command_flag = "--diff"
 [presets.mypy]
 name = "mypy"
 phase = "code"
-image = "dhi.io/python:3.13-alpine3.21"
+image = "dhi.io/python:3.13-alpine3.21@sha256:d60ba1e84507e21ab542c15170c4334f001a810a5c8cc3dd1f829fc851219680"
 hardened = true
 command = "sh -c 'pip install --quiet mypy && mypy .'"
 workdir = "/work"
@@ -708,7 +708,7 @@ command_flag = "--strict"
 [presets.bandit]
 name = "bandit"
 phase = "security"
-image = "dhi.io/python:3.13-alpine3.21"
+image = "dhi.io/python:3.13-alpine3.21@sha256:d60ba1e84507e21ab542c15170c4334f001a810a5c8cc3dd1f829fc851219680"
 hardened = true
 command = "sh -c 'pip install --quiet bandit && bandit -r .'"
 workdir = "/work"
@@ -732,7 +732,7 @@ command_flag = "-i"
 [presets.pip-audit]
 name = "pip-audit"
 phase = "security"
-image = "dhi.io/python:3.13-alpine3.21"
+image = "dhi.io/python:3.13-alpine3.21@sha256:d60ba1e84507e21ab542c15170c4334f001a810a5c8cc3dd1f829fc851219680"
 hardened = true
 command = "sh -c 'pip install --quiet pip-audit && pip-audit'"
 workdir = "/work"
@@ -755,7 +755,7 @@ command_flag = "--fix"
 [presets.pytest]
 name = "pytest"
 phase = "test"
-image = "dhi.io/python:3.13-alpine3.21"
+image = "dhi.io/python:3.13-alpine3.21@sha256:d60ba1e84507e21ab542c15170c4334f001a810a5c8cc3dd1f829fc851219680"
 hardened = true
 command = "sh -c 'pip install --quiet pytest pytest-cov && pytest'"
 workdir = "/work"
@@ -778,7 +778,7 @@ command_flag = "--cov=."
 [presets.python-build]
 name = "python-build"
 phase = "build"
-image = "dhi.io/python:3.13-alpine3.21"
+image = "dhi.io/python:3.13-alpine3.21@sha256:d60ba1e84507e21ab542c15170c4334f001a810a5c8cc3dd1f829fc851219680"
 hardened = true
 command = "sh -c 'pip install --quiet build && python -m build'"
 workdir = "/work"
@@ -793,7 +793,7 @@ OUTPUT_DIR = "dist"
 [presets.twine]
 name = "twine"
 phase = "release"
-image = "dhi.io/python:3.13-alpine3.21"
+image = "dhi.io/python:3.13-alpine3.21@sha256:d60ba1e84507e21ab542c15170c4334f001a810a5c8cc3dd1f829fc851219680"
 hardened = true
 command = "sh -c 'pip install --quiet twine && twine upload dist/*'"
 workdir = "/work"
@@ -821,7 +821,7 @@ command_flag = "--repository"
 [presets.rustfmt]
 name = "rustfmt"
 phase = "code"
-image = "rust:1.95.0"
+image = "rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3"
 command = "sh -c 'rustup component add rustfmt && cargo fmt -- --check'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -832,7 +832,7 @@ config_files = ["rustfmt.toml", ".rustfmt.toml"]
 [presets.clippy]
 name = "clippy"
 phase = "code"
-image = "rust:1.95.0"
+image = "rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3"
 command = "sh -c 'rustup component add clippy && cargo clippy -- -D warnings'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -858,7 +858,7 @@ command_flag = "-W clippy::pedantic"
 [presets.cargo-audit]
 name = "cargo-audit"
 phase = "security"
-image = "rust:1.95.0"
+image = "rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3"
 command = "sh -c 'curl -sSfL https://github.com/rustsec/rustsec/releases/download/cargo-audit/v0.22.2/cargo-audit-$(uname -m)-unknown-linux-gnu-v0.22.2.tgz | tar xz --strip-components=1 -C /tmp && HOME=/tmp CARGO_HOME=/tmp/cargo /tmp/cargo-audit audit'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -874,7 +874,7 @@ command_flag = "--deny warnings"
 [presets.cargo-test]
 name = "cargo-test"
 phase = "test"
-image = "rust:1.95.0"
+image = "rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3"
 command = "cargo test"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -899,7 +899,7 @@ command_flag = "--all-features"
 [presets.cargo-build]
 name = "cargo-build"
 phase = "build"
-image = "rust:1.95.0"
+image = "rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3"
 command = "cargo build --release"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -915,7 +915,7 @@ command_flag = "--target"
 [presets.cargo-publish]
 name = "cargo-publish"
 phase = "release"
-image = "rust:1.95.0"
+image = "rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3"
 command = "cargo publish"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -936,7 +936,7 @@ command_flag = "--dry-run"
 [presets.probatum]
 name = "probatum"
 phase = "test"
-image = "ghcr.io/probatum-org/probatum:0.2.1"
+image = "ghcr.io/probatum-org/probatum:0.2.1@sha256:c78575afc4469d5d310f449f8133927d4b2859e6ea66a720d82205e1dfb09ef1"
 # The image is Alpine/musl and ships no glibc loader; a glibc binary fails with
 # the shell's misleading "sh: <path>: not found" even though the file exists (#195).
 description = "Executes static or musl-linked artifacts only: the image is Alpine (no glibc loader), so glibc binaries built by cargo-build will not run (misleading 'sh: <path>: not found'). Build with --target x86_64-unknown-linux-musl."

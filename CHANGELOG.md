@@ -1,3 +1,13 @@
+## [Unreleased]
+
+### Feat
+
+- **presets**: every catalogue image is now pinned `image:tag@sha256:...` — the tag stays readable, the digest makes the reference immutable. A tag alone can point at different content tomorrow with nothing in `presets.toml` changing, and no scanner catches that, because a backdoored image has no CVE until someone finds it. Rule 1 of the image supply-chain policy (#242). Observable change: image references differ, so every cidx container is recreated once on the next run (the `cidx.config_hash` label includes the image, #144); the cache inside those containers is rebuilt, nothing else changes. `cidx preset scan-targets` now resolves the digest of an update candidate and reports an error instead of an update when it cannot, so `container-monitor.yml`'s promote job can never write a mutable tag back into the catalogue. `TestCatalogueImagesArePinnedByDigest` fails on any preset that arrives without a digest, including inside that promote job (#242)
+
+### Fix
+
+- **presets**: `dhi.io/alpine-base:3.21` (test-hot-reload) and `dhi.io/docker:27-cli` (docker-buildx) were 404 — Docker Hardened Images had deleted both tags, so the two presets could not run at all. Moved to the nearest published tags, `3.24` and `29-cli`, and pinned (#242)
+
 ## v2.1.5 (2026-07-27)
 
 ### Fix

@@ -62,7 +62,7 @@ func presetAuditCommand() *cli.Command {
 
 			for _, name := range presets.List() {
 				preset, _ := presets.Get(name)
-				imageName, currentTag := parseImageTag(preset.Image)
+				imageName, currentTag, _ := parseImageRef(preset.Image)
 
 				result := auditResult{
 					Name:       name,
@@ -70,8 +70,10 @@ func presetAuditCommand() *cli.Command {
 					CurrentTag: currentTag,
 				}
 
-				// Check known CVEs for this image
-				if vulns, ok := knownVulns[preset.Image]; ok {
+				// Check known CVEs for this image. Exceptions are recorded
+				// against `repo:tag`, so the digest the catalogue is pinned
+				// with (#242) must not be part of the lookup key.
+				if vulns, ok := knownVulns[refWithoutDigest(preset.Image)]; ok {
 					result.KnownCVEs = len(vulns)
 					for _, v := range vulns {
 						result.CVEDetails = append(result.CVEDetails, fmt.Sprintf("%s (%s)", v.CVE, v.Severity))
