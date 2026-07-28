@@ -82,17 +82,23 @@ type WorkflowUpdate struct {
 
 // PRChecks represents the status of all checks for a PR
 type PRChecks struct {
-	TotalCount   int
-	Pending      int
-	Success      int
-	Failure      int
-	Queued       int
-	InProgress   int
-	Status       string // pending, success, failure
-	HeadSHA      string // The commit SHA these checks are for
-	UpdatedAt    time.Time
-	Checks       []CheckRun
-	StatusChecks []StatusCheck
+	TotalCount int
+	// WorkflowChecks counts the checks produced by a workflow of the
+	// repository itself (GitHub Actions runs, GitLab pipeline jobs). Checks
+	// posted by other apps -- GitHub's own .github/dependabot.yml config
+	// validation, an external service -- are excluded, so "CI has started"
+	// can be told apart from "some app posted a check" (issue #257).
+	WorkflowChecks int
+	Pending        int
+	Success        int
+	Failure        int
+	Queued         int
+	InProgress     int
+	Status         string // pending, success, failure
+	HeadSHA        string // The commit SHA these checks are for
+	UpdatedAt      time.Time
+	Checks         []CheckRun
+	StatusChecks   []StatusCheck
 }
 
 // CheckRun represents a GitHub Actions check run

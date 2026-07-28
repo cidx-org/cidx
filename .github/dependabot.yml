@@ -45,3 +45,4 @@ updates:
     # ecosystem supports default-days only; semver-*-days is not available for it.
     cooldown:
       default-days: 14
+    # A PR touching this file also gets GitHub's config-validation check.

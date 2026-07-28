@@ -107,6 +107,16 @@ func (a *CommitPushWatchAction) watchCI(ctx context.Context, branch, pushedSHA s
 		return fmt.Errorf("failed waiting for CI to start: %w", err)
 	}
 
+	// Checks can exist without CI having started: GitHub attaches its own
+	// dependabot config check to any PR touching .github/dependabot.yml.
+	// Calling that green would greenlight an unverified commit (issue #257).
+	if checks.WorkflowChecks == 0 {
+		log.Warnf("⚠️  No workflow started on this commit within %s", a.ciStartTimeout)
+		displayChecksStatus(checks)
+		log.Info("💡 Watch them once they start: cidx pr watch -q")
+		return nil
+	}
+
 	shortSHA := headSHA
 	if len(shortSHA) > 7 {
 		shortSHA = shortSHA[:7]

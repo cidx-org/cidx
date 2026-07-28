@@ -2,6 +2,12 @@
 
 ### Fix
 
+- **actions**: wait for a check of the repository's own workflows, not for any check (#257)
+
+  `cidx cpw` stopped waiting as soon as one check existed on the pushed commit. On a PR touching `.github/dependabot.yml`, GitHub attaches its config-validation check long before the workflows are queued, so cpw reported `1 total | 1 success` and `🎉 All checks passed!` on a commit whose CI had not started — the failure #167 set out to fix, from the other side.
+
+  The wait now ends on a check posted by the `github-actions` app, which the check-runs API already returns alongside each run; GitLab pipeline jobs count as such by construction. A repository without CI is unchanged: no check at all still means "no CI configured", reported after the same timeout. Checks from other apps only are no longer mistaken for CI — they come back at the end of the timeout, and cpw reports them as what they are rather than as a green pipeline.
+
 - **monitor**: gate promotion on the vulnerabilities a candidate actually introduces (#247)
 
   Every scan step in `container-monitor.yml` wrapped `docker run` in an `if … then … else …`, so a vulnerable image exited 0 and the job always succeeded. `needs.trivy-scan.result` was therefore `success` by construction, and the promote job promoted whatever the cooldown had cleared — while the promotion PR claimed the images had passed a HIGH/CRITICAL check that never ran.
