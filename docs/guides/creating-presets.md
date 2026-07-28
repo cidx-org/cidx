@@ -256,15 +256,31 @@ This allows seamless transition between development and production.
 
 ### Step 1: Edit presets.toml
 
+Catalogue images are pinned `image:tag@sha256:...` — the tag stays readable, the
+digest makes the reference immutable. See [rule 1 of the image supply-chain
+policy](../core-concepts/security.md#image-supply-chain-policy) for why, and
+issue #242 for the decision record. `TestCatalogueImagesArePinnedByDigest`
+rejects a preset added without a digest.
+
+Resolve the digest of the **multi-arch index**, not of a single architecture —
+pinning one platform's manifest would break every runner on another:
+
+```bash
+docker buildx imagetools inspect --format '{{.Manifest.Digest}}' myorg/newtool:1.4.0
+```
+
 ```toml
 [presets.newtool]
 name = "newtool"
 phase = "security"
-image = "myorg/newtool:latest"
+image = "myorg/newtool:1.4.0@sha256:0d3ff80420a972e6966417c32a02340bfbd7ade2d6fdad9b162d4ce6cfb74a6a"
 command = "scan /workspace"
 workdir = "/workspace"
 volumes = ["${WORKSPACE}:/workspace"]
 ```
+
+This applies to the built-in catalogue only. Presets you define in your own
+`.cidx/presets.toml` are yours to pin or not.
 
 ### Step 2: Test Immediately
 

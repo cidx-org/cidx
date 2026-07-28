@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -37,6 +38,64 @@ func RegisterPresetSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.When(`^I resolve the preset "([^"]*)" without overrides$`, tc.resolvePresetWithoutOverrides)
 	ctx.Then(`^the resolved command should be "([^"]*)"$`, tc.resolvedCommandShouldBe)
 	ctx.Then(`^the resolved command should contain "([^"]*)"$`, tc.resolvedCommandShouldContain)
+
+	// Catalogue image pinning (#242)
+	ctx.Then(`^the resolved image should be pinned by digest$`, tc.resolvedImageShouldBePinned)
+	ctx.Then(`^the resolved image tag should be "([^"]*)"$`, tc.resolvedImageTagShouldBe)
+	ctx.Then(`^the presets "([^"]*)" and "([^"]*)" should resolve the same image$`, tc.presetsShouldResolveSameImage)
+}
+
+// pinnedImageRef is the reference form rule 1 of the image supply-chain policy
+// requires: a readable tag plus the digest that makes it immutable.
+var pinnedImageRef = regexp.MustCompile(`^[^@\s]+:[^@:/\s]+@sha256:[0-9a-f]{64}$`)
+
+// resolvedImageShouldBePinned asserts the reference a run would pull carries
+// both a tag and a digest.
+func (tc *TestContext) resolvedImageShouldBePinned() error {
+	image, ok := tc.Config["resolved_image"].(string)
+	if !ok || image == "" {
+		return fmt.Errorf("no preset was resolved")
+	}
+	if !pinnedImageRef.MatchString(image) {
+		return fmt.Errorf("image %q is not pinned as image:tag@sha256:...", image)
+	}
+	return nil
+}
+
+// resolvedImageTagShouldBe asserts the tag remains readable next to the digest.
+func (tc *TestContext) resolvedImageTagShouldBe(expected string) error {
+	image, ok := tc.Config["resolved_image"].(string)
+	if !ok || image == "" {
+		return fmt.Errorf("no preset was resolved")
+	}
+	ref, _, _ := strings.Cut(image, "@")
+	_, tag, found := strings.Cut(ref, ":")
+	if !found {
+		return fmt.Errorf("image %q carries no tag", image)
+	}
+	if tag != expected {
+		return fmt.Errorf("expected tag %q, got %q (image %q)", expected, tag, image)
+	}
+	return nil
+}
+
+// presetsShouldResolveSameImage asserts that presets sharing an image share its
+// digest too — otherwise "pinned" would mean two different things depending on
+// which preset you ran.
+func (tc *TestContext) presetsShouldResolveSameImage(first, second string) error {
+	firstPreset, err := presets.Get(first)
+	if err != nil {
+		return fmt.Errorf("failed to resolve preset %q: %w", first, err)
+	}
+	secondPreset, err := presets.Get(second)
+	if err != nil {
+		return fmt.Errorf("failed to resolve preset %q: %w", second, err)
+	}
+	if firstPreset.Image != secondPreset.Image {
+		return fmt.Errorf("preset %q uses %q but preset %q uses %q",
+			first, firstPreset.Image, second, secondPreset.Image)
+	}
+	return nil
 }
 
 // resolvePresetWithOption merges a single user option override into a built-in
@@ -55,7 +114,9 @@ func (tc *TestContext) resolvePreset(presetName string, overrides map[string]any
 	if err != nil {
 		return fmt.Errorf("failed to resolve preset %q: %w", presetName, err)
 	}
-	tc.Config["resolved_command"] = preset.MergeWith(overrides).Command
+	merged := preset.MergeWith(overrides)
+	tc.Config["resolved_command"] = merged.Command
+	tc.Config["resolved_image"] = merged.Image
 	return nil
 }
 

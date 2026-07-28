@@ -167,9 +167,9 @@ This governs how the **built-in preset catalogue** is pinned and updated. It is 
 
 So there are two delays, and database freshness only addresses the first:
 
-| Delay | Duration | Addressed by |
-| ----- | -------- | ------------ |
-| CVE published → scanner knows it | hours | database refresh |
+| Delay                                           | Duration      | Addressed by       |
+| ----------------------------------------------- | ------------- | ------------------ |
+| CVE published → scanner knows it                | hours         | database refresh   |
 | Malicious code published → someone discovers it | days to weeks | the cooldown below |
 
 ### The three rules

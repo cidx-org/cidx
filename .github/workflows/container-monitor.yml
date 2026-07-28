@@ -198,7 +198,11 @@ jobs:
 
             echo "Promoting: $CURRENT → $NEW (used by: $PRESETS)"
 
-            # Update presets.toml
+            # Update presets.toml. `scan_image` is already digest-pinned
+            # (image:tag@sha256:..., issue #242) — cidx preset scan-targets
+            # resolves the candidate's digest and reports an error instead of
+            # an update when it cannot, so a promotion can never write back a
+            # mutable tag. The "Test build" step below re-checks the invariant.
             sed -i "s|image = \"$CURRENT\"|image = \"$NEW\"|g" pkg/presets/presets.toml
 
             echo "- **$CURRENT** → **$NEW** (presets: $PRESETS)" >> $GITHUB_STEP_SUMMARY
@@ -220,6 +224,10 @@ jobs:
             git diff pkg/presets/presets.toml
           fi
 
+      # go test ./pkg/... includes TestCatalogueImagesArePinnedByDigest, the
+      # standing guard for rule 1 of the image supply-chain policy: if a
+      # promotion ever wrote a bare tag back into presets.toml, this fails and
+      # no PR is opened.
       - name: Test build
         if: steps.promote.outputs.has_changes == 'true'
         run: |

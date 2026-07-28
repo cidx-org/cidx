@@ -214,7 +214,7 @@ cidx run ci                           # Full local CI
 "toolname": {
     Name:    "toolname",
     Phase:   "security",  // security, code, test, build, docker, release
-    Image:   "org/image:tag",
+    Image:   "org/image:tag@sha256:...",
     Command: "tool scan .",
     Workdir: "/scan",
     Volumes: []string{"${WORKSPACE}:/scan"},
@@ -222,6 +222,8 @@ cidx run ci                           # Full local CI
 ```
 
 Rules: use official images (prefer DHI), defaults must work without overrides, test with `cidx run toolname --dry-run`.
+
+Catalogue images are **pinned by digest** (`image:tag@sha256:...`) — rule 1 of the [image supply-chain policy](docs/core-concepts/security.md#image-supply-chain-policy), issue #242. Resolve the multi-arch index digest with `docker buildx imagetools inspect --format '{{.Manifest.Digest}}' <image:tag>`; `TestCatalogueImagesArePinnedByDigest` fails on a preset added without one.
 
 ## Configuration
 
