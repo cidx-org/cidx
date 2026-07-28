@@ -154,6 +154,38 @@ cidx run release
 4. **Flexible**: Override behaviors when necessary
 5. **Secure**: Prevents accidental production publishes from local
 
+## Image Supply-Chain Policy
+
+This governs how the **built-in preset catalogue** is pinned and updated. It is not imposed on projects using CIDX — you pin whatever you want in your own `cidx.toml`.
+
+### Why scanning is not enough
+
+`container-monitor.yml` scans every candidate image with Trivy and Grype, and both refresh their databases on each run. That covers known vulnerabilities well. It does not cover a compromised image, for two reasons:
+
+- **A CVE exists only once someone has found the flaw.** A deliberately backdoored image has no CVE until the world notices. In the xz-utils case the backdoor landed in February 2024 and was found on 29 March — for six weeks a perfectly current scanner reported green, because there was nothing yet to know.
+- **Neither scanner does behavioural analysis.** They match an inventory of installed packages against CVE lists. A modified entrypoint, an added `curl | sh`, a binary swapped at an unchanged version — none of it registers, ever.
+
+So there are two delays, and database freshness only addresses the first:
+
+| Delay | Duration | Addressed by |
+| ----- | -------- | ------------ |
+| CVE published → scanner knows it | hours | database refresh |
+| Malicious code published → someone discovers it | days to weeks | the cooldown below |
+
+### The three rules
+
+**1. Pin by digest.** Every catalogue image is written `image:tag@sha256:...`. The tag stays readable; the digest makes the reference immutable. A tag alone is mutable — `commitizen:4.15.1` can point at different content tomorrow with nothing in `presets.toml` changing. This is the quietest vector, and no version-based rule catches it.
+
+**2. Wait 14 days.** A newly published version is not promoted until it has been publicly available for 14 days, comfortably past the usual detection window for a compromise (24–72h). The monitor runs weekly, so this is roughly two cycles.
+
+Why not "always stay one version behind"? An attacker publishing twice in a row defeats it, and on a project that ships twice a year it would strand the catalogue on months-old CVEs. Age is measurable and independent of upstream's release cadence; lagging a version or two falls out of it naturally when upstream ships often.
+
+**3. Waive the wait for a real fix.** When a new version fixes a vulnerability that actually affects us, it is promoted immediately — deliberately running a known-vulnerable image to guard against a hypothetical one is the worse trade. The waiver is stated in the promotion PR: which CVE, affecting which image, fixed by which version.
+
+### What this costs
+
+Security fixes reach the catalogue up to two weeks later than upstream publishes them, unless rule 3 applies. That is the deliberate price of rule 2. If that lag ever hurts more than it helps, the honest fix is to shorten the window — not to quietly bypass it.
+
 ## Future Enhancements
 
 - Override flags: `--force-production`, `--force-dry-run`
