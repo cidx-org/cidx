@@ -257,8 +257,8 @@ This allows seamless transition between development and production.
 ### Step 1: Edit presets.toml
 
 Catalogue images are pinned `image:tag@sha256:...` — the tag stays readable, the
-digest makes the reference immutable. See [rule 1 of the image supply-chain
-policy](../core-concepts/security.md#image-supply-chain-policy) for why, and
+digest makes the reference immutable. See [rule 1 of the supply-chain
+policy](../core-concepts/security.md#supply-chain-policy) for why, and
 issue #242 for the decision record. `TestCatalogueImagesArePinnedByDigest`
 rejects a preset added without a digest.
 
