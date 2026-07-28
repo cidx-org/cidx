@@ -124,7 +124,7 @@ func readScanTargets(path string) ([]scanTarget, error) {
 // nothing to report twice. That is the order of the two gates — cooldown first,
 // scan second — and it is the pipeline that enforces it.
 //
-// A candidate whose scan results are missing or unreadable is held. Same
+// A candidate no scanner produced a readable result for is held. Same
 // fail-closed posture as an unresolvable digest (rule 1) and an undatable
 // version (rule 2): a promotion is never taken on an assumption.
 func buildPromotionVerdicts(targets []scanTarget, resultsDir string, accepted map[string][]string) []promotionVerdict {

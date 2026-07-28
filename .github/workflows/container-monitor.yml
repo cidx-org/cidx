@@ -252,7 +252,12 @@ jobs:
 
       # The findings every scan job kept. Without them no candidate can be shown
       # to be safe, and the verdict below holds all of them — fail-closed.
+      #
+      # continue-on-error covers the case where every scan job died and there is
+      # nothing to download: those jobs already turned the run red, and failing
+      # here on top would only cost the report of what was held and why.
       - name: Download scan results
+        continue-on-error: true
         uses: actions/download-artifact@v8
         with:
           path: scan-results
