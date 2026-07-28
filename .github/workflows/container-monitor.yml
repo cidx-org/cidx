@@ -29,10 +29,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
 
@@ -42,7 +42,7 @@ jobs:
       # dhi.io answers no anonymous token, so its tag listings and its manifest
       # lookups need the same login the scan jobs perform (#245).
       - name: Login to Docker Hardened Images
-        uses: docker/login-action@v4
+        uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
         with:
           registry: dhi.io
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -137,7 +137,7 @@ jobs:
 
     steps:
       - name: Login to Docker Hardened Images
-        uses: docker/login-action@v4
+        uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
         with:
           registry: dhi.io
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -171,7 +171,7 @@ jobs:
           echo "Trivy $IMAGE: $COUNT HIGH/CRITICAL finding(s) recorded for the promotion verdict"
 
       - name: Upload results
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: trivy-scan-${{ strategy.job-index }}
           path: results/
@@ -189,7 +189,7 @@ jobs:
 
     steps:
       - name: Login to Docker Hardened Images
-        uses: docker/login-action@v4
+        uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
         with:
           registry: dhi.io
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -215,7 +215,7 @@ jobs:
           echo "Grype $IMAGE: $COUNT HIGH/CRITICAL finding(s) recorded for the promotion verdict"
 
       - name: Upload results
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: grype-scan-${{ strategy.job-index }}
           path: results/
@@ -240,10 +240,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
 
@@ -258,7 +258,7 @@ jobs:
       # here on top would only cost the report of what was held and why.
       - name: Download scan results
         continue-on-error: true
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: scan-results
           pattern: "*-scan-*"
@@ -389,7 +389,7 @@ jobs:
 
       - name: Create Pull Request
         if: steps.promote.outputs.has_changes == 'true' && !inputs.dry_run
-        uses: peter-evans/create-pull-request@v8
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore(deps): update container images to ${{ steps.bump.outputs.new_version }}"

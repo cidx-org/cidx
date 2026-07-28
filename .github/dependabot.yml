@@ -11,6 +11,14 @@ updates:
       prefix: "chore(deps)"
     labels:
       - dependencies
+    # Supply-chain policy rule 2 (#242, #249): 14 days between publication and adoption.
+    # The Go checksum database already makes a *published* version immutable, so the
+    # moving-reference problem does not apply here — go.sum pins content. What it does
+    # not cover is a malicious *new* version, which lands like any other release; that
+    # is the delay this cooldown buys. gomod also supports semver-*-days, deliberately
+    # unused: the policy is one number, not a tariff schedule.
+    cooldown:
+      default-days: 14
     # Auto-merge patch updates, review minor/major
     groups:
       patch-updates:
@@ -31,3 +39,9 @@ updates:
     labels:
       - dependencies
       - ci
+    # Actions run on our runners with the repository token in scope, and are pinned by
+    # SHA in .github/workflows — the same posture as a digest-pinned image. The wait is
+    # what stops a fresh release being adopted the day it lands. The github-actions
+    # ecosystem supports default-days only; semver-*-days is not available for it.
+    cooldown:
+      default-days: 14

@@ -154,9 +154,14 @@ cidx run release
 4. **Flexible**: Override behaviors when necessary
 5. **Secure**: Prevents accidental production publishes from local
 
-## Image Supply-Chain Policy
+## Supply-Chain Policy
 
-This governs how the **built-in preset catalogue** is pinned and updated. It is not imposed on projects using CIDX — you pin whatever you want in your own `cidx.toml`.
+This governs how the third-party artefacts CIDX itself depends on are pinned and updated. There are two classes, and the same three rules apply to both:
+
+- **The built-in preset catalogue** — the container images CIDX runs. Everything up to [What this costs](#what-this-costs).
+- **This repository's own CI** — the GitHub Actions its workflows call, and its Go modules. See [The same rules, applied to GitHub Actions](#the-same-rules-applied-to-github-actions).
+
+Neither is imposed on projects using CIDX. You pin whatever you want in your own `cidx.toml`, and the workflows `cidx generate github` writes for you are yours to harden or not — per guardrail 5, CIDX is an execution engine, not a governance framework.
 
 ### Why scanning is not enough
 
@@ -254,6 +259,37 @@ Both scanners' JSON is parsed, so a finding only one of them knows about still h
 ### What this costs
 
 Security fixes reach the catalogue up to two weeks later than upstream publishes them, unless rule 3 applies. That is the deliberate price of rule 2. If that lag ever hurts more than it helps, the honest fix is to shorten the window — not to quietly bypass it.
+
+### The same rules, applied to GitHub Actions
+
+A third-party action is the same class of risk as a third-party image, and for a while it got none of the same treatment (#249). It executes on our runners with the repository token in scope — `actions/checkout` handles that token directly — and `actions/checkout@v6` is a **moving reference**: it resolves to whatever the maintainers last pushed to that tag, which is exactly the mutability rule 1 removed from images.
+
+**Rule 1 — pin by SHA.** Every `uses:` in `.github/workflows/` is written `org/action@<full-commit-sha> # vX.Y.Z`. The 40-character commit SHA is the digest equivalent: immutable, and unlike a tag it cannot be repointed. The trailing comment keeps the reference readable and is not decoration — Dependabot parses it, and keeps proposing updates in the same form. A short SHA is not enough; the full one is what GitHub's own hardening guidance asks for.
+
+Resolving the SHA means dereferencing the tag, because some publishers use annotated tags whose ref points at a tag object rather than a commit:
+
+```bash
+gh api repos/OWNER/REPO/git/ref/tags/TAG --jq '.object.type + " " + .object.sha'
+# if the type is "tag", the commit is one hop further:
+gh api repos/OWNER/REPO/git/tags/SHA --jq '.object.sha'
+```
+
+The comment must carry the **precise** version the SHA is, not the major tag that happened to point at it — `# v6.1.0`, never `# v6`. A comment saying `v6` would be true forever and therefore say nothing.
+
+**Rule 2 — wait 14 days.** Pinning by SHA freezes the reference but says nothing about when to move it, and Dependabot's default is to open the bump the day a version lands. `.github/dependabot.yml` sets the wait in the tool rather than in whoever reviews the pull request:
+
+```yaml
+cooldown:
+  default-days: 14
+```
+
+`github-actions` supports `default-days` only; the `semver-major-days` / `semver-minor-days` / `semver-patch-days` keys exist for SemVer ecosystems and are deliberately unused for `gomod` too. The policy is one number. (Dependabot applies a 3-day cooldown of its own when the option is absent — enough to show the mechanism is the right one, nowhere near the window rule 2 asks for, and worth stating explicitly rather than inheriting.)
+
+**Rule 3 — waive the wait for a real fix.** This one needs no configuration: `cooldown` governs *version* updates only. A Dependabot **security** update is exempt by construction, so a version that fixes a vulnerability affecting us still arrives immediately. The mechanism differs from the catalogue's — there the waiver is a human line in the promotion PR — but the outcome is rule 3 either way.
+
+**Why `gomod` gets rule 2 but not rule 1.** The Go checksum database already makes a published version immutable: `go.sum` records the content hash, and a republished `v1.2.3` fails verification instead of quietly substituting itself. Rule 1's problem does not exist there. What sumdb guarantees is that everyone gets the *same* bytes — not that those bytes are benign, so a maliciously published *new* version lands like any other release. That is the delay rule 2 buys, and why the cooldown applies to `gomod` as well.
+
+**Scope, again.** This covers this repository's workflows. `pkg/generate/github.go` still emits major tags in the workflows it generates for other projects, on purpose: pinning by SHA is a policy, and shipping it in generated output would make CIDX impose one on its users. Whether that trade is worth making is a separate decision, not a consequence of this one.
 
 ## Future Enhancements
 
