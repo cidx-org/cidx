@@ -146,7 +146,7 @@ func TestRefWithoutDigest(t *testing.T) {
 // version to compare, and reporting that is better than querying the registry
 // for an empty string.
 func TestGetLatestTagRejectsDigestOnlyReference(t *testing.T) {
-	if _, err := getLatestTag("tmknom/prettier", ""); err == nil {
+	if _, _, err := getLatestTag("tmknom/prettier", ""); err == nil {
 		t.Fatal("getLatestTag with an empty tag should fail, got nil error")
 	}
 }
