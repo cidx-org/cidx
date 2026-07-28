@@ -2,6 +2,7 @@ package presets
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -103,6 +104,99 @@ func EvaluatePromotion(published, now time.Time, affectingUs []string) Promotion
 	return PromotionDecision{
 		Reason: fmt.Sprintf("held: no publication date available, so the %d-day cooldown cannot be shown to have elapsed", cooldownDays),
 	}
+}
+
+// ScanDecision is the verdict on what the monitor's scanners found on one
+// candidate, in the words the workflow summary and the promotion PR print
+// verbatim.
+type ScanDecision struct {
+	// Promote reports whether the findings leave the candidate promotable.
+	Promote bool
+
+	// Reason states why — for a pass as much as for a hold. A candidate the
+	// scan gate holds has to say so somewhere, or the promotion silently
+	// swallows it, which is the failure mode #247 was about in the first place.
+	Reason string
+
+	// Introduces names the findings that blocked the promotion: on the
+	// candidate, on neither the running image's record nor the candidate's own,
+	// and therefore new. Empty on a pass, so a promotion never implies findings
+	// it does not have.
+	Introduces []string
+}
+
+// EvaluateScan decides whether what the scanners found on a candidate blocks
+// its promotion.
+//
+// found are the HIGH/CRITICAL vulnerabilities the monitor's scanners reported
+// against the candidate. accepted are the ones already on record for the image
+// the catalogue runs today and for the candidate's own reference
+// (known-vulnerabilities.toml, the file the security audit maintains).
+//
+// The verdict is differential on purpose. Several catalogue images are
+// knowingly vulnerable — that is exactly what known-vulnerabilities.toml
+// records — so "the candidate has findings" would hold every one of them for
+// ever, and a gate that never passes is worth as little as the one that never
+// failed (#247). What blocks a promotion is a finding that is *new*: reported
+// on the candidate, not already accepted on what we run today.
+//
+// It follows that a candidate carrying the same vulnerabilities as the running
+// image is promotable. It is not a regression, and refusing it would strand the
+// catalogue on an older image over a finding the candidate merely inherited —
+// while the update it carries goes unapplied.
+//
+// Comparison is case-insensitive: Trivy spells severities and identifiers in
+// upper case, Grype does not, and the same CVE reported by both must count once.
+func EvaluateScan(found, accepted []string) ScanDecision {
+	onRecord := make(map[string]bool, len(accepted))
+	for _, id := range accepted {
+		onRecord[strings.ToUpper(id)] = true
+	}
+
+	var introduces []string
+	distinct := make(map[string]bool, len(found))
+	for _, id := range found {
+		key := strings.ToUpper(id)
+		if distinct[key] {
+			continue
+		}
+		distinct[key] = true
+		if !onRecord[key] {
+			introduces = append(introduces, id)
+		}
+	}
+	sort.Strings(introduces)
+
+	if len(introduces) == 0 {
+		return ScanDecision{Promote: true, Reason: scanPassReason(len(distinct))}
+	}
+
+	return ScanDecision{
+		Reason: fmt.Sprintf("held: introduces %s, %s not accepted for the image we run today",
+			strings.Join(introduces, ", "), isAre(len(introduces))),
+		Introduces: introduces,
+	}
+}
+
+// scanPassReason distinguishes the two ways a candidate clears the gate, because
+// they are not the same news: nothing was found, or everything found was already
+// on our own record.
+//
+// Which scanners were consulted is deliberately not stated here — this function
+// weighs findings and does not know where they came from. The caller appends the
+// provenance, so a verdict never implies a scanner that did not run.
+func scanPassReason(found int) string {
+	if found == 0 {
+		return "no HIGH/CRITICAL finding reported"
+	}
+	return fmt.Sprintf("%d HIGH/CRITICAL finding(s), all already accepted for the image we run today", found)
+}
+
+func isAre(n int) string {
+	if n == 1 {
+		return "which is"
+	}
+	return "which are"
 }
 
 // waiverReason spells out rule 3 the way the promotion PR has to state it:

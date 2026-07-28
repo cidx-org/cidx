@@ -184,7 +184,7 @@ Why not "always stay one version behind"? An attacker publishing twice in a row 
 
 ### How the rules are applied
 
-`cidx preset scan-targets` decides, per image, what `container-monitor.yml` scans and what it may promote. The workflow only reads that verdict — the policy lives in code, where it is testable, rather than in shell scattered across a YAML file.
+`cidx preset scan-targets` decides, per image, what `container-monitor.yml` scans and which candidates are old enough to consider; `cidx preset scan-verdicts` then decides which of them the scan results allow. The workflow only reads those verdicts — the policy lives in code, where it is testable, rather than in shell scattered across a YAML file.
 
 **Where the age comes from.** The cooldown is measured against the date the registry reports for the candidate tag, taken from the same call that finds the tag, so it costs no extra request:
 
@@ -224,6 +224,32 @@ Rule 1 makes a reference immutable; it does not make it eternal. Two catalogue i
 **How rule 3 knows what affects us.** `known-vulnerabilities.toml` already records the HIGH/CRITICAL findings accepted against the images the catalogue runs today — that is the list of vulnerabilities demonstrably affecting us, produced by the security audit. A candidate replacing an image with entries in that file is promoted without waiting, and the promotion PR names them. No second scan is run to obtain this: the current image's vulnerabilities are on file, and the monitor already scans the candidate.
 
 A candidate that has served the full 14 days claims no waiver, even when the running image is vulnerable — a waiver line in the PR means the cooldown was actually bypassed, or the record stops being worth reading.
+
+### The scan gate is differential
+
+The cooldown decides whether a version is old enough to consider. What the scanners find on it decides whether it may actually replace the running image — and for a long time it decided nothing at all. Every scan step wrapped `docker run` in an `if … then … else …`, so a vulnerable image exited 0 and the job succeeded; the promote job read `needs.trivy-scan.result`, which was `success` by construction. The promotion PR claimed a check that had never run (#247).
+
+Making the job fail on any HIGH/CRITICAL is not the fix. Several catalogue images are knowingly vulnerable — that is precisely what `known-vulnerabilities.toml` records — so a fail-hard gate would leave the monitor permanently red, and a gate that is always red is ignored exactly like one that is always green.
+
+The verdict is therefore **per candidate** and **differential**:
+
+```
+held  ⟺  the scanners report a HIGH/CRITICAL finding on the candidate
+         that is accepted neither for the image we run today
+         nor for the candidate's own reference
+```
+
+A candidate carrying the same vulnerabilities as the running image is not a regression: those findings are already on file, they subtract out, and the update ships. What blocks a promotion is a finding that is **new**. `known-vulnerabilities.toml` is what makes the comparison possible without a second scan — `security-audit.yml` fails daily on any HIGH/CRITICAL that is not on file, so that record _is_ the status of the pinned image.
+
+**Two cumulative gates, in this order.** The cooldown runs first, in `cidx preset scan-targets`: only a candidate it clears becomes the image the monitor scans. The scan gate then judges what came back, in `cidx preset scan-verdicts`. Both must pass, and rule 3's waiver applies to the cooldown alone — a candidate promoted early because it fixes a CVE affecting us is still held if it brings a different one along.
+
+**Fail-closed, again.** A candidate that neither scanner produced a readable result for is held. An empty scanner output — what a failed pull leaves behind — parses as no JSON at all rather than as a clean image.
+
+One scanner missing is not fatal: the other's findings are real evidence, and holding every promotion because a registry login flaked would rebuild the stuck gate this replaced. What the verdict must not do is imply a scan that never happened, so it names the scanners it actually read (`scanned by Trivy and Grype`, or just one of them). For the same reason the promote job runs even when a scan job failed — a lost matrix leg holds its own candidate, not everyone else's.
+
+**A held candidate is information, not a failure.** It is annotated on the run and listed in the summary under *Held by the scan gate*, and the monitor stays green. Red is reserved for what is actually broken — a catalogue image deleted upstream (#245) — so that signal keeps meaning something. The candidate returns next week, with the current pinned image still scanned and still running in the meantime.
+
+Both scanners' JSON is parsed, so a finding only one of them knows about still holds the candidate; running two scanners buys nothing otherwise. Severity filtering happens in code because Grype reports every severity whatever `--fail-on` says.
 
 ### What this costs
 

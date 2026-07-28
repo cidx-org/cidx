@@ -1,5 +1,15 @@
 ## [Unreleased]
 
+### Fix
+
+- **monitor**: gate promotion on the vulnerabilities a candidate actually introduces (#247)
+
+  Every scan step in `container-monitor.yml` wrapped `docker run` in an `if … then … else …`, so a vulnerable image exited 0 and the job always succeeded. `needs.trivy-scan.result` was therefore `success` by construction, and the promote job promoted whatever the cooldown had cleared — while the promotion PR claimed the images had passed a HIGH/CRITICAL check that never ran.
+
+  Failing the job on any finding was not an option: several catalogue images are knowingly vulnerable, which is what `known-vulnerabilities.toml` records, and a permanently red monitor is ignored exactly like a permanently green one. The verdict is now per candidate and differential — `cidx preset scan-verdicts` holds a candidate only for a HIGH/CRITICAL finding accepted neither for the image it replaces nor for its own reference. A candidate carrying the same vulnerabilities as the running image is not a regression and still ships.
+
+  The two gates are cumulative and ordered: the cooldown (#246) decides what gets scanned as a candidate, the scan gate decides what gets promoted. A cooldown waiver does not excuse a new finding. Missing or unreadable scan results hold the candidate, and a held candidate is annotated and reported rather than failing the run.
+
 ### Feat
 
 - **presets**: detect image updates on the OCI registries, and report a catalogue image deleted upstream (#245)

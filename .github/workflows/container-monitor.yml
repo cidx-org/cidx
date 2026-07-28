@@ -143,25 +143,39 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      # The scan reports; it does not judge. It deliberately exits 0 on a
+      # finding, because several catalogue images are knowingly vulnerable
+      # (known-vulnerabilities.toml) and failing here would leave the monitor
+      # permanently red. What used to be wrong is that nothing judged
+      # afterwards: the promote job read needs.trivy-scan.result, which is
+      # `success` by construction (#247). The findings are now kept, and the
+      # promote job turns them into a per-candidate verdict.
       - name: Scan with Trivy
-        id: scan
         run: |
           IMAGE="${{ matrix.image }}"
           echo "Scanning: $IMAGE"
+          mkdir -p results
 
-          if docker run --rm aquasec/trivy:latest image \
+          # The file name is the whole contract with `cidx preset
+          # scan-verdicts`; TestScanResultFileMatchesTheWorkflowConvention pins
+          # this transform. stdout only: stderr would corrupt the JSON, and a
+          # corrupt result holds the candidate rather than reading as clean.
+          OUT="results/trivy-$(echo "$IMAGE" | tr '/:@' '___').json"
+          docker run --rm aquasec/trivy:latest image \
             --severity HIGH,CRITICAL \
-            --exit-code 1 \
             --quiet \
-            "$IMAGE" 2>&1; then
-            echo "status=clean" >> $GITHUB_OUTPUT
-          else
-            echo "status=vulnerable" >> $GITHUB_OUTPUT
-          fi
+            --format json \
+            "$IMAGE" > "$OUT" || true
 
-      - name: Report
-        run: |
-          echo "Trivy ${{ matrix.image }}: ${{ steps.scan.outputs.status }}"
+          COUNT=$(jq '[.Results[]?.Vulnerabilities[]?] | length' "$OUT" 2>/dev/null || echo "unreadable")
+          echo "Trivy $IMAGE: $COUNT HIGH/CRITICAL finding(s) recorded for the promotion verdict"
+
+      - name: Upload results
+        uses: actions/upload-artifact@v7
+        with:
+          name: trivy-scan-${{ strategy.job-index }}
+          path: results/
+          retention-days: 1
 
   # Job 3: Grype scan (parallel matrix)
   grype-scan:
@@ -181,30 +195,47 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      # Same posture as the Trivy job: report the findings, leave the verdict to
+      # the promote job (#247).
       - name: Scan with Grype
-        id: scan
         run: |
           IMAGE="${{ matrix.image }}"
           echo "Scanning: $IMAGE"
+          mkdir -p results
 
-          if docker run --rm anchore/grype:latest \
+          OUT="results/grype-$(echo "$IMAGE" | tr '/:@' '___').json"
+          docker run --rm anchore/grype:latest \
             "$IMAGE" \
-            --fail-on high \
-            --quiet 2>&1; then
-            echo "status=clean" >> $GITHUB_OUTPUT
-          else
-            echo "status=vulnerable" >> $GITHUB_OUTPUT
-          fi
+            --quiet \
+            -o json > "$OUT" || true
 
-      - name: Report
-        run: |
-          echo "Grype ${{ matrix.image }}: ${{ steps.scan.outputs.status }}"
+          # Grype reports every severity whatever --fail-on says, so the count
+          # here is filtered the same way the verdict filters it.
+          COUNT=$(jq '[.matches[]? | select(.vulnerability.severity | ascii_upcase | IN("HIGH","CRITICAL"))] | length' "$OUT" 2>/dev/null || echo "unreadable")
+          echo "Grype $IMAGE: $COUNT HIGH/CRITICAL finding(s) recorded for the promotion verdict"
+
+      - name: Upload results
+        uses: actions/upload-artifact@v7
+        with:
+          name: grype-scan-${{ strategy.job-index }}
+          path: results/
+          retention-days: 1
 
   # Job 4: Promote updates that passed scans
   promote:
     name: Promote Updates
     needs: [get-scan-targets, trivy-scan, grype-scan]
-    if: needs.get-scan-targets.outputs.has_updates == 'true'
+    # Runs even when a scan job failed, because the verdict is per candidate:
+    # the very first end-to-end run of this gate lost one Trivy leg to a flaky
+    # registry login, and letting that skip the whole job would block every
+    # unrelated promotion — the coarse, always-stuck gate #247 replaced. A
+    # candidate whose results are missing is held on its own; the others are
+    # judged on the evidence that does exist, and the verdict names the scanners
+    # it actually read.
+    if: >-
+      !cancelled()
+      && needs.get-scan-targets.result == 'success'
+      && needs.get-scan-targets.outputs.has_updates == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -219,48 +250,55 @@ jobs:
       - name: Build CIDX
         run: go build -o bin/cidx ./cmd/cidx
 
+      # The findings every scan job kept. Without them no candidate can be shown
+      # to be safe, and the verdict below holds all of them — fail-closed.
+      #
+      # continue-on-error covers the case where every scan job died and there is
+      # nothing to download: those jobs already turned the run red, and failing
+      # here on top would only cost the report of what was held and why.
+      - name: Download scan results
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          path: scan-results
+          pattern: "*-scan-*"
+          merge-multiple: true
+
       - name: Check scan results and promote
         id: promote
         env:
-          TRIVY_RESULT: ${{ needs.trivy-scan.result }}
-          GRYPE_RESULT: ${{ needs.grype-scan.result }}
           TARGETS_JSON: ${{ needs.get-scan-targets.outputs.targets }}
         run: |
           echo "## Promotion Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          echo "Trivy overall: $TRIVY_RESULT"
-          echo "Grype overall: $GRYPE_RESULT"
+          # The scan gate, per candidate and differential: what the scanners
+          # found on the candidate, minus what is already accepted for the image
+          # we run today (#247). The decision lives in Go, where it is tested —
+          # this step only reads the verdict, as the cooldown did in #242.
+          VERDICTS=$(echo "$TARGETS_JSON" | ./bin/cidx preset scan-verdicts --results scan-results)
+          echo "$VERDICTS" | jq -r '.[] | "\(.new_image): promote=\(.promote) — \(.reason)"'
 
-          # Only promote if both scanners passed
-          if [ "$TRIVY_RESULT" != "success" ] || [ "$GRYPE_RESULT" != "success" ]; then
-            echo "Some scans failed - promoting only images that passed"
-            echo "**Warning**: Some security scans failed. Only safe images will be promoted." >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-          fi
+          # Only candidates that cleared both gates: the cooldown and its CVE
+          # exception in `cidx preset scan-targets` (#242), then the scan gate
+          # above.
+          echo "$VERDICTS" | jq -c '.[] | select(.promote == true)' | while read -r verdict; do
+            CURRENT=$(echo "$verdict" | jq -r '.current_image')
+            NEW=$(echo "$verdict" | jq -r '.new_image')
+            PRESETS=$(echo "$verdict" | jq -r '.presets | join(", ")')
+            POLICY=$(echo "$verdict" | jq -r '.policy_reason // "no policy verdict"')
+            SCAN=$(echo "$verdict" | jq -r '.reason')
 
-          PROMOTED=0
-          SKIPPED=0
+            echo "Promoting: $CURRENT → $NEW (used by: $PRESETS) — $POLICY; $SCAN"
 
-          # Process each target with is_update=true. cidx preset scan-targets
-          # has already applied the 14-day cooldown and its CVE exception
-          # (#242): anything still marked is_update is cleared for promotion.
-          echo "$TARGETS_JSON" | jq -c '.[] | select(.is_update == true)' | while read -r target; do
-            CURRENT=$(echo "$target" | jq -r '.current_image')
-            NEW=$(echo "$target" | jq -r '.scan_image')
-            PRESETS=$(echo "$target" | jq -r '.presets | join(", ")')
-            REASON=$(echo "$target" | jq -r '.policy_reason // "no policy verdict"')
-
-            echo "Promoting: $CURRENT → $NEW (used by: $PRESETS) — $REASON"
-
-            # Update presets.toml. `scan_image` is already digest-pinned
+            # Update presets.toml. `new_image` is already digest-pinned
             # (image:tag@sha256:..., issue #242) — cidx preset scan-targets
             # resolves the candidate's digest and reports an error instead of
             # an update when it cannot, so a promotion can never write back a
             # mutable tag. The "Test build" step below re-checks the invariant.
             sed -i "s|image = \"$CURRENT\"|image = \"$NEW\"|g" pkg/presets/presets.toml
 
-            echo "- **$CURRENT** → **$NEW** (presets: $PRESETS) — $REASON" >> $GITHUB_STEP_SUMMARY
+            echo "- **$CURRENT** → **$NEW** (presets: $PRESETS) — $POLICY; $SCAN" >> $GITHUB_STEP_SUMMARY
             echo $(($(cat /tmp/promoted_count 2>/dev/null || echo 0) + 1)) > /tmp/promoted_count
           done
 
@@ -269,9 +307,35 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Total promoted: $PROMOTED**" >> $GITHUB_STEP_SUMMARY
 
+          # A candidate the scan gate holds is information, not a broken
+          # workflow: it is annotated and reported, and the run stays green. Red
+          # is kept for what is actually broken — a catalogue image that no
+          # longer exists (#245) — so it keeps meaning something.
+          HELD=$(echo "$VERDICTS" | jq -r '.[] | select(.promote == false) | "- `\(.current_image)` → `\(.new_image)` — \(.reason)"')
+          if [ -n "$HELD" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Held by the scan gate" >> $GITHUB_STEP_SUMMARY
+            echo "$HELD" >> $GITHUB_STEP_SUMMARY
+            echo "$VERDICTS" | jq -r '.[] | select(.promote == false) | "::warning::promotion held: \(.new_image) — \(.reason)"'
+          fi
+
+          # What the promotion PR may claim about security, stated per image
+          # rather than as an overall job result that was always `success`.
+          CLEARED=$(echo "$VERDICTS" | jq -r '.[] | select(.promote == true) | "- `\(.new_image)` — \(.reason)"')
+          if [ -z "$CLEARED" ]; then
+            CLEARED="_None._"
+          fi
+          {
+            echo "scan_report<<SCAN_EOF"
+            echo "$CLEARED"
+            echo "SCAN_EOF"
+          } >> $GITHUB_OUTPUT
+
           # Rule 3 requires the waiver to be visible in the promotion PR:
-          # which vulnerability, on which image, fixed by which version.
-          WAIVERS=$(echo "$TARGETS_JSON" | jq -r '.[] | select(.is_update == true and .cve_waiver != null) | "- `\(.current_image)` is affected by \(.cve_waiver | join(", ")) — promoted to `\(.scan_image)` without waiting out the cooldown"')
+          # which vulnerability, on which image, fixed by which version. Only
+          # for candidates actually promoted — a waiver claimed for a candidate
+          # the scan gate then held would be a claim about nothing.
+          WAIVERS=$(echo "$VERDICTS" | jq -r '.[] | select(.promote == true and .cve_waiver != null) | "- `\(.current_image)` is affected by \(.cve_waiver | join(", ")) — promoted to `\(.new_image)` without waiting out the cooldown"')
           if [ -z "$WAIVERS" ]; then
             WAIVERS="_None: every promoted version served the full 14-day cooldown._"
           fi
@@ -347,12 +411,17 @@ jobs:
 
             ${{ steps.promote.outputs.waivers }}
 
-            ### Security Validation
-            - Trivy: ${{ needs.trivy-scan.result }}
-            - Grype: ${{ needs.grype-scan.result }}
+            ### Security validation (#247)
 
-            Trivy and Grype ran against every scan target; the per-image
-            verdicts are in the run log.
+            Trivy and Grype scanned every version below. Each was promoted
+            because it introduces no HIGH/CRITICAL finding beyond what is
+            already accepted for the image it replaces
+            (`known-vulnerabilities.toml`):
+
+            ${{ steps.promote.outputs.scan_report }}
+
+            Candidates that did introduce one are held back, and named in the
+            run summary under *Held by the scan gate*.
 
             See [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.
 
@@ -381,6 +450,11 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Images scanned: **${{ needs.get-scan-targets.outputs.count }}**" >> $GITHUB_STEP_SUMMARY
           echo "Updates available: **${{ needs.get-scan-targets.outputs.has_updates }}**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          # The scanner rows say the scans ran, not that the images are clean —
+          # reading them as a verdict is the mistake #247 was about. The verdicts
+          # are per candidate, in the Promotion Report above.
+          echo "The scanner rows report that the scans ran. What they found is weighed per candidate in the promotion report (#247)." >> $GITHUB_STEP_SUMMARY
 
       # A catalogue image deleted upstream breaks every preset using it, so the
       # weekly run goes red rather than reporting it in a summary nobody opens
