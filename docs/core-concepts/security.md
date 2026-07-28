@@ -188,17 +188,38 @@ Why not "always stay one version behind"? An attacker publishing twice in a row 
 
 **Where the age comes from.** The cooldown is measured against the date the registry reports for the candidate tag, taken from the same call that finds the tag, so it costs no extra request:
 
-| Registry                    | Date used                | Meaning                                              |
-| --------------------------- | ------------------------ | ---------------------------------------------------- |
-| Docker Hub                   | `last_updated` on the tag | when that tag last received content                  |
-| Quay.io                      | `start_ts` on the tag     | when that tag started pointing at its current content |
-| ghcr.io, gcr.io, dhi.io      | none                     | no candidate is detected there at all today (#245)   |
+| Registry   | Date used                 | Meaning                                               |
+| ---------- | ------------------------- | ----------------------------------------------------- |
+| Docker Hub | `last_updated` on the tag | when that tag last received content                   |
+| Quay.io    | `start_ts` on the tag     | when that tag started pointing at its current content  |
+| gcr.io     | `timeUploadedMs`          | when the registry received that tag's manifest         |
+| ghcr.io    | none                      | tags are listed, dated nowhere we can read (see below) |
+| dhi.io     | none                      | idem                                                   |
 
-Both dates restart if a tag is republished with new content, which is what the cooldown wants: new content, new wait.
+Every one of those dates restarts if a tag is republished with new content, which is what the cooldown wants: new content, new wait.
 
 The OCI distribution API itself carries no publication date. The nearest substitute is the `created` field of the image config blob, and it is deliberately **not** used: that is a _build_ date, which can precede publication by an arbitrary amount. A date that is too old would silently shorten the cooldown, which is worse than having none.
 
 **Fail-closed.** A candidate whose publication date cannot be determined is not promoted — the same posture as rule 1's unresolvable digest. It is reported in the workflow summary with the reason, not silently discarded, and the current pinned image keeps being scanned in the meantime.
+
+### Finding versions on the registries that only list tags
+
+`GET /v2/<repo>/tags/list` works on every OCI registry the catalogue pulls from, behind the same Bearer challenge as the manifest lookup, and that is how `cidx preset scan-targets` reaches gcr.io, ghcr.io and dhi.io — 9 of the 21 catalogue images, every Docker Hardened Image among them, which had no update detection at all before #245.
+
+The listing is an unordered set of names, so the newest version is worked out from the names themselves. A version qualifies only if it has the **same shape** as the tag the catalogue pins: the same `v` prefix, the same variant suffix, the same number of components. `dhi.io/golang:1.23-alpine3.21-dev` is therefore never offered a plain `1.24` — a different base image — and an image pinned `0.68` is offered `0.71` rather than `0.71.2`. Versions compare as numbers: `1.24` is newer than `1.9`, which no lexical ordering would say.
+
+**A newer version is not always a candidate.** ghcr.io and dhi.io date nothing:
+
+- ghcr.io's dates live in the GitHub Packages API, which needs a `read:packages` token and answers 403 for a package owned by another organisation.
+- dhi.io has no repository on `hub.docker.com` to ask, and its registry response carries names only.
+
+Reporting versions found there as candidates would be worse than reporting nothing: the cooldown is fail-closed, so each one would be held in every weekly run from now until someone acted on it by hand — noise that never resolves. They are reported in a state of their own instead, `newer_version` with a reason saying the registry publishes no date, and the workflow summary lists them under **Newer version, not promotable automatically**. Pinning one is a deliberate act with a human behind it.
+
+### A pinned image that vanished
+
+Rule 1 makes a reference immutable; it does not make it eternal. Two catalogue images — `dhi.io/alpine-base:3.21` and `dhi.io/docker:27-cli` — were deleted upstream and answered 404, and nothing noticed until the presets using them failed to start (#244).
+
+`cidx preset scan-targets` now resolves the exact reference each catalogue image is pinned to, digest included, and marks it `missing` when the registry says it does not exist. `container-monitor.yml` annotates the run with an error and fails its summary job, so the weekly run goes red. A 401 from a registry we hold no credentials for is reported as an unverified image, never as a deleted one — the loudest signal the command has must not cry wolf.
 
 **How rule 3 knows what affects us.** `known-vulnerabilities.toml` already records the HIGH/CRITICAL findings accepted against the images the catalogue runs today — that is the list of vulnerabilities demonstrably affecting us, produced by the security audit. A candidate replacing an image with entries in that file is promoted without waiting, and the promotion PR names them. No second scan is run to obtain this: the current image's vulnerabilities are on file, and the monitor already scans the candidate.
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -26,6 +27,17 @@ func stubRegistry(t *testing.T, latestTag string, published time.Time, tagErr er
 	resolveDigestFunc = func(image, tag string) (string, error) {
 		return "sha256:" + zeroDigest, nil
 	}
+}
+
+// stubDigestResolution replaces only the digest resolution, for the tests that
+// turn on what the registry says about a reference the catalogue already runs.
+// Apply it after stubRegistry, which sets a resolving default.
+func stubDigestResolution(t *testing.T, resolve func(image, reference string) (string, error)) {
+	t.Helper()
+
+	original := resolveDigestFunc
+	t.Cleanup(func() { resolveDigestFunc = original })
+	resolveDigestFunc = resolve
 }
 
 const testNow = "2026-07-28T09:00:00Z"
@@ -156,13 +168,130 @@ func TestBuildScanTargetsWaivesTheCooldownForAffectingCVEs(t *testing.T) {
 	}
 }
 
-// TestBuildScanTargetsKeepsCurrentImageOnLookupError: an unreachable or
-// unsupported registry yields no candidate, and the current image is what gets
-// scanned (#245 — that is 9 of 21 catalogue images today).
+// TestBuildScanTargetsReportsAnUndatableVersionRatherThanAnEternalCandidate is
+// the trap #245 had to avoid: ghcr.io and dhi.io list their tags but date none
+// of them, and the cooldown is fail-closed. Offering a candidate there would
+// hold it in every weekly run for ever, so the newer version is reported as
+// something to pin by hand instead.
+func TestBuildScanTargetsReportsAnUndatableVersionRatherThanAnEternalCandidate(t *testing.T) {
+	now := scanNow(t)
+	current := "ghcr.io/astral-sh/ruff:0.8.2@sha256:" + zeroDigest
+	stubRegistry(t, "0.16.0", time.Time{}, nil)
+
+	target := onlyTarget(t, buildScanTargets(
+		map[string][]string{current: {"ruff"}}, nil, now))
+
+	if target.NewerVersion != "0.16.0" {
+		t.Errorf("NewerVersion = %q, want 0.16.0: the version has to stay visible", target.NewerVersion)
+	}
+	if target.CandidateImage != "" {
+		t.Errorf("CandidateImage = %q, want none: an undatable version can never clear the cooldown", target.CandidateImage)
+	}
+	if target.IsUpdate || target.ScanImage != current {
+		t.Errorf("ScanImage = %q, IsUpdate = %v; want the current image and no promotion", target.ScanImage, target.IsUpdate)
+	}
+	if target.AgeDays != nil || target.PublishedAt != "" {
+		t.Error("an undatable version must claim neither an age nor a publication date")
+	}
+	if !strings.Contains(target.PolicyReason, "ghcr.io") {
+		t.Errorf("PolicyReason = %q, want it to name the registry that publishes no date", target.PolicyReason)
+	}
+
+	// container-monitor.yml selects this state with jq, so the field name is
+	// part of the contract.
+	encoded, err := json.Marshal(target)
+	if err != nil {
+		t.Fatalf("failed to encode scan target: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("failed to decode scan target: %v", err)
+	}
+	if _, ok := decoded["newer_version"]; !ok {
+		t.Error("field \"newer_version\" missing from scan-targets JSON: container-monitor.yml reads it")
+	}
+	if _, ok := decoded["candidate_image"]; ok {
+		t.Error("candidate_image is set although no promotable candidate exists")
+	}
+}
+
+// TestBuildScanTargetsFlagsAPinnedImageThatIsGone: the reference the catalogue
+// runs no longer exists. #244 found two catalogue images deleted upstream, and
+// nothing had noticed until the presets failed to start.
+func TestBuildScanTargetsFlagsAPinnedImageThatIsGone(t *testing.T) {
+	now := scanNow(t)
+	current := "dhi.io/alpine-base:3.21@sha256:" + zeroDigest
+	stubRegistry(t, "3.21", time.Time{}, nil) // nothing newer on offer
+	stubDigestResolution(t, func(image, reference string) (string, error) {
+		return "", fmt.Errorf("%s: %w", image+"@"+reference, errImageNotFound)
+	})
+
+	target := onlyTarget(t, buildScanTargets(
+		map[string][]string{current: {"test-hot-reload"}}, nil, now))
+
+	if !target.Missing {
+		t.Fatal("a pinned image the registry answers 404 for must be reported missing")
+	}
+	if !strings.Contains(target.Error, "gone") {
+		t.Errorf("Error = %q, want it to say the image is gone", target.Error)
+	}
+
+	encoded, err := json.Marshal(target)
+	if err != nil {
+		t.Fatalf("failed to encode scan target: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"missing":true`) {
+		t.Errorf("scan target JSON = %s, want a missing flag container-monitor.yml can select", encoded)
+	}
+}
+
+// TestBuildScanTargetsDoesNotCallAnUnverifiableImageMissing: a registry we hold
+// no credentials for answers 401, not 404. Calling that a deleted image would
+// make the loudest signal the command has a false alarm.
+func TestBuildScanTargetsDoesNotCallAnUnverifiableImageMissing(t *testing.T) {
+	now := scanNow(t)
+	current := "dhi.io/trivy:0.68@sha256:" + zeroDigest
+	stubRegistry(t, "0.68", time.Time{}, nil)
+	stubDigestResolution(t, func(_, _ string) (string, error) {
+		return "", fmt.Errorf("registry dhi.io returned HTTP 401")
+	})
+
+	target := onlyTarget(t, buildScanTargets(
+		map[string][]string{current: {"trivy"}}, nil, now))
+
+	if target.Missing {
+		t.Error("an unauthenticated lookup is not a deletion")
+	}
+	if target.Error == "" {
+		t.Error("the failed verification must still be reported")
+	}
+}
+
+// TestRegistryDatesTags pins which registries can serve the cooldown at all —
+// the fact the whole undatable path turns on (#245).
+func TestRegistryDatesTags(t *testing.T) {
+	tests := map[string]bool{
+		"tmknom/prettier":                true,
+		"alpine":                         true,
+		"quay.io/team/tool":              true,
+		"gcr.io/kaniko-project/executor": true,
+		"ghcr.io/astral-sh/ruff":         false,
+		"dhi.io/trivy":                   false,
+	}
+
+	for image, want := range tests {
+		if got := registryDatesTags(image); got != want {
+			t.Errorf("registryDatesTags(%q) = %v, want %v", image, got, want)
+		}
+	}
+}
+
+// TestBuildScanTargetsKeepsCurrentImageOnLookupError: an unreachable registry
+// yields no candidate, and the current image is what gets scanned.
 func TestBuildScanTargetsKeepsCurrentImageOnLookupError(t *testing.T) {
 	now := scanNow(t)
 	current := "ghcr.io/astral-sh/ruff:0.8.2@sha256:" + zeroDigest
-	stubRegistry(t, "", time.Time{}, fmt.Errorf("registry ghcr.io not supported yet"))
+	stubRegistry(t, "", time.Time{}, fmt.Errorf("registry ghcr.io returned HTTP 500 listing tags"))
 
 	target := onlyTarget(t, buildScanTargets(
 		map[string][]string{current: {"ruff"}}, nil, now))
