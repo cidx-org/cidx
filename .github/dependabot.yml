@@ -45,3 +45,5 @@ updates:
     # ecosystem supports default-days only; semver-*-days is not available for it.
     cooldown:
       default-days: 14
+    # A PR touching this file also gets GitHub's own config-validation check, posted
+    # before any workflow starts -- it is not CI, and cpw no longer treats it as such (#257).

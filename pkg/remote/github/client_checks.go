@@ -9,6 +9,16 @@ import (
 	"github.com/google/go-github/v76/github"
 )
 
+// workflowAppSlug is the GitHub App that posts the check runs of the
+// repository's own workflows. Every other app -- dependabot validating
+// .github/dependabot.yml, an external CI service -- posts checks that exist
+// without any workflow of this repository having started (issue #257).
+const workflowAppSlug = "github-actions"
+
+// checksPollInterval is how often the wait re-reads the checks of a PR.
+// Package-level so tests can drive the loop without waiting on the clock.
+var checksPollInterval = 2 * time.Second
+
 // GetPullRequestChecks returns the status of all checks/workflows for a PR
 func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remote.PRChecks, error) {
 	// Get PR details to get the head SHA
@@ -59,6 +69,9 @@ func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remot
 
 		// Count by status
 		checks.TotalCount++
+		if isWorkflowCheck(run) {
+			checks.WorkflowChecks++
+		}
 		switch run.GetStatus() {
 		case "queued":
 			checks.Queued++
@@ -115,6 +128,12 @@ func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remot
 	return checks, nil
 }
 
+// isWorkflowCheck reports whether a check run was posted by a workflow of the
+// repository, as opposed to another app that happens to check the commit.
+func isWorkflowCheck(run *github.CheckRun) bool {
+	return run.GetApp().GetSlug() == workflowAppSlug
+}
+
 // WaitForChecksToStart waits for CI checks to start for a PR
 // This solves the race condition where CI hasn't started yet when we query
 func (c *Client) WaitForChecksToStart(ctx context.Context, prNumber int, expectedSHA string, timeout time.Duration) (string, *remote.PRChecks, error) {
@@ -129,30 +148,49 @@ func (c *Client) WaitForChecksToStart(ctx context.Context, prNumber int, expecte
 		expectedSHA = pr.GetHead().GetSHA()
 	}
 
+	checks, err := waitForWorkflowCheck(ctx, expectedSHA, timeout, func(ctx context.Context) (*remote.PRChecks, error) {
+		return c.GetPullRequestChecks(ctx, prNumber)
+	})
+	return expectedSHA, checks, err
+}
+
+// getChecksFunc reads the current checks of a PR. It exists as a seam so
+// waitForWorkflowCheck can be unit-tested without a real GitHub client.
+type getChecksFunc func(ctx context.Context) (*remote.PRChecks, error)
+
+// waitForWorkflowCheck polls until a check produced by a workflow of the
+// repository appears on expectedSHA. A check posted by another app does not
+// mean CI has started -- GitHub attaches its dependabot config check to every
+// PR touching .github/dependabot.yml, long before the workflows are queued --
+// so it does not end the wait (issue #257). On timeout whatever exists is
+// returned: no checks at all means the repository has no CI, reported through
+// the error; foreign checks only come back with WorkflowChecks == 0 for the
+// caller to report them for what they are.
+func waitForWorkflowCheck(ctx context.Context, expectedSHA string, timeout time.Duration, get getChecksFunc) (*remote.PRChecks, error) {
 	// Create timeout context
 	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	// Poll for checks to appear
-	ticker := time.NewTicker(2 * time.Second)
+	ticker := time.NewTicker(checksPollInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-timeoutCtx.Done():
 			// Timeout reached - return current state with warning
-			checks, err := c.GetPullRequestChecks(ctx, prNumber)
+			checks, err := get(ctx)
 			if err != nil {
-				return expectedSHA, nil, fmt.Errorf("timeout waiting for CI to start (waited %v): %w", timeout, err)
+				return nil, fmt.Errorf("timeout waiting for CI to start (waited %v): %w", timeout, err)
 			}
 			// If no checks after timeout, it might be a repo without CI
 			if checks.TotalCount == 0 {
-				return expectedSHA, checks, fmt.Errorf("no CI checks found after %v - repository may not have CI configured", timeout)
+				return checks, fmt.Errorf("no CI checks found after %v - repository may not have CI configured", timeout)
 			}
-			return expectedSHA, checks, nil
+			return checks, nil
 
 		case <-ticker.C:
-			checks, err := c.GetPullRequestChecks(ctx, prNumber)
+			checks, err := get(ctx)
 			if err != nil {
 				continue // Retry on transient errors
 			}
@@ -163,12 +201,12 @@ func (c *Client) WaitForChecksToStart(ctx context.Context, prNumber int, expecte
 				continue
 			}
 
-			// Check if CI has started (at least one check exists)
-			if checks.TotalCount > 0 {
-				return expectedSHA, checks, nil
+			// Check if a workflow of the repository has started
+			if checks.WorkflowChecks > 0 {
+				return checks, nil
 			}
 
-			// No checks yet, continue waiting
+			// No workflow check yet, continue waiting
 		}
 	}
 }

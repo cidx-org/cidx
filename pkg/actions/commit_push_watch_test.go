@@ -1,13 +1,16 @@
 package actions
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cidx-org/cidx/v2/pkg/remote"
+	log "github.com/sirupsen/logrus"
 )
 
 // cpwFakeProvider extends fakeProvider with configurable PR lookup, checks
@@ -100,6 +103,59 @@ func TestCPWWatchCI_PRExistsButNoChecksWithinTimeout(t *testing.T) {
 	}
 }
 
+func TestCPWWatchCI_ForeignCheckAloneIsNotSuccess(t *testing.T) {
+	// A green check from another app -- GitHub's own dependabot config check --
+	// is not the CI. cpw must say no workflow ran instead of "All checks
+	// passed", which would greenlight an unverified commit (issue #257).
+	provider := &cpwFakeProvider{
+		prNumber: 255,
+		waitSHA:  "abc1234def",
+		waitChecks: &remote.PRChecks{
+			TotalCount: 1, WorkflowChecks: 0, Success: 1, Status: "success", HeadSHA: "abc1234def",
+		},
+	}
+
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+
+	if err := newCPWAction(provider).watchCI(context.Background(), "feat/x", "abc1234def"); err != nil {
+		t.Fatalf("expected graceful exit when no workflow started, got: %v", err)
+	}
+	if provider.watchCalled {
+		t.Error("expected no checks watch when no workflow started")
+	}
+	if strings.Contains(buf.String(), "All checks passed") {
+		t.Errorf("cpw announced success on a non-workflow check: %s", buf.String())
+	}
+	if !strings.Contains(buf.String(), "No workflow started") {
+		t.Errorf("expected an explicit 'no workflow started' warning, got: %s", buf.String())
+	}
+}
+
+func TestCPWWatchCI_WorkflowChecksAlongsideForeignOneAreWatched(t *testing.T) {
+	// Same PR once the workflow checks show up: the foreign check is still
+	// there, but CI has really started, so watching proceeds to green.
+	sha := "abc1234def"
+	provider := &cpwFakeProvider{
+		prNumber: 255,
+		waitSHA:  sha,
+		waitChecks: &remote.PRChecks{
+			TotalCount: 3, WorkflowChecks: 2, Success: 1, Pending: 2, Status: "pending", HeadSHA: sha,
+		},
+		checksUpdates: []remote.PRChecksUpdate{
+			{Checks: &remote.PRChecks{TotalCount: 3, WorkflowChecks: 2, Success: 3, Pending: 0, Status: "success", HeadSHA: sha}},
+		},
+	}
+
+	if err := newCPWAction(provider).watchCI(context.Background(), "feat/x", sha); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !provider.watchCalled {
+		t.Error("expected workflow checks to be watched to completion")
+	}
+}
+
 func TestCPWWatchCI_WaitErrorIsPropagated(t *testing.T) {
 	provider := &cpwFakeProvider{
 		prNumber: 172,
@@ -117,7 +173,7 @@ func TestCPWWatchCI_ChecksAlreadyCompletedSuccess(t *testing.T) {
 		prNumber: 172,
 		waitSHA:  "abc1234def",
 		waitChecks: &remote.PRChecks{
-			TotalCount: 2, Success: 2, Status: "success", HeadSHA: "abc1234def",
+			TotalCount: 2, WorkflowChecks: 2, Success: 2, Status: "success", HeadSHA: "abc1234def",
 		},
 	}
 
@@ -137,7 +193,7 @@ func TestCPWWatchCI_ChecksAlreadyCompletedFailure(t *testing.T) {
 		prNumber: 172,
 		waitSHA:  "abc1234def",
 		waitChecks: &remote.PRChecks{
-			TotalCount: 2, Success: 1, Failure: 1, Status: "failure", HeadSHA: "abc1234def",
+			TotalCount: 2, WorkflowChecks: 2, Success: 1, Failure: 1, Status: "failure", HeadSHA: "abc1234def",
 		},
 	}
 
@@ -153,7 +209,7 @@ func TestCPWWatchCI_WatchesPendingChecksToCompletion(t *testing.T) {
 		prNumber: 172,
 		waitSHA:  sha,
 		waitChecks: &remote.PRChecks{
-			TotalCount: 2, Pending: 2, Status: "pending", HeadSHA: sha,
+			TotalCount: 2, WorkflowChecks: 2, Pending: 2, Status: "pending", HeadSHA: sha,
 		},
 		checksUpdates: []remote.PRChecksUpdate{
 			{Checks: &remote.PRChecks{TotalCount: 2, Success: 1, Pending: 1, Status: "pending", HeadSHA: sha}},
@@ -175,7 +231,7 @@ func TestCPWWatchCI_FailureDuringWatchReturnsError(t *testing.T) {
 		prNumber: 172,
 		waitSHA:  sha,
 		waitChecks: &remote.PRChecks{
-			TotalCount: 2, Pending: 2, Status: "pending", HeadSHA: sha,
+			TotalCount: 2, WorkflowChecks: 2, Pending: 2, Status: "pending", HeadSHA: sha,
 		},
 		checksUpdates: []remote.PRChecksUpdate{
 			{Checks: &remote.PRChecks{TotalCount: 2, Success: 1, Failure: 1, Pending: 0, Status: "failure", HeadSHA: sha}},
@@ -193,7 +249,7 @@ func TestCPWWatchCI_HeadSHAChangeAborts(t *testing.T) {
 		prNumber: 172,
 		waitSHA:  "abc1234def",
 		waitChecks: &remote.PRChecks{
-			TotalCount: 1, Pending: 1, Status: "pending", HeadSHA: "abc1234def",
+			TotalCount: 1, WorkflowChecks: 1, Pending: 1, Status: "pending", HeadSHA: "abc1234def",
 		},
 		checksUpdates: []remote.PRChecksUpdate{
 			{Checks: &remote.PRChecks{TotalCount: 1, Pending: 1, Status: "pending", HeadSHA: "other000sha"}},
@@ -213,7 +269,7 @@ func TestCPWWatchCI_StreamEndsWhilePendingIsAnError(t *testing.T) {
 		prNumber: 172,
 		waitSHA:  "abc1234def",
 		waitChecks: &remote.PRChecks{
-			TotalCount: 1, Pending: 1, Status: "pending", HeadSHA: "abc1234def",
+			TotalCount: 1, WorkflowChecks: 1, Pending: 1, Status: "pending", HeadSHA: "abc1234def",
 		},
 		checksUpdates: nil, // stream closes immediately
 	}
@@ -229,7 +285,7 @@ func TestCPWWatchCI_StreamErrorIsPropagated(t *testing.T) {
 		prNumber: 172,
 		waitSHA:  "abc1234def",
 		waitChecks: &remote.PRChecks{
-			TotalCount: 1, Pending: 1, Status: "pending", HeadSHA: "abc1234def",
+			TotalCount: 1, WorkflowChecks: 1, Pending: 1, Status: "pending", HeadSHA: "abc1234def",
 		},
 		checksUpdates: []remote.PRChecksUpdate{
 			{Error: errors.New("stream blew up")},

@@ -372,14 +372,17 @@ func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remot
 	}
 
 	return &remote.PRChecks{
-		TotalCount:   len(checks),
-		Pending:      pending,
-		Success:      success,
-		Failure:      failure,
-		Status:       overallStatus,
-		HeadSHA:      mr.SHA,
-		Checks:       checks,
-		StatusChecks: []remote.StatusCheck{},
+		TotalCount: len(checks),
+		// Every check here is a job of the project's own pipeline, so they all
+		// count as workflow checks (issue #257).
+		WorkflowChecks: len(checks),
+		Pending:        pending,
+		Success:        success,
+		Failure:        failure,
+		Status:         overallStatus,
+		HeadSHA:        mr.SHA,
+		Checks:         checks,
+		StatusChecks:   []remote.StatusCheck{},
 	}, nil
 }
 
