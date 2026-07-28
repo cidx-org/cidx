@@ -50,7 +50,7 @@ jobs:
 
       - name: Cache Trivy DB
         id: trivy-cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/trivy
           key: ${{ steps.cache-keys.outputs.trivy }}
@@ -67,7 +67,7 @@ jobs:
 
       - name: Cache Grype DB
         id: grype-cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/grype
           key: ${{ steps.cache-keys.outputs.grype }}
@@ -116,7 +116,7 @@ jobs:
       # Read-only restore: setup already populated this exact key in this run,
       # so a save here would be a no-op that races across matrix jobs.
       - name: Restore Trivy DB
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: ~/.cache/trivy
           key: ${{ needs.setup.outputs.trivy-cache-key }}
@@ -227,7 +227,7 @@ jobs:
       # so a save here would be a no-op that races across matrix jobs.
       # GRYPE_DB_AUTO_UPDATE is false, so fail loudly rather than scan blind.
       - name: Restore Grype DB
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: ~/.cache/grype
           key: ${{ needs.setup.outputs.grype-cache-key }}
