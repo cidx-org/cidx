@@ -1,13 +1,9 @@
-## [Unreleased]
+## v2.2.0 (2026-07-28)
 
 ### Feat
 
-- **presets**: a newly published image version is now held for 14 days before the catalogue promotes it. Digest pinning made references immutable, but a version published with a backdoor is immutable too and carries no CVE until someone finds it — the only defence against a detection window measured in weeks is to wait one out. `cidx preset scan-targets` reports the candidate, its publication date and its age, and promotes it only once the window has elapsed; the cooldown is waived when the image we run today is knowingly vulnerable, in which case the promotion PR names the CVEs that bought the waiver. A candidate whose publication date the registry will not give is held, not assumed old enough — same posture as an unresolvable digest. The window comes from Docker Hub's `last_updated` and Quay's `start_ts`; the OCI API publishes no such date, and the config blob's `created` is a build date, so it is deliberately not used. Rules 2 and 3 of the image supply-chain policy (#242)
-- **presets**: every catalogue image is now pinned `image:tag@sha256:...` — the tag stays readable, the digest makes the reference immutable. A tag alone can point at different content tomorrow with nothing in `presets.toml` changing, and no scanner catches that, because a backdoored image has no CVE until someone finds it. Rule 1 of the image supply-chain policy (#242). Observable change: image references differ, so every cidx container is recreated once on the next run (the `cidx.config_hash` label includes the image, #144); the cache inside those containers is rebuilt, nothing else changes. `cidx preset scan-targets` now resolves the digest of an update candidate and reports an error instead of an update when it cannot, so `container-monitor.yml`'s promote job can never write a mutable tag back into the catalogue. `TestCatalogueImagesArePinnedByDigest` fails on any preset that arrives without a digest, including inside that promote job (#242)
-
-### Fix
-
-- **presets**: `dhi.io/alpine-base:3.21` (test-hot-reload) and `dhi.io/docker:27-cli` (docker-buildx) were 404 — Docker Hardened Images had deleted both tags, so the two presets could not run at all. Moved to the nearest published tags, `3.24` and `29-cli`, and pinned (#242)
+- **presets**: hold new image versions for 14 days unless they fix a CVE (#246)
+- **presets**: pin catalogue images by digest (#244)
 
 ## v2.1.5 (2026-07-27)
 
