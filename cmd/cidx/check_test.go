@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/urfave/cli/v2"
@@ -79,5 +80,92 @@ func TestResolveConfigPath_NoConfigReportsError(t *testing.T) {
 
 	if _, err := runResolveConfigPath(t); err == nil {
 		t.Error("expected an error when no config exists")
+	}
+}
+
+// projectWithConfig writes a minimal config under a name that is deliberately
+// not cidx.toml, and makes it the working directory. A command that ignores
+// --config finds nothing there and fails.
+func projectWithConfig(t *testing.T, name string) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, name)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	config := "[security]\ncontainers = [\"trivy\"]\n\n[pipelines.ci]\nphases = [\"security\"]\n"
+	if err := os.WriteFile(path, []byte(config), 0644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	return dir
+}
+
+// TestGenerateHonoursConfigFlag covers the `generate` half of #230: both
+// subcommands hardcoded cidx.toml, so a project whose config is named
+// differently could not generate its workflow at all.
+func TestGenerateHonoursConfigFlag(t *testing.T) {
+	for _, platform := range []string{"github", "gitlab"} {
+		t.Run(platform, func(t *testing.T) {
+			dir := projectWithConfig(t, "ci/pipeline.toml")
+			out := filepath.Join(dir, "generated.yml")
+
+			if err := newApp().Run([]string{"cidx", "--config", "ci/pipeline.toml", "generate", platform, "-o", out}); err != nil {
+				t.Fatalf("generate %s: %v", platform, err)
+			}
+			if _, err := os.Stat(out); err != nil {
+				t.Fatalf("expected the workflow to be written: %v", err)
+			}
+		})
+	}
+}
+
+// TestGenerateRegenerationHintNamesTheOutputPath covers #229 on the GitLab
+// side: the header always announced `-o .gitlab-ci.yml`, so following it from a
+// file generated elsewhere silently wrote a second configuration.
+func TestGenerateRegenerationHintNamesTheOutputPath(t *testing.T) {
+	for _, tc := range []struct{ platform, out, defaultPath string }{
+		{"github", "ci/custom.yml", ".github/workflows/cidx.yml"},
+		{"gitlab", "ci/custom.yml", ".gitlab-ci.yml"},
+	} {
+		t.Run(tc.platform, func(t *testing.T) {
+			dir := projectWithConfig(t, "cidx.toml")
+			out := filepath.Join(dir, tc.out)
+
+			if err := newApp().Run([]string{"cidx", "generate", tc.platform, "-o", out}); err != nil {
+				t.Fatalf("generate %s: %v", tc.platform, err)
+			}
+
+			generated, err := os.ReadFile(out)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := "# Regenerate with: cidx generate " + tc.platform + " -o " + out
+			if !strings.Contains(string(generated), want) {
+				t.Errorf("expected the header to name %q", out)
+			}
+			if strings.Contains(string(generated), "-o "+tc.defaultPath) {
+				t.Errorf("the header still points at the default path %q", tc.defaultPath)
+			}
+		})
+	}
+}
+
+// TestCheckDriftHonoursConfigFlag covers the `check drift` half of #230: it
+// loaded cidx.toml outright, so a project whose config is named differently
+// could not compare it against its workflow.
+func TestCheckDriftHonoursConfigFlag(t *testing.T) {
+	dir := projectWithConfig(t, "ci/pipeline.toml")
+	workflow := filepath.Join(dir, "ci.yml")
+
+	if err := newApp().Run([]string{"cidx", "--config", "ci/pipeline.toml", "generate", "github", "-o", workflow}); err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+
+	// The workflow was generated from that very config, so there is no drift.
+	// Before the fix this failed on "failed to load cidx.toml" instead.
+	if err := newApp().Run([]string{"cidx", "--config", "ci/pipeline.toml", "check", "drift", "--file", workflow}); err != nil {
+		t.Fatalf("check drift: %v", err)
 	}
 }

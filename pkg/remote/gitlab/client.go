@@ -316,7 +316,13 @@ func (c *Client) UpdatePullRequest(ctx context.Context, prNumber int, title, bod
 	return nil
 }
 
-// GetPullRequestChecks returns pipeline status for an MR
+// GetPullRequestChecks returns pipeline status for an MR.
+//
+// The counterpart of issue #240 cannot arise here: the jobs come from the MR's
+// own head pipeline, not from everything attached to the head commit, so a
+// pipeline someone triggers by hand on the branch is a separate pipeline that
+// is never folded in. GitHub has no such notion -- every check run of the SHA
+// lands on the PR -- which is why only that side needed a filter.
 func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remote.PRChecks, error) {
 	// Get MR to find associated pipeline
 	mr, _, err := c.client.MergeRequests.GetMergeRequest(c.projectID, int64(prNumber), nil)

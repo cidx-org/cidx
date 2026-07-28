@@ -624,16 +624,27 @@ func presetImagesCommand() *cli.Command {
 				Name:  "verbose",
 				Usage: "Show which presets use each image",
 			},
+			&cli.BoolFlag{
+				Name:  "catalogue",
+				Usage: "List only the built-in catalogue, leaving out user and project presets",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			jsonOutput := c.Bool("json")
 			verbose := c.Bool("verbose")
 
-			// Build map of image -> presets using it
-			imagePresets := make(map[string][]string)
-			for _, name := range presets.List() {
-				preset, _ := presets.Get(name)
-				imagePresets[preset.Image] = append(imagePresets[preset.Image], name)
+			// Build map of image -> presets using it. The default is the
+			// resolved registry, like `preset list` and `preset scan`: in a
+			// project, the images its own presets run are images it uses.
+			// --catalogue narrows it to what presets.toml ships, which is what
+			// the supply-chain policy governs and all security-audit.yml should
+			// ever scan -- the same leak scan-targets had in #248.
+			imagePresets := registryImages()
+			if c.Bool("catalogue") {
+				var err error
+				if imagePresets, err = catalogueImages(); err != nil {
+					return err
+				}
 			}
 
 			// Get sorted unique images
@@ -663,7 +674,10 @@ func presetImagesCommand() *cli.Command {
 			}
 
 			// Calculate deduplication stats
-			totalPresets := len(presets.List())
+			totalPresets := 0
+			for _, using := range imagePresets {
+				totalPresets += len(using)
+			}
 			uniqueImages := len(images)
 			duplicates := totalPresets - uniqueImages
 
@@ -774,6 +788,18 @@ func presetScanTargetsCommand() *cli.Command {
 // the user's and the project's own presets: those are governed by nobody but
 // their author, and the promotion job's `sed` against pkg/presets/presets.toml
 // silently matched nothing for them while inflating the candidate count (#248).
+// registryImages maps each distinct image of the resolved preset registry to
+// the presets running it: the catalogue plus whatever the user (~/.config/cidx)
+// and the project (.cidx/) merged on top.
+func registryImages() map[string][]string {
+	imagePresets := make(map[string][]string)
+	for _, name := range presets.List() {
+		preset, _ := presets.Get(name)
+		imagePresets[preset.Image] = append(imagePresets[preset.Image], name)
+	}
+	return imagePresets
+}
+
 func catalogueImages() (map[string][]string, error) {
 	catalogue, err := presets.Catalogue()
 	if err != nil {

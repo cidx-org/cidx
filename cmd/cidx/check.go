@@ -64,16 +64,28 @@ func resolveConfigPath(c *cli.Context) (string, error) {
 	return config.FindConfig()
 }
 
-func checkWorkflowAction(c *cli.Context) error {
-	// Load configuration
+// loadResolvedConfig loads the config resolveConfigPath points at. Every
+// command that reads the project config goes through it, so none can drift back
+// to a hardcoded cidx.toml the way `generate` and `check drift` had (issue #240
+// follow-up to #230).
+func loadResolvedConfig(c *cli.Context) (*config.Config, error) {
 	configPath, err := resolveConfigPath(c)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	cfg, err := config.Load(configPath)
 	if err != nil {
-		return fmt.Errorf("failed to load %s: %w", configPath, err)
+		return nil, fmt.Errorf("failed to load %s: %w", configPath, err)
+	}
+	return cfg, nil
+}
+
+func checkWorkflowAction(c *cli.Context) error {
+	// Load configuration
+	cfg, err := loadResolvedConfig(c)
+	if err != nil {
+		return err
 	}
 
 	workflowDir := c.String("workflow-dir")
@@ -143,9 +155,9 @@ func checkWorkflowAction(c *cli.Context) error {
 }
 
 func checkDriftAction(c *cli.Context) error {
-	cfg, err := config.Load("cidx.toml")
+	cfg, err := loadResolvedConfig(c)
 	if err != nil {
-		return fmt.Errorf("failed to load cidx.toml: %w", err)
+		return err
 	}
 
 	// Explicit --file wins; otherwise probe the candidate workflow names

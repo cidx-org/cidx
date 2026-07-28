@@ -19,6 +19,22 @@ const workflowAppSlug = "github-actions"
 // Package-level so tests can drive the loop without waiting on the clock.
 var checksPollInterval = 2 * time.Second
 
+// nonPullRequestEvents are the workflow-run events a pull request never causes.
+// A run started by hand or by the clock lands on the PR's head SHA and its check
+// runs show up against that commit, but they are not the PR's gate: dispatching
+// Security Audit on a PR branch -- the natural way to validate a workflow change
+// before merging -- made cpw exit red and pr merge refuse, forcing --skip-checks
+// and defeating the gate entirely (issue #240).
+//
+// It is a deny list, not an allow list of "pull_request": a repository whose CI
+// triggers on push alone still gates its PRs with those checks, and dropping
+// them would turn a red gate green -- a worse failure than the one being fixed.
+var nonPullRequestEvents = map[string]bool{
+	"workflow_dispatch":   true,
+	"schedule":            true,
+	"repository_dispatch": true,
+}
+
 // GetPullRequestChecks returns the status of all checks/workflows for a PR
 func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remote.PRChecks, error) {
 	// Get PR details to get the head SHA
@@ -36,13 +52,64 @@ func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remot
 		StatusChecks: []remote.StatusCheck{},
 	}
 
-	// Get check runs (GitHub Actions)
-	checkRuns, _, err := c.client.Checks.ListCheckRunsForRef(ctx, c.owner, c.repo, headSHA, &github.ListCheckRunsOptions{})
+	// Get check runs (GitHub Actions). PerPage is raised above the default 30
+	// because a single dispatched workflow can post dozens of check runs on the
+	// SHA and push the PR's own ones off the first page (issue #240).
+	checkRuns, _, err := c.client.Checks.ListCheckRunsForRef(ctx, c.owner, c.repo, headSHA, &github.ListCheckRunsOptions{
+		ListOptions: github.ListOptions{PerPage: 100},
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list check runs: %w", err)
 	}
 
-	for _, run := range checkRuns.CheckRuns {
+	addCheckRuns(checks, checkRuns.CheckRuns, dispatchedCheckSuites(ctx, headSHA, c.listRepositoryRuns))
+
+	// Get commit status checks (legacy status API)
+	statuses, _, err := c.client.Repositories.GetCombinedStatus(ctx, c.owner, c.repo, headSHA, &github.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list check runs: %w", err)
+	}
+
+	for _, status := range statuses.Statuses {
+		statusCheck := remote.StatusCheck{
+			Context: status.GetContext(),
+			State:   status.GetState(),
+			URL:     status.GetTargetURL(),
+		}
+		checks.StatusChecks = append(checks.StatusChecks, statusCheck)
+
+		// Count by status
+		checks.TotalCount++
+		if status.GetState() == "pending" {
+			checks.Pending++
+		} else if status.GetState() == "success" {
+			checks.Success++
+		} else {
+			checks.Failure++
+		}
+	}
+
+	// Determine overall status
+	if checks.Failure > 0 {
+		checks.Status = "failure"
+	} else if checks.Pending > 0 {
+		checks.Status = "pending"
+	} else {
+		checks.Status = "success"
+	}
+
+	return checks, nil
+}
+
+// addCheckRuns folds the check runs of the PR's head commit into checks,
+// leaving out those whose check suite belongs to a run the pull request did not
+// cause (issue #240).
+func addCheckRuns(checks *remote.PRChecks, runs []*github.CheckRun, dispatched map[int64]bool) {
+	for _, run := range runs {
+		if dispatched[run.GetCheckSuite().GetID()] {
+			continue
+		}
+
 		check := remote.CheckRun{
 			ID:          run.GetID(),
 			Name:        run.GetName(),
@@ -90,42 +157,32 @@ func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remot
 			checks.Pending++
 		}
 	}
+}
 
-	// Get commit status checks (legacy status API)
-	statuses, _, err := c.client.Repositories.GetCombinedStatus(ctx, c.owner, c.repo, headSHA, &github.ListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list check runs: %w", err)
+// dispatchedCheckSuites returns the check suites on headSHA produced by a
+// workflow run the pull request did not cause.
+//
+// A check run names its check suite but never the event behind it, so the
+// mapping comes from the repository's run listing filtered on the SHA -- the
+// only read that carries the event, and one extra request per read of the PR's
+// checks. A failure there yields no suites, which keeps the pre-#240 behaviour
+// of counting everything rather than failing the whole read.
+func dispatchedCheckSuites(ctx context.Context, headSHA string, list listRepoRunsFunc) map[int64]bool {
+	runs, _, err := list(ctx, &github.ListWorkflowRunsOptions{
+		HeadSHA:     headSHA,
+		ListOptions: github.ListOptions{PerPage: 100},
+	})
+	if err != nil || runs == nil {
+		return nil
 	}
 
-	for _, status := range statuses.Statuses {
-		statusCheck := remote.StatusCheck{
-			Context: status.GetContext(),
-			State:   status.GetState(),
-			URL:     status.GetTargetURL(),
+	suites := make(map[int64]bool)
+	for _, run := range runs.WorkflowRuns {
+		if id := run.GetCheckSuiteID(); id != 0 && nonPullRequestEvents[run.GetEvent()] {
+			suites[id] = true
 		}
-		checks.StatusChecks = append(checks.StatusChecks, statusCheck)
-
-		// Count by status
-		checks.TotalCount++
-		if status.GetState() == "pending" {
-			checks.Pending++
-		} else if status.GetState() == "success" {
-			checks.Success++
-		} else {
-			checks.Failure++
-		}
 	}
-
-	// Determine overall status
-	if checks.Failure > 0 {
-		checks.Status = "failure"
-	} else if checks.Pending > 0 {
-		checks.Status = "pending"
-	} else {
-		checks.Status = "success"
-	}
-
-	return checks, nil
+	return suites
 }
 
 // isWorkflowCheck reports whether a check run was posted by a workflow of the

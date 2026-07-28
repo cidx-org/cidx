@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/cidx-org/cidx/v2/pkg/presets"
 )
 
 // stubRegistry replaces the two network calls scan-targets makes for the
@@ -385,6 +387,35 @@ phase = "test"
 	}
 	if got := images["dhi.io/trivy:0.68@sha256:"+zeroDigest]; len(got) != 1 || got[0] != "trivy" {
 		t.Errorf("presets for the catalogue image = %v, want [trivy]", got)
+	}
+}
+
+// TestRegistryImagesVersusCatalogue: `cidx preset images` feeds the daily
+// security audit, which governs the images presets.toml ships. Reading the
+// resolved registry made the audit scan a checked-out project's own presets too
+// -- the same leak scan-targets had in #248, one file further along. The
+// default stays the resolved registry, like `preset list` and `preset scan`;
+// --catalogue is what the workflow asks for.
+func TestRegistryImagesVersusCatalogue(t *testing.T) {
+	const name, image = "cidx-test-project-preset", "example.invalid/project:1.0"
+
+	presets.GlobalRegistry[name] = presets.Preset{Name: name, Image: image, Phase: "test"}
+	t.Cleanup(func() { delete(presets.GlobalRegistry, name) })
+
+	merged := registryImages()
+	if got := merged[image]; len(got) != 1 || got[0] != name {
+		t.Errorf("the default listing must keep a project preset, got %v", got)
+	}
+
+	catalogue, err := catalogueImages()
+	if err != nil {
+		t.Fatalf("catalogueImages() error = %v", err)
+	}
+	if _, ok := catalogue[image]; ok {
+		t.Error("a project preset reached --catalogue: the audit governs the catalogue only")
+	}
+	if len(catalogue) >= len(merged) {
+		t.Errorf("expected --catalogue to be a strict subset, got %d images against %d", len(catalogue), len(merged))
 	}
 }
 

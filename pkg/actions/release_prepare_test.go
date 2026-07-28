@@ -69,6 +69,34 @@ func TestReleasePrepare_DryRunWithoutRemote(t *testing.T) {
 	}
 }
 
+// TestGhPRList_RunsInTheRepositoryBeingReleased: gh resolves which repository
+// to query from its working directory, and this invocation was the one place
+// that left Dir unset -- so it listed the PRs of wherever the cidx process
+// happened to be started, not those of the repository being prepared.
+func TestGhPRList_RunsInTheRepositoryBeingReleased(t *testing.T) {
+	dir := initRepoWithoutRemote(t)
+
+	repo, err := vcs.OpenRepository(dir)
+	if err != nil {
+		t.Fatalf("open repository: %v", err)
+	}
+	workDir, err := repo.GetWorkDir()
+	if err != nil {
+		t.Fatalf("work dir: %v", err)
+	}
+
+	cmd := ghPRList(workDir, []string{"pr", "list"})
+	if cmd.Dir != workDir {
+		t.Errorf("gh must run in %q, got %q", workDir, cmd.Dir)
+	}
+
+	// The current directory is not it, which is exactly what made the bug
+	// invisible when releasing the repository you happen to stand in.
+	if cwd, err := os.Getwd(); err == nil && cmd.Dir == cwd {
+		t.Error("fixture repository is the current directory, the test proves nothing")
+	}
+}
+
 // TestGhCommandError_NamesCommandAndStderr covers the second half of #227:
 // "Could not fetch PRs: exit status 1" named neither the tool that failed nor
 // the reason.
