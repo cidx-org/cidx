@@ -132,41 +132,59 @@ Specifies how named pipelines execute their phases:
 
 ## Running Scenarios
 
+The suites live in the root package, together with the `*_steps_test.go` step
+definitions they need. Always name a package, never a single file:
+`go test ./features_test.go` fails to build with `undefined: RegisterCommonSteps`.
+
 ### Run All Scenarios
 
 ```bash
-go test ./features_test.go
+go test -run TestFeatures .
 ```
+
+`-run` matches as an unanchored regexp, so this runs both `TestFeatures` (strict)
+and `TestFeaturesDocker` (best-effort). Use `-run 'TestFeatures$'` for the strict
+suite alone.
 
 ### Run with Pretty Output
 
 ```bash
-GODOG_FORMAT=pretty go test ./features_test.go -v
+GODOG_FORMAT=pretty go test -v -run TestFeatures .
 ```
 
-### Run Specific Feature
+`features_test.go` reads `GODOG_FORMAT` and passes it to `godog.Options.Format`
+(`pretty`, `progress`, `junit`, `cucumber`). `progress` is what CI uses.
+
+### Run Specific Feature or Scenario
+
+Scenarios are reported as Go subtests, so the standard `-run` filter selects
+them by name (spaces become underscores):
 
 ```bash
-go test ./features_test.go -godog.paths=features/events/pull_request.feature
+go test -v -run 'TestFeatures$/Drift_detected' .
 ```
 
-### Run with Tags
+### Tags
 
-```bash
-# Tag scenarios in features with @wip, @smoke, etc.
-go test ./features_test.go -godog.tags=@smoke
-```
+`@docker-required` marks the scenarios that need control over the container
+runtime. `TestFeatures` excludes them and runs strict; `TestFeaturesDocker` runs
+only them, best-effort, and skips outright when no runtime is reachable.
+Filtering is set in `features_test.go` via `godog.Options.Tags` -- the suites do
+not call `godog.BindCommandLineFlags`, so `-godog.tags` is not available.
 
 ## Dogfooding
 
 CIDX tests itself using CIDX:
 
 ```bash
-# Run BDD scenarios using CIDX
+# Run every package's tests, BDD scenarios included
 cidx run test
 ```
 
-This executes the `godog` preset which runs all scenarios.
+The test phase runs the `go-test` preset, with `cidx.toml` overriding its command
+to `go test -v ./...`. The catalogue default (`./pkg/... ./cmd/...`) skips the
+root package, which is where these suites live -- without the override the
+scenarios would never run in CI.
 
 ## Writing New Scenarios
 

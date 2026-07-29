@@ -46,6 +46,20 @@ exit_code = 0
 [containers.prettier]
 write = true
 
+# The catalogue default for go-test is `go test -v ./pkg/... ./cmd/...`, which
+# leaves out the root package — exactly where this repo keeps its godog suite
+# (features_test.go + the *_steps_test.go definitions). Without this override
+# the BDD scenarios never run in CI, so nothing enforces the specs the project
+# is built around. `./...` covers every package, root included.
+#
+# GODOG_FORMAT=progress keeps the phase log readable: one character per step
+# plus the scenario/step totals, instead of ~2000 lines of pretty output.
+[containers.go-test]
+command = "go test -v ./..."
+
+[containers.go-test.env]
+GODOG_FORMAT = "progress"
+
 # ─── pipelines ───
 [pipelines.ci]
 phases = ["security", "code", "test", "build"]

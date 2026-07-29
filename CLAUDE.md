@@ -125,7 +125,8 @@ If a command is missing, broken, or has bad UX -- **that becomes the next priori
 - Step definitions in `*_steps_test.go` at project root
 - Simulation engine (no real Docker needed to run specs)
 - `Strict: true` for unit scenarios, `Strict: false` only for `@docker-required` scenarios
-- `TestFeatures` (strict, 57+ scenarios) and `TestFeaturesDocker` (best-effort, 5 scenarios)
+- `TestFeatures` (strict, 159 scenarios) and `TestFeaturesDocker` (best-effort, 19 scenarios, skipped when no container runtime answers)
+- The suites live in the **root package**, so `cidx.toml` overrides the `go-test` command to `go test -v ./...` — the catalogue default (`./pkg/... ./cmd/...`) would skip them and the CI test job would gate on nothing
 
 **Unit tests** -- Package-level correctness:
 

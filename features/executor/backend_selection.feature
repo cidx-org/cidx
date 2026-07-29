@@ -8,6 +8,7 @@ Feature: Executor Backend Selection
 
   Rule: CIDX auto-detects available container runtimes
 
+    @docker-required
     Scenario: Docker is available and selected automatically
       Given Docker daemon is running
       When I run "cidx run security"
@@ -33,6 +34,7 @@ Feature: Executor Backend Selection
 
   Rule: Users can force a specific backend
 
+    @docker-required
     Scenario: Force Docker backend
       Given Docker daemon is running
       When I run "cidx run security --backend docker"
@@ -55,6 +57,7 @@ Feature: Executor Backend Selection
 
   Rule: Backend flag accepts multiple formats
 
+    @docker-required
     Scenario Outline: Backend flag variations
       Given Docker daemon is running
       When I run "cidx run security <flag>"
@@ -68,6 +71,7 @@ Feature: Executor Backend Selection
 
   Rule: Executor interface is consistent across backends
 
+    @docker-required
     Scenario: Docker executor implements Executor interface
       Given Docker daemon is running
       When I execute a tool via Docker
@@ -76,6 +80,7 @@ Feature: Executor Backend Selection
       And the executor should have method "Name"
       And the executor should have method "Close"
 
+    @docker-required
     Scenario: All backends use same ContainerConfig
       Given any container runtime is available
       When I run a tool
@@ -91,6 +96,7 @@ Feature: Executor Backend Selection
 
   Rule: Dry-run works with backend selection
 
+    @docker-required
     Scenario: Dry-run shows selected backend
       Given Docker daemon is running
       When I run "cidx run security --dry-run"

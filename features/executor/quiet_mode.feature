@@ -26,6 +26,7 @@ Feature: Quiet Mode Execution
 
   Rule: Quiet mode is configurable via CLI flag
 
+    @docker-required
     Scenario Outline: Quiet flag variations
       Given Docker daemon is running
       When I run "cidx run security <flag>"

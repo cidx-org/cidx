@@ -455,12 +455,21 @@ default = false
 description = "Enable race detector"
 command_flag = "-race"
 
+# Godog: Run the BDD suite of a Go project
+# Official image: golang:alpine (official Go Docker image)
+# ✅ Container-first: Full Go toolchain included
+#
+# The command must compile whole packages, never a single file: godog step
+# definitions live in sibling `*_steps_test.go` files, so `go test ./suite_test.go`
+# fails to build with `undefined: RegisterXxxSteps`. `-run TestFeatures` selects
+# the suite entrypoints by the name godog's own documentation uses, and matches
+# as an unanchored regexp, so companion suites (TestFeaturesDocker, ...) run too.
 [presets.godog]
 name = "godog"
 phase = "test"
 image = "dhi.io/golang:1.23-alpine3.21-dev@sha256:7563e8b20d15a6240a946d7e35fda1f1b31cb48dd307d9f877355fa81865ea7b"
 hardened = true
-command = "go test -v ./features_test.go"
+command = "go test -v -run TestFeatures ./..."
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
 
@@ -472,17 +481,21 @@ GOCACHE = "/tmp/go-build-cache"
 CGO_ENABLED = "0"
 GOTOOLCHAIN = "auto"
 
+# Exported as an environment variable, which is the only channel that survives
+# `go test`: godog reads its options from the suite's godog.Options, not from
+# the command line, unless the suite calls godog.BindCommandLineFlags. A suite
+# that does `Format: os.Getenv("GODOG_FORMAT")` picks this up; one that does not
+# simply ignores it.
+#
+# There is deliberately no `tags` option: it used to emit `-tags`, which is
+# `go test`'s build-constraint flag, so `tags = "@smoke"` broke the build
+# instead of filtering scenarios. Filter by tag from the suite's
+# godog.Options.Tags, or override `command` in cidx.toml.
 [presets.godog.options.format]
 type = "string"
 default = "pretty"
-description = "Output format (pretty, progress, junit, cucumber)"
+description = "Output format (pretty, progress, junit, cucumber) via GODOG_FORMAT"
 env_var = "GODOG_FORMAT"
-
-[presets.godog.options.tags]
-type = "string"
-default = ""
-description = "Tags to filter scenarios (@wip, @smoke, etc.)"
-command_flag = "-tags"
 
 # Go Build: Compile Go binary with version injection
 # Official image: golang:alpine (official Go Docker image)
