@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -181,9 +182,9 @@ func checkDriftAction(c *cli.Context) error {
 	fmt.Println()
 
 	if !result.HasDrift() {
-		fmt.Println("\033[32mNo drift detected.\033[0m")
+		fmt.Println(drift.Summary(result))
 		return nil
 	}
 
-	return fmt.Errorf("%d difference(s) found", result.DiffCount())
+	return errors.New(drift.Summary(result))
 }

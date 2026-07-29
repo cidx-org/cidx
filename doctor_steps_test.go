@@ -2,12 +2,19 @@ package main
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
+	"github.com/cidx-org/cidx/v2/pkg/doctor"
 	"github.com/cucumber/godog"
 )
 
-// RegisterDoctorSteps registers step definitions for doctor scenarios
+// RegisterDoctorSteps registers step definitions for doctor scenarios.
+//
+// The checks run for real (doctor.Run) against the directory the scenario
+// staged: its Git repository, its cidx.toml, and the container runtime this
+// machine actually has — the runtime steps live in executor_steps_test.go and
+// already probe it (issue #265).
 func RegisterDoctorSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Then(`^I should see a passing check for "([^"]*)"$`, tc.shouldSeePassingCheck)
 	ctx.Then(`^I should see a failing check for "([^"]*)"$`, tc.shouldSeeFailingCheck)
@@ -22,116 +29,181 @@ func RegisterDoctorSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Given(`^I am NOT in a Git repository$`, tc.notInGitRepo)
 }
 
-func (tc *TestContext) shouldSeePassingCheck(name string) error {
-	tc.simulateDoctorIfNeeded()
-	if !strings.Contains(tc.Output, "✓") || !strings.Contains(tc.Output, name) {
-		return fmt.Errorf("expected passing check for %q in output:\n%s", name, tc.Output)
+// runDoctor runs the real environment checks from the scenario's project
+// directory and keeps both what `cidx doctor` prints and the checks behind it.
+func (tc *TestContext) runDoctor() error {
+	return tc.inScenarioDir(func() error {
+		if tc.Config["no_config"] != true {
+			if _, err := tc.writeStagedConfig(); err != nil {
+				return err
+			}
+		}
+
+		result := doctor.Run()
+		tc.Config["doctor_result"] = result
+		tc.Output = doctor.Format(result) + "\n" + doctor.Summary(result) + "\n"
+		if result.Issues() > 0 {
+			tc.ExitCode = 1
+		}
+		return nil
+	})
+}
+
+func (tc *TestContext) doctorCheck(name string) (doctor.Check, error) {
+	result, ok := tc.Config["doctor_result"].(*doctor.Result)
+	if !ok {
+		return doctor.Check{}, fmt.Errorf("cidx doctor did not run in this scenario")
 	}
-	return nil
+	var names []string
+	for _, check := range result.Checks {
+		if check.Name == name {
+			return check, nil
+		}
+		names = append(names, check.Name)
+	}
+	return doctor.Check{}, fmt.Errorf("no check named %q (checks: %s)", name, strings.Join(names, ", "))
+}
+
+// checkWithStatus asserts a check reached the given status and that the user
+// can see it — the status is the diagnosis, the output is what is delivered.
+func (tc *TestContext) checkWithStatus(name string, want doctor.Status) (doctor.Check, error) {
+	check, err := tc.doctorCheck(name)
+	if err != nil {
+		return check, err
+	}
+	if check.Status != want {
+		return check, fmt.Errorf("check %q is %s, want %s (detail: %s)",
+			name, statusName(check.Status), statusName(want), check.Detail)
+	}
+	if !strings.Contains(tc.Output, name) || !strings.Contains(tc.Output, statusIcon(want)) {
+		return check, fmt.Errorf("check %q is not reported as %s in the output:\n%s",
+			name, statusName(want), tc.Output)
+	}
+	return check, nil
+}
+
+func (tc *TestContext) shouldSeePassingCheck(name string) error {
+	_, err := tc.checkWithStatus(name, doctor.StatusPass)
+	return err
 }
 
 func (tc *TestContext) shouldSeeFailingCheck(name string) error {
-	tc.simulateDoctorIfNeeded()
-	if !strings.Contains(tc.Output, "✗") || !strings.Contains(tc.Output, name) {
-		return fmt.Errorf("expected failing check for %q in output:\n%s", name, tc.Output)
-	}
-	return nil
+	_, err := tc.checkWithStatus(name, doctor.StatusFail)
+	return err
 }
 
 func (tc *TestContext) shouldSeeWarningCheck(name string) error {
-	tc.simulateDoctorIfNeeded()
-	if !strings.Contains(tc.Output, "⚠") || !strings.Contains(tc.Output, name) {
-		return fmt.Errorf("expected warning check for %q in output:\n%s", name, tc.Output)
-	}
-	return nil
+	_, err := tc.checkWithStatus(name, doctor.StatusWarn)
+	return err
 }
 
+// runtimeVersion is the version number the runtime check reports next to the
+// engine name ("Docker 29.6.1").
+var runtimeVersion = regexp.MustCompile(`\d+\.\d+`)
+
 func (tc *TestContext) checkShouldShowDockerVersion() error {
-	tc.simulateDoctorIfNeeded()
-	if !strings.Contains(tc.Output, "Docker") {
-		return fmt.Errorf("expected Docker version in output:\n%s", tc.Output)
+	check, err := tc.doctorCheck("Container runtime")
+	if err != nil {
+		return err
+	}
+	if !strings.Contains(check.Detail, "Docker") || !runtimeVersion.MatchString(check.Detail) {
+		return fmt.Errorf("expected a Docker version in the runtime detail, got %q", check.Detail)
+	}
+	if !strings.Contains(tc.Output, check.Detail) {
+		return fmt.Errorf("the runtime detail %q is missing from the output:\n%s", check.Detail, tc.Output)
 	}
 	return nil
 }
 
 func (tc *TestContext) shouldSeeSuggestionInstallDocker() error {
-	tc.simulateDoctorIfNeeded()
-	if !strings.Contains(tc.Output, "Docker") || !strings.Contains(tc.Output, "Podman") {
-		return fmt.Errorf("expected suggestion to install Docker or Podman:\n%s", tc.Output)
+	check, err := tc.doctorCheck("Container runtime")
+	if err != nil {
+		return err
+	}
+	if !strings.Contains(check.Suggestion, "Docker") || !strings.Contains(check.Suggestion, "Podman") {
+		return fmt.Errorf("expected a suggestion naming Docker and Podman, got %q", check.Suggestion)
+	}
+	if !strings.Contains(tc.Output, check.Suggestion) {
+		return fmt.Errorf("the suggestion %q is missing from the output:\n%s", check.Suggestion, tc.Output)
 	}
 	return nil
 }
 
-func (tc *TestContext) shouldSeeSuggestionToRun(cmd string) error {
-	tc.simulateDoctorIfNeeded()
-	if !strings.Contains(tc.Output, cmd) {
-		return fmt.Errorf("expected suggestion containing %q in output:\n%s", cmd, tc.Output)
+// shouldSeeSuggestionToRun looks for a command a failing or warning check tells
+// the user to run.
+func (tc *TestContext) shouldSeeSuggestionToRun(command string) error {
+	result, ok := tc.Config["doctor_result"].(*doctor.Result)
+	if !ok {
+		return fmt.Errorf("cidx doctor did not run in this scenario")
 	}
-	return nil
+	for _, check := range result.Checks {
+		if strings.Contains(check.Suggestion, command) {
+			if !strings.Contains(tc.Output, check.Suggestion) {
+				return fmt.Errorf("the suggestion %q is missing from the output:\n%s", check.Suggestion, tc.Output)
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("no check suggests running %q", command)
 }
 
 func (tc *TestContext) shouldSeeIssueCount() error {
-	tc.simulateDoctorIfNeeded()
-	if !strings.Contains(tc.Output, "issue") {
-		return fmt.Errorf("expected issue count in output:\n%s", tc.Output)
+	result, ok := tc.Config["doctor_result"].(*doctor.Result)
+	if !ok {
+		return fmt.Errorf("cidx doctor did not run in this scenario")
+	}
+	if result.Issues() == 0 {
+		return fmt.Errorf("expected issues to be counted, doctor found none")
+	}
+	expected := fmt.Sprintf("%d issue(s) found", result.Issues())
+	if !strings.Contains(tc.Output, expected) {
+		return fmt.Errorf("expected %q in the output:\n%s", expected, tc.Output)
 	}
 	return nil
 }
 
+// aValidConfigExists stages a real, loadable cidx.toml in the scenario's
+// project directory. The commands write it when they run, so the pipelines a
+// scenario declares afterwards are part of it.
 func (tc *TestContext) aValidConfigExists(filename string) error {
-	// In the test context, we simulate config presence
 	tc.Config["config_file"] = filename
-	return nil
+	_, err := tc.scenarioDir()
+	return err
 }
 
-func (tc *TestContext) noConfigExists(filename string) error {
+// noConfigExists leaves the scenario's project directory without a cidx.toml,
+// which is what config.FindConfig then fails to find.
+func (tc *TestContext) noConfigExists(string) error {
 	tc.Config["no_config"] = true
-	return nil
+	_, err := tc.scenarioDir()
+	return err
 }
 
+// notInGitRepo leaves the scenario in a plain temporary directory: no .git of
+// its own and none above it, so `git rev-parse` fails the way the scenario says.
 func (tc *TestContext) notInGitRepo() error {
-	tc.Config["no_git"] = true
-	return nil
+	_, err := tc.scenarioDir()
+	return err
 }
 
-// simulateDoctorIfNeeded generates simulated doctor output based on test context state
-func (tc *TestContext) simulateDoctorIfNeeded() {
-	if tc.Output != "" {
-		return
+func statusName(status doctor.Status) string {
+	switch status {
+	case doctor.StatusPass:
+		return "passing"
+	case doctor.StatusWarn:
+		return "a warning"
+	default:
+		return "failing"
 	}
+}
 
-	var b strings.Builder
-
-	// Container runtime check
-	b.WriteString("  ✓ Container runtime Docker 27.0.0\n")
-
-	// Git repo check
-	if tc.Config["no_git"] == true {
-		b.WriteString("  ✗ Git repository    not a Git repository\n")
-		b.WriteString("    └─ Run 'git init' or navigate to a Git repository\n")
-	} else {
-		b.WriteString("  ✓ Git repository    detected\n")
+func statusIcon(status doctor.Status) string {
+	switch status {
+	case doctor.StatusPass:
+		return "✓"
+	case doctor.StatusWarn:
+		return "⚠"
+	default:
+		return "✗"
 	}
-
-	// Config file check
-	if tc.Config["no_config"] == true {
-		b.WriteString("  ⚠ Config file       not found\n")
-		b.WriteString("    └─ Run 'cidx init' to create a configuration\n")
-	} else {
-		b.WriteString("  ✓ Config file       valid (cidx.toml)\n")
-	}
-
-	b.WriteString("\n")
-
-	hasFailure := tc.Config["no_git"] == true
-	if hasFailure {
-		b.WriteString("1 issue(s) found\n")
-		tc.ExitCode = 1
-	} else if tc.Config["no_config"] == true {
-		b.WriteString("1 warning(s), no issues.\n")
-	} else {
-		b.WriteString("All checks passed.\n")
-	}
-
-	tc.Output = b.String()
 }

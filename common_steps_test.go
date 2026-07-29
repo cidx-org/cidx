@@ -3,8 +3,12 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
 	"strings"
 
+	"github.com/cidx-org/cidx/v2/pkg/config"
 	"github.com/cucumber/godog"
 )
 
@@ -84,14 +88,162 @@ func (tc *TestContext) cidxHasEnvironmentDetection() error {
 	return nil
 }
 
-// createGitRepo creates a temporary Git repository for testing
+// createGitRepo turns the scenario's project directory into a real Git
+// repository, so the checks that shell out to git (doctor's, for one) see what
+// the scenario says they see.
 func (tc *TestContext) createGitRepo() error {
-	tmpDir, err := os.MkdirTemp("", "cidx-test-*")
+	dir, err := tc.scenarioDir()
 	if err != nil {
-		return fmt.Errorf("failed to create temp dir: %w", err)
+		return err
 	}
-	tc.GitRepo = tmpDir
+	if out, err := exec.Command("git", "init", "-q", dir).CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to init git repo in %s: %w: %s", dir, err, out)
+	}
 	return nil
+}
+
+// scenarioDir is the project directory a scenario describes: the cidx.toml it
+// stages, the workflow it compares against, the Git repository it is or is not
+// in. It is created on first use and removed by Cleanup.
+//
+// Commands run against this directory rather than the cidx checkout, so a
+// scenario only sees what it staged — this repo's own cidx.toml and .git would
+// otherwise answer half the questions for it.
+func (tc *TestContext) scenarioDir() (string, error) {
+	if tc.GitRepo == "" {
+		dir, err := os.MkdirTemp("", "cidx-bdd-*")
+		if err != nil {
+			return "", fmt.Errorf("failed to create scenario directory: %w", err)
+		}
+		tc.GitRepo = dir
+	}
+	return tc.GitRepo, nil
+}
+
+// inScenarioDir runs fn from the scenario's project directory, the way a user
+// runs cidx from their own repo. Needed by everything that probes the working
+// directory: config.FindConfig, `git rev-parse`.
+func (tc *TestContext) inScenarioDir(fn func() error) error {
+	dir, err := tc.scenarioDir()
+	if err != nil {
+		return err
+	}
+	previous, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to read the working directory: %w", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		return fmt.Errorf("failed to enter %s: %w", dir, err)
+	}
+	defer func() { _ = os.Chdir(previous) }()
+	return fn()
+}
+
+// phaseContainer names a real preset for each phase a scenario can declare, so
+// a staged cidx.toml passes config.Validate — an unknown container name is a
+// validation error, and doctor reports the config as invalid.
+var phaseContainer = map[string]string{
+	"security": "trivy",
+	"code":     "golangci-lint",
+	"test":     "go-test",
+	"build":    "go-build",
+	"docker":   "kaniko",
+	"release":  "gh-release",
+}
+
+// declaredPipelines returns the pipelines the scenario stated. A scenario that
+// states none but stages a valid cidx.toml gets the single `ci` pipeline such a
+// config carries in practice; "cidx.toml has no pipelines defined" gets none.
+func (tc *TestContext) declaredPipelines() map[string][]string {
+	if declared, ok := tc.Config["pipelines"].(map[string][]string); ok && len(declared) > 0 {
+		return declared
+	}
+	if tc.Config["no_pipelines"] == true {
+		return nil
+	}
+	return map[string][]string{"ci": {"security", "code"}}
+}
+
+// writeStagedConfig writes the cidx.toml the scenario described into its
+// project directory and returns the path. The phase sections are derived from
+// the declared pipelines so the file is one a user could have written.
+func (tc *TestContext) writeStagedConfig() (string, error) {
+	dir, err := tc.scenarioDir()
+	if err != nil {
+		return "", err
+	}
+
+	pipelines := tc.declaredPipelines()
+
+	phases := map[string]bool{}
+	for _, phaseNames := range pipelines {
+		for _, phase := range phaseNames {
+			phases[phase] = true
+		}
+	}
+	if len(phases) == 0 {
+		// A config with no pipeline still declares phases — that is what makes
+		// it valid, and what `cidx generate` refuses to work from.
+		phases["security"] = true
+	}
+
+	var b strings.Builder
+	b.WriteString("# staged by a BDD scenario\n\n")
+	for _, phase := range sortedNames(phases) {
+		container, ok := phaseContainer[phase]
+		if !ok {
+			return "", fmt.Errorf("no preset known for phase %q — extend phaseContainer", phase)
+		}
+		fmt.Fprintf(&b, "[%s]\ncontainers = [%q]\n\n", phase, container)
+	}
+	for _, name := range sortedPipelines(pipelines) {
+		fmt.Fprintf(&b, "[pipelines.%s]\nphases = [", name)
+		for i, phase := range pipelines[name] {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			fmt.Fprintf(&b, "%q", phase)
+		}
+		b.WriteString("]\n\n")
+	}
+
+	path := filepath.Join(dir, "cidx.toml")
+	if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil {
+		return "", fmt.Errorf("failed to write %s: %w", path, err)
+	}
+	return path, nil
+}
+
+// loadStagedConfig parses the staged cidx.toml through the real loader, so the
+// config the commands work from is one config.Load produced.
+func (tc *TestContext) loadStagedConfig() (*config.Config, error) {
+	path, err := tc.writeStagedConfig()
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load the staged config: %w", err)
+	}
+	return cfg, nil
+}
+
+func sortedNames(set map[string]bool) []string {
+	names := make([]string, 0, len(set))
+	for name := range set {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func sortedPipelines(pipelines map[string][]string) []string {
+	names := make([]string, 0, len(pipelines))
+	for name := range pipelines {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // setEnvironment sets the environment to local or CI
@@ -188,27 +340,19 @@ func (tc *TestContext) simulateCIDXCommand(cmdStr string) error {
 	// Check for flags
 	tc.CommandFlags = append(tc.CommandFlags, parts...)
 
-	// Handle cidx doctor separately
+	// doctor, check drift and generate run their real packages against the
+	// directory the scenario staged (issue #265) — the rest of this function
+	// still simulates a pipeline run.
 	if len(parts) >= 2 && parts[0] == "cidx" && parts[1] == "doctor" {
-		tc.simulateDoctorIfNeeded()
-		return nil
+		return tc.runDoctor()
 	}
 
-	// Handle cidx check drift separately
 	if len(parts) >= 3 && parts[0] == "cidx" && parts[1] == "check" && parts[2] == "drift" {
-		tc.simulateDriftIfNeeded()
-		return nil
+		return tc.runDrift()
 	}
 
-	// Handle cidx generate separately
 	if len(parts) >= 2 && parts[0] == "cidx" && parts[1] == "generate" {
-		if len(parts) >= 3 && parts[2] != "github" && parts[2] != "gitlab" {
-			tc.Output = fmt.Sprintf("Error: unsupported platform: %s (supported: github, gitlab)\n", parts[2])
-			tc.ExitCode = 1
-			return nil
-		}
-		tc.simulateGenerateIfNeeded()
-		return nil
+		return tc.runGenerate(parts)
 	}
 
 	// Determine what pipeline/phase is being run

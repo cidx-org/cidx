@@ -2,12 +2,20 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/cidx-org/cidx/v2/pkg/drift"
+	"github.com/cidx-org/cidx/v2/pkg/remote"
 	"github.com/cucumber/godog"
 )
 
-// RegisterDriftSteps registers step definitions for drift detection scenarios
+// RegisterDriftSteps registers step definitions for drift detection scenarios.
+//
+// The steps stage a real cidx.toml and a real workflow file, then run the
+// comparison `cidx check drift` runs (drift.Compare) over them: a scenario that
+// stays green while pkg/drift is broken would be worth nothing (issue #265).
 func RegisterDriftSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Given(`^the GitHub Actions workflow has jobs "([^"]*)"$`, tc.ciWorkflowHasJobs)
 	ctx.Given(`^the GitHub Actions workflow triggers on "([^"]*)"$`, tc.ciWorkflowTriggersOn)
@@ -24,9 +32,14 @@ func RegisterDriftSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 }
 
 func (tc *TestContext) ciWorkflowHasJobs(jobsStr string) error {
-	jobs := strings.Split(jobsStr, ", ")
+	var jobs []string
+	for _, job := range strings.Split(jobsStr, ",") {
+		jobs = append(jobs, strings.TrimSpace(job))
+	}
 	tc.Config["ci_jobs"] = jobs
-	// Default triggers based on pipeline names if not already set
+	// A workflow that runs jobs runs them on something: push, unless the
+	// scenario states otherwise — the trigger `cidx generate` writes for the
+	// ci pipeline.
 	if tc.Config["ci_triggers"] == nil {
 		tc.Config["ci_triggers"] = []string{"push"}
 	}
@@ -34,15 +47,12 @@ func (tc *TestContext) ciWorkflowHasJobs(jobsStr string) error {
 }
 
 func (tc *TestContext) ciWorkflowTriggersOn(event string) error {
-	if tc.Config["ci_triggers"] == nil {
-		tc.Config["ci_triggers"] = []string{}
-	}
-	tc.Config["ci_triggers"] = append(tc.Config["ci_triggers"].([]string), event)
+	triggers, _ := tc.Config["ci_triggers"].([]string)
+	tc.Config["ci_triggers"] = append(triggers, event)
 	return nil
 }
 
 func (tc *TestContext) ciWorkflowDoesNotTriggerOn(event string) error {
-	// Ensure the trigger is NOT in the list
 	tc.Config["ci_no_trigger_"+event] = true
 	return nil
 }
@@ -65,189 +75,217 @@ func (tc *TestContext) cidxAndCIHaveDifferences() error {
 	return nil
 }
 
+// runDrift compares the staged cidx.toml with the staged workflow exactly as
+// checkDriftAction does: the same workflow resolution (#170), the same
+// comparison, the same rendering.
+func (tc *TestContext) runDrift() error {
+	cfg, err := tc.loadStagedConfig()
+	if err != nil {
+		return err
+	}
+	if err := tc.writeStagedWorkflow(); err != nil {
+		return err
+	}
+
+	dir, err := tc.scenarioDir()
+	if err != nil {
+		return err
+	}
+	workflowFile, err := remote.ResolveWorkflowFile(filepath.Join(dir, remote.GitHubWorkflowDir))
+	if err != nil {
+		return err
+	}
+
+	result, err := drift.Compare(cfg, workflowFile)
+	if err != nil {
+		return err
+	}
+
+	tc.Config["drift_result"] = result
+	tc.Output = drift.Format(result) + "\n" + drift.Summary(result) + "\n"
+	if result.HasDrift() {
+		tc.ExitCode = 1
+	}
+	return nil
+}
+
+// writeStagedWorkflow renders the GitHub Actions workflow the scenario
+// described — one job per stated job name, next to the bootstrap job every
+// generated workflow carries — as ci.yml, the name that maps this workflow to
+// the [pipelines.ci] it implements.
+func (tc *TestContext) writeStagedWorkflow() error {
+	dir, err := tc.scenarioDir()
+	if err != nil {
+		return err
+	}
+
+	var b strings.Builder
+	b.WriteString("name: CIDX CI\n\non:\n")
+	triggers := tc.stagedWorkflowTriggers()
+	for _, trigger := range triggers {
+		switch trigger {
+		case "push":
+			b.WriteString("  push:\n    branches: [main]\n")
+		case "pull_request":
+			b.WriteString("  pull_request:\n    branches: [main]\n")
+		default:
+			fmt.Fprintf(&b, "  %s:\n", trigger)
+		}
+	}
+	if len(triggers) == 0 {
+		// A workflow nothing triggers automatically is still a workflow.
+		b.WriteString("  workflow_dispatch:\n")
+	}
+
+	b.WriteString("\njobs:\n")
+	b.WriteString("  bootstrap:\n    name: Bootstrap\n    runs-on: ubuntu-latest\n")
+	jobs, _ := tc.Config["ci_jobs"].([]string)
+	for _, job := range jobs {
+		fmt.Fprintf(&b, "  %s:\n    name: %s\n    runs-on: ubuntu-latest\n    needs: [bootstrap]\n", job, job)
+	}
+
+	workflowDir := filepath.Join(dir, remote.GitHubWorkflowDir)
+	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
+		return fmt.Errorf("failed to create %s: %w", workflowDir, err)
+	}
+	path := filepath.Join(workflowDir, "ci.yml")
+	if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil {
+		return fmt.Errorf("failed to write %s: %w", path, err)
+	}
+	return nil
+}
+
+// stagedWorkflowTriggers is what the scenario left the workflow triggering on.
+func (tc *TestContext) stagedWorkflowTriggers() []string {
+	stated, _ := tc.Config["ci_triggers"].([]string)
+	var triggers []string
+	for _, trigger := range stated {
+		if tc.Config["ci_no_trigger_"+trigger] == true {
+			continue
+		}
+		triggers = append(triggers, trigger)
+	}
+	return triggers
+}
+
+func (tc *TestContext) driftResult() (*drift.Result, error) {
+	result, ok := tc.Config["drift_result"].(*drift.Result)
+	if !ok {
+		return nil, fmt.Errorf("no drift comparison ran in this scenario")
+	}
+	return result, nil
+}
+
 func (tc *TestContext) shouldSeePhasesTable() error {
-	tc.simulateDriftIfNeeded()
-	if !strings.Contains(tc.Output, "Phase") {
-		return fmt.Errorf("expected phases table in output:\n%s", tc.Output)
+	result, err := tc.driftResult()
+	if err != nil {
+		return err
+	}
+	if len(result.Phases) == 0 {
+		return fmt.Errorf("the comparison reported no phase at all")
+	}
+	if !strings.Contains(tc.Output, "Phases:") {
+		return fmt.Errorf("expected a phases table in the output:\n%s", tc.Output)
+	}
+	for _, phase := range result.Phases {
+		if !strings.Contains(tc.Output, phase.Name) {
+			return fmt.Errorf("phase %q is missing from the table:\n%s", phase.Name, tc.Output)
+		}
 	}
 	return nil
 }
 
 func (tc *TestContext) allPhasesShouldShow(status string) error {
-	tc.simulateDriftIfNeeded()
-	// Extract only the phases section (before "Triggers:")
-	phasesSection := tc.Output
-	if idx := strings.Index(tc.Output, "Triggers:"); idx > 0 {
-		phasesSection = tc.Output[:idx]
+	result, err := tc.driftResult()
+	if err != nil {
+		return err
 	}
-	if strings.Contains(phasesSection, "missing") || strings.Contains(phasesSection, "extra") {
-		return fmt.Errorf("expected all phases to show %q but found drift:\n%s", status, phasesSection)
+	if len(result.Phases) == 0 {
+		return fmt.Errorf("expected every phase to show %q, but no phase was compared", status)
+	}
+	for _, phase := range result.Phases {
+		if string(phase.Status) != status {
+			return fmt.Errorf("phase %q shows %q, want %q", phase.Name, phase.Status, status)
+		}
 	}
 	return nil
 }
 
+// phaseShouldShow asserts on the comparison itself, then on the table the user
+// reads — a status the user cannot see is not reported.
 func (tc *TestContext) phaseShouldShow(phase, status string) error {
-	tc.simulateDriftIfNeeded()
-	if !strings.Contains(tc.Output, phase) || !strings.Contains(tc.Output, status) {
-		return fmt.Errorf("expected phase %q with status %q:\n%s", phase, status, tc.Output)
+	result, err := tc.driftResult()
+	if err != nil {
+		return err
 	}
-	return nil
+	for _, diff := range result.Phases {
+		if diff.Name != phase {
+			continue
+		}
+		if string(diff.Status) != status {
+			return fmt.Errorf("phase %q shows %q, want %q", phase, diff.Status, status)
+		}
+		if !strings.Contains(tc.Output, phase) || !strings.Contains(tc.Output, status) {
+			return fmt.Errorf("phase %q with status %q is missing from the table:\n%s", phase, status, tc.Output)
+		}
+		return nil
+	}
+	return fmt.Errorf("no phase %q in the comparison (compared: %s)", phase, phaseNames(result))
 }
 
+// jobShouldShow reads the same table from the CI side: a workflow job with no
+// phase behind it lands in the phases comparison as extra.
 func (tc *TestContext) jobShouldShow(job, status string) error {
-	tc.simulateDriftIfNeeded()
-	if !strings.Contains(tc.Output, job) || !strings.Contains(tc.Output, status) {
-		return fmt.Errorf("expected job %q with status %q:\n%s", job, status, tc.Output)
-	}
-	return nil
+	return tc.phaseShouldShow(job, status)
 }
 
 func (tc *TestContext) triggerShouldShow(trigger, status string) error {
-	tc.simulateDriftIfNeeded()
-	if !strings.Contains(tc.Output, trigger) || !strings.Contains(tc.Output, status) {
-		return fmt.Errorf("expected trigger %q with status %q:\n%s", trigger, status, tc.Output)
+	result, err := tc.driftResult()
+	if err != nil {
+		return err
 	}
-	return nil
+	for _, diff := range result.Triggers {
+		if diff.Event != trigger {
+			continue
+		}
+		if string(diff.Status) != status {
+			return fmt.Errorf("trigger %q shows %q, want %q", trigger, diff.Status, status)
+		}
+		if !strings.Contains(tc.Output, trigger) || !strings.Contains(tc.Output, status) {
+			return fmt.Errorf("trigger %q with status %q is missing from the table:\n%s", trigger, status, tc.Output)
+		}
+		return nil
+	}
+	return fmt.Errorf("no trigger %q in the comparison (compared: %s)", trigger, triggerEvents(result))
 }
 
 func (tc *TestContext) shouldSeeNumberOfDifferences() error {
-	tc.simulateDriftIfNeeded()
-	if !strings.Contains(tc.Output, "difference") {
-		return fmt.Errorf("expected number of differences in output:\n%s", tc.Output)
+	result, err := tc.driftResult()
+	if err != nil {
+		return err
+	}
+	if result.DiffCount() == 0 {
+		return fmt.Errorf("expected differences to be counted, the comparison found none")
+	}
+	expected := fmt.Sprintf("%d difference(s) found", result.DiffCount())
+	if !strings.Contains(tc.Output, expected) {
+		return fmt.Errorf("expected %q in the output:\n%s", expected, tc.Output)
 	}
 	return nil
 }
 
-// simulateDriftIfNeeded simulates cidx check drift output
-func (tc *TestContext) simulateDriftIfNeeded() {
-	if tc.Output != "" {
-		return
+func phaseNames(result *drift.Result) string {
+	names := make([]string, 0, len(result.Phases))
+	for _, phase := range result.Phases {
+		names = append(names, phase.Name)
 	}
+	return strings.Join(names, ", ")
+}
 
-	pipelines, _ := tc.Config["pipelines"].(map[string][]string)
-	ciJobs, _ := tc.Config["ci_jobs"].([]string)
-	ciTriggers, _ := tc.Config["ci_triggers"].([]string)
-
-	// Collect the phases the CI workflow is expected to run: those of the
-	// pipeline it implements ([pipelines.ci] by convention), not those of every
-	// pipeline — a release pipeline runs in its own workflow (issue #178).
-	cidxPhases := make(map[string]bool)
-	if ciPhases, ok := pipelines["ci"]; ok {
-		for _, p := range ciPhases {
-			cidxPhases[p] = true
-		}
-	} else {
-		for _, phases := range pipelines {
-			for _, p := range phases {
-				cidxPhases[p] = true
-			}
-		}
+func triggerEvents(result *drift.Result) string {
+	events := make([]string, 0, len(result.Triggers))
+	for _, trigger := range result.Triggers {
+		events = append(events, trigger.Event)
 	}
-
-	ciJobSet := make(map[string]bool)
-	for _, j := range ciJobs {
-		ciJobSet[j] = true
-	}
-
-	ciTriggerSet := make(map[string]bool)
-	for _, t := range ciTriggers {
-		ciTriggerSet[t] = true
-	}
-
-	var b strings.Builder
-	b.WriteString("Phases:\n")
-	b.WriteString("  Phase           cidx.toml  CI         Status\n")
-	b.WriteString("  ─────           ─────────  ──         ──────\n")
-
-	diffCount := 0
-
-	// All phases from both sides
-	allPhases := make(map[string]bool)
-	for p := range cidxPhases {
-		allPhases[p] = true
-	}
-	for p := range ciJobSet {
-		allPhases[p] = true
-	}
-
-	for p := range allPhases {
-		inCIDX := cidxPhases[p]
-		inCI := ciJobSet[p]
-
-		cidxIcon := "✗"
-		if inCIDX {
-			cidxIcon = "✓"
-		}
-		ciIcon := "✗"
-		if inCI {
-			ciIcon = "✓"
-		}
-
-		var status string
-		switch {
-		case inCIDX && inCI:
-			status = "match"
-		case inCIDX && !inCI:
-			status = "missing from CI"
-			diffCount++
-		case !inCIDX && inCI:
-			status = "extra in CI"
-			diffCount++
-		}
-		fmt.Fprintf(&b, "  %-15s %-10s %-10s %s\n", p, cidxIcon, ciIcon, status)
-	}
-
-	// Expected triggers
-	expectedTriggers := make(map[string]bool)
-	for name := range pipelines {
-		switch name {
-		case "pr":
-			expectedTriggers["pull_request"] = true
-		case "main", "ci":
-			expectedTriggers["push"] = true
-		}
-	}
-
-	b.WriteString("\nTriggers:\n")
-	b.WriteString("  Event              cidx.toml  CI         Status\n")
-	b.WriteString("  ─────              ─────────  ──         ──────\n")
-
-	allTriggers := make(map[string]bool)
-	for t := range expectedTriggers {
-		allTriggers[t] = true
-	}
-	for t := range ciTriggerSet {
-		allTriggers[t] = true
-	}
-
-	for t := range allTriggers {
-		inCIDX := expectedTriggers[t]
-		inCI := ciTriggerSet[t]
-		if tc.Config["ci_no_trigger_"+t] == true {
-			inCI = false
-		}
-
-		var status string
-		switch {
-		case inCIDX && inCI:
-			status = "match"
-		case inCIDX && !inCI:
-			status = "missing"
-			diffCount++
-		case !inCIDX && inCI:
-			status = "extra in CI"
-			diffCount++
-		}
-		fmt.Fprintf(&b, "  %-18s %-10s %-10s %s\n", t, "✓", "✓", status)
-	}
-
-	b.WriteString("\n")
-	if diffCount == 0 {
-		b.WriteString("No drift detected.\n")
-	} else {
-		fmt.Fprintf(&b, "%d difference(s) found\n", diffCount)
-		tc.ExitCode = 1
-	}
-
-	tc.Output = b.String()
+	return strings.Join(events, ", ")
 }
