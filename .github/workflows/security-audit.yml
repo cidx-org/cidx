@@ -315,6 +315,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       status: ${{ steps.check.outputs.status }}
+      expired: ${{ steps.check.outputs.expired }}
+      expiring: ${{ steps.check.outputs.expiring }}
 
     steps:
       - name: Checkout
@@ -328,14 +330,49 @@ jobs:
       - name: Build CIDX
         run: go build -o bin/cidx ./cmd/cidx
 
+      # `vuln check` exits 1 when an exception has passed its expiry date. The
+      # previous `if ... then ... else ...` swallowed the exit code *and* the
+      # command's output, so an expired entry surfaced nowhere at all: neither
+      # the job, nor the run, nor the report said which one had rotted (#238).
+      #
+      # The job still exits 0 on purpose. Failing here would leave the audit
+      # red every day until someone edited the file, and a gate that is always
+      # red is ignored exactly like one that is always green — the trap #247
+      # documents for the scan gate. So the state is *reported*, not silenced:
+      # annotated on the run here, named in the report below.
       - name: Check for expired exceptions
         id: check
         run: |
-          if ./bin/cidx security vuln check --days 7; then
-            echo "status=ok" >> $GITHUB_OUTPUT
-          else
-            echo "status=expired" >> $GITHUB_OUTPUT
+          ./bin/cidx security vuln check --days 7 --json > exceptions.json || true
+
+          EXPIRED=$(jq '.expired | length' exceptions.json)
+          EXPIRING=$(jq '.expiring | length' exceptions.json)
+
+          # One annotation, not one per entry: GitHub keeps only 10 per step,
+          # and a flood of them would bury the count that matters. The entries
+          # themselves are listed in the report summary.
+          if [ "$EXPIRED" -gt 0 ]; then
+            echo "::error title=Expired vulnerability exceptions::$EXPIRED exception(s) in known-vulnerabilities.toml are past their expiry date and waive nothing until reviewed - see the Security Audit Report summary"
           fi
+          if [ "$EXPIRING" -gt 0 ]; then
+            echo "::warning title=Expiring vulnerability exceptions::$EXPIRING exception(s) expire within 7 days"
+          fi
+
+          if [ "$EXPIRED" -gt 0 ]; then
+            STATUS=expired
+          elif [ "$EXPIRING" -gt 0 ]; then
+            STATUS=expiring
+          else
+            STATUS=ok
+          fi
+
+          {
+            echo "status=$STATUS"
+            echo "expired=$EXPIRED"
+            echo "expiring=$EXPIRING"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Exception status: $STATUS ($EXPIRED expired, $EXPIRING expiring)"
 
   # Job 5: Generate consolidated report
   report:
@@ -368,6 +405,8 @@ jobs:
           TRIVY_STATUS="${{ needs.trivy-scan.result }}"
           GRYPE_STATUS="${{ needs.grype-scan.result }}"
           EXCEPTIONS_STATUS="${{ needs.check-exceptions.outputs.status }}"
+          EXPIRED_COUNT="${{ needs.check-exceptions.outputs.expired }}"
+          EXPIRING_COUNT="${{ needs.check-exceptions.outputs.expiring }}"
           IMAGE_COUNT="${{ needs.setup.outputs.count }}"
 
           # Header
@@ -449,12 +488,31 @@ jobs:
           fi
 
           # Exception Status
+          # "Some exceptions have expired or will expire soon" said neither
+          # how many nor which, and read the same whether one entry was a week
+          # past its date or the whole file had rotted (#238). Name them.
           echo "## 📋 Vulnerability Exceptions" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ "$EXCEPTIONS_STATUS" = "ok" ]; then
             echo "✅ All exceptions are valid and not expired." >> $GITHUB_STEP_SUMMARY
           else
-            echo "⚠️ Some exceptions have expired or will expire soon." >> $GITHUB_STEP_SUMMARY
+            echo "❌ **$EXPIRED_COUNT expired**, $EXPIRING_COUNT expiring within 7 days." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "An expired exception waives nothing: it was written with a date so that the" >> $GITHUB_STEP_SUMMARY
+            echo "acceptance would be re-argued, not inherited. Re-date it, or delete it." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            EXPIRED_LIST=$(./bin/cidx security vuln check --days 7 --json 2>/dev/null \
+              | jq -r '.expired[] | "| \(.CVE) | \(.Image) | \(.Severity) | \(.Expires) |"')
+            if [ -n "$EXPIRED_LIST" ]; then
+              echo "<details>" >> $GITHUB_STEP_SUMMARY
+              echo "<summary>⏰ Expired exceptions ($EXPIRED_COUNT)</summary>" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "| CVE | Image | Severity | Expired |" >> $GITHUB_STEP_SUMMARY
+              echo "|-----|-------|----------|---------|" >> $GITHUB_STEP_SUMMARY
+              echo "$EXPIRED_LIST" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "</details>" >> $GITHUB_STEP_SUMMARY
+            fi
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
 
