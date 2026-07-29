@@ -332,6 +332,17 @@ func Format(result *Result) string {
 	return b.String()
 }
 
+// Summary is the verdict `cidx check drift` closes with: the reassurance when
+// the workflow matches the config, or the count that becomes the command's
+// error otherwise. The error branch carries no colour of its own — the CLI
+// renders errors — which is why only the clean verdict is styled here.
+func Summary(result *Result) string {
+	if !result.HasDrift() {
+		return "\033[32mNo drift detected.\033[0m"
+	}
+	return fmt.Sprintf("%d difference(s) found", result.DiffCount())
+}
+
 func icon(present bool) string {
 	if present {
 		return "✓"

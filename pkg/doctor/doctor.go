@@ -79,6 +79,44 @@ func Run() *Result {
 	return r
 }
 
+// Format renders the checks the way `cidx doctor` prints them: one line per
+// check, with its remedy attached underneath when there is one.
+func Format(result *Result) string {
+	var b strings.Builder
+	for _, check := range result.Checks {
+		var icon string
+		switch check.Status {
+		case StatusPass:
+			icon = "\033[32m✓\033[0m"
+		case StatusWarn:
+			icon = "\033[33m⚠\033[0m"
+		case StatusFail:
+			icon = "\033[31m✗\033[0m"
+		}
+
+		fmt.Fprintf(&b, "  %s %-20s %s\n", icon, check.Name, check.Detail)
+		if check.Suggestion != "" {
+			fmt.Fprintf(&b, "    └─ %s\n", check.Suggestion)
+		}
+	}
+	return b.String()
+}
+
+// Summary is the verdict `cidx doctor` closes with. A run with failures ends as
+// the command's error, so that branch carries no colour of its own — the CLI
+// renders errors.
+func Summary(result *Result) string {
+	issues, warnings := result.Issues(), result.Warnings()
+	switch {
+	case issues == 0 && warnings == 0:
+		return "\033[32mAll checks passed.\033[0m"
+	case issues == 0:
+		return fmt.Sprintf("\033[33m%d warning(s)\033[0m, no issues.", warnings)
+	default:
+		return fmt.Sprintf("%d issue(s) found", issues)
+	}
+}
+
 // checkContainerRuntime verifies a container runtime cidx can actually use.
 // A runtime only passes when the executor would accept it: Docker's daemon
 // responding, or Podman's Docker-compatible API socket responding (#190).

@@ -46,7 +46,11 @@ Feature: CI Workflow Generation
       Then the command should fail
       And I should see "no pipelines defined"
 
+    # `cidx generate` only has the platforms it can produce as subcommands, so
+    # an unknown one is refused by the CLI before any generator runs. The
+    # wording is urfave/cli's, not ours: the scenario used to claim an
+    # "unsupported platform" message that no code ever printed (issue #265).
     Scenario: Unknown platform
       When I run "cidx generate unknown"
       Then the command should fail
-      And I should see "unsupported platform"
+      And I should see "No help topic for 'unknown'"
