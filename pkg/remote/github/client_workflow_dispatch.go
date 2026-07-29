@@ -25,6 +25,12 @@ const (
 	// pre-dispatch snapshot and for each poll. Large enough that a burst of
 	// dispatches cannot push our run off the page.
 	dispatchRunPageSize = 30
+
+	// dispatchClockTolerance backs off the "created before we started" filter
+	// when no server clock could be read before the dispatch. A local clock
+	// running ahead of GitHub's would otherwise rule out our own run; the
+	// pre-dispatch snapshot is what actually excludes older runs.
+	dispatchClockTolerance = 2 * time.Minute
 )
 
 // TriggerWorkflow dispatches workflowFile on ref and returns the run it
@@ -37,10 +43,13 @@ const (
 //
 //   - the runs of that workflow, on that ref, with event workflow_dispatch are
 //     listed *before* the dispatch, and every one of them is excluded;
+//   - candidates older than that listing are excluded too, which is what keeps
+//     the filter meaningful if the listing itself failed. The cutoff is the
+//     server's own clock, read from that response's Date header: GitHub creates
+//     the run before it answers the dispatch, so anchoring on the dispatch's own
+//     Date would rule out the very run we are looking for;
 //   - candidates triggered by another account are excluded, when the
 //     authenticated login can be resolved;
-//   - candidates created before the dispatch (server clock, from the response's
-//     Date header) are excluded;
 //   - of what survives, the oldest is taken: a dispatch made after ours can
 //     only have produced a newer run.
 //
@@ -55,49 +64,52 @@ func (c *Client) TriggerWorkflow(ctx context.Context, workflowFile, ref string, 
 	}
 	file := remote.NormalizeWorkflowFile(workflowFile)
 
-	list := func(ctx context.Context) ([]*github.WorkflowRun, error) {
-		runs, _, err := c.client.Actions.ListWorkflowRunsByFileName(ctx, c.owner, c.repo, file,
+	listRuns := func(ctx context.Context) (*github.WorkflowRuns, *github.Response, error) {
+		return c.client.Actions.ListWorkflowRunsByFileName(ctx, c.owner, c.repo, file,
 			&github.ListWorkflowRunsOptions{
 				Branch:      ref,
 				Event:       "workflow_dispatch",
 				ListOptions: github.ListOptions{PerPage: dispatchRunPageSize},
 			})
-		if err != nil {
-			return nil, err
-		}
-		if runs == nil {
-			return nil, nil
-		}
-		return runs.WorkflowRuns, nil
 	}
 
 	// Snapshot first: anything listed here predates the dispatch and can never
-	// be the run it creates.
+	// be the run it creates. A workflow that has never been dispatched 404s
+	// here, which is simply the first-run case -- the snapshot stays empty and
+	// the dispatch below reports any real problem with a message of its own.
 	known := map[int64]bool{}
-	existing, err := list(ctx)
-	if err != nil {
-		// A workflow that has never been dispatched 404s here. That is not a
-		// reason to refuse the dispatch -- it is exactly the first-run case --
-		// so the snapshot stays empty and the dispatch below reports any real
-		// problem with a message of its own.
-		existing = nil
+	snapshot, snapshotResp, err := listRuns(ctx)
+	if err == nil && snapshot != nil {
+		for _, run := range snapshot.WorkflowRuns {
+			known[run.GetID()] = true
+		}
 	}
-	for _, run := range existing {
-		known[run.GetID()] = true
+
+	since, fromServer := serverTime(snapshotResp)
+	if !fromServer {
+		since = time.Now().UTC().Add(-dispatchClockTolerance)
 	}
 
 	actor := c.authenticatedLogin(ctx)
 
-	dispatchedAt, err := c.dispatchWorkflow(ctx, file, ref, inputs)
-	if err != nil {
+	if err := c.dispatchWorkflow(ctx, file, ref, inputs); err != nil {
 		return nil, err
 	}
 
 	run, err := resolveDispatchedRun(ctx, dispatchProbe{
-		list:     list,
+		list: func(ctx context.Context) ([]*github.WorkflowRun, error) {
+			runs, _, err := listRuns(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if runs == nil {
+				return nil, nil
+			}
+			return runs.WorkflowRuns, nil
+		},
 		known:    known,
 		actor:    actor,
-		since:    dispatchedAt,
+		since:    since,
 		interval: dispatchPollInterval,
 		timeout:  dispatchPollTimeout,
 	})
@@ -108,9 +120,8 @@ func (c *Client) TriggerWorkflow(ctx context.Context, workflowFile, ref string, 
 	return c.convertWorkflow(ctx, run)
 }
 
-// dispatchWorkflow performs the dispatch and returns the server time it was
-// accepted at, which anchors the identification below.
-func (c *Client) dispatchWorkflow(ctx context.Context, file, ref string, inputs map[string]string) (time.Time, error) {
+// dispatchWorkflow performs the dispatch, translating the API's refusals.
+func (c *Client) dispatchWorkflow(ctx context.Context, file, ref string, inputs map[string]string) error {
 	payload := github.CreateWorkflowDispatchEventRequest{Ref: ref}
 	if len(inputs) > 0 {
 		payload.Inputs = make(map[string]any, len(inputs))
@@ -121,22 +132,22 @@ func (c *Client) dispatchWorkflow(ctx context.Context, file, ref string, inputs 
 
 	resp, err := c.client.Actions.CreateWorkflowDispatchEventByFileName(ctx, c.owner, c.repo, file, payload)
 	if err != nil {
-		return time.Time{}, dispatchError(file, ref, resp, err)
+		return dispatchError(file, ref, resp, err)
 	}
 
-	return responseTime(resp), nil
+	return nil
 }
 
-// responseTime reads the server's clock from the response, falling back to the
-// local one. Using the server's avoids a skewed local clock making our own run
-// look older than the dispatch that created it.
-func responseTime(resp *github.Response) time.Time {
+// serverTime reads GitHub's own clock from a response, reporting whether it
+// could. Preferring it over the local one keeps a skewed workstation clock from
+// ruling out the run the dispatch is about to create.
+func serverTime(resp *github.Response) (time.Time, bool) {
 	if resp != nil && resp.Response != nil {
 		if t, err := http.ParseTime(resp.Header.Get("Date")); err == nil {
-			return t.UTC()
+			return t.UTC(), true
 		}
 	}
-	return time.Now().UTC()
+	return time.Time{}, false
 }
 
 // authenticatedLogin returns the login the token belongs to, or "" when it
@@ -194,7 +205,7 @@ type dispatchProbe struct {
 	list     dispatchRunLister
 	known    map[int64]bool // run IDs that already existed before the dispatch
 	actor    string         // authenticated login; "" disables the actor filter
-	since    time.Time      // server time the dispatch was accepted at
+	since    time.Time      // server time observed before the dispatch
 	interval time.Duration
 	timeout  time.Duration
 
@@ -246,7 +257,7 @@ func resolveDispatchedRun(ctx context.Context, p dispatchProbe) (*github.Workflo
 // combination of filters does and does not guarantee.
 func pickDispatchedRun(runs []*github.WorkflowRun, known map[int64]bool, actor string, since time.Time) *github.WorkflowRun {
 	// created_at is reported to the second, so a run created in the same second
-	// as the dispatch must not be dropped for being a fraction "too early".
+	// as the cutoff must not be dropped for being a fraction "too early".
 	cutoff := since.Truncate(time.Second)
 
 	var best *github.WorkflowRun

@@ -95,6 +95,20 @@ func TestPickDispatchedRun(t *testing.T) {
 		}
 	})
 
+	t.Run("keeps our run when GitHub created it before it answered", func(t *testing.T) {
+		// GitHub records the run, then replies 204 to the dispatch: its
+		// created_at is *earlier* than the dispatch response. Anchoring the
+		// cutoff on that response made the command dispatch successfully and
+		// then fail to find its own run -- caught end to end on #266.
+		snapshotAt := dispatchedAt.Add(-3 * time.Second)
+		runs := []*github.WorkflowRun{dispatchedRun(80, "me", dispatchedAt.Add(-time.Second))}
+
+		got := pickDispatchedRun(runs, nil, "me", snapshotAt)
+		if got == nil || got.GetID() != 80 {
+			t.Fatalf("expected run 80, got %v", got)
+		}
+	})
+
 	t.Run("skips the actor filter when the login is unknown", func(t *testing.T) {
 		// A token with no user (GitHub App): the other filters still apply.
 		runs := []*github.WorkflowRun{dispatchedRun(70, "whoever", dispatchedAt)}
@@ -269,23 +283,26 @@ func TestDispatchError(t *testing.T) {
 	}
 }
 
-func TestResponseTime(t *testing.T) {
-	t.Run("prefers the server clock", func(t *testing.T) {
+func TestServerTime(t *testing.T) {
+	t.Run("reads GitHub's clock from the Date header", func(t *testing.T) {
 		header := http.Header{}
 		header.Set("Date", "Wed, 29 Jul 2026 10:00:00 GMT")
 		resp := &github.Response{Response: &http.Response{Header: header}}
 
-		got := responseTime(resp)
-		want := time.Date(2026, 7, 29, 10, 0, 0, 0, time.UTC)
-		if !got.Equal(want) {
+		got, ok := serverTime(resp)
+		if !ok {
+			t.Fatal("expected the server clock to be readable")
+		}
+		if want := time.Date(2026, 7, 29, 10, 0, 0, 0, time.UTC); !got.Equal(want) {
 			t.Errorf("got %s, want %s", got, want)
 		}
 	})
 
-	t.Run("falls back to the local clock without a usable Date", func(t *testing.T) {
-		before := time.Now().Add(-time.Second)
-		if got := responseTime(nil); got.Before(before) {
-			t.Errorf("expected a current timestamp, got %s", got)
+	t.Run("reports that there is no server clock to read", func(t *testing.T) {
+		for _, resp := range []*github.Response{nil, {Response: &http.Response{Header: http.Header{}}}} {
+			if _, ok := serverTime(resp); ok {
+				t.Errorf("expected no server time for %+v", resp)
+			}
 		}
 	})
 }
