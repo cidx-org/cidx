@@ -38,12 +38,16 @@
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # Prettier: Auto-format code (JS, TS, JSON, YAML, Markdown, etc.)
-# Official image: tmknom/prettier (community-maintained, widely used)
+# Prettier publishes no image of its own, so this is a third-party build.
+# jauderho/prettier rebuilds weekly from a current Alpine and ships SBOM +
+# provenance; tmknom/prettier, which this replaces, was last published
+# 2025-06-30 and its base had been accumulating CVEs for thirteen months (#238).
+# The image entrypoint is `prettier` itself, so the command carries args only.
 [presets.prettier]
 name = "prettier"
 phase = "code"
-image = "tmknom/prettier:3.6.2@sha256:31684fd957f78ddebd0fc003f2790da08bd7a41cfe1146912da43a114fbeebf9"
-command = "prettier --check ."
+image = "jauderho/prettier:3.9.4@sha256:b233d9c847048561850a1a107e35318b28361cd9a850eac7edcd5d8bfd82cea2"
+command = "--check ."
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
 config_files = [
@@ -92,6 +96,10 @@ command_flag = "--exit-code"
 
 # Gitleaks: Scan git history for secrets and credentials
 # Detects: API keys, passwords, tokens in git history
+# Kept on Docker Hub deliberately: ghcr.io/gitleaks/gitleaks:v8.30.1 is the
+# byte-identical mirror (same index digest), and upstream publishes no slim or
+# distroless variant. Its findings come from the alpine:3.22 pinned in the
+# project's own Dockerfile, which only a new upstream release can move (#238).
 [presets.gitleaks]
 name = "gitleaks"
 phase = "security"
@@ -303,12 +311,15 @@ volumes = ["${WORKSPACE}:/work"]
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # Gosec: Go Security Checker - inspects Go source code for security issues
-# Official image: securego/gosec (maintained by securego team)
+# Official image: ghcr.io/securego/gosec — the only registry the project's
+# release workflow pushes to. Its Docker Hub mirror (docker.io/securego/gosec)
+# stopped at 2.24.6 on 2026-02-28 while upstream kept releasing, so the tag
+# looked like upstream's head and was four minor versions behind it (#238).
 # Detects: SQL injection, command injection, hardcoded credentials, etc.
 [presets.gosec]
 name = "gosec"
 phase = "security"
-image = "securego/gosec:2.24.6@sha256:2cf71ea78210c496c65e3a987576a9c8317b68e20f2960520b3f6f8f9f539be5"
+image = "ghcr.io/securego/gosec:2.28.0@sha256:4342ad119a7c69f3f4e4ce78d81ba183dc774a70a7a4c6eeb15fe9e511f214f0"
 command = "./..."
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -375,11 +386,14 @@ GOTOOLCHAIN = "auto"
 # GolangCI-Lint: Fast Go linters aggregator
 # Official image: golangci/golangci-lint (maintained by golangci-lint team)
 # ✅ Container-first: Pre-configured with 50+ linters
+# The `-alpine` variant, not the default Debian one: same publisher, same tool
+# build, same entrypoint — but the Debian 13 base carried 515 of the image's
+# HIGH/CRITICAL findings and all 23 of its CRITICALs (#238).
 # Runs: staticcheck, govet, errcheck, gosec, and many more
 [presets.golangci-lint]
 name = "golangci-lint"
 phase = "code"
-image = "golangci/golangci-lint:v2.12.2@sha256:5cceeef04e53efe1470638d4b4b4f5ceefd574955ab3941b2d9a68a8c9ad5240"
+image = "golangci/golangci-lint:v2.12.2-alpine@sha256:91b27804074a0bacea298707f016911e60cf0cdbc6c7bf5ccacb5f0606d18d60"
 command = "golangci-lint run --timeout 5m"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -528,10 +542,15 @@ env_var = "LDFLAGS"
 # Docker Phase - Build and push container images
 # ============================================================================
 
+# Kaniko: build container images without a Docker daemon.
+# GoogleContainerTools/kaniko was archived on GitHub in 2025 — last release
+# v1.24.0 (2025-05-23), last commit June 2025 — so gcr.io/kaniko-project will
+# never be rebuilt again. osscontainertools/kaniko is the community fork that
+# took the project over; same entrypoint, same flags, same env (#238).
 [presets.kaniko]
 name = "kaniko"
 phase = "docker"
-image = "gcr.io/kaniko-project/executor:v1.24.0@sha256:4e7a52dd1f14872430652bb3b027405b8dfd17c4538751c620ac005741ef9698"
+image = "ghcr.io/osscontainertools/kaniko:v1.28.0@sha256:f072b11159668f4d11ba3a38d489db7ff18eb961b8140de91a437c71c1747583"
 command = "--context=/work --dockerfile=Dockerfile --destination=${IMAGE_NAME}:${IMAGE_TAG} --cache=true"
 workdir = "/work"
 volumes = [

@@ -9,6 +9,8 @@ Feature: Catalogue Image Pinning
       When I resolve the preset "<preset>" without overrides
       Then the resolved image should be pinned by digest
 
+      # gcr.io left the catalogue with kaniko (#238); the registries still
+      # represented here are dhi.io, docker.io and ghcr.io.
       Examples: One preset per registry the catalogue pulls from
         | preset      |
         | trivy       |
