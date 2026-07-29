@@ -7,6 +7,10 @@
 
 ### Fix
 
+- **presets**: update seven catalogue images carrying HIGH/CRITICAL findings the security audit had no answer for — `commitizen` 4.15.1→4.16.5, `commitlint` 21.0.0→21.2.1, `goreleaser` v2.15.4→v2.17.0, `black` 26.3.1→26.5.1, `gh-release` v2.92.0→v2.95, the Rust language pack 1.95.0→1.97.0 and the Ansible dev-tools image v25.12.0→v26.7.1 (#238)
+
+- **audit**: stop `Check Exceptions` swallowing its own result — an expired exception is now annotated on the run and named in the report instead of resolving silently to `status=expired` (#238)
+
 - **cli**: refuse a flag placed after an argument instead of ignoring it — `cidx release tag delete v1.2.3 --dry-run` deleted the tag (#268)
 
 - **actions**: keep `pr merge` cleanup working when another worktree holds main (#266)

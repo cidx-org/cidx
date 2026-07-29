@@ -108,7 +108,7 @@ config_files = [".gitleaks.toml"]
 [presets.commitlint]
 name = "commitlint"
 phase = "code"
-image = "commitlint/commitlint:21.0.0@sha256:f607550f066a09d5c3ef065495c7c7460535139977566ea3b1dac9f8c6afb430"
+image = "commitlint/commitlint:21.2.1@sha256:f4b38082bec66b4cd1b37a0357145dded515c4468e2b339ec9ba31f86461f6b9"
 command = "commitlint --from ${FROM} --to ${TO}"
 workdir = "/work"
 volumes = [
@@ -134,7 +134,7 @@ TO = "HEAD"
 [presets.commitizen]
 name = "commitizen"
 phase = "code"
-image = "commitizen/commitizen:4.15.1@sha256:0d3ff80420a972e6966417c32a02340bfbd7ade2d6fdad9b162d4ce6cfb74a6a"
+image = "commitizen/commitizen:4.16.5@sha256:451d0150ed7804c51cf201b2e9bd3f351867badbb7dc98f195cad740fdeaabaa"
 command = "sh -c 'export GIT_CONFIG_GLOBAL=/tmp/.gitconfig && git config --global --add safe.directory /work && BASE=$(git merge-base HEAD origin/main 2>/dev/null || git describe --tags --abbrev=0 2>/dev/null || echo HEAD~10) && COMMITS=$(git rev-list ${BASE}..HEAD --count 2>/dev/null || echo 0) && if [ \"$COMMITS\" = \"0\" ]; then echo \"No commits to validate\"; exit 0; fi && cz check --rev-range ${BASE}..HEAD'"
 entrypoint = [""]
 workdir = "/work"
@@ -151,7 +151,7 @@ config_files = [
 [presets.ansible-lint]
 name = "ansible-lint"
 phase = "code"
-image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0@sha256:83de707daf00cc415f7213132de09715cfdf66834232dbdb842f7196a70b846e"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v26.7.1@sha256:4d4db3e75c48ce64763d26adbca58ff3f8b93a8ddae785373ac973b4f20a7d92"
 command = "ansible-lint"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -160,7 +160,7 @@ config_files = [".ansible-lint"]
 [presets.molecule]
 name = "molecule"
 phase = "test"
-image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0@sha256:83de707daf00cc415f7213132de09715cfdf66834232dbdb842f7196a70b846e"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v26.7.1@sha256:4d4db3e75c48ce64763d26adbca58ff3f8b93a8ddae785373ac973b4f20a7d92"
 command = "molecule test -s ${SCENARIO}"
 workdir = "/work"
 volumes = [
@@ -183,7 +183,7 @@ env_var = "SCENARIO"
 [presets.yamllint]
 name = "yamllint"
 phase = "code"
-image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0@sha256:83de707daf00cc415f7213132de09715cfdf66834232dbdb842f7196a70b846e"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v26.7.1@sha256:4d4db3e75c48ce64763d26adbca58ff3f8b93a8ddae785373ac973b4f20a7d92"
 command = "yamllint ."
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -206,7 +206,7 @@ command_flag = "--format"
 [presets.ansible-syntax]
 name = "ansible-syntax"
 phase = "code"
-image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0@sha256:83de707daf00cc415f7213132de09715cfdf66834232dbdb842f7196a70b846e"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v26.7.1@sha256:4d4db3e75c48ce64763d26adbca58ff3f8b93a8ddae785373ac973b4f20a7d92"
 command = "ansible-playbook --syntax-check ${PLAYBOOK}"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -225,7 +225,7 @@ env_var = "PLAYBOOK"
 [presets.ansible-test]
 name = "ansible-test"
 phase = "test"
-image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0@sha256:83de707daf00cc415f7213132de09715cfdf66834232dbdb842f7196a70b846e"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v26.7.1@sha256:4d4db3e75c48ce64763d26adbca58ff3f8b93a8ddae785373ac973b4f20a7d92"
 command = "ansible-test ${TEST_TYPE} --docker"
 workdir = "/work"
 volumes = [
@@ -253,7 +253,7 @@ command_flag = "--python"
 [presets.ansible-galaxy-build]
 name = "ansible-galaxy-build"
 phase = "build"
-image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0@sha256:83de707daf00cc415f7213132de09715cfdf66834232dbdb842f7196a70b846e"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v26.7.1@sha256:4d4db3e75c48ce64763d26adbca58ff3f8b93a8ddae785373ac973b4f20a7d92"
 command = "ansible-galaxy collection build --output-path ${OUTPUT_PATH}"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -273,7 +273,7 @@ command_flag = "--force"
 [presets.ansible-galaxy-publish]
 name = "ansible-galaxy-publish"
 phase = "release"
-image = "ghcr.io/ansible/community-ansible-dev-tools:v25.12.0@sha256:83de707daf00cc415f7213132de09715cfdf66834232dbdb842f7196a70b846e"
+image = "ghcr.io/ansible/community-ansible-dev-tools:v26.7.1@sha256:4d4db3e75c48ce64763d26adbca58ff3f8b93a8ddae785373ac973b4f20a7d92"
 command = "ansible-galaxy collection publish ${ARTIFACT}"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -590,7 +590,7 @@ IMAGE_TAG = "latest"
 [presets.gh-release]
 name = "gh-release"
 phase = "release"
-image = "maniator/gh:v2.92.0@sha256:63c7b3b8610ed9eab086b2b71fc415e74734e0ed83ba95a76bf9165c279f2dd3"
+image = "maniator/gh:v2.95@sha256:c7e862eeb468003aba87847a03e214a21638cd898130d6e5894f019aec091913"
 entrypoint = [""]  # Override image entrypoint (gh) to allow shell commands
 # Smart command: uses prepared release notes if available (versioned filename), otherwise auto-generates
 command = "sh -c 'if [ -f .cidx/release-version ]; then VERSION=$(cat .cidx/release-version | tr -d \"\\n\"); NOTES_FILE=\".cidx/release-notes-v${VERSION}.md\"; if [ -f \"$NOTES_FILE\" ]; then echo \"Using prepared release notes: $NOTES_FILE\"; gh release create ${TAG} ${ARTIFACTS} --notes-file \"$NOTES_FILE\"; exit 0; fi; fi; echo \"Auto-generating release notes...\"; gh release create ${TAG} ${ARTIFACTS} --generate-notes'"
@@ -625,7 +625,7 @@ command_flag = "--notes-file"
 [presets.goreleaser]
 name = "goreleaser"
 phase = "release"
-image = "goreleaser/goreleaser:v2.15.4@sha256:579eee23514fa647adcc669b5875f866f1c1faf5a0464aec4614a9121684c06c"
+image = "goreleaser/goreleaser:v2.17.0@sha256:054eefd282c02233a2556ce2d1a60cd2f51dc565ffc2520dc38b5deb4dd1ad30"
 command = "goreleaser release --clean"
 workdir = "/work"
 volumes = [
@@ -683,7 +683,7 @@ command_flag = "format"
 [presets.black]
 name = "black"
 phase = "code"
-image = "pyfound/black:26.3.1@sha256:6ef96489dd2af4cf66aa4f1f04bca5b0dd6afef5b38de26b8cf921d10ff0b67d"
+image = "pyfound/black:26.5.1@sha256:bcdafe3e6a60fd181fde19859f7ee4c498557f03bb30af3fa880f502a66e5b5f"
 command = "black --check ."
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -834,7 +834,7 @@ command_flag = "--repository"
 [presets.rustfmt]
 name = "rustfmt"
 phase = "code"
-image = "rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3"
+image = "rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9"
 command = "sh -c 'rustup component add rustfmt && cargo fmt -- --check'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -845,7 +845,7 @@ config_files = ["rustfmt.toml", ".rustfmt.toml"]
 [presets.clippy]
 name = "clippy"
 phase = "code"
-image = "rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3"
+image = "rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9"
 command = "sh -c 'rustup component add clippy && cargo clippy -- -D warnings'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -871,7 +871,7 @@ command_flag = "-W clippy::pedantic"
 [presets.cargo-audit]
 name = "cargo-audit"
 phase = "security"
-image = "rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3"
+image = "rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9"
 command = "sh -c 'curl -sSfL https://github.com/rustsec/rustsec/releases/download/cargo-audit/v0.22.2/cargo-audit-$(uname -m)-unknown-linux-gnu-v0.22.2.tgz | tar xz --strip-components=1 -C /tmp && HOME=/tmp CARGO_HOME=/tmp/cargo /tmp/cargo-audit audit'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -887,7 +887,7 @@ command_flag = "--deny warnings"
 [presets.cargo-test]
 name = "cargo-test"
 phase = "test"
-image = "rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3"
+image = "rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9"
 command = "cargo test"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -912,7 +912,7 @@ command_flag = "--all-features"
 [presets.cargo-build]
 name = "cargo-build"
 phase = "build"
-image = "rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3"
+image = "rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9"
 command = "cargo build --release"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -928,7 +928,7 @@ command_flag = "--target"
 [presets.cargo-publish]
 name = "cargo-publish"
 phase = "release"
-image = "rust:1.95.0@sha256:f49565f188ee00bc2a18dd418183f2c5f23ef7d6e691890517ed341a598f67c3"
+image = "rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9"
 command = "cargo publish"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
