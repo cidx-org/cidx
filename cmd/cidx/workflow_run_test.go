@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"strings"
 	"testing"
 
@@ -13,28 +12,7 @@ import (
 // a repository or a network call.
 func runContext(t *testing.T, args ...string) *cli.Context {
 	t.Helper()
-
-	var cmd *cli.Command
-	for _, sub := range workflowCommand().Subcommands {
-		if sub.Name == "run" {
-			cmd = sub
-		}
-	}
-	if cmd == nil {
-		t.Fatal("workflow run subcommand not found")
-	}
-
-	set := flag.NewFlagSet("run", flag.ContinueOnError)
-	for _, f := range cmd.Flags {
-		if err := f.Apply(set); err != nil {
-			t.Fatalf("failed to apply flag: %v", err)
-		}
-	}
-	if err := set.Parse(args); err != nil {
-		t.Fatalf("failed to parse %v: %v", args, err)
-	}
-
-	return cli.NewContext(cli.NewApp(), set, nil)
+	return contextFor(t, commandAt(t, "workflow", "run"), args...)
 }
 
 func TestWorkflowRunActionRequiresAWorkflowName(t *testing.T) {
@@ -47,15 +25,19 @@ func TestWorkflowRunActionRequiresAWorkflowName(t *testing.T) {
 // urfave/cli stops parsing flags at the first positional argument, so
 // `workflow run ci --ref main` reaches the action with --ref unset and would
 // silently run on the current branch. Refusing beats guessing (issue #266).
-func TestWorkflowRunActionRefusesOptionsAfterTheName(t *testing.T) {
-	err := workflowRunAction(runContext(t, "ci.yml", "--ref", "main"))
+//
+// The refusal used to live in workflowRunAction; it now comes from the guard
+// every command carries (issue #268), so this checks the case that found the
+// bug still comes back with the line that works.
+func TestWorkflowRunRefusesOptionsAfterTheName(t *testing.T) {
+	cmd := commandAt(t, "workflow", "run")
+
+	err := cmd.Before(runContext(t, "ci.yml", "--ref", "main"))
 	if err == nil {
 		t.Fatal("expected an error for options placed after the workflow name")
 	}
-	for _, want := range []string{"--ref main", "cidx workflow run --ref main ci.yml"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("error %q should mention %q", err, want)
-		}
+	if want := "cidx workflow run --ref main ci.yml"; !strings.Contains(err.Error(), want) {
+		t.Errorf("error %q should mention %q", err, want)
 	}
 }
 

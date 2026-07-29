@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"strings"
-
 	"github.com/cidx-org/cidx/v2/pkg/actions"
 	"github.com/cidx-org/cidx/v2/pkg/branch"
 	"github.com/cidx-org/cidx/v2/pkg/remote"
@@ -146,15 +144,8 @@ func workflowRunAction(c *cli.Context) error {
 		return fmt.Errorf("workflow name is required: cidx workflow run [options] <workflow>")
 	}
 
-	// urfave/cli stops parsing flags at the first positional argument, so
-	// `workflow run ci --ref main` would silently run on the current branch
-	// instead of main. By the time this runs the flags are already lost, so
-	// the only honest thing left is to refuse and show the working form.
-	if c.Args().Len() > 1 {
-		return fmt.Errorf("options after the workflow name are not parsed -- put them first: cidx workflow run %s %s",
-			strings.Join(c.Args().Tail(), " "), workflow)
-	}
-
+	// Options placed after the name were caught right here (#266); the check now
+	// covers the whole tree, installed from newApp (issue #268).
 	inputs, err := actions.ParseWorkflowInputs(c.StringSlice("input"))
 	if err != nil {
 		return err

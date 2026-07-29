@@ -35,6 +35,16 @@ func main() {
 // the tree can be walked outside of a run — `cidx validate` resolves the
 // invocations it finds in the workflows against it (issue #239).
 func newApp() *cli.App {
+	app := buildApp()
+
+	// Applied to the finished tree, not written into each command: every
+	// command is covered, including the ones added after this line (issue #268).
+	installFlagPlacementGuard(app)
+
+	return app
+}
+
+func buildApp() *cli.App {
 	return &cli.App{
 		Name:                   "cidx",
 		Usage:                  "CI with Declarative eXecution - Integrate any project in two commands",
@@ -46,7 +56,7 @@ func newApp() *cli.App {
 			runCommand(),
 			generateCommand(),
 			validateCommand(),
-			checkCommand,
+			checkCommand(),
 			doctorCommand(),
 			presetCommand(),
 			statusCommand(),

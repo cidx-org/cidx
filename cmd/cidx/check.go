@@ -14,44 +14,50 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-var checkCommand = &cli.Command{
-	Name:  "check",
-	Usage: "Validate configuration and workflows",
-	Subcommands: []*cli.Command{
-		{
-			Name:  "drift",
-			Usage: "Compare cidx.toml with actual CI workflow and detect divergence",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:        "file",
-					Aliases:     []string{"f"},
-					Usage:       "Path to CI workflow file",
-					DefaultText: "auto-detect: cidx.yml, ci.yml",
+// checkCommand is built on demand like every other command. It used to be a
+// package-level value, which made it the one branch of the tree shared between
+// two newApp() calls -- urfave appends a `help` subcommand to the tree it runs,
+// so the second call got a tree the first one had mutated (issue #268).
+func checkCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "check",
+		Usage: "Validate configuration and workflows",
+		Subcommands: []*cli.Command{
+			{
+				Name:  "drift",
+				Usage: "Compare cidx.toml with actual CI workflow and detect divergence",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:        "file",
+						Aliases:     []string{"f"},
+						Usage:       "Path to CI workflow file",
+						DefaultText: "auto-detect: cidx.yml, ci.yml",
+					},
 				},
+				Action: checkDriftAction,
 			},
-			Action: checkDriftAction,
-		},
-		{
-			Name:      "workflow",
-			Usage:     "Validate that cidx.toml pipelines match GitHub Actions workflows",
-			ArgsUsage: "[pipeline-name]",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:    "workflow-dir",
-					Aliases: []string{"w"},
-					Value:   ".github/workflows",
-					Usage:   "Directory containing GitHub Actions workflow files",
+			{
+				Name:      "workflow",
+				Usage:     "Validate that cidx.toml pipelines match GitHub Actions workflows",
+				ArgsUsage: "[pipeline-name]",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "workflow-dir",
+						Aliases: []string{"w"},
+						Value:   ".github/workflows",
+						Usage:   "Directory containing GitHub Actions workflow files",
+					},
+					&cli.BoolFlag{
+						Name:    "verbose",
+						Aliases: []string{"v"},
+						Value:   false,
+						Usage:   "Show detailed validation information",
+					},
 				},
-				&cli.BoolFlag{
-					Name:    "verbose",
-					Aliases: []string{"v"},
-					Value:   false,
-					Usage:   "Show detailed validation information",
-				},
+				Action: checkWorkflowAction,
 			},
-			Action: checkWorkflowAction,
 		},
-	},
+	}
 }
 
 // resolveConfigPath returns the config file to read: the global --config when
