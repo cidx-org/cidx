@@ -681,6 +681,23 @@ func (a *PRAction) generatePRBody() string {
 	return body
 }
 
+// worktreeConflictRe matches git's refusal to check out a branch that another
+// worktree already holds. Two wordings are in the wild:
+//
+//	fatal: 'main' is already used by worktree at '/path/to/other'
+//	fatal: 'main' is already checked out at '/path/to/other'
+var worktreeConflictRe = regexp.MustCompile(`is already (?:used by worktree|checked out) at '([^']*)'`)
+
+// worktreeHolding reports the path of the other worktree git named, when the
+// checkout failed only because that worktree has the branch.
+func worktreeHolding(gitOutput string) (string, bool) {
+	m := worktreeConflictRe.FindStringSubmatch(gitOutput)
+	if m == nil {
+		return "", false
+	}
+	return m[1], true
+}
+
 // postMergeCleanup handles cleanup after a successful PR merge:
 // - Checkout main branch
 // - Pull latest changes
@@ -698,6 +715,17 @@ func (a *PRAction) postMergeCleanup(mergedBranch string) error {
 	checkoutCmd := exec.Command("git", "checkout", "main")
 	checkoutCmd.Dir = workDir
 	if output, err := checkoutCmd.CombinedOutput(); err != nil {
+		// Keeping a baseline worktree on main is a normal setup, and git
+		// refuses to check the branch out twice. The merge already succeeded,
+		// so this is a fact to report, not a failed cleanup (issue #266).
+		// Nothing local can be switched or deleted from here -- this worktree
+		// stays on the merged branch -- but the remote branch still goes.
+		if holder, held := worktreeHolding(string(output)); held {
+			log.Infof("  ℹ️  'main' is checked out in another worktree (%s) -- staying on '%s'", holder, mergedBranch)
+			a.deleteRemoteBranch(workDir, mergedBranch)
+			log.Infof("✅ Cleanup complete! Remote branch removed; this worktree stays on '%s'.", mergedBranch)
+			return nil
+		}
 		return fmt.Errorf("failed to checkout main: %w\n%s", err, output)
 	}
 
@@ -725,18 +753,23 @@ func (a *PRAction) postMergeCleanup(mergedBranch string) error {
 	}
 
 	// 4. Delete remote branch
+	a.deleteRemoteBranch(workDir, mergedBranch)
+
+	log.Info("✅ Cleanup complete! You're on main with latest changes.")
+
+	return nil
+}
+
+// deleteRemoteBranch removes the merged branch from origin. A branch GitHub
+// already deleted on merge is not an error.
+func (a *PRAction) deleteRemoteBranch(workDir, mergedBranch string) {
 	log.Infof("  → Deleting remote branch '%s'...", mergedBranch)
 	deleteRemoteCmd := exec.Command("git", "push", "origin", "--delete", mergedBranch)
 	deleteRemoteCmd.Dir = workDir
 	if output, err := deleteRemoteCmd.CombinedOutput(); err != nil {
-		// Remote branch might already be deleted by GitHub
 		outputStr := strings.TrimSpace(string(output))
 		if !strings.Contains(outputStr, "remote ref does not exist") {
 			log.Warnf("  ⚠️  Could not delete remote branch: %s", outputStr)
 		}
 	}
-
-	log.Info("✅ Cleanup complete! You're on main with latest changes.")
-
-	return nil
 }

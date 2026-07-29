@@ -2,9 +2,12 @@
 
 ### Feat
 
+- **workflow**: trigger a workflow with `cidx workflow run` and watch the run it starts (#266)
 - **validate**: catch workflow steps calling a cidx subcommand that no longer exists (#239)
 
 ### Fix
+
+- **actions**: keep `pr merge` cleanup working when another worktree holds main (#266)
 
 - **validator**: extract workflow phases in declaration order so `check workflow` stops flapping (#233)
 

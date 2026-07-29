@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"strings"
+
 	"github.com/cidx-org/cidx/v2/pkg/actions"
 	"github.com/cidx-org/cidx/v2/pkg/branch"
 	"github.com/cidx-org/cidx/v2/pkg/remote"
@@ -49,6 +51,48 @@ func workflowCommand() *cli.Command {
 				},
 			},
 			{
+				Name:      "run",
+				Usage:     "Trigger a workflow and watch the run it starts",
+				ArgsUsage: "[options] <workflow>",
+				Description: `Triggers a workflow on a ref and follows the run it creates.
+
+The workflow is named by its file: 'ci.yml', or 'ci' for short. It must declare
+the 'workflow_dispatch' trigger on the default branch, otherwise GitHub refuses
+the dispatch.
+
+--ref defaults to the current branch, which is the point of the command: trying
+a workflow change on your own branch before merging it. The branch has to be
+pushed.
+
+The run is watched until it completes; --no-watch prints its URL and returns.
+
+Options go before the workflow name -- anything after it is not parsed as a
+flag.
+
+Examples:
+  cidx workflow run ci                                # current branch
+  cidx workflow run --ref main release.yml
+  cidx workflow run --input dry_run=true container-monitor.yml
+  cidx workflow run --no-watch ci`,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "ref",
+						Aliases: []string{"r"},
+						Usage:   "Branch or tag to run on (defaults to current branch)",
+					},
+					&cli.StringSliceFlag{
+						Name:    "input",
+						Aliases: []string{"i"},
+						Usage:   "Workflow input as key=value (repeatable)",
+					},
+					&cli.BoolFlag{
+						Name:  "no-watch",
+						Usage: "Print the run URL and return instead of watching it",
+					},
+				},
+				Action: workflowRunAction,
+			},
+			{
 				Name:      "watch",
 				Usage:     "Watch a workflow run until it completes (works for any branch, no PR required)",
 				Aliases:   []string{"w"},
@@ -92,6 +136,44 @@ Examples:
 			},
 		},
 	}
+}
+
+// workflowRunAction resolves the ref (defaulting to the current branch) and
+// the inputs, then delegates to actions.WorkflowRunAction.
+func workflowRunAction(c *cli.Context) error {
+	workflow := c.Args().First()
+	if workflow == "" {
+		return fmt.Errorf("workflow name is required: cidx workflow run [options] <workflow>")
+	}
+
+	// urfave/cli stops parsing flags at the first positional argument, so
+	// `workflow run ci --ref main` would silently run on the current branch
+	// instead of main. By the time this runs the flags are already lost, so
+	// the only honest thing left is to refuse and show the working form.
+	if c.Args().Len() > 1 {
+		return fmt.Errorf("options after the workflow name are not parsed -- put them first: cidx workflow run %s %s",
+			strings.Join(c.Args().Tail(), " "), workflow)
+	}
+
+	inputs, err := actions.ParseWorkflowInputs(c.StringSlice("input"))
+	if err != nil {
+		return err
+	}
+
+	// Validating a change to a workflow means running it on the branch that
+	// carries the change, so the current branch is the default.
+	ref := c.String("ref")
+	if ref == "" {
+		ref, err = branch.GetCurrentBranch()
+		if err != nil {
+			return fmt.Errorf("failed to get current branch: %w", err)
+		}
+	}
+
+	return withRepoAndProvider(func(_ *vcs.Repository, provider remote.Provider) error {
+		action := actions.NewWorkflowRun(provider, workflow, ref, inputs, !c.Bool("no-watch"))
+		return action.Execute(context.Background())
+	})
 }
 
 // workflowWatchAction resolves the run to watch (by ID, by --tag, by --branch,

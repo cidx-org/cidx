@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"time"
 
@@ -143,6 +144,56 @@ func (c *Client) GetLatestWorkflow(ctx context.Context, branch string) (*remote.
 	}
 
 	pipeline := pipelines[0]
+	return &remote.Workflow{
+		ID:         fmt.Sprintf("%d", pipeline.ID),
+		Status:     mapPipelineStatus(pipeline.Status),
+		Conclusion: mapPipelineConclusion(pipeline.Status),
+		URL:        pipeline.WebURL,
+		Jobs:       []remote.Job{},
+	}, nil
+}
+
+// TriggerWorkflow starts a pipeline on ref and returns it.
+//
+// GitLab runs one pipeline definition per project, so workflowFile selects
+// nothing here -- it is reported and ignored rather than silently dropped. The
+// inputs become pipeline variables, GitLab's equivalent of the key/value pairs
+// a workflow_dispatch takes.
+//
+// Unlike GitHub's dispatch endpoint, POST /projects/:id/pipeline answers with
+// the pipeline it created, so there is no run to identify afterwards and none
+// of the raciness documented on the GitHub side applies (issue #266).
+func (c *Client) TriggerWorkflow(ctx context.Context, workflowFile, ref string, inputs map[string]string) (*remote.Workflow, error) {
+	if ref == "" {
+		return nil, fmt.Errorf("a ref is required to trigger a pipeline")
+	}
+	if workflowFile != "" {
+		log.Infof("GitLab runs one pipeline definition per project: %q selects nothing, triggering the project pipeline on %s", workflowFile, ref)
+	}
+
+	opts := &gitlab.CreatePipelineOptions{Ref: gitlab.Ptr(ref)}
+	if len(inputs) > 0 {
+		keys := make([]string, 0, len(inputs))
+		for k := range inputs {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		vars := make([]*gitlab.PipelineVariableOptions, 0, len(keys))
+		for _, k := range keys {
+			vars = append(vars, &gitlab.PipelineVariableOptions{
+				Key:   gitlab.Ptr(k),
+				Value: gitlab.Ptr(inputs[k]),
+			})
+		}
+		opts.Variables = &vars
+	}
+
+	pipeline, _, err := c.client.Pipelines.CreatePipeline(c.projectID, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to trigger pipeline on %s (check that the ref is pushed and that .gitlab-ci.yml runs for it): %w", ref, err)
+	}
+
 	return &remote.Workflow{
 		ID:         fmt.Sprintf("%d", pipeline.ID),
 		Status:     mapPipelineStatus(pipeline.Status),

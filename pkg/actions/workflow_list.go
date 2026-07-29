@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cidx-org/cidx/v2/pkg/remote"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -85,11 +86,9 @@ func (a *WorkflowListAction) Execute(ctx context.Context) error {
 
 // getWorkflowRuns fetches workflow runs from GitHub
 func (a *WorkflowListAction) getWorkflowRuns() ([]WorkflowRun, error) {
-	// Use gh CLI to get workflow runs
-	workflowFile := a.workflow
-	if !strings.HasSuffix(workflowFile, ".yml") && !strings.HasSuffix(workflowFile, ".yaml") {
-		workflowFile = a.workflow + ".yml"
-	}
+	// Use gh CLI to get workflow runs. The name-to-file transform is shared
+	// with `workflow run`, so both commands resolve a name the same way.
+	workflowFile := remote.NormalizeWorkflowFile(a.workflow)
 
 	args := []string{
 		"api",
