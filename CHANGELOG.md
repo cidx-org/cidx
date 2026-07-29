@@ -7,6 +7,8 @@
 
 ### Fix
 
+- **cli**: refuse a flag placed after an argument instead of ignoring it — `cidx release tag delete v1.2.3 --dry-run` deleted the tag (#268)
+
 - **actions**: keep `pr merge` cleanup working when another worktree holds main (#266)
 
 - **validator**: extract workflow phases in declaration order so `check workflow` stops flapping (#233)
