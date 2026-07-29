@@ -16,6 +16,28 @@ func writeWorkflow(t *testing.T, dir, name string) string {
 	return path
 }
 
+func TestNormalizeWorkflowFile(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"bare name gets the conventional extension", "ci", "ci.yml"},
+		{"a .yml name is left alone", "go-version-check.yml", "go-version-check.yml"},
+		{"a .yaml name is left alone", "release.yaml", "release.yaml"},
+		{"surrounding spaces are trimmed", "  ci  ", "ci.yml"},
+		{"a dotted name is not mistaken for an extension", "container-monitor.v2", "container-monitor.v2.yml"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := NormalizeWorkflowFile(tt.in); got != tt.want {
+				t.Errorf("NormalizeWorkflowFile(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestResolveWorkflowFile(t *testing.T) {
 	t.Run("finds cidx.yml when it is the only candidate", func(t *testing.T) {
 		dir := t.TempDir()

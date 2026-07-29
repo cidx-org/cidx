@@ -33,6 +33,17 @@ type Provider interface {
 	// WatchWorkflow streams updates for a running workflow
 	WatchWorkflow(ctx context.Context, workflowID string) (<-chan WorkflowUpdate, error)
 
+	// TriggerWorkflow starts a run of workflowFile on ref and returns the run
+	// it created, so the caller can chain straight into watching it. inputs are
+	// the trigger's parameters, passed through unchanged.
+	//
+	// GitHub's dispatch endpoint answers 204 with no body, so the created run
+	// has to be identified afterwards and that identification is best-effort --
+	// see the implementation for exactly what it guarantees. GitLab's
+	// create-pipeline call returns the pipeline, so there is nothing to guess
+	// on that side (issue #266).
+	TriggerWorkflow(ctx context.Context, workflowFile, ref string, inputs map[string]string) (*Workflow, error)
+
 	// CreatePullRequest creates a new pull request
 	CreatePullRequest(ctx context.Context, title, body, head, base string, draft bool) (number int, url string, err error)
 

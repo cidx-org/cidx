@@ -17,6 +17,18 @@ const GitHubWorkflowDir = ".github/workflows"
 // from this list instead of hardcoding a filename (issue #170).
 var CandidateWorkflowFiles = []string{"cidx.yml", "ci.yml"}
 
+// NormalizeWorkflowFile returns the filename a workflow name refers to, so
+// `ci` and `ci.yml` name the same workflow. GitHub addresses a workflow by its
+// file name, so every command that takes one -- `workflow list`, `workflow
+// run` -- has to agree on this transform (issue #266).
+func NormalizeWorkflowFile(name string) string {
+	name = strings.TrimSpace(name)
+	if strings.HasSuffix(name, ".yml") || strings.HasSuffix(name, ".yaml") {
+		return name
+	}
+	return name + ".yml"
+}
+
 // ResolveWorkflowFile returns the path of the first candidate workflow file
 // that exists in dir. When none is found, the error names every candidate
 // tried so the user knows what was searched.

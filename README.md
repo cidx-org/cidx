@@ -132,6 +132,9 @@ cidx repo branch list --stale             # Find stale branches
 cidx repo branch cleanup -x              # Delete merged branches
 
 # Workflow runs (no PR required, e.g. direct push to main)
+cidx repo workflow run ci                 # Trigger on current branch, then watch it
+cidx repo workflow run --ref main ci      # Trigger on another ref
+cidx repo workflow run -i dry_run=true container-monitor  # workflow_dispatch inputs
 cidx repo workflow watch                  # Watch latest run on current branch
 cidx repo workflow watch --branch main    # Watch latest run on main
 cidx repo workflow watch --tag v1.2.3     # Watch the run a tag push triggered

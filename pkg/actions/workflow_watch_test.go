@@ -23,6 +23,25 @@ type fakeProvider struct {
 	runErr          map[string]error
 	watchUpdates    []remote.WorkflowUpdate
 	watchErr        error
+
+	triggered    *remote.Workflow
+	triggerErr   error
+	triggerCalls []triggerCall
+}
+
+// triggerCall records what a TriggerWorkflow call was asked to do.
+type triggerCall struct {
+	workflow string
+	ref      string
+	inputs   map[string]string
+}
+
+func (f *fakeProvider) TriggerWorkflow(_ context.Context, workflowFile, ref string, inputs map[string]string) (*remote.Workflow, error) {
+	f.triggerCalls = append(f.triggerCalls, triggerCall{workflow: workflowFile, ref: ref, inputs: inputs})
+	if f.triggerErr != nil {
+		return nil, f.triggerErr
+	}
+	return f.triggered, nil
 }
 
 func (f *fakeProvider) GetLatestWorkflow(_ context.Context, branch string) (*remote.Workflow, error) {
