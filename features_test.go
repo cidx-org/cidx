@@ -7,6 +7,8 @@ import (
 
 	"github.com/cucumber/godog"
 	"github.com/cucumber/godog/colors"
+
+	"github.com/cidx-org/cidx/v2/pkg/executor"
 )
 
 // Test repository configuration
@@ -18,6 +20,10 @@ const (
 
 // TestFeatures runs BDD scenarios that don't require Docker (strict mode).
 // These are the living documentation -- if they fail, the spec is broken.
+//
+// This is the suite CI gates on: cidx.toml overrides the go-test command to
+// `go test -v ./...` so the root package -- this file and the *_steps_test.go
+// definitions next to it -- is compiled and run like any other package.
 func TestFeatures(t *testing.T) {
 	suite := godog.TestSuite{
 		ScenarioInitializer: InitializeScenario,
@@ -41,7 +47,16 @@ func TestFeatures(t *testing.T) {
 // TestFeaturesDocker runs scenarios that require Docker daemon control.
 // These run in best-effort mode -- pending steps are acceptable when
 // the Docker environment cannot be fully controlled (e.g. in CI without DinD).
+//
+// Best-effort must not mean "silently green". With no runtime reachable every
+// scenario short-circuits to pending, Strict:false forgives pending, and the
+// suite reports PASS having asserted nothing -- the same decorative signal as
+// #239 and #265. Skipping says so out loud instead.
 func TestFeaturesDocker(t *testing.T) {
+	if !containerRuntimeReachable() {
+		t.Skip("no container runtime reachable: @docker-required scenarios need one to assert anything")
+	}
+
 	suite := godog.TestSuite{
 		ScenarioInitializer: InitializeScenario,
 		Options: &godog.Options{
@@ -59,6 +74,18 @@ func TestFeaturesDocker(t *testing.T) {
 	if status != 0 {
 		t.Fatalf("Docker-dependent BDD scenarios failed with status %d", status)
 	}
+}
+
+// containerRuntimeReachable reports whether Docker or Podman answers, using the
+// same selector the executor scenarios use so the gate and the steps agree.
+func containerRuntimeReachable() bool {
+	selector, err := executor.NewSelector(false, false, false)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = selector.Close() }()
+
+	return selector.DockerAvailable() || selector.PodmanAvailable()
 }
 
 // InitializeScenario registers all step definitions

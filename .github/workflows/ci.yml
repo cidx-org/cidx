@@ -127,8 +127,12 @@ jobs:
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
 
+      # --verbose defeats the CI auto-quiet, which buffers container output and
+      # prints it only on failure. A green test job whose log shows nothing
+      # cannot tell you whether 159 BDD scenarios ran or zero -- the scenario
+      # and step totals are the evidence that the suite is a real gate.
       - name: Run tests
-        run: ./bin/cidx run test
+        run: ./bin/cidx --verbose run test
 
   # Build: Compile final binary (only on main branch)
   build:

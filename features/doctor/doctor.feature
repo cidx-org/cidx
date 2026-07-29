@@ -5,6 +5,7 @@ Feature: Environment Doctor
 
   Rule: Doctor checks container runtime availability
 
+    @docker-required
     Scenario: Docker is available
       Given Docker daemon is running
       When I run "cidx doctor"
@@ -46,6 +47,7 @@ Feature: Environment Doctor
 
   Rule: Doctor reports overall status
 
+    @docker-required
     Scenario: All checks pass
       Given Docker daemon is running
       And I am in a Git repository
@@ -54,6 +56,7 @@ Feature: Environment Doctor
       Then the exit code should be 0
       And I should see "All checks passed"
 
+    @docker-required
     Scenario: Some checks fail
       Given Docker daemon is running
       And I am NOT in a Git repository
