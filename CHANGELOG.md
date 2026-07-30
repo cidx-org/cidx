@@ -2,6 +2,8 @@
 
 ### Feat
 
+- **security**: publish what the catalogue actually ships in `SECURITY-BASELINE.md` — every image pinned by digest with the HIGH/CRITICAL findings accepted on it — and expire the exceptions no catalogue image carries any more with `cidx security vuln prune`, which reports by default and only removes an entry whose CVE the findings show is gone (#238)
+
 - **workflow**: trigger a workflow with `cidx workflow run` and watch the run it starts (#266)
 - **validate**: catch workflow steps calling a cidx subcommand that no longer exists (#239)
 

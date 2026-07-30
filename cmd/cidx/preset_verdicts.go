@@ -192,10 +192,29 @@ func scanResultFile(scanner, image string) string {
 	return fmt.Sprintf("%s-%s.json", scanner, imageFileName.Replace(image))
 }
 
+// scanResultFiles is every name a scanner result for one image may be filed
+// under. Two workflows produce these files and they do not spell the name the
+// same way: container-monitor.yml runs `tr '/:@' '___'`, security-audit.yml runs
+// `tr '/:' '__'` and leaves the `@` alone. Both are legitimate sources of
+// findings, so both names are tried rather than one of the workflows being
+// edited into agreement — a rename there is a silent miss here.
+func scanResultFiles(scanner, image string) []string {
+	monitor := scanResultFile(scanner, image)
+	audit := fmt.Sprintf("%s-%s.json", scanner, auditFileName.Replace(image))
+	if audit == monitor {
+		return []string{monitor}
+	}
+	return []string{monitor, audit}
+}
+
 // imageFileName flattens an image reference into something a file system will
 // take: `/`, `:` and `@` all become `_`, exactly as `tr '/:@' '___'` does in the
 // workflow.
 var imageFileName = strings.NewReplacer("/", "_", ":", "_", "@", "_")
+
+// auditFileName is security-audit.yml's flattening: `tr '/:' '__'`, which leaves
+// the digest separator in place.
+var auditFileName = strings.NewReplacer("/", "_", ":", "_")
 
 // scanFindings collects the HIGH/CRITICAL vulnerabilities the scanners reported
 // for one image, and names the ones that actually produced a result.
@@ -223,7 +242,7 @@ func scanFindings(dir, image string) ([]string, []string, error) {
 	var found, read []string
 
 	for _, scanner := range scanners {
-		data, err := os.ReadFile(filepath.Join(dir, scanResultFile(scanner.name, image)))
+		data, err := readFirstResult(dir, scanResultFiles(scanner.name, image))
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
@@ -244,6 +263,19 @@ func scanFindings(dir, image string) ([]string, []string, error) {
 		return nil, nil, errNoScanResults
 	}
 	return found, read, nil
+}
+
+// readFirstResult returns the first of the candidate names that exists, and
+// os.ErrNotExist when none does.
+func readFirstResult(dir string, names []string) ([]byte, error) {
+	for _, name := range names {
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		return data, err
+	}
+	return nil, os.ErrNotExist
 }
 
 // trivyFindings reads the vulnerability identifiers out of `trivy image

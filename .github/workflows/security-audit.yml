@@ -139,7 +139,14 @@ jobs:
           SAFE_NAME=$(echo "$IMAGE" | tr '/:' '_')
           mkdir -p results
 
-          # Run scan and capture output (don't fail yet)
+          # Run scan and capture output (don't fail yet).
+          #
+          # stderr is dropped rather than merged: `2>&1` here put docker's own
+          # "Pulling from ..." progress at the head of every .json this job
+          # uploaded, so the artifacts parsed as JSON nowhere — including in
+          # `cidx security vuln prune`, which reads exactly these files to decide
+          # whether an accepted CVE is still present (#238). The .txt capture
+          # below still keeps stderr, which is where the auth check reads it.
           docker run --rm \
             -v "$(pwd)/.trivyignore:/root/.trivyignore:ro" \
             -v "$HOME/.cache/trivy:/root/.cache/trivy" \
@@ -148,7 +155,7 @@ jobs:
             --ignorefile /root/.trivyignore \
             --skip-db-update \
             --format json \
-            "$IMAGE" > results/trivy-${SAFE_NAME}.json 2>&1 || true
+            "$IMAGE" > results/trivy-${SAFE_NAME}.json 2>/dev/null || true
 
           # Also get table format for display
           docker run --rm \
@@ -251,7 +258,8 @@ jobs:
           SAFE_NAME=$(echo "$IMAGE" | tr '/:' '_')
           mkdir -p results
 
-          # Run scan and capture output
+          # Same as the Trivy job: stderr stays out of the JSON, which was
+          # otherwise headed by docker's pull progress and parsed nowhere (#238).
           docker run --rm \
             -v "$(pwd)/.grype.yaml:/.grype.yaml:ro" \
             -v "$HOME/.cache/grype:/root/.cache/grype:ro" \
@@ -260,7 +268,7 @@ jobs:
             anchore/grype:latest \
             "registry:$IMAGE" \
             --config /.grype.yaml \
-            -o json > results/grype-${SAFE_NAME}.json 2>&1 || true
+            -o json > results/grype-${SAFE_NAME}.json 2>/dev/null || true
 
           # Also get table format
           docker run --rm \
