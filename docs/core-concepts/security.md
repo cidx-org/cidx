@@ -222,7 +222,7 @@ The version does not move, so rule 2 has nothing to hold: 1.97.0 is the release 
 
 `ruff` is the case the rule exists to catch in both directions: the publisher's default is a scratch image, and reaching for `-alpine` out of habit would have _added_ 21 findings. Measure, then choose.
 
-The remaining images publish no smaller variant at their pinned version (`commitizen`, `commitlint`, `gitleaks`, `black`, `goreleaser`, `gh`, `gosec`, `shellcheck`, `probatum`, the Ansible dev-tools image), or are Docker Hardened Images that are already the minimal build (`dhi.io/*`). `dhi.io/golang:1.23-alpine3.21-dev` carries 340 HIGH / 23 CRITICAL, the catalogue's second-worst, but that is the frozen variant line of [the section below](#a-variant-line-that-froze) — a base-version decision, not a variant choice.
+The remaining images publish no smaller variant at their pinned version (`commitizen`, `commitlint`, `gitleaks`, `black`, `goreleaser`, `gh`, `gosec`, `shellcheck`, `probatum`, the Ansible dev-tools image), or are Docker Hardened Images that are already the minimal build (`dhi.io/*`). `dhi.io/golang:1.23-alpine3.21-dev` carried 340 HIGH / 23 CRITICAL, the catalogue's second-worst, and no smaller variant would have helped: it was the frozen variant line of [the section below](#a-variant-line-that-froze), and getting out of it took a base-version decision, not a variant choice.
 
 ### How the rules are applied
 
@@ -265,11 +265,21 @@ Rule 1 makes a reference immutable; it does not make it eternal. Two catalogue i
 
 ### A variant line that froze
 
-A reference can also stop receiving fixes without ever answering 404. `dhi.io/golang:1.23-alpine3.21-dev` and `dhi.io/python:3.13-alpine3.21` still pull, and inside their own variant family they are genuinely up to date — because DHI publishes no `alpine3.21` tag at all any more, having moved to `alpine3.23` and `alpine3.24`. No successor will ever appear in the pinned family, so the family comparison correctly offers nothing and the catalogue silently sat on an abandoned line (#252). Same rot as the deleted images above, one step quieter.
+A reference can also stop receiving fixes without ever answering 404. `dhi.io/golang:1.23-alpine3.21-dev` and `dhi.io/python:3.13-alpine3.21` still pulled, and inside their own variant family they were genuinely up to date — because DHI publishes no `alpine3.21` tag at all any more, having moved to `alpine3.23` and `alpine3.24`. No successor will ever appear in the pinned family, so the family comparison correctly offers nothing and the catalogue silently sat on an abandoned line (#252). Same rot as the deleted images above, one step quieter.
 
 `cidx preset scan-targets` reads the version the variant suffix itself carries — `-alpine3.21-dev` is version 3.21 of the `-alpine…-dev` line — and reports `frozen_variant` when the repository lists **no** tag in the pinned family while publishing a newer one. A family still published, even sitting at its own head, is alive and says nothing; the check costs no extra request, since it reads the listing update detection already fetched.
 
 It is deliberately not a candidate. Moving from `alpine3.21` to `alpine3.24` changes the base image, which is a decision, not a version bump. The workflow summary lists it under **Frozen variant line** with a warning annotation, and repinning stays a human act.
+
+**Getting out of one.** Both lines were repinned by hand: `dhi.io/golang:1.23-alpine3.21-dev` → `1.26.5-alpine-dev` (340 HIGH / 23 CRITICAL → 0 / 0) and `dhi.io/python:3.13-alpine3.21` → `3.13.14-alpine-dev` (34 / 3 → 0 / 0).
+
+The base did **not** go to the `-alpine3.24…` family the report names. `frozen_variant` answers "what replaced the dead family", which is the honest reading of the tag listing; it is not a recommendation, and taking it as one would pin the catalogue to Alpine 3.24 until that freezes too. The unversioned line — `-alpine-dev`, `-alpine` — names the family rather than one base of it: DHI republishes it against each new Alpine, so it is the one shape that cannot go stale the way 3.21 did. It also cannot be _reported_ frozen, because a suffix carrying no version supersedes nothing, and that is correct rather than a blind spot. What the tag stops saying is which Alpine is underneath; the digest still says exactly what the content is, which is what rule 1 asks of it.
+
+The language version moved with it, and that was the point of the exercise: `1.23` was three Go releases behind the `go 1.26` this repository compiles with, far enough that `govulncheck` could not analyse its own project from that image. DHI keeps one patch per minor, so `1.26.5` and `3.13.14` were the only tags on offer in their lines — there is no slightly older, equally clean version to prefer here, as there was in #277 and #280.
+
+Python moved off the non-dev line at the same time. The minimal build ships no shell, and all six Python presets are a `sh -c 'pip install <tool> && <tool>'`: none of them had been able to start since the day they were written. "The variant has to actually work" is the rule that decided it, settled by a real run rather than by the finding count, which was 0 / 0 either way.
+
+**On the cooldown.** dhi.io publishes no date for its tags, so rule 2 cannot be measured against these images at all — which is precisely why the promotion is a human act and not something `container-monitor.yml` performs. Rule 3's waiver is stated in its place, as the rule requires: the images being left behind carry 374 HIGH / 26 CRITICAL findings between them, on file in `known-vulnerabilities.toml` and demonstrably affecting us today, against a hypothetical compromise in a tag whose publication date nobody can read.
 
 **How rule 3 knows what affects us.** `known-vulnerabilities.toml` already records the HIGH/CRITICAL findings accepted against the images the catalogue runs today — that is the list of vulnerabilities demonstrably affecting us, produced by the security audit. A candidate replacing an image with entries in that file is promoted without waiting, and the promotion PR names them. No second scan is run to obtain this: the current image's vulnerabilities are on file, and the monitor already scans the candidate.
 
