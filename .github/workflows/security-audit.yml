@@ -139,6 +139,26 @@ jobs:
           SAFE_NAME=$(echo "$IMAGE" | tr '/:' '_')
           mkdir -p results
 
+          # The login step above wrote the dhi.io credentials into the *runner's*
+          # ~/.docker/config.json. Trivy runs in a container that saw neither that
+          # file nor the daemon socket, so it re-pulled every image itself, as an
+          # anonymous client — which passes on public registries and answered 401
+          # on all five hardened images. A quarter of the catalogue had no
+          # evidence at all, and that pinned 122 exceptions in `unknown` where
+          # `cidx security vuln prune` can never resolve them (#284).
+          #
+          # The config is mounted read-only and DOCKER_CONFIG points at it, the
+          # form both scanners document for running in a container. Credentials
+          # stay keyed by registry under `auths`, so only dhi.io ever receives
+          # them; TRIVY_USERNAME/TRIVY_PASSWORD would be offered to every
+          # registry Trivy contacts, including the one hosting its own database.
+          #
+          # Not the docker socket: the catalogue references are digest-pinned
+          # (rule 1 of the supply-chain policy), so a registry fetch resolves the
+          # exact bytes a local pull would — there is no tag re-resolution to
+          # guard against, and no reason to hand the scanner root on the runner.
+          DOCKER_AUTH=(-v "$HOME/.docker:/docker-config:ro" -e DOCKER_CONFIG=/docker-config)
+
           # Run scan and capture output (don't fail yet).
           #
           # stderr is dropped rather than merged: `2>&1` here put docker's own
@@ -148,6 +168,7 @@ jobs:
           # whether an accepted CVE is still present (#238). The .txt capture
           # below still keeps stderr, which is where the auth check reads it.
           docker run --rm \
+            "${DOCKER_AUTH[@]}" \
             -v "$(pwd)/.trivyignore:/root/.trivyignore:ro" \
             -v "$HOME/.cache/trivy:/root/.cache/trivy" \
             aquasec/trivy:latest image \
@@ -159,6 +180,7 @@ jobs:
 
           # Also get table format for display
           docker run --rm \
+            "${DOCKER_AUTH[@]}" \
             -v "$(pwd)/.trivyignore:/root/.trivyignore:ro" \
             -v "$HOME/.cache/trivy:/root/.cache/trivy" \
             aquasec/trivy:latest image \
@@ -167,15 +189,17 @@ jobs:
             --skip-db-update \
             "$IMAGE" > results/trivy-${SAFE_NAME}.txt 2>&1 || true
 
-          # Check for auth failures (private registry)
+          # Check for auth failures (private registry). Reported here, failed in
+          # the step after the upload so the evidence is kept either way.
           if grep -q "UNAUTHORIZED\|401 Unauthorized\|authentication required" results/trivy-${SAFE_NAME}.txt 2>/dev/null; then
-            echo "⚠️ Skipping $IMAGE - requires registry authentication"
+            echo "❌ $IMAGE was not scanned - the registry refused the credentials"
             echo "status=auth_required" >> $GITHUB_OUTPUT
             exit 0
           fi
 
           # Check if vulnerabilities found
           if docker run --rm \
+            "${DOCKER_AUTH[@]}" \
             -v "$(pwd)/.trivyignore:/root/.trivyignore:ro" \
             -v "$HOME/.cache/trivy:/root/.cache/trivy" \
             aquasec/trivy:latest image \
@@ -196,6 +220,19 @@ jobs:
           name: trivy-${{ strategy.job-index }}
           path: results/
           retention-days: 1
+
+      # An image the scanner could not authenticate to yields no findings, and no
+      # findings must never read as clean. The previous "⚠️ Skipping" left the leg
+      # green, which is how five hardened images went unscanned for months
+      # without anyone noticing (#284). Same posture as the step below: the
+      # artifacts are uploaded first, then the leg fails.
+      - name: Fail if unscannable
+        if: steps.scan.outputs.status == 'auth_required'
+        run: |
+          echo "❌ ${{ matrix.image }} was not scanned - the registry refused the credentials"
+          echo "   The audit has no evidence for this image, so the exceptions"
+          echo "   recorded against it can never be shown to be obsolete."
+          exit 1
 
       - name: Fail if vulnerable
         if: steps.scan.outputs.status == 'vulnerable'
@@ -258,9 +295,15 @@ jobs:
           SAFE_NAME=$(echo "$IMAGE" | tr '/:' '_')
           mkdir -p results
 
+          # Same as the Trivy job: the runner's registry credentials, mounted
+          # read-only and pointed at with DOCKER_CONFIG, which Grype's image
+          # layer honours the same way (#284).
+          DOCKER_AUTH=(-v "$HOME/.docker:/docker-config:ro" -e DOCKER_CONFIG=/docker-config)
+
           # Same as the Trivy job: stderr stays out of the JSON, which was
           # otherwise headed by docker's pull progress and parsed nowhere (#238).
           docker run --rm \
+            "${DOCKER_AUTH[@]}" \
             -v "$(pwd)/.grype.yaml:/.grype.yaml:ro" \
             -v "$HOME/.cache/grype:/root/.cache/grype:ro" \
             -e GRYPE_DB_AUTO_UPDATE=false \
@@ -272,6 +315,7 @@ jobs:
 
           # Also get table format
           docker run --rm \
+            "${DOCKER_AUTH[@]}" \
             -v "$(pwd)/.grype.yaml:/.grype.yaml:ro" \
             -v "$HOME/.cache/grype:/root/.cache/grype:ro" \
             -e GRYPE_DB_AUTO_UPDATE=false \
@@ -280,15 +324,17 @@ jobs:
             "registry:$IMAGE" \
             --config /.grype.yaml > results/grype-${SAFE_NAME}.txt 2>&1 || true
 
-          # Check for auth failures (private registry)
+          # Check for auth failures (private registry). Reported here, failed in
+          # the step after the upload so the evidence is kept either way.
           if grep -q "UNAUTHORIZED\|401 Unauthorized\|authentication required" results/grype-${SAFE_NAME}.txt 2>/dev/null; then
-            echo "⚠️ Skipping $IMAGE - requires registry authentication"
+            echo "❌ $IMAGE was not scanned - the registry refused the credentials"
             echo "status=auth_required" >> $GITHUB_OUTPUT
             exit 0
           fi
 
           # Check if vulnerabilities found
           if docker run --rm \
+            "${DOCKER_AUTH[@]}" \
             -v "$(pwd)/.grype.yaml:/.grype.yaml:ro" \
             -v "$HOME/.cache/grype:/root/.cache/grype:ro" \
             -e GRYPE_DB_AUTO_UPDATE=false \
@@ -309,6 +355,16 @@ jobs:
           name: grype-${{ strategy.job-index }}
           path: results/
           retention-days: 1
+
+      # Same as the Trivy job: an unscannable image is a hole in the evidence,
+      # not a skip to shrug at (#284).
+      - name: Fail if unscannable
+        if: steps.scan.outputs.status == 'auth_required'
+        run: |
+          echo "❌ ${{ matrix.image }} was not scanned - the registry refused the credentials"
+          echo "   The audit has no evidence for this image, so the exceptions"
+          echo "   recorded against it can never be shown to be obsolete."
+          exit 1
 
       - name: Fail if vulnerable
         if: steps.scan.outputs.status == 'vulnerable'
