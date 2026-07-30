@@ -37,7 +37,8 @@ echo "🎨 Code quality checks..."
 if ! $CIDX_CMD run code; then
     echo ""
     echo "❌ Code quality checks failed!"
-    echo "   Fix the issues above or use --no-verify to bypass"
+    echo "   Formatting drift: $CIDX_CMD run format"
+    echo "   Anything else: fix it above, or --no-verify to bypass"
     exit 1
 fi
 

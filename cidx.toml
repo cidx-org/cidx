@@ -38,13 +38,29 @@ containers = ["kaniko"]
 [release]
 containers = ["gh-release"]
 
+# Formatting is written here and only here: `cidx run format`, on demand, never
+# from a pipeline. No [pipelines.*] lists this phase, so CI cannot run it — the
+# `code` phase checks (prettier's preset default is `--check`), this one fixes.
+# Same split as Go: golangci-lint's gofmt formatter gates CI, `go fmt` writes.
+[format]
+containers = ["prettier-write"]
+
 # ─── container overrides ───
 [containers.trivy]
 severity = "HIGH,CRITICAL"
 exit_code = 0
 
-[containers.prettier]
-write = true
+# prettier in write mode, as a separate entry rather than `[containers.prettier]
+# write = true`: overrides are keyed by container name, not by phase, so a
+# `write` on `prettier` would follow it into the `code` phase — which is exactly
+# the bug this replaces (#272). Same image as the `prettier` preset; the
+# catalogue pin is what governs the checking side.
+[containers.prettier-write]
+phase = "format"
+image = "jauderho/prettier:3.9.4@sha256:b233d9c847048561850a1a107e35318b28361cd9a850eac7edcd5d8bfd82cea2"
+command = "--write ."
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
 
 # The catalogue default for go-test is `go test -v ./pkg/... ./cmd/...`, which
 # leaves out the root package — exactly where this repo keeps its godog suite
