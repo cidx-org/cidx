@@ -39,7 +39,7 @@ func TestGitLab_BasicCI(t *testing.T) {
 		{"bootstrap stage", "- bootstrap"},
 		{"security stage", "- security"},
 		{"bootstrap job", "bootstrap:"},
-		{"golang image", "golang:1.23-alpine"},
+		{"golang image", "image: " + bootstrapGoImage},
 		{"dind service", "docker:dind"},
 		{"needs bootstrap", "- bootstrap"},
 		{"cidx run security", "./bin/cidx run security"},
@@ -148,5 +148,50 @@ func TestGitLab_Artifacts(t *testing.T) {
 	}
 	if !strings.Contains(output, "expire_in:") {
 		t.Error("expected expire_in for artifacts")
+	}
+}
+
+// TestBootstrapGoImageIsPinnedAndPullable pins the two properties the bootstrap
+// image of a *generated* workflow must have, both of which it lacked while it
+// was a literal: a digest, so the reference says what it runs, and a registry
+// the project reading the workflow can actually reach. The catalogue's Go image
+// is a Docker Hardened Image and answers 401 to anonymous clients, so it must
+// never leak into what cidx writes for someone else (#238).
+func TestBootstrapGoImageIsPinnedAndPullable(t *testing.T) {
+	if !strings.Contains(bootstrapGoImage, "@sha256:") {
+		t.Errorf("bootstrap image %q is not pinned by digest", bootstrapGoImage)
+	}
+	if strings.HasPrefix(bootstrapGoImage, "dhi.io/") {
+		t.Errorf("bootstrap image %q needs a DHI entitlement the reader may not have", bootstrapGoImage)
+	}
+	if !strings.HasPrefix(bootstrapGoImage, "golang:"+bootstrapGoVersion+"-") {
+		t.Errorf("bootstrap image %q does not carry the generated Go version %q", bootstrapGoImage, bootstrapGoVersion)
+	}
+}
+
+// TestBothGeneratorsBootstrapTheSameGo is the regression this constant exists
+// for: GitLab carried its own `golang:1.23-alpine` and sat three Go releases
+// behind the GitHub workflow generated from the same cidx.toml.
+func TestBothGeneratorsBootstrapTheSameGo(t *testing.T) {
+	cfg := &config.Config{
+		Pipelines: map[string]config.Pipeline{
+			"ci": {Phases: []string{"code"}},
+		},
+	}
+
+	gitlab, err := GitLab(cfg, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	github, err := GitHub(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(github, `go-version: "`+bootstrapGoVersion+`"`) {
+		t.Errorf("GitHub workflow does not set up Go %s", bootstrapGoVersion)
+	}
+	if !strings.Contains(gitlab, "image: "+bootstrapGoImage) {
+		t.Errorf("GitLab bootstrap does not run on %s", bootstrapGoImage)
 	}
 }

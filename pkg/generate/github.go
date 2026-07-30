@@ -16,6 +16,35 @@ import (
 // and as the marker that identifies cidx's own repo when reading go.mod.
 const cidxModulePath = "github.com/cidx-org/cidx/v2"
 
+// bootstrapGoVersion is the Go toolchain a generated workflow bootstraps cidx
+// with. Both generators read it: GitHub hands it to actions/setup-go, GitLab
+// builds its bootstrap image tag from it. The generated workflow cannot read
+// this repo's go.mod (the project it runs in has its own, or none at all —
+// cidx generates for Python projects too), so the version is a literal here,
+// in one place rather than one per generator.
+const bootstrapGoVersion = "1.26"
+
+// bootstrapGoImageDigest pins bootstrapGoImage. Docker Official Images rebuild
+// `golang:<minor>-alpine` whenever their base moves, so the tag alone is
+// mutable; the digest makes the reference say exactly what it runs.
+//
+// Resolve a new one with:
+//
+//	docker buildx imagetools inspect --format '{{.Manifest.Digest}}' golang:1.26-alpine
+const bootstrapGoImageDigest = "sha256:0178a641fbb4858c5f1b48e34bdaabe0350a330a1b1149aabd498d0699ff5fb2"
+
+// bootstrapGoImage is the container image a generated GitLab job builds cidx
+// in. GitLab has no actions/setup-go: every job names an image, so unlike the
+// GitHub generator this one cannot avoid picking one.
+//
+// Deliberately the Docker Official Image and not the catalogue's Go preset
+// image. `dhi.io/golang:...` is what *this* repo runs, with the Docker Hardened
+// Images credentials its own CI holds (#288); anonymous clients get 401. A
+// workflow cidx generates is run by someone else, on their runners, and must
+// not require them to hold a DHI entitlement to build the binary — guardrail 1,
+// cidx adapts to the project. `golang:<version>-alpine` pulls for anyone.
+const bootstrapGoImage = "golang:" + bootstrapGoVersion + "-alpine@" + bootstrapGoImageDigest
+
 // Version is the cidx build version, propagated from main at startup (same
 // pattern as executor.Version). Release builds inject it via ldflags
 // (`-X main.Version=1.7.0`); dev builds keep the "dev" default.
@@ -176,7 +205,7 @@ func writeBootstrapJob(b *strings.Builder, selfBuild bool) {
 	b.WriteString("          persist-credentials: false\n")
 	b.WriteString("      - uses: actions/setup-go@v6\n")
 	b.WriteString("        with:\n")
-	b.WriteString("          go-version: \"1.26\"\n")
+	fmt.Fprintf(b, "          go-version: %q\n", bootstrapGoVersion)
 	b.WriteString("          cache: true\n")
 	if selfBuild {
 		b.WriteString("      - name: Build CIDX\n")

@@ -40,6 +40,9 @@ func RegisterPresetSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Then(`^the resolved command should be "([^"]*)"$`, tc.resolvedCommandShouldBe)
 	ctx.Then(`^the resolved command should contain "([^"]*)"$`, tc.resolvedCommandShouldContain)
 
+	// Writable paths for a container that never runs as root (#188, #238)
+	ctx.Then(`^the resolved environment should set "([^"]*)" to "([^"]*)"$`, tc.resolvedEnvShouldBe)
+
 	// Catalogue image pinning (#242)
 	ctx.Then(`^the resolved image should be pinned by digest$`, tc.resolvedImageShouldBePinned)
 	ctx.Then(`^the resolved image tag should be "([^"]*)"$`, tc.resolvedImageTagShouldBe)
@@ -473,6 +476,25 @@ func (tc *TestContext) resolvePreset(presetName string, overrides map[string]any
 	merged := preset.MergeWith(overrides)
 	tc.Config["resolved_command"] = merged.Command
 	tc.Config["resolved_image"] = merged.Image
+	tc.Config["resolved_env"] = merged.Env
+	return nil
+}
+
+// resolvedEnvShouldBe asserts a variable the container needs to be able to
+// write anywhere: cidx runs as the invoking uid, so HOME and GOPATH decide
+// whether a runtime install lands in a writable tree or dies (#238).
+func (tc *TestContext) resolvedEnvShouldBe(name, want string) error {
+	env, ok := tc.Config["resolved_env"].(map[string]string)
+	if !ok {
+		return fmt.Errorf("no preset was resolved")
+	}
+	got, set := env[name]
+	if !set {
+		return fmt.Errorf("environment variable %q is not set", name)
+	}
+	if got != want {
+		return fmt.Errorf("environment variable %q = %q, want %q", name, got, want)
+	}
 	return nil
 }
 
