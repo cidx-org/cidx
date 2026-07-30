@@ -11,11 +11,11 @@ Feature: Preset Option Flags
 
     Scenario: A shell-wrapped command receives the flag inside the quoting
       When I resolve the preset "mypy" with option "strict" set to "true"
-      Then the resolved command should be "sh -c 'pip install --quiet mypy && mypy . --strict'"
+      Then the resolved command should be "sh -c 'pip install --quiet mypy && PATH=$PATH:/tmp/.local/bin mypy . --strict'"
 
     Scenario: A shell-wrapped command is untouched without overrides
       When I resolve the preset "mypy" without overrides
-      Then the resolved command should be "sh -c 'pip install --quiet mypy && mypy .'"
+      Then the resolved command should be "sh -c 'pip install --quiet mypy && PATH=$PATH:/tmp/.local/bin mypy .'"
 
     Scenario: The reported cargo-audit override reaches cargo-audit
       When I resolve the preset "cargo-audit" with option "deny" set to "true"

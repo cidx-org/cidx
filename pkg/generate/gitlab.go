@@ -59,10 +59,15 @@ func GitLab(cfg *config.Config, outputPath string) (string, error) {
 }
 
 // writeGitLabBootstrap writes the bootstrap job that builds CIDX.
+//
+// The image comes from bootstrapGoImage, the same constant that feeds the
+// GitHub generator's setup-go version, rather than a literal of its own: this
+// job spent three Go releases on a hardcoded `golang:1.23-alpine` while the
+// GitHub side moved to 1.26, and an unpinned tag on top of it.
 func writeGitLabBootstrap(b *strings.Builder) {
 	b.WriteString("bootstrap:\n")
 	b.WriteString("  stage: bootstrap\n")
-	b.WriteString("  image: golang:1.23-alpine\n")
+	fmt.Fprintf(b, "  image: %s\n", bootstrapGoImage)
 	b.WriteString("  script:\n")
 	b.WriteString("    - go build -o bin/cidx ./cmd/cidx\n")
 	b.WriteString("  artifacts:\n")

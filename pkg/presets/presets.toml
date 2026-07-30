@@ -70,10 +70,20 @@ command_flag = "--write"
 # Trivy: Container and filesystem vulnerability scanner
 # 🛡️ DHI: Docker Hardened Image (near-zero CVEs)
 # Scans: dependencies, OS packages, misconfigurations, secrets
+#
+# 0.68 → 0.71 is an ordinary promotion inside a live family, not a repin like
+# #293's: dhi.io still publishes the unversioned trivy line, so nothing here is
+# frozen. dhi.io dates no tag, so rule 2's 14-day cooldown cannot be measured on
+# it, and rule 3's waiver is claimed out loud in its place: 0.68 carries 51 HIGH
+# and 2 CRITICAL that affect us today (Trivy, DB of 2026-07-30; Grype counts 45
+# HIGH/CRITICAL on the same image), 0.71 carries 0/0 by Trivy. Grype still finds
+# two on 0.71 — GO-2026-5970 in golang.org/x/text and GHSA-hrxh-6v49-42gf in
+# grpc, both advisory IDs Trivy does not carry — which the audit will surface as
+# new findings; that is two, against fifty-three (#238).
 [presets.trivy]
 name = "trivy"
 phase = "security"
-image = "dhi.io/trivy:0.68@sha256:488478898f58e97d81c2ab37bb9e51d17cac8c90ac6e94f82afa1a0e6066cc97"
+image = "dhi.io/trivy:0.71@sha256:fd727baaf00f823f59c2936f2c797c61750e2440b736c5b787722c18dd9518aa"
 hardened = true
 command = "fs /work"
 workdir = "/work"
@@ -370,6 +380,11 @@ GOTOOLCHAIN = "auto"
 # Go Mod Tidy: Verify go.mod and go.sum are clean
 # Official image: golang:alpine (official Go Docker image)
 # Checks: go.mod is tidy (no unused deps, all required deps present)
+#
+# GOPATH is not decoration: `go mod tidy` downloads modules, and the default
+# GOPATH is /go on every golang image. cidx runs the container as the invoking
+# uid, so the first write dies with `mkdir /go/pkg: permission denied`. The five
+# sibling Go presets all pin /tmp/go; this one did not, on any image.
 [presets.go-mod-tidy]
 name = "go-mod-tidy"
 phase = "code"
@@ -381,6 +396,7 @@ volumes = ["${WORKSPACE}:/work"]
 
 [presets.go-mod-tidy.env]
 HOME = "/tmp"
+GOPATH = "/tmp/go"
 GOTOOLCHAIN = "auto"
 
 # GolangCI-Lint: Fast Go linters aggregator
@@ -673,6 +689,23 @@ command_flag = "--skip=publish"
 # PYTHON LANGUAGE PACK - Linting, testing, security, and packaging
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+# The six presets in this pack that install their tool at runtime — mypy,
+# bandit, pip-audit, pytest, python-build, twine; not ruff or black, which ship
+# ready-to-run images — all carry HOME = "/tmp" and prefix the tool with
+# PATH=$PATH:/tmp/.local/bin, for the same reason cargo-audit carries
+# HOME/CARGO_HOME (#188): cidx runs containers as the invoking uid, never root.
+# pip therefore cannot write to the interpreter's site-packages and falls back
+# to a user install under $HOME — which is `/` when HOME is unset, so the
+# install dies with `Permission denied: '/.local'`. HOME = "/tmp" moves both
+# that tree and pip's cache somewhere writable; the entry points then land in
+# /tmp/.local/bin, which no image puts on PATH, so the invocation names it the
+# way govulncheck names /tmp/go/bin. python-build needs only HOME: `python -m
+# build` runs a module, and a --user install is on sys.path already.
+#
+# The defect was invisible until #293: the previous image (dhi.io/python:3.13-
+# alpine3.21) ships no shell, so every one of these presets died at container
+# init with `exec: "sh": executable file not found` and never reached pip.
+
 # Ruff: Extremely fast Python linter and formatter (replaces flake8, isort, black)
 # Official image: ghcr.io/astral-sh/ruff (maintained by Astral)
 # ✅ Container-first: Ready-to-run, blazingly fast
@@ -721,12 +754,13 @@ name = "mypy"
 phase = "code"
 image = "dhi.io/python:3.13.14-alpine-dev@sha256:8c3820102033dff6a1e5de0fad001747c7b0979c372d6ffc1ac95dd0e03eed82"
 hardened = true
-command = "sh -c 'pip install --quiet mypy && mypy .'"
+command = "sh -c 'pip install --quiet mypy && PATH=$PATH:/tmp/.local/bin mypy .'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
 config_files = ["mypy.ini", "pyproject.toml", ".mypy.ini", "setup.cfg"]
 
 [presets.mypy.env]
+HOME = "/tmp"
 MYPY_CACHE_DIR = "/tmp/.mypy_cache"
 
 [presets.mypy.options.strict]
@@ -742,10 +776,13 @@ name = "bandit"
 phase = "security"
 image = "dhi.io/python:3.13.14-alpine-dev@sha256:8c3820102033dff6a1e5de0fad001747c7b0979c372d6ffc1ac95dd0e03eed82"
 hardened = true
-command = "sh -c 'pip install --quiet bandit && bandit -r .'"
+command = "sh -c 'pip install --quiet bandit && PATH=$PATH:/tmp/.local/bin bandit -r .'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
 config_files = [".bandit", "bandit.yaml", "pyproject.toml"]
+
+[presets.bandit.env]
+HOME = "/tmp"
 
 [presets.bandit.options.severity]
 type = "string"
@@ -766,9 +803,12 @@ name = "pip-audit"
 phase = "security"
 image = "dhi.io/python:3.13.14-alpine-dev@sha256:8c3820102033dff6a1e5de0fad001747c7b0979c372d6ffc1ac95dd0e03eed82"
 hardened = true
-command = "sh -c 'pip install --quiet pip-audit && pip-audit'"
+command = "sh -c 'pip install --quiet pip-audit && PATH=$PATH:/tmp/.local/bin pip-audit'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
+
+[presets.pip-audit.env]
+HOME = "/tmp"
 
 [presets.pip-audit.options.strict]
 type = "bool"
@@ -789,10 +829,13 @@ name = "pytest"
 phase = "test"
 image = "dhi.io/python:3.13.14-alpine-dev@sha256:8c3820102033dff6a1e5de0fad001747c7b0979c372d6ffc1ac95dd0e03eed82"
 hardened = true
-command = "sh -c 'pip install --quiet pytest pytest-cov && pytest'"
+command = "sh -c 'pip install --quiet pytest pytest-cov && PATH=$PATH:/tmp/.local/bin pytest'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
 config_files = ["pytest.ini", "pyproject.toml", "setup.cfg", "tox.ini"]
+
+[presets.pytest.env]
+HOME = "/tmp"
 
 [presets.pytest.options.verbose]
 type = "bool"
@@ -818,6 +861,7 @@ volumes = ["${WORKSPACE}:/work"]
 config_files = ["pyproject.toml", "setup.py", "setup.cfg"]
 
 [presets.python-build.env]
+HOME = "/tmp"
 OUTPUT_DIR = "dist"
 
 # Twine: Upload packages to PyPI
@@ -827,12 +871,13 @@ name = "twine"
 phase = "release"
 image = "dhi.io/python:3.13.14-alpine-dev@sha256:8c3820102033dff6a1e5de0fad001747c7b0979c372d6ffc1ac95dd0e03eed82"
 hardened = true
-command = "sh -c 'pip install --quiet twine && twine upload dist/*'"
+command = "sh -c 'pip install --quiet twine && PATH=$PATH:/tmp/.local/bin twine upload dist/*'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
 require_ci = true
 
 [presets.twine.env]
+HOME = "/tmp"
 TWINE_USERNAME = "${PYPI_USERNAME}"
 TWINE_PASSWORD = "${PYPI_TOKEN}"
 

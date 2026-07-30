@@ -163,6 +163,8 @@ This governs how the third-party artefacts CIDX itself depends on are pinned and
 
 Neither is imposed on projects using CIDX. You pin whatever you want in your own `cidx.toml`, and the workflows `cidx generate github` writes for you are yours to harden or not — per guardrail 5, CIDX is an execution engine, not a governance framework.
 
+The reverse does bind the generators, though: what CIDX writes for someone else has to run on their runners. A generated workflow therefore never references a Docker Hardened Image, however clean it measures — `dhi.io` answers `401` to anyone without an entitlement, and the catalogue's Go image is only usable here because this repository's own CI holds credentials for it (#288). `cidx generate gitlab` bootstraps on the Docker Official `golang:<version>-alpine`, pinned by digest, from the same version constant the GitHub generator hands to `actions/setup-go`.
+
 ### Why scanning is not enough
 
 `container-monitor.yml` scans every candidate image with Trivy and Grype, and both refresh their databases on each run. That covers known vulnerabilities well. It does not cover a compromised image, for two reasons:
