@@ -21,8 +21,9 @@ phases = ["security", "code", "test"]
 severity = "HIGH,CRITICAL"
 exit_code = 1
 
-[containers.prettier]
-write = true
+# prettier is left on its `--check` default: a checking phase that rewrites
+# files exits 0 whatever it finds, and CI never sees the drift (#272). See
+# examples/cidx-complete.toml for the on-demand [format] phase that writes.
 
 # Mount contract:
 # All built-in presets mount the workspace at /work (unified since #151).

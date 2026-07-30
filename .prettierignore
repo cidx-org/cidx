@@ -1,0 +1,18 @@
+# Files prettier does not own.
+#
+# Prettier is a checker here (`cidx run code`) and a writer only on demand
+# (`cidx run format`). Either way it has no business rewriting a file another
+# tool generates: both would keep reformatting it, and whichever ran last would
+# win (#272). `.gitignore` is honoured on top of this list — prettier reads both.
+
+# Written by `cidx security baseline`. Its header says "do not edit by hand",
+# and it promises that the same inputs produce the same bytes — a promise
+# prettier's markdown-table realignment breaks on every run (#283, #286).
+SECURITY-BASELINE.md
+
+# Rewritten wholesale by commitizen at every `cz bump`.
+CHANGELOG.md
+
+# cidx's own hand-off artifacts: release notes written by `cidx release prepare`
+# and the tag staging files. Generated, short-lived, not project source.
+.cidx/

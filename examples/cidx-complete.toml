@@ -264,9 +264,11 @@ exit_code = 0               # Exit code on findings (0 = don't fail build yet, 1
 [code]
 containers = ["prettier", "golangci-lint", "commitizen", "shellcheck"]  # Code quality containers
 
-# Prettier: Auto-format code (Markdown, YAML, JSON, etc.)
-[containers.prettier]
-write = true  # Auto-fix formatting issues (true = write changes, false = check only)
+# Prettier: check formatting (Markdown, YAML, JSON, etc.)
+# The preset default is `--check`: it reports drift and fails. Leave it that
+# way in any phase a pipeline runs — `write = true` makes prettier rewrite the
+# files and exit 0 whatever it finds, so CI never sees the drift (#272).
+# To fix formatting instead of reporting it, see the [format] phase below.
 
 # GolangCI-Lint: Go linter aggregator
 # Uses CIDX default configuration (.golangci.yml in project root)
@@ -313,6 +315,27 @@ containers = ["gh-release"]  # Create GitHub release with artifacts
 # GitHub Release: Create release from git tag with binaries and changelog
 # Requires GH_TOKEN environment variable
 # Uploads artifacts from build phase to GitHub Releases
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Format Phase: rewrite files, on demand only
+# ──────────────────────────────────────────────────────────────────────────────
+# A phase no [pipelines.*] lists is never run by CI — it runs when you ask:
+# `cidx run format`. That is where writing belongs, so the checking phase stays
+# a check. Overrides are keyed by container name, not by phase, so the writing
+# entry is its own container: a `write = true` on `prettier` would follow it
+# into the [code] phase (#272).
+[format]
+containers = ["prettier-write"]
+
+[containers.prettier-write]
+phase = "format"
+image = "jauderho/prettier:3.9.4"  # same image as the built-in prettier preset
+command = "--write ."
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
+
+# Prettier reads .prettierignore (and .gitignore): keep generated files out of
+# it, or the generator and the formatter will rewrite each other forever.
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Custom Containers (without preset): Define your own containers

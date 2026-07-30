@@ -122,8 +122,9 @@ cidx/
 Before submitting a PR:
 
 1. Run tests: `go test ./...`
-2. Run linting: `./bin/cidx run code`
-3. Run full CI: `./bin/cidx run ci`
+2. Run linting: `./bin/cidx run code` — checks only, it never rewrites your files
+3. Fix formatting drift it reports: `./bin/cidx run format`
+4. Run full CI: `./bin/cidx run ci`
 
 ## 💡 Adding New Containers
 
