@@ -176,8 +176,17 @@ jobs:
           # scan-verdicts`; TestScanResultFileMatchesTheWorkflowConvention pins
           # this transform. stdout only: stderr would corrupt the JSON, and a
           # corrupt result holds the candidate rather than reading as clean.
+          # The login above wrote its credentials into the runner's docker
+          # config; the scanner runs in a container that never saw it, so it
+          # pulled anonymously and dhi.io answered 401 (#284). Mounted read-only,
+          # with DOCKER_CONFIG pointing at it: credentials stay keyed by registry
+          # under `auths`, so only dhi.io receives them — TRIVY_USERNAME would
+          # also be offered to ghcr.io, where this job fetches its database.
           OUT="results/trivy-$(echo "$IMAGE" | tr '/:@' '___').json"
-          docker run --rm aquasec/trivy:latest image \
+          docker run --rm \
+            -v "$HOME/.docker:/docker-config:ro" \
+            -e DOCKER_CONFIG=/docker-config \
+            aquasec/trivy:latest image \
             --severity HIGH,CRITICAL \
             --quiet \
             --format json \
@@ -222,8 +231,12 @@ jobs:
           echo "Scanning: $IMAGE"
           mkdir -p results
 
+          # Same credential path as the Trivy job (#284).
           OUT="results/grype-$(echo "$IMAGE" | tr '/:@' '___').json"
-          docker run --rm anchore/grype:latest \
+          docker run --rm \
+            -v "$HOME/.docker:/docker-config:ro" \
+            -e DOCKER_CONFIG=/docker-config \
+            anchore/grype:latest \
             "$IMAGE" \
             --quiet \
             -o json > "$OUT" || true
