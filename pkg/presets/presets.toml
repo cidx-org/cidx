@@ -846,6 +846,14 @@ command_flag = "--repository"
 # RUST LANGUAGE PACK - Linting, testing, security, and building
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+# The pack runs on `rust:<version>-slim`, not the default image: same publisher,
+# same toolchain, Debian without the ~270 MB of packages the compiler never
+# touches — 429 HIGH/60 CRITICAL become 78/5. Deliberately not `-alpine`, which
+# would be 0/0: alpine is musl, so every binary these presets produce would
+# change libc. `probatum` already documents that a glibc artefact will not run
+# on a musl image (#195); flipping the producer instead of the consumer would be
+# the same trap with the arrow reversed.
+
 # Rustfmt: Official Rust code formatter
 # Included in official Rust image
 # Public image: docker.io/library/rust (RUSTUP_HOME=/usr/local/rustup,
@@ -853,7 +861,7 @@ command_flag = "--repository"
 [presets.rustfmt]
 name = "rustfmt"
 phase = "code"
-image = "rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9"
+image = "rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51"
 command = "sh -c 'rustup component add rustfmt && cargo fmt -- --check'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -864,7 +872,7 @@ config_files = ["rustfmt.toml", ".rustfmt.toml"]
 [presets.clippy]
 name = "clippy"
 phase = "code"
-image = "rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9"
+image = "rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51"
 command = "sh -c 'rustup component add clippy && cargo clippy -- -D warnings'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -887,6 +895,12 @@ command_flag = "-W clippy::pedantic"
 # the advisory DB fetch also works non-root; the binary is invoked directly
 # (`cargo-audit audit` is RustSec's documented direct invocation) to avoid
 # depending on PATH.
+#
+# The one Rust preset still on the full image. `rust:1.97.0-slim` ships no HTTP
+# client at all — the official slim Dockerfile installs wget to fetch rustup and
+# apt-removes it in the same layer — so the download above fails with
+# `sh: curl: not found`. The other five presets run on `-slim` (429 HIGH/60
+# CRITICAL → 78/5); this one keeps the base that can fetch its own tool.
 [presets.cargo-audit]
 name = "cargo-audit"
 phase = "security"
@@ -906,7 +920,7 @@ command_flag = "--deny warnings"
 [presets.cargo-test]
 name = "cargo-test"
 phase = "test"
-image = "rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9"
+image = "rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51"
 command = "cargo test"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -931,7 +945,7 @@ command_flag = "--all-features"
 [presets.cargo-build]
 name = "cargo-build"
 phase = "build"
-image = "rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9"
+image = "rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51"
 command = "cargo build --release"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -947,7 +961,7 @@ command_flag = "--target"
 [presets.cargo-publish]
 name = "cargo-publish"
 phase = "release"
-image = "rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9"
+image = "rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51"
 command = "cargo publish"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
