@@ -27,8 +27,8 @@ reports the ones no catalogue image carries any more.
 | `commitlint/commitlint:21.2.1@sha256:f4b38082bec66b4cd1b37a0357145dded515c4468e2b339ec9ba31f86461f6b9` | commitlint | none |
 | `dhi.io/alpine-base:3.24@sha256:84a21d3dfb87eb1c0bf1b532350f2aa0bf7d0df6246c398cc5c14b29002b7310` | test-hot-reload | none |
 | `dhi.io/docker:29-cli@sha256:5962df1dad91fbf81be7c795c00d6137c6a46ac28acada6af9f0af7c92133966` | docker-buildx | none |
-| `dhi.io/golang:1.23-alpine3.21-dev@sha256:7563e8b20d15a6240a946d7e35fda1f1b31cb48dd307d9f877355fa81865ea7b` | go-build, go-mod-tidy, go-test, godog, gofmt, govulncheck | none |
-| `dhi.io/python:3.13-alpine3.21@sha256:d60ba1e84507e21ab542c15170c4334f001a810a5c8cc3dd1f829fc851219680` | bandit, mypy, pip-audit, pytest, python-build, twine | none |
+| `dhi.io/golang:1.26.5-alpine-dev@sha256:29fe0a7d2a5ab0c236fbde3a7f63801755585ed260b6f2f564e831c92bfa9f34` | go-build, go-mod-tidy, go-test, godog, gofmt, govulncheck | none |
+| `dhi.io/python:3.13.14-alpine-dev@sha256:8c3820102033dff6a1e5de0fad001747c7b0979c372d6ffc1ac95dd0e03eed82` | bandit, mypy, pip-audit, pytest, python-build, twine | none |
 | `dhi.io/trivy:0.68@sha256:488478898f58e97d81c2ab37bb9e51d17cac8c90ac6e94f82afa1a0e6066cc97` | trivy | none |
 | `ghcr.io/ansible/community-ansible-dev-tools:v26.7.1@sha256:4d4db3e75c48ce64763d26adbca58ff3f8b93a8ddae785373ac973b4f20a7d92` | ansible-galaxy-build, ansible-galaxy-publish, ansible-lint, ansible-syntax, ansible-test, molecule, yamllint | none |
 | `ghcr.io/astral-sh/ruff:0.8.2@sha256:84b0ad0023906db70b759b3b29e455dad0638159bf2de2b95086db1ab175917b` | ruff | none |

@@ -352,7 +352,7 @@ command_flag = "-fmt"
 [presets.govulncheck]
 name = "govulncheck"
 phase = "security"
-image = "dhi.io/golang:1.23-alpine3.21-dev@sha256:7563e8b20d15a6240a946d7e35fda1f1b31cb48dd307d9f877355fa81865ea7b"
+image = "dhi.io/golang:1.26.5-alpine-dev@sha256:29fe0a7d2a5ab0c236fbde3a7f63801755585ed260b6f2f564e831c92bfa9f34"
 hardened = true
 command = "sh -c 'go install golang.org/x/vuln/cmd/govulncheck@latest && PATH=$PATH:/tmp/go/bin govulncheck ./...'"
 workdir = "/work"
@@ -373,7 +373,7 @@ GOTOOLCHAIN = "auto"
 [presets.go-mod-tidy]
 name = "go-mod-tidy"
 phase = "code"
-image = "dhi.io/golang:1.23-alpine3.21-dev@sha256:7563e8b20d15a6240a946d7e35fda1f1b31cb48dd307d9f877355fa81865ea7b"
+image = "dhi.io/golang:1.26.5-alpine-dev@sha256:29fe0a7d2a5ab0c236fbde3a7f63801755585ed260b6f2f564e831c92bfa9f34"
 hardened = true
 command = "sh -c 'cp go.mod go.mod.bak && cp go.sum go.sum.bak && go mod tidy && diff go.mod go.mod.bak && diff go.sum go.sum.bak && echo \"go.mod is tidy\"'"
 workdir = "/work"
@@ -428,7 +428,7 @@ command_flag = "--severity"
 [presets.gofmt]
 name = "gofmt"
 phase = "code"
-image = "dhi.io/golang:1.23-alpine3.21-dev@sha256:7563e8b20d15a6240a946d7e35fda1f1b31cb48dd307d9f877355fa81865ea7b"
+image = "dhi.io/golang:1.26.5-alpine-dev@sha256:29fe0a7d2a5ab0c236fbde3a7f63801755585ed260b6f2f564e831c92bfa9f34"
 hardened = true
 command = "gofmt -l ."
 workdir = "/work"
@@ -444,7 +444,7 @@ GOTOOLCHAIN = "auto"
 [presets.go-test]
 name = "go-test"
 phase = "test"
-image = "dhi.io/golang:1.23-alpine3.21-dev@sha256:7563e8b20d15a6240a946d7e35fda1f1b31cb48dd307d9f877355fa81865ea7b"
+image = "dhi.io/golang:1.26.5-alpine-dev@sha256:29fe0a7d2a5ab0c236fbde3a7f63801755585ed260b6f2f564e831c92bfa9f34"
 hardened = true
 command = "go test -v ./pkg/... ./cmd/..."
 workdir = "/work"
@@ -481,7 +481,7 @@ command_flag = "-race"
 [presets.godog]
 name = "godog"
 phase = "test"
-image = "dhi.io/golang:1.23-alpine3.21-dev@sha256:7563e8b20d15a6240a946d7e35fda1f1b31cb48dd307d9f877355fa81865ea7b"
+image = "dhi.io/golang:1.26.5-alpine-dev@sha256:29fe0a7d2a5ab0c236fbde3a7f63801755585ed260b6f2f564e831c92bfa9f34"
 hardened = true
 command = "go test -v -run TestFeatures ./..."
 workdir = "/work"
@@ -518,7 +518,7 @@ env_var = "GODOG_FORMAT"
 [presets.go-build]
 name = "go-build"
 phase = "build"
-image = "dhi.io/golang:1.23-alpine3.21-dev@sha256:7563e8b20d15a6240a946d7e35fda1f1b31cb48dd307d9f877355fa81865ea7b"
+image = "dhi.io/golang:1.26.5-alpine-dev@sha256:29fe0a7d2a5ab0c236fbde3a7f63801755585ed260b6f2f564e831c92bfa9f34"
 hardened = true
 command = "sh -c 'VERSION=$(cat VERSION 2>/dev/null || echo dev); go build -ldflags \"-X main.Version=${VERSION} ${LDFLAGS}\" -o bin/cidx ./cmd/cidx'"
 workdir = "/work"
@@ -719,7 +719,7 @@ command_flag = "--diff"
 [presets.mypy]
 name = "mypy"
 phase = "code"
-image = "dhi.io/python:3.13-alpine3.21@sha256:d60ba1e84507e21ab542c15170c4334f001a810a5c8cc3dd1f829fc851219680"
+image = "dhi.io/python:3.13.14-alpine-dev@sha256:8c3820102033dff6a1e5de0fad001747c7b0979c372d6ffc1ac95dd0e03eed82"
 hardened = true
 command = "sh -c 'pip install --quiet mypy && mypy .'"
 workdir = "/work"
@@ -740,7 +740,7 @@ command_flag = "--strict"
 [presets.bandit]
 name = "bandit"
 phase = "security"
-image = "dhi.io/python:3.13-alpine3.21@sha256:d60ba1e84507e21ab542c15170c4334f001a810a5c8cc3dd1f829fc851219680"
+image = "dhi.io/python:3.13.14-alpine-dev@sha256:8c3820102033dff6a1e5de0fad001747c7b0979c372d6ffc1ac95dd0e03eed82"
 hardened = true
 command = "sh -c 'pip install --quiet bandit && bandit -r .'"
 workdir = "/work"
@@ -764,7 +764,7 @@ command_flag = "-i"
 [presets.pip-audit]
 name = "pip-audit"
 phase = "security"
-image = "dhi.io/python:3.13-alpine3.21@sha256:d60ba1e84507e21ab542c15170c4334f001a810a5c8cc3dd1f829fc851219680"
+image = "dhi.io/python:3.13.14-alpine-dev@sha256:8c3820102033dff6a1e5de0fad001747c7b0979c372d6ffc1ac95dd0e03eed82"
 hardened = true
 command = "sh -c 'pip install --quiet pip-audit && pip-audit'"
 workdir = "/work"
@@ -787,7 +787,7 @@ command_flag = "--fix"
 [presets.pytest]
 name = "pytest"
 phase = "test"
-image = "dhi.io/python:3.13-alpine3.21@sha256:d60ba1e84507e21ab542c15170c4334f001a810a5c8cc3dd1f829fc851219680"
+image = "dhi.io/python:3.13.14-alpine-dev@sha256:8c3820102033dff6a1e5de0fad001747c7b0979c372d6ffc1ac95dd0e03eed82"
 hardened = true
 command = "sh -c 'pip install --quiet pytest pytest-cov && pytest'"
 workdir = "/work"
@@ -810,7 +810,7 @@ command_flag = "--cov=."
 [presets.python-build]
 name = "python-build"
 phase = "build"
-image = "dhi.io/python:3.13-alpine3.21@sha256:d60ba1e84507e21ab542c15170c4334f001a810a5c8cc3dd1f829fc851219680"
+image = "dhi.io/python:3.13.14-alpine-dev@sha256:8c3820102033dff6a1e5de0fad001747c7b0979c372d6ffc1ac95dd0e03eed82"
 hardened = true
 command = "sh -c 'pip install --quiet build && python -m build'"
 workdir = "/work"
@@ -825,7 +825,7 @@ OUTPUT_DIR = "dist"
 [presets.twine]
 name = "twine"
 phase = "release"
-image = "dhi.io/python:3.13-alpine3.21@sha256:d60ba1e84507e21ab542c15170c4334f001a810a5c8cc3dd1f829fc851219680"
+image = "dhi.io/python:3.13.14-alpine-dev@sha256:8c3820102033dff6a1e5de0fad001747c7b0979c372d6ffc1ac95dd0e03eed82"
 hardened = true
 command = "sh -c 'pip install --quiet twine && twine upload dist/*'"
 workdir = "/work"

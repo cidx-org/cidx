@@ -54,26 +54,6 @@
   references = []
 
 [[vulnerabilities]]
-  cve = "CVE-2025-58050"
-  image = "aquasec/trivy:0.67.2"
-  severity = "CRITICAL"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2025-9230"
-  image = "aquasec/trivy:0.67.2"
-  severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
-  references = []
-
-[[vulnerabilities]]
   cve = "GHSA-cgrx-mc8f-2prm"
   image = "aquasec/trivy:0.67.2"
   severity = "HIGH"
@@ -86,16 +66,6 @@
 [[vulnerabilities]]
   cve = "GHSA-pwhc-rpq9-4c8w"
   image = "aquasec/trivy:0.67.2"
-  severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2025-9230"
-  image = "commitlint/commitlint:20.1.0"
   severity = "HIGH"
   status = "third-party"
   added = "2025-12-02"
@@ -144,36 +114,6 @@
   references = []
 
 [[vulnerabilities]]
-  cve = "CVE-2025-9230"
-  image = "maniator/gh:v2.83.1"
-  severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2025-58050"
-  image = "securego/gosec:2.22.10"
-  severity = "CRITICAL"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2025-9230"
-  image = "tmknom/prettier:3.6.2"
-  severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
-  references = []
-
-[[vulnerabilities]]
   cve = "CVE-2024-25621"
   image = "aquasec/trivy:0.67.2"
   severity = "HIGH"
@@ -185,16 +125,6 @@
 
 [[vulnerabilities]]
   cve = "CVE-2024-25621"
-  image = "gcr.io/kaniko-project/executor:v1.24.0"
-  severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image (Trivy)"
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2025-47907"
   image = "gcr.io/kaniko-project/executor:v1.24.0"
   severity = "HIGH"
   status = "third-party"
@@ -226,26 +156,6 @@
 [[vulnerabilities]]
   cve = "CVE-2025-52881"
   image = "gcr.io/kaniko-project/executor:v1.24.0"
-  severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2025-58187"
-  image = "gcr.io/kaniko-project/executor:v1.24.0"
-  severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2025-58187"
-  image = "aquasec/trivy:0.67.2"
   severity = "HIGH"
   status = "third-party"
   added = "2025-12-02"
@@ -364,78 +274,8 @@
   references = []
 
 [[vulnerabilities]]
-  cve = "CVE-2025-61723"
-  image = "gcr.io/kaniko-project/executor:v1.24.0"
-  severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2025-61725"
-  image = "gcr.io/kaniko-project/executor:v1.24.0"
-  severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2025-58188"
-  image = "gcr.io/kaniko-project/executor:v1.24.0"
-  severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
-  references = []
-
-[[vulnerabilities]]
   cve = "CVE-2025-59375"
   image = "golangci/golangci-lint:v2.6.2"
-  severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2025-61723"
-  image = "goreleaser/goreleaser:v2.12.7"
-  severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2025-61725"
-  image = "goreleaser/goreleaser:v2.12.7"
-  severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2025-58187"
-  image = "goreleaser/goreleaser:v2.12.7"
-  severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2025-58188"
-  image = "goreleaser/goreleaser:v2.12.7"
   severity = "HIGH"
   status = "third-party"
   added = "2025-12-02"
@@ -484,46 +324,6 @@
   references = []
 
 [[vulnerabilities]]
-  cve = "CVE-2025-47907"
-  image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
-  severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Go stdlib database/sql race in embedded kubectl"
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2025-58187"
-  image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
-  severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Go stdlib name constraint in embedded kubectl"
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2025-61723"
-  image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
-  severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Go stdlib issue in kubectl"
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2025-61725"
-  image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
-  severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Go stdlib issue in kubectl"
-  references = []
-
-[[vulnerabilities]]
   cve = "GHSA-cgrx-mc8f-2prm"
   image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
   severity = "HIGH"
@@ -531,16 +331,6 @@
   added = "2025-12-02"
   expires = "2026-03-02"
   notes = "runc/selinux container escape (GHSA) in kubectl"
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2025-58188"
-  image = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
-  severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Go stdlib issue in kubectl"
   references = []
 
 [[vulnerabilities]]
