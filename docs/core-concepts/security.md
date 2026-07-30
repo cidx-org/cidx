@@ -200,15 +200,39 @@ Two caveats, both real:
 - **The variant has to actually work.** A distroless image with no shell breaks any preset whose command is a pipeline, and an alpine image is musl, not glibc — a tool that ships a glibc binary will not run in one. The variant is a candidate, not an automatic winner; `cidx run <preset> --dry-run` and one real run are what settle it.
 - **The variant line is a commitment.** Moving between families later is a repin by hand, never a promotion (see [A variant line that froze](#a-variant-line-that-froze)), so picking `-alpine3.21` means watching whether that family is still published.
 
+### Applying it to the rest of the catalogue
+
+Every catalogue image was scanned against every smaller variant its publisher offers at the same version (#286). One moved, and the reasons the others did not are the more useful half of the result.
+
+**What moved.** The Rust pack went to `rust:1.97.0-slim`: **429 HIGH / 60 CRITICAL → 78 / 5**, and 596 MB → 323 MB. Same publisher, same toolchain, the same glibc — Debian minus the packages a compiler never reads.
+
+The version does not move, so rule 2 has nothing to hold: 1.97.0 is the release the catalogue already runs, and `-slim` has carried it since the day it shipped. What is 13 days old is that tag's _content_ — the official images rebuild every variant when their base does, and `-slim` was last rebuilt one day later than the default. Rule 3 covers the remaining day and says so out loud: the image being left behind carries 60 CRITICAL findings that affect us today, against a hypothetical compromise in a rebuild of a release the catalogue already trusts.
+
+**Why not `-alpine`, which measures 0 / 0.** Because alpine is musl, and these presets _compile_. Every artefact `cargo-build` produces would silently change libc: the binary would stop running anywhere glibc is expected, and nothing in the config would say so. The catalogue has already been bitten from the other side — `probatum` carries a description explaining that a glibc binary will not start on its musl image (#195) — and flipping the producer instead of the consumer is the same trap with the arrow reversed. The rule reads _at equal tool and version_; an image that changes what the tool emits is not equal. **For anything that compiles, or whose output is consumed elsewhere, `slim` is the floor.** A self-contained linter or scanner that emits nothing linkable can take alpine, as `golangci-lint` did.
+
+**Why `cargo-audit` stayed behind.** It is the one Rust preset still on the full image. `rust:<version>-slim` ships no HTTP client — the official Dockerfile installs `wget` to fetch rustup and `apt-get remove`s it in the same layer — and the preset downloads the RustSec release binary rather than `cargo install`ing it, which #161 measured in minutes and #188 fixed for non-root. On `-slim` it fails with `sh: curl: not found`. The other five presets took the smaller image; this one keeps a base that can fetch its own tool, and the split is one extra line in the baseline, not a fork of the pack.
+
+**Where the smaller variant lost.** A variant is a candidate, not a winner, and three of them measured worse or equal:
+
+| Image            | Default | Smaller variant                           | Verdict                                                              |
+| ---------------- | ------- | ----------------------------------------- | -------------------------------------------------------------------- |
+| `ruff:0.8.2`     | 0 / 0   | `-alpine` 21 / 2, `-bookworm-slim` 38 / 7 | Default is distroless and already the smallest — kept                |
+| `prettier:3.9.4` | 0 / 0   | `-alpine` 0 / 0                           | Nothing to gain — kept                                               |
+| `kaniko:v1.28.0` | 7 / 0   | `-slim` 3 / 0                             | `-slim` drops the ACR/ECR/GCR credential helpers — not the same tool |
+
+`ruff` is the case the rule exists to catch in both directions: the publisher's default is a scratch image, and reaching for `-alpine` out of habit would have _added_ 21 findings. Measure, then choose.
+
+The remaining images publish no smaller variant at their pinned version (`commitizen`, `commitlint`, `gitleaks`, `black`, `goreleaser`, `gh`, `gosec`, `shellcheck`, `probatum`, the Ansible dev-tools image), or are Docker Hardened Images that are already the minimal build (`dhi.io/*`). `dhi.io/golang:1.23-alpine3.21-dev` carries 340 HIGH / 23 CRITICAL, the catalogue's second-worst, but that is the frozen variant line of [the section below](#a-variant-line-that-froze) — a base-version decision, not a variant choice.
+
 ### How the rules are applied
 
 `cidx preset scan-targets` decides, per image, what `container-monitor.yml` scans and which candidates are old enough to consider; `cidx preset scan-verdicts` then decides which of them the scan results allow. The workflow only reads those verdicts — the policy lives in code, where it is testable, rather than in shell scattered across a YAML file.
 
 **Where the age comes from.** The cooldown is measured against the date the registry reports for the candidate tag, taken from the same call that finds the tag, so it costs no extra request:
 
-| Registry   | Date used                 | Meaning                                               |
-| ---------- | ------------------------- | ----------------------------------------------------- |
-| Docker Hub | `last_updated` on the tag | when that tag last received content                   |
+| Registry   | Date used                 | Meaning                                                |
+| ---------- | ------------------------- | ------------------------------------------------------ |
+| Docker Hub | `last_updated` on the tag | when that tag last received content                    |
 | Quay.io    | `start_ts` on the tag     | when that tag started pointing at its current content  |
 | gcr.io     | `timeUploadedMs`          | when the registry received that tag's manifest         |
 | ghcr.io    | none                      | tags are listed, dated nowhere we can read (see below) |
@@ -268,12 +292,12 @@ Tags cannot tell those apart. The findings can, so the criterion is the CVE: **i
 
 Every entry lands in one of four states:
 
-| State          | Meaning                                                             | What happens to it              |
-| -------------- | ------------------------------------------------------------------- | ------------------------------- |
-| **live**       | covers an image the catalogue runs today                            | nothing, it is doing its job    |
-| **carry-over** | its CVE followed the promotion and a catalogue image still carries it | reported, named, never deleted  |
-| **obsolete**   | no catalogue image carries its CVE any more                         | removable                       |
-| **unknown**    | some catalogue image has no scan result                             | reported, never deleted         |
+| State          | Meaning                                                               | What happens to it             |
+| -------------- | --------------------------------------------------------------------- | ------------------------------ |
+| **live**       | covers an image the catalogue runs today                              | nothing, it is doing its job   |
+| **carry-over** | its CVE followed the promotion and a catalogue image still carries it | reported, named, never deleted |
+| **obsolete**   | no catalogue image carries its CVE any more                           | removable                      |
+| **unknown**    | some catalogue image has no scan result                               | reported, never deleted        |
 
 **Fail-closed, once more.** A CVE cannot be shown absent from an image nobody scanned, so a missing result makes the verdict `unknown`, not `obsolete` — the same posture as an unresolvable digest (rule 1), an undatable candidate (rule 2) and an unreadable scan (the scan gate).
 
@@ -315,7 +339,7 @@ A candidate carrying the same vulnerabilities as the running image is not a regr
 
 One scanner missing is not fatal: the other's findings are real evidence, and holding every promotion because a registry login flaked would rebuild the stuck gate this replaced. What the verdict must not do is imply a scan that never happened, so it names the scanners it actually read (`scanned by Trivy and Grype`, or just one of them). For the same reason the promote job runs even when a scan job failed — a lost matrix leg holds its own candidate, not everyone else's.
 
-**A held candidate is information, not a failure.** It is annotated on the run and listed in the summary under *Held by the scan gate*, and the monitor stays green. Red is reserved for what is actually broken — a catalogue image deleted upstream (#245) — so that signal keeps meaning something. The candidate returns next week, with the current pinned image still scanned and still running in the meantime.
+**A held candidate is information, not a failure.** It is annotated on the run and listed in the summary under _Held by the scan gate_, and the monitor stays green. Red is reserved for what is actually broken — a catalogue image deleted upstream (#245) — so that signal keeps meaning something. The candidate returns next week, with the current pinned image still scanned and still running in the meantime.
 
 Both scanners' JSON is parsed, so a finding only one of them knows about still holds the candidate; running two scanners buys nothing otherwise. Severity filtering happens in code because Grype reports every severity whatever `--fail-on` says.
 
@@ -348,9 +372,9 @@ cooldown:
 
 `github-actions` supports `default-days` only; the `semver-major-days` / `semver-minor-days` / `semver-patch-days` keys exist for SemVer ecosystems and are deliberately unused for `gomod` too. The policy is one number. (Dependabot applies a 3-day cooldown of its own when the option is absent — enough to show the mechanism is the right one, nowhere near the window rule 2 asks for, and worth stating explicitly rather than inheriting.)
 
-**Rule 3 — waive the wait for a real fix.** This one needs no configuration: `cooldown` governs *version* updates only. A Dependabot **security** update is exempt by construction, so a version that fixes a vulnerability affecting us still arrives immediately. The mechanism differs from the catalogue's — there the waiver is a human line in the promotion PR — but the outcome is rule 3 either way.
+**Rule 3 — waive the wait for a real fix.** This one needs no configuration: `cooldown` governs _version_ updates only. A Dependabot **security** update is exempt by construction, so a version that fixes a vulnerability affecting us still arrives immediately. The mechanism differs from the catalogue's — there the waiver is a human line in the promotion PR — but the outcome is rule 3 either way.
 
-**Why `gomod` gets rule 2 but not rule 1.** The Go checksum database already makes a published version immutable: `go.sum` records the content hash, and a republished `v1.2.3` fails verification instead of quietly substituting itself. Rule 1's problem does not exist there. What sumdb guarantees is that everyone gets the *same* bytes — not that those bytes are benign, so a maliciously published *new* version lands like any other release. That is the delay rule 2 buys, and why the cooldown applies to `gomod` as well.
+**Why `gomod` gets rule 2 but not rule 1.** The Go checksum database already makes a published version immutable: `go.sum` records the content hash, and a republished `v1.2.3` fails verification instead of quietly substituting itself. Rule 1's problem does not exist there. What sumdb guarantees is that everyone gets the _same_ bytes — not that those bytes are benign, so a maliciously published _new_ version lands like any other release. That is the delay rule 2 buys, and why the cooldown applies to `gomod` as well.
 
 **Scope, again.** This covers this repository's workflows. `pkg/generate/github.go` still emits major tags in the workflows it generates for other projects, on purpose: pinning by SHA is a policy, and shipping it in generated output would make CIDX impose one on its users. Whether that trade is worth making is a separate decision, not a consequence of this one.
 

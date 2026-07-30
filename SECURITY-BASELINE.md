@@ -17,7 +17,7 @@ An entry past its expiry date waives nothing until it is reviewed; `cidx
 security vuln check` is what reports those, and `cidx security vuln prune`
 reports the ones no catalogue image carries any more.
 
-**20 images, 0 accepted HIGH/CRITICAL finding(s) across 0 of them.**
+**21 images, 0 accepted HIGH/CRITICAL finding(s) across 0 of them.**
 
 ## Images
 
@@ -41,7 +41,8 @@ reports the ones no catalogue image carries any more.
 | `koalaman/shellcheck:stable@sha256:bb596a0d169b85ddd81d8b6d3a2ff6d5baf5fca10b97f575ebc647c3dff62b3d` | shellcheck | none |
 | `maniator/gh:v2.95@sha256:c7e862eeb468003aba87847a03e214a21638cd898130d6e5894f019aec091913` | gh-release | none |
 | `pyfound/black:26.5.1@sha256:bcdafe3e6a60fd181fde19859f7ee4c498557f03bb30af3fa880f502a66e5b5f` | black | none |
-| `rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9` | cargo-audit, cargo-build, cargo-publish, cargo-test, clippy, rustfmt | none |
+| `rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51` | cargo-build, cargo-publish, cargo-test, clippy, rustfmt | none |
+| `rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9` | cargo-audit | none |
 | `zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f` | gitleaks | none |
 
 ## Accepted findings

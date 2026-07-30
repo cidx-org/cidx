@@ -9,6 +9,8 @@
 
 ### Fix
 
+- **presets**: run the Rust pack on `rust:1.97.0-slim` — same publisher, same toolchain, same glibc, 429 HIGH/60 CRITICAL become 78/5 and the image halves to 323 MB. Deliberately not `-alpine`, which measures 0/0: alpine is musl, so every binary `cargo-build` emits would change libc without a line of config saying so. `cargo-audit` keeps the full image, the only one that can fetch its own tool: `-slim` ships no HTTP client. The other smaller variants the catalogue's publishers offer were measured and rejected — `ruff`'s default is already distroless and `-alpine` would have added 21 findings, `prettier`'s changes nothing, and `kaniko`'s drops the ACR/ECR/GCR credential helpers (#238)
+
 - **presets**: update seven catalogue images carrying HIGH/CRITICAL findings the security audit had no answer for — `commitizen` 4.15.1→4.16.5, `commitlint` 21.0.0→21.2.1, `goreleaser` v2.15.4→v2.17.0, `black` 26.3.1→26.5.1, `gh-release` v2.92.0→v2.95, the Rust language pack 1.95.0→1.97.0 and the Ansible dev-tools image v25.12.0→v26.7.1 (#238)
 
 - **presets**: replace four catalogue images a version bump could no longer help, because their publisher had stopped — `kaniko` moves to the `osscontainertools` fork now that GoogleContainerTools/kaniko is archived, `gosec` to `ghcr.io`, the registry its release workflow actually pushes to, `golangci-lint` to the `-alpine` variant of the same build, and `prettier` off `tmknom`, unpublished for thirteen months. 962 HIGH/CRITICAL findings become 106, and 36 CRITICALs become 0 (#238)
