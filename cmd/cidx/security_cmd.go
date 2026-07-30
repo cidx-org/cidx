@@ -9,6 +9,7 @@ func securityCommand() *cli.Command {
 		Subcommands: []*cli.Command{
 			vulnCommand(),
 			registryCommand(),
+			securityBaselineCommand(),
 		},
 	}
 }

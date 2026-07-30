@@ -187,6 +187,19 @@ Why not "always stay one version behind"? An attacker publishing twice in a row 
 
 **3. Waive the wait for a real fix.** When a new version fixes a vulnerability that actually affects us, it is promoted immediately — deliberately running a known-vulnerable image to guard against a hypothetical one is the worse trade. The waiver is stated in the promotion PR: which CVE, affecting which image, fixed by which version.
 
+### At equal tool and version, take the smaller image
+
+The three rules govern how a reference is pinned and when it moves. They say nothing about which reference to pick in the first place, and that choice turns out to dominate the numbers.
+
+`golangci-lint` was pinned to the publisher's default image, built on Debian. Moving to `-alpine` — same publisher, same build, same version of the same tool — took it from **604 HIGH / 23 CRITICAL to 98 HIGH / 0 CRITICAL** (#280). 515 of those findings were never in golangci-lint at all: they were in a base image the linter does not use, shipped along with it.
+
+So: **at equal tool and equal version, prefer the smallest variant the publisher offers** — `alpine`, `slim`, `distroless`, in that order of preference where they exist — and check at the moment of choosing, not later. A finding that is not in the image cannot be scanned, triaged, excepted, or re-argued in ninety days; the cheapest exception is the one never written.
+
+Two caveats, both real:
+
+- **The variant has to actually work.** A distroless image with no shell breaks any preset whose command is a pipeline, and an alpine image is musl, not glibc — a tool that ships a glibc binary will not run in one. The variant is a candidate, not an automatic winner; `cidx run <preset> --dry-run` and one real run are what settle it.
+- **The variant line is a commitment.** Moving between families later is a repin by hand, never a promotion (see [A variant line that froze](#a-variant-line-that-froze)), so picking `-alpine3.21` means watching whether that family is still published.
+
 ### How the rules are applied
 
 `cidx preset scan-targets` decides, per image, what `container-monitor.yml` scans and which candidates are old enough to consider; `cidx preset scan-verdicts` then decides which of them the scan results allow. The workflow only reads those verdicts — the policy lives in code, where it is testable, rather than in shell scattered across a YAML file.
@@ -238,9 +251,47 @@ It is deliberately not a candidate. Moving from `alpine3.21` to `alpine3.24` cha
 
 A candidate that has served the full 14 days claims no waiver, even when the running image is vulnerable — a waiver line in the PR means the cooldown was actually bypassed, or the record stops being worth reading.
 
-That record only works while it points at what we actually run. Entries are keyed `repo:tag`, so every promotion leaves the ones recorded against the replaced version behind: they stop matching, which is correct, and then nothing says so — 138 of the file's 155 entries were keyed to tags the catalogue had passed, and rule 3's waiver had gone quiet with them (#248). `cidx security vuln list --stale` lists the entries matching no catalogue image. It only reports: whether a record is dead is a judgement — the CVE may still be unfixed upstream — so pruning stays a deliberate edit.
+That record only works while it points at what we actually run. Entries are keyed `repo:tag`, so every promotion leaves the ones recorded against the replaced version behind: they stop matching, which is correct, and then nothing says so — 138 of the file's 155 entries were keyed to tags the catalogue had passed, and rule 3's waiver had gone quiet with them (#248). `cidx security vuln list --stale` lists the entries matching no catalogue image.
 
 **The catalogue, and only the catalogue.** These rules govern the built-in preset catalogue. `cidx preset scan-targets` therefore reads `pkg/presets/presets.toml` rather than the resolved preset registry, which also carries whatever the user and the project declared in their own `presets.toml` — images the policy does not govern and the promotion job could not update anyway (guardrail 1, #248).
+
+### An exception dies with the image it covers
+
+An exception is written against one image, with a date on it so the acceptance gets argued again rather than inherited. When that image is replaced, the entry stops matching anything — and stays in the file for ever, because nothing ever asked whether it still had an object. All 155 entries reached that state, the most recent expiry dated 2026-03-02 (#238).
+
+The tempting rule is "the tag changed, so delete it". It is wrong, and expensively so. When an image is promoted, an accepted CVE does one of two things:
+
+- **It went away with the image.** The exception has no object left. Delete it.
+- **It followed the promotion into the new image.** Deleting it loses the justification somebody wrote and the review it came from, and the next audit goes red on a finding that was settled months ago. It has to be **re-filed** against the new reference, not purged.
+
+Tags cannot tell those apart. The findings can, so the criterion is the CVE: **is it still present in an image the catalogue runs?** `cidx security vuln prune` answers that from the scanner results the audit and the monitor already produce — nothing is rescanned, because a command that pulled twenty images to answer a bookkeeping question would be run once and never again. Point `--results` at the JSON either workflow uploaded.
+
+Every entry lands in one of four states:
+
+| State          | Meaning                                                             | What happens to it              |
+| -------------- | ------------------------------------------------------------------- | ------------------------------- |
+| **live**       | covers an image the catalogue runs today                            | nothing, it is doing its job    |
+| **carry-over** | its CVE followed the promotion and a catalogue image still carries it | reported, named, never deleted  |
+| **obsolete**   | no catalogue image carries its CVE any more                         | removable                       |
+| **unknown**    | some catalogue image has no scan result                             | reported, never deleted         |
+
+**Fail-closed, once more.** A CVE cannot be shown absent from an image nobody scanned, so a missing result makes the verdict `unknown`, not `obsolete` — the same posture as an unresolvable digest (rule 1), an undatable candidate (rule 2) and an unreadable scan (the scan gate).
+
+**And it only reports.** `vuln prune` prints; `vuln prune -x` removes, and removes obsolete entries alone. The convention is `repo branch cleanup`'s: the default run is the one that cannot destroy anything. Deciding to stop waiving a CVE — or to accept one in the first place — belongs to whoever has to live with it. The tool prepares the material and names what it found; the human decides.
+
+### What the catalogue actually ships
+
+`known-vulnerabilities.toml` is a working record: keyed by `repo:tag`, full of entries for images the catalogue has moved past, written for the audit rather than for a reader. Nobody installing CIDX could tell from it which vulnerabilities the images they are about to run actually carry.
+
+`cidx security baseline` writes that down, in `SECURITY-BASELINE.md` at the root of the repository: every image the built-in catalogue runs, pinned by digest, with the presets using it, and every HIGH/CRITICAL finding accepted on it — with the reason and the expiry date. Only the built-in catalogue: a preset your own `presets.toml` declares is yours, and CIDX makes no claim about it (guardrail 1).
+
+Three properties, each deliberate:
+
+- **It is committed.** The diff is the point. A release that changes what the catalogue carries shows it as a changed line, and "what we ship by default" stops being something you have to reconstruct.
+- **It carries no generation date.** A timestamp would change the file on every run and make every diff meaningless. The same inputs produce byte-identical output, and a test pins that — map iteration order has flapped this repository's output twice already (#230, #233).
+- **It only lists what is accepted on an image the catalogue runs.** An entry recorded against a tag the catalogue passed waives nothing; publishing it would claim an acceptance that does not exist, which is the exact fiction this file removes. That is also why the two commands travel together: `vuln prune` is what keeps the record honest, and the baseline is what publishes it.
+
+An entry past its expiry date is printed with that date and nothing else — the table states facts, and `cidx security vuln check` is what judges them.
 
 ### The scan gate is differential
 

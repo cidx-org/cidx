@@ -1,0 +1,198 @@
+package main
+
+import (
+	"fmt"
+	"os"
+	"sort"
+	"strings"
+
+	"github.com/urfave/cli/v2"
+)
+
+// defaultBaselineFile is where the generated table lives. It sits at the root of
+// the repository on purpose: it is committed, so its diff is the history of what
+// the catalogue ships, and it is attached to the release assets alongside the
+// binaries it describes.
+const defaultBaselineFile = "SECURITY-BASELINE.md"
+
+// securityBaselineCommand writes down what the built-in catalogue actually
+// delivers: every image it runs, pinned by digest, and every HIGH/CRITICAL
+// finding accepted on it, with its justification and its expiry date.
+//
+// Nothing said that before. `known-vulnerabilities.toml` is the working record —
+// keyed by `repo:tag`, full of entries for images the catalogue has moved past —
+// and reading it tells you what was once accepted, not what you install today.
+//
+// The output is deliberately free of any generation timestamp. A date would
+// change every run and make the diff — the only reason to commit the file —
+// unreadable. Two generations of the same inputs produce byte-identical output;
+// TestSecurityBaselineIsDeterministic pins that.
+func securityBaselineCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "baseline",
+		Usage: "Generate " + defaultBaselineFile + ": the images the catalogue ships and the findings accepted on them",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "file",
+				Value: defaultVulnFile,
+				Usage: "Path to known-vulnerabilities.toml",
+			},
+			&cli.StringFlag{
+				Name:    "output",
+				Aliases: []string{"o"},
+				Value:   defaultBaselineFile,
+				Usage:   "Where to write the baseline",
+			},
+		},
+		Action: func(c *cli.Context) error {
+			imagePresets, err := catalogueImages()
+			if err != nil {
+				return err
+			}
+
+			// An absent exception file is not an error: it means nothing is
+			// accepted, which is a perfectly good baseline to publish.
+			var accepted []Vulnerability
+			if vulns, err := loadVulnerabilities(c.String("file")); err == nil {
+				accepted = vulns.Vulnerabilities
+			}
+
+			out := c.String("output")
+			if err := os.WriteFile(out, []byte(renderSecurityBaseline(imagePresets, accepted)), 0644); err != nil {
+				return fmt.Errorf("failed to write %s: %w", out, err)
+			}
+
+			fmt.Printf("Wrote %s: %d catalogue image(s), %d accepted HIGH/CRITICAL finding(s).\n",
+				out, len(imagePresets), len(acceptedFindings(imagePresets, accepted)))
+			return nil
+		},
+	}
+}
+
+// baselineFinding is one accepted HIGH/CRITICAL finding, resolved against the
+// image the catalogue runs today.
+type baselineFinding struct {
+	Image    string // the pinned catalogue reference, not the `repo:tag` key
+	CVE      string
+	Severity string
+	Status   string
+	Expires  string
+	Notes    string
+}
+
+// acceptedFindings keeps the exceptions that describe an image the catalogue
+// actually runs, and only those.
+//
+// An entry recorded against a tag the catalogue has moved past waives nothing —
+// that is what `vuln prune` is about — so publishing it here would overstate what
+// is accepted and understate what is carried. The baseline says what is true of
+// the images shipped, or it is not worth committing.
+//
+// Severities outside HIGH/CRITICAL are dropped: they are the band the policy
+// acts on, the band the audit gates on, and the band this table claims to cover.
+func acceptedFindings(imagePresets map[string][]string, accepted []Vulnerability) []baselineFinding {
+	byRef := make(map[string]string, len(imagePresets))
+	for image := range imagePresets {
+		byRef[refWithoutDigest(image)] = image
+	}
+
+	var findings []baselineFinding
+	for _, v := range accepted {
+		image, ok := byRef[refWithoutDigest(v.Image)]
+		if !ok || !isHighOrCritical(v.Severity) {
+			continue
+		}
+		findings = append(findings, baselineFinding{
+			Image:    image,
+			CVE:      v.CVE,
+			Severity: strings.ToUpper(v.Severity),
+			Status:   v.Status,
+			Expires:  v.Expires,
+			Notes:    v.Notes,
+		})
+	}
+
+	// CRITICAL before HIGH, then by image and identifier. Map iteration order
+	// has bitten this repository twice (#230, #233); every ordering here is
+	// explicit for that reason.
+	sort.Slice(findings, func(i, j int) bool {
+		if findings[i].Image != findings[j].Image {
+			return findings[i].Image < findings[j].Image
+		}
+		if findings[i].Severity != findings[j].Severity {
+			return findings[i].Severity < findings[j].Severity // CRITICAL < HIGH
+		}
+		return findings[i].CVE < findings[j].CVE
+	})
+	return findings
+}
+
+func renderSecurityBaseline(imagePresets map[string][]string, accepted []Vulnerability) string {
+	images := make([]string, 0, len(imagePresets))
+	for image := range imagePresets {
+		images = append(images, image)
+	}
+	sort.Strings(images)
+
+	findings := acceptedFindings(imagePresets, accepted)
+	countByImage := make(map[string]int, len(findings))
+	for _, f := range findings {
+		countByImage[f.Image]++
+	}
+
+	var sb strings.Builder
+	sb.WriteString("# Security baseline\n\n")
+	sb.WriteString("<!-- Generated by `cidx security baseline`. Do not edit by hand. -->\n\n")
+	sb.WriteString("What the built-in preset catalogue ships: every container image it runs, pinned\n")
+	sb.WriteString("by digest, and every HIGH/CRITICAL finding accepted on it — with the reason it\n")
+	sb.WriteString("was accepted and the date that acceptance has to be argued again.\n\n")
+	sb.WriteString("This file is committed, so its diff is the history of what the catalogue\n")
+	sb.WriteString("delivers, and it carries no generation date: the same inputs produce the same\n")
+	sb.WriteString("bytes, and a changed line means something actually changed.\n\n")
+	sb.WriteString("Only the built-in catalogue is described here. Presets your own `presets.toml`\n")
+	sb.WriteString("declares are yours, and CIDX makes no claim about them (guardrail 1).\n\n")
+	sb.WriteString("An entry past its expiry date waives nothing until it is reviewed; `cidx\n")
+	sb.WriteString("security vuln check` is what reports those, and `cidx security vuln prune`\n")
+	sb.WriteString("reports the ones no catalogue image carries any more.\n\n")
+
+	fmt.Fprintf(&sb, "**%d images, %d accepted HIGH/CRITICAL finding(s) across %d of them.**\n\n",
+		len(images), len(findings), len(countByImage))
+
+	sb.WriteString("## Images\n\n")
+	sb.WriteString("| Image | Presets | Accepted HIGH/CRITICAL |\n")
+	sb.WriteString("| ----- | ------- | ---------------------- |\n")
+	for _, image := range images {
+		names := append([]string(nil), imagePresets[image]...)
+		sort.Strings(names)
+
+		count := "none"
+		if n := countByImage[image]; n > 0 {
+			count = fmt.Sprintf("%d", n)
+		}
+		fmt.Fprintf(&sb, "| `%s` | %s | %s |\n", image, strings.Join(names, ", "), count)
+	}
+	sb.WriteString("\n")
+
+	sb.WriteString("## Accepted findings\n\n")
+	if len(findings) == 0 {
+		sb.WriteString("No HIGH/CRITICAL finding is accepted on any image the catalogue ships.\n")
+		return sb.String()
+	}
+
+	sb.WriteString("| Image | CVE | Severity | Status | Expires | Justification |\n")
+	sb.WriteString("| ----- | --- | -------- | ------ | ------- | ------------- |\n")
+	for _, f := range findings {
+		fmt.Fprintf(&sb, "| `%s` | %s | %s | %s | %s | %s |\n",
+			f.Image, f.CVE, f.Severity, f.Status, f.Expires, escapeCell(f.Notes))
+	}
+	return sb.String()
+}
+
+// escapeCell keeps a justification containing a pipe from splitting the row it
+// is written in, and collapses newlines the same way.
+func escapeCell(text string) string {
+	if text == "" {
+		return "—"
+	}
+	return strings.NewReplacer("|", `\|`, "\n", " ", "\r", "").Replace(text)
+}

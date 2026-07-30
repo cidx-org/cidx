@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cidx-org/cidx/v2/pkg/presets"
 	"github.com/cucumber/godog"
 )
 
@@ -63,6 +64,149 @@ func RegisterSecuritySteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	// CI provider shortcuts
 	ctx.Given(`^I am in GitHub Actions$`, tc.iAmInGitHubActions)
 	ctx.Given(`^I am in GitLab CI$`, tc.iAmInGitLabCI)
+
+	// The lifecycle of a vulnerability exception (#238)
+	ctx.Given(`^the catalogue runs "([^"]*)"$`, tc.catalogueRuns)
+	ctx.Given(`^every catalogue image has been scanned$`, tc.everyCatalogueImageScanned)
+	ctx.Given(`^no catalogue image has been scanned$`, tc.noCatalogueImageScanned)
+	ctx.Given(`^the scanners produced no result for "([^"]*)"$`, tc.noResultForImage)
+	ctx.Given(`^the scanners report "([^"]*)" on "([^"]*)"$`, tc.scannersReportOnImage)
+	ctx.Given(`^the exception "([^"]*)" was recorded against "([^"]*)"$`, tc.exceptionRecordedAgainst)
+	ctx.When(`^the exception lifecycle is applied$`, tc.applyExceptionLifecycle)
+	ctx.Then(`^the exception should be live$`, tc.exceptionShouldBe(presets.ExceptionLive))
+	ctx.Then(`^the exception should be obsolete$`, tc.exceptionShouldBe(presets.ExceptionObsolete))
+	ctx.Then(`^the exception should be carried over$`, tc.exceptionShouldBe(presets.ExceptionCarryOver))
+	ctx.Then(`^the exception should be unresolved$`, tc.exceptionShouldBe(presets.ExceptionUnknown))
+	ctx.Then(`^the exception verdict should mention "([^"]*)"$`, tc.exceptionVerdictShouldMention)
+	ctx.Then(`^the exception verdict should name the image "([^"]*)"$`, tc.exceptionVerdictShouldNameImage)
+}
+
+// catalogueRuns stages one reference the catalogue runs today, digest-free, in
+// the form known-vulnerabilities.toml records exceptions in.
+func (tc *TestContext) catalogueRuns(image string) error {
+	running, _ := tc.Config["catalogue_images"].([]string)
+	tc.Config["catalogue_images"] = append(running, image)
+	return nil
+}
+
+// everyCatalogueImageScanned is the evidence state where the scanners answered
+// for every image and found nothing beyond what was staged. Stated out loud,
+// because "scanned, nothing found" and "not scanned" are the two answers this
+// whole feature turns on.
+func (tc *TestContext) everyCatalogueImageScanned() error {
+	findings := tc.exceptionFindings()
+	for _, image := range tc.catalogueImages() {
+		if _, ok := findings[image]; !ok {
+			findings[image] = nil
+		}
+	}
+	return nil
+}
+
+func (tc *TestContext) noCatalogueImageScanned() error {
+	tc.Config["exception_findings"] = map[string][]string{}
+	return nil
+}
+
+// noResultForImage marks one image as unscanned while the others answered — the
+// partial-evidence case, where a purge would be a guess about exactly the image
+// nobody looked at.
+func (tc *TestContext) noResultForImage(image string) error {
+	if err := tc.everyCatalogueImageScanned(); err != nil {
+		return err
+	}
+	delete(tc.exceptionFindings(), image)
+	return nil
+}
+
+func (tc *TestContext) scannersReportOnImage(cve, image string) error {
+	findings := tc.exceptionFindings()
+	findings[image] = append(findings[image], cve)
+	return nil
+}
+
+func (tc *TestContext) exceptionRecordedAgainst(cve, image string) error {
+	tc.Config["exception_cve"] = cve
+	tc.Config["exception_image"] = image
+	return nil
+}
+
+// applyExceptionLifecycle runs the real policy — the same function
+// `cidx security vuln prune` calls on known-vulnerabilities.toml.
+func (tc *TestContext) applyExceptionLifecycle() error {
+	cve, _ := tc.Config["exception_cve"].(string)
+	image, _ := tc.Config["exception_image"].(string)
+	if cve == "" || image == "" {
+		return fmt.Errorf("no exception was staged")
+	}
+
+	findings, scanned := tc.Config["exception_findings"].(map[string][]string)
+	if !scanned {
+		return fmt.Errorf("the scan evidence was not staged: say whether the catalogue images were scanned")
+	}
+
+	tc.Config["exception_verdict"] = presets.ClassifyException(cve, image, tc.catalogueImages(), findings)
+	return nil
+}
+
+func (tc *TestContext) catalogueImages() []string {
+	running, _ := tc.Config["catalogue_images"].([]string)
+	return running
+}
+
+func (tc *TestContext) exceptionFindings() map[string][]string {
+	findings, ok := tc.Config["exception_findings"].(map[string][]string)
+	if !ok {
+		findings = make(map[string][]string)
+		tc.Config["exception_findings"] = findings
+	}
+	return findings
+}
+
+func (tc *TestContext) exceptionVerdict() (presets.ExceptionVerdict, error) {
+	verdict, ok := tc.Config["exception_verdict"].(presets.ExceptionVerdict)
+	if !ok {
+		return presets.ExceptionVerdict{}, fmt.Errorf("the exception lifecycle was not applied")
+	}
+	return verdict, nil
+}
+
+func (tc *TestContext) exceptionShouldBe(want string) func() error {
+	return func() error {
+		verdict, err := tc.exceptionVerdict()
+		if err != nil {
+			return err
+		}
+		if verdict.State != want {
+			return fmt.Errorf("exception is %q (%s), expected %q", verdict.State, verdict.Reason, want)
+		}
+		return nil
+	}
+}
+
+func (tc *TestContext) exceptionVerdictShouldMention(fragment string) error {
+	verdict, err := tc.exceptionVerdict()
+	if err != nil {
+		return err
+	}
+	if !strings.Contains(verdict.Reason, fragment) {
+		return fmt.Errorf("verdict %q does not mention %q", verdict.Reason, fragment)
+	}
+	return nil
+}
+
+func (tc *TestContext) exceptionVerdictShouldNameImage(image string) error {
+	verdict, err := tc.exceptionVerdict()
+	if err != nil {
+		return err
+	}
+	if verdict.StillOn != image {
+		return fmt.Errorf("verdict names %q as still carrying the finding, expected %q", verdict.StillOn, image)
+	}
+	if !strings.Contains(verdict.Reason, image) {
+		return fmt.Errorf("verdict %q does not say which image still carries the finding", verdict.Reason)
+	}
+	return nil
 }
 
 // presetHasLocalBehavior sets local_behavior for a preset

@@ -40,6 +40,7 @@ func vulnCommand() *cli.Command {
 		Subcommands: []*cli.Command{
 			vulnListCommand(),
 			vulnCheckCommand(),
+			vulnPruneCommand(),
 			vulnReportCommand(),
 			vulnAddCommand(),
 			vulnIgnoreCommand(),
