@@ -566,13 +566,13 @@ jobs:
             echo "acceptance would be re-argued, not inherited. Re-date it, or delete it." >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             EXPIRED_LIST=$(./bin/cidx security vuln check --days 7 --json 2>/dev/null \
-              | jq -r '.expired[] | "| \(.CVE) | \(.Image) | \(.Severity) | \(.Expires) |"')
+              | jq -r '.expired[] | "| \(.CVE) | \(.Repository) | \(.Severity) | \(.Expires) |"')
             if [ -n "$EXPIRED_LIST" ]; then
               echo "<details>" >> $GITHUB_STEP_SUMMARY
               echo "<summary>⏰ Expired exceptions ($EXPIRED_COUNT)</summary>" >> $GITHUB_STEP_SUMMARY
               echo "" >> $GITHUB_STEP_SUMMARY
-              echo "| CVE | Image | Severity | Expired |" >> $GITHUB_STEP_SUMMARY
-              echo "|-----|-------|----------|---------|" >> $GITHUB_STEP_SUMMARY
+              echo "| CVE | Repository | Severity | Expired |" >> $GITHUB_STEP_SUMMARY
+              echo "|-----|------------|----------|---------|" >> $GITHUB_STEP_SUMMARY
               echo "$EXPIRED_LIST" >> $GITHUB_STEP_SUMMARY
               echo "" >> $GITHUB_STEP_SUMMARY
               echo "</details>" >> $GITHUB_STEP_SUMMARY

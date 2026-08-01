@@ -67,22 +67,30 @@ func RegisterSecuritySteps(ctx *godog.ScenarioContext, tc *TestContext) {
 
 	// The lifecycle of a vulnerability exception (#238)
 	ctx.Given(`^the catalogue runs "([^"]*)"$`, tc.catalogueRuns)
-	ctx.Given(`^every catalogue image has been scanned$`, tc.everyCatalogueImageScanned)
-	ctx.Given(`^no catalogue image has been scanned$`, tc.noCatalogueImageScanned)
+	ctx.Given(`^every catalogue repository has been scanned$`, tc.everyCatalogueImageScanned)
+	ctx.Given(`^no catalogue repository has been scanned$`, tc.noCatalogueImageScanned)
 	ctx.Given(`^the scanners produced no result for "([^"]*)"$`, tc.noResultForImage)
 	ctx.Given(`^the scanners report "([^"]*)" on "([^"]*)"$`, tc.scannersReportOnImage)
+	ctx.Given(`^the scanners report "([^"]*)" on "([^"]*)", fixed in "([^"]*)"$`, tc.scannersReportFixedOnImage)
+	ctx.Given(`^the scanners report "([^"]*)" on "([^"]*)" in package "([^"]*)" of type "([^"]*)"$`, tc.scannersReportPackageOnImage)
 	ctx.Given(`^the exception "([^"]*)" was recorded against "([^"]*)"$`, tc.exceptionRecordedAgainst)
 	ctx.When(`^the exception lifecycle is applied$`, tc.applyExceptionLifecycle)
+	ctx.When(`^the findings are triaged$`, tc.triageFindings)
 	ctx.Then(`^the exception should be live$`, tc.exceptionShouldBe(presets.ExceptionLive))
 	ctx.Then(`^the exception should be obsolete$`, tc.exceptionShouldBe(presets.ExceptionObsolete))
 	ctx.Then(`^the exception should be carried over$`, tc.exceptionShouldBe(presets.ExceptionCarryOver))
 	ctx.Then(`^the exception should be unresolved$`, tc.exceptionShouldBe(presets.ExceptionUnknown))
 	ctx.Then(`^the exception verdict should mention "([^"]*)"$`, tc.exceptionVerdictShouldMention)
-	ctx.Then(`^the exception verdict should name the image "([^"]*)"$`, tc.exceptionVerdictShouldNameImage)
+	ctx.Then(`^the exception verdict should name the repository "([^"]*)"$`, tc.exceptionVerdictShouldNameImage)
+	ctx.Then(`^the exception verdict should name the fix "([^"]*)"$`, tc.exceptionVerdictShouldNameFix)
+	ctx.Then(`^(\d+) finding\(s\) should be fixed upstream$`, tc.triageCountShouldBe("fixable"))
+	ctx.Then(`^(\d+) finding\(s\) should be exempt as Go stdlib$`, tc.triageCountShouldBe("go-stdlib"))
+	ctx.Then(`^(\d+) finding\(s\) should be exempt as kernel headers$`, tc.triageCountShouldBe("kernel-headers"))
+	ctx.Then(`^(\d+) finding\(s\) should need triage$`, tc.triageCountShouldBe("actionable"))
 }
 
-// catalogueRuns stages one reference the catalogue runs today, digest-free, in
-// the form known-vulnerabilities.toml records exceptions in.
+// catalogueRuns stages one repository the catalogue runs today, in the form
+// known-vulnerabilities.toml keys exceptions by.
 func (tc *TestContext) catalogueRuns(image string) error {
 	running, _ := tc.Config["catalogue_images"].([]string)
 	tc.Config["catalogue_images"] = append(running, image)
@@ -104,7 +112,7 @@ func (tc *TestContext) everyCatalogueImageScanned() error {
 }
 
 func (tc *TestContext) noCatalogueImageScanned() error {
-	tc.Config["exception_findings"] = map[string][]string{}
+	tc.Config["exception_findings"] = map[string][]presets.Finding{}
 	return nil
 }
 
@@ -120,8 +128,24 @@ func (tc *TestContext) noResultForImage(image string) error {
 }
 
 func (tc *TestContext) scannersReportOnImage(cve, image string) error {
+	return tc.stageFinding(image, presets.Finding{ID: cve, Severity: "HIGH"})
+}
+
+// scannersReportFixedOnImage stages a finding the publisher has already fixed —
+// the population the policy says an exception must never be written for.
+func (tc *TestContext) scannersReportFixedOnImage(cve, image, fix string) error {
+	return tc.stageFinding(image, presets.Finding{ID: cve, Severity: "HIGH", FixedIn: fix})
+}
+
+// scannersReportPackageOnImage stages a finding with the package metadata the
+// class exemptions read.
+func (tc *TestContext) scannersReportPackageOnImage(cve, image, pkg, pkgType string) error {
+	return tc.stageFinding(image, presets.Finding{ID: cve, Severity: "HIGH", Package: pkg, PackageType: pkgType})
+}
+
+func (tc *TestContext) stageFinding(image string, finding presets.Finding) error {
 	findings := tc.exceptionFindings()
-	findings[image] = append(findings[image], cve)
+	findings[image] = append(findings[image], finding)
 	return nil
 }
 
@@ -140,9 +164,9 @@ func (tc *TestContext) applyExceptionLifecycle() error {
 		return fmt.Errorf("no exception was staged")
 	}
 
-	findings, scanned := tc.Config["exception_findings"].(map[string][]string)
+	findings, scanned := tc.Config["exception_findings"].(map[string][]presets.Finding)
 	if !scanned {
-		return fmt.Errorf("the scan evidence was not staged: say whether the catalogue images were scanned")
+		return fmt.Errorf("the scan evidence was not staged: say whether the catalogue repositories were scanned")
 	}
 
 	tc.Config["exception_verdict"] = presets.ClassifyException(cve, image, tc.catalogueImages(), findings)
@@ -154,13 +178,49 @@ func (tc *TestContext) catalogueImages() []string {
 	return running
 }
 
-func (tc *TestContext) exceptionFindings() map[string][]string {
-	findings, ok := tc.Config["exception_findings"].(map[string][]string)
+func (tc *TestContext) exceptionFindings() map[string][]presets.Finding {
+	findings, ok := tc.Config["exception_findings"].(map[string][]presets.Finding)
 	if !ok {
-		findings = make(map[string][]string)
+		findings = make(map[string][]presets.Finding)
 		tc.Config["exception_findings"] = findings
 	}
 	return findings
+}
+
+// triageFindings runs the real triage over everything staged, the same call
+// `cidx security baseline` makes on the audit's artifacts.
+func (tc *TestContext) triageFindings() error {
+	var all []presets.Finding
+	for _, image := range tc.catalogueImages() {
+		all = append(all, tc.exceptionFindings()[image]...)
+	}
+	tc.Config["triage"] = presets.Summarise(all)
+	return nil
+}
+
+func (tc *TestContext) triageCountShouldBe(population string) func(int) error {
+	return func(want int) error {
+		triage, ok := tc.Config["triage"].(presets.Triage)
+		if !ok {
+			return fmt.Errorf("the findings were not triaged")
+		}
+
+		var got int
+		switch population {
+		case "fixable":
+			got = triage.Fixable
+		case "go-stdlib":
+			got = triage.GoStdlib
+		case "kernel-headers":
+			got = triage.KernelHeaders
+		case "actionable":
+			got = triage.Actionable
+		}
+		if got != want {
+			return fmt.Errorf("%s = %d, expected %d (carried %d)", population, got, want, triage.Carried)
+		}
+		return nil
+	}
 }
 
 func (tc *TestContext) exceptionVerdict() (presets.ExceptionVerdict, error) {
@@ -204,7 +264,21 @@ func (tc *TestContext) exceptionVerdictShouldNameImage(image string) error {
 		return fmt.Errorf("verdict names %q as still carrying the finding, expected %q", verdict.StillOn, image)
 	}
 	if !strings.Contains(verdict.Reason, image) {
-		return fmt.Errorf("verdict %q does not say which image still carries the finding", verdict.Reason)
+		return fmt.Errorf("verdict %q does not say which repository still carries the finding", verdict.Reason)
+	}
+	return nil
+}
+
+// exceptionVerdictShouldNameFix: a carried-over CVE that is fixed upstream is
+// not exception territory, and the verdict has to say so rather than let the
+// entry be re-filed in silence.
+func (tc *TestContext) exceptionVerdictShouldNameFix(fix string) error {
+	verdict, err := tc.exceptionVerdict()
+	if err != nil {
+		return err
+	}
+	if verdict.FixedIn != fix {
+		return fmt.Errorf("verdict reports the fix as %q, expected %q", verdict.FixedIn, fix)
 	}
 	return nil
 }

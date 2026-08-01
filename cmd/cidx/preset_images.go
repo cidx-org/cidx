@@ -816,8 +816,8 @@ func catalogueImages() (map[string][]string, error) {
 // buildScanTargets resolves, for every distinct catalogue image, what to scan
 // and whether a newer version may replace it.
 //
-// affectingUs maps an image reference (`repo:tag`, as known-vulnerabilities.toml
-// records them) to the vulnerabilities already known to affect it.
+// affectingUs maps a repository (as known-vulnerabilities.toml keys exceptions,
+// #238) to the vulnerabilities already known to affect it.
 func buildScanTargets(imagePresets map[string][]string, affectingUs map[string][]string, now time.Time) []scanTarget {
 	currentImages := make([]string, 0, len(imagePresets))
 	for img := range imagePresets {
@@ -891,7 +891,7 @@ func buildScanTargets(imagePresets map[string][]string, affectingUs map[string][
 			// wait are the ones already recorded against what we run today —
 			// no second scan is needed to learn them, and the monitor's scan of
 			// the promoted candidate is what shows the fix landed.
-			decision := presets.EvaluatePromotion(published, now, affectingUs[refWithoutDigest(currentImage)])
+			decision := presets.EvaluatePromotion(published, now, affectingUs[imageRepository(currentImage)])
 			target.AgeDays = decision.AgeDays
 			target.PolicyReason = decision.Reason
 			target.CVEWaiver = decision.WaivedFor
@@ -948,9 +948,10 @@ func verifyPinnedImage(imageName, tag, digest string) error {
 	return nil
 }
 
-// knownHighSeverityCVEs indexes known-vulnerabilities.toml by the image it
-// records exceptions against (`repo:tag`, digest excluded — re-pinning a tag
-// must not orphan its entries).
+// knownHighSeverityCVEs indexes known-vulnerabilities.toml by the repository it
+// records exceptions against. Neither the tag nor the digest is part of the key:
+// an exception is a judgement about a CVE in an image in our usage, and a
+// promotion inside the same repository changes none of what it rests on (#238).
 //
 // These are rule 3's input: the vulnerabilities demonstrably affecting what the
 // catalogue runs today, already produced by the security audit, so the cooldown
@@ -968,7 +969,7 @@ func knownHighSeverityCVEs(path string) map[string][]string {
 	for _, v := range vulns.Vulnerabilities {
 		switch strings.ToUpper(v.Severity) {
 		case "HIGH", "CRITICAL":
-			byImage[v.Image] = append(byImage[v.Image], v.CVE)
+			byImage[v.Repository] = append(byImage[v.Repository], v.CVE)
 		}
 	}
 	for image := range byImage {

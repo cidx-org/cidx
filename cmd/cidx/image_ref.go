@@ -56,6 +56,20 @@ func refWithoutDigest(image string) string {
 	return image
 }
 
+// imageRepository strips both tag and digest, leaving the repository a
+// reference belongs to.
+//
+// This is the key `known-vulnerabilities.toml` records exceptions under: an
+// accepted CVE is a judgement about a package in an image, in our usage, and
+// none of that changes when the tag moves (#238). `rust:1.97.0` and
+// `rust:1.97.0-slim` are the same repository, and an exception written for one
+// covers the other — which is what the catalogue actually needs, since it runs
+// both.
+func imageRepository(image string) string {
+	name, _, _ := parseImageRef(image)
+	return name
+}
+
 // manifestAcceptTypes lists the manifest media types requested when resolving a
 // digest, index types first. The order is load-bearing: a registry answers with
 // the first type it can produce, and pinning a per-platform manifest digest

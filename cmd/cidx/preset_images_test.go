@@ -165,10 +165,11 @@ func TestBuildScanTargetsWaivesTheCooldownForAffectingCVEs(t *testing.T) {
 	current := "tmknom/prettier:3.6.2@sha256:" + zeroDigest
 	stubRegistry(t, "3.7.0", now.AddDate(0, 0, -3), nil)
 
-	// Keyed by repo:tag, exactly as known-vulnerabilities.toml records it: the
-	// digest the catalogue is pinned with must not be part of the lookup.
+	// Keyed by repository, exactly as known-vulnerabilities.toml records it
+	// (#238): neither the tag nor the digest the catalogue is pinned with is
+	// part of the lookup.
 	affecting := map[string][]string{
-		"tmknom/prettier:3.6.2": {"CVE-2025-27209"},
+		"tmknom/prettier": {"CVE-2025-27209"},
 	}
 
 	target := onlyTarget(t, buildScanTargets(
@@ -467,7 +468,7 @@ func TestScanTargetJSONContract(t *testing.T) {
 
 	targets := buildScanTargets(
 		map[string][]string{"tmknom/prettier:3.6.2@sha256:" + zeroDigest: {"prettier"}},
-		map[string][]string{"tmknom/prettier:3.6.2": {"CVE-2025-27209"}},
+		map[string][]string{"tmknom/prettier": {"CVE-2025-27209"}},
 		now)
 
 	encoded, err := json.Marshal(targets[0])
@@ -524,34 +525,35 @@ func TestScanTargetJSONOmitsPolicyFieldsWithoutCandidate(t *testing.T) {
 	}
 }
 
-// TestKnownHighSeverityCVEsIndexesByImage: rule 3 reads the exceptions the
-// security audit already produced, keyed the way that file records them.
-func TestKnownHighSeverityCVEsIndexesByImage(t *testing.T) {
+// TestKnownHighSeverityCVEsIndexesByRepository: rule 3 reads the exceptions the
+// security audit already produced, keyed the way that file records them — by
+// repository, so a promotion inside it keeps the waiver alive (#238).
+func TestKnownHighSeverityCVEsIndexesByRepository(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "known-vulnerabilities.toml")
 	content := `
 [[vulnerabilities]]
 cve = "CVE-2025-0002"
-image = "tmknom/prettier:3.6.2"
+repository = "tmknom/prettier"
 severity = "HIGH"
 
 [[vulnerabilities]]
 cve = "CVE-2025-0001"
-image = "tmknom/prettier:3.6.2"
+repository = "tmknom/prettier"
 severity = "CRITICAL"
 
 [[vulnerabilities]]
 cve = "CVE-2025-0001"
-image = "tmknom/prettier:3.6.2"
+repository = "tmknom/prettier"
 severity = "CRITICAL"
 
 [[vulnerabilities]]
 cve = "CVE-2025-0003"
-image = "tmknom/prettier:3.6.2"
+repository = "tmknom/prettier"
 severity = "MEDIUM"
 
 [[vulnerabilities]]
 cve = "CVE-2025-0004"
-image = "securego/gosec:2.24.6"
+repository = "securego/gosec"
 severity = "HIGH"
 `
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
@@ -560,7 +562,7 @@ severity = "HIGH"
 
 	byImage := knownHighSeverityCVEs(path)
 
-	got := byImage["tmknom/prettier:3.6.2"]
+	got := byImage["tmknom/prettier"]
 	want := []string{"CVE-2025-0001", "CVE-2025-0002"}
 	if len(got) != len(want) {
 		t.Fatalf("prettier CVEs = %v, want %v (MEDIUM excluded, duplicate collapsed)", got, want)
@@ -571,8 +573,8 @@ severity = "HIGH"
 			break
 		}
 	}
-	if len(byImage["securego/gosec:2.24.6"]) != 1 {
-		t.Errorf("gosec CVEs = %v, want one entry", byImage["securego/gosec:2.24.6"])
+	if len(byImage["securego/gosec"]) != 1 {
+		t.Errorf("gosec CVEs = %v, want one entry", byImage["securego/gosec"])
 	}
 }
 
