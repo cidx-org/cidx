@@ -320,7 +320,7 @@ Four questions, in this order. The first that answers decides.
 
 The split is real and it is per-image, not per-severity: `commitlint` is 100% fixable, `gitleaks` 98%, `ansible-dev-tools` 93% — pure image-freshness. `rust:1.97.0` is 19% fixable — genuinely exception territory.
 
-**3. Is it reachable here?** Read the CVSS vector against the threat model above, not in the abstract. `AV:N` means the attack path crosses a network *if something feeds it hostile input*; in a linter that opens no socket, it means "would be network-reachable in a server", not "is reachable in this container".
+**3. Is it reachable here?** Read the CVSS vector against the threat model above, not in the abstract. `AV:N` means the attack path crosses a network _if something feeds it hostile input_; in a linter that opens no socket, it means "would be network-reachable in a server", not "is reachable in this container".
 
 Two classes are unreachable by construction and are exempt as classes, not case by case:
 
