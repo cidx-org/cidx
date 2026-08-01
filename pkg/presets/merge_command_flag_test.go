@@ -178,10 +178,10 @@ func TestMergeWith_CargoAuditDenyOption(t *testing.T) {
 
 	merged := preset.MergeWith(map[string]any{"deny": true})
 
-	if strings.Contains(merged.Command, "audit' --deny") {
+	if strings.Contains(merged.Command, "--no-yanked' --deny") {
 		t.Fatalf("--deny landed outside the sh -c quoting: %q", merged.Command)
 	}
-	if !strings.Contains(merged.Command, "/tmp/cargo-audit audit --deny warnings'") {
+	if !strings.Contains(merged.Command, "/tmp/cargo-audit audit --no-yanked --deny warnings'") {
 		t.Errorf("command = %q, want --deny injected before the closing quote", merged.Command)
 	}
 }
