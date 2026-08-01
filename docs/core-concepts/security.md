@@ -212,8 +212,6 @@ The version does not move, so rule 2 has nothing to hold: 1.97.0 is the release 
 
 **Why not `-alpine`, which measures 0 / 0.** Because alpine is musl, and these presets _compile_. Every artefact `cargo-build` produces would silently change libc: the binary would stop running anywhere glibc is expected, and nothing in the config would say so. The catalogue has already been bitten from the other side — `probatum` carries a description explaining that a glibc binary will not start on its musl image (#195) — and flipping the producer instead of the consumer is the same trap with the arrow reversed. The rule reads _at equal tool and version_; an image that changes what the tool emits is not equal. **For anything that compiles, or whose output is consumed elsewhere, `slim` is the floor.** A self-contained linter or scanner that emits nothing linkable can take alpine, as `golangci-lint` did.
 
-**Why `cargo-audit` stayed behind.** It is the one Rust preset still on the full image. `rust:<version>-slim` ships no HTTP client — the official Dockerfile installs `wget` to fetch rustup and `apt-get remove`s it in the same layer — and the preset downloads the RustSec release binary rather than `cargo install`ing it, which #161 measured in minutes and #188 fixed for non-root. On `-slim` it fails with `sh: curl: not found`. The other five presets took the smaller image; this one keeps a base that can fetch its own tool, and the split is one extra line in the baseline, not a fork of the pack.
-
 **Where the smaller variant lost.** A variant is a candidate, not a winner, and three of them measured worse or equal:
 
 | Image            | Default | Smaller variant                           | Verdict                                                              |
@@ -225,6 +223,20 @@ The version does not move, so rule 2 has nothing to hold: 1.97.0 is the release 
 `ruff` is the case the rule exists to catch in both directions: the publisher's default is a scratch image, and reaching for `-alpine` out of habit would have _added_ 21 findings. Measure, then choose.
 
 The remaining images publish no smaller variant at their pinned version (`commitizen`, `commitlint`, `gitleaks`, `black`, `goreleaser`, `gh`, `gosec`, `shellcheck`, `probatum`, the Ansible dev-tools image), or are Docker Hardened Images that are already the minimal build (`dhi.io/*`). `dhi.io/golang:1.23-alpine3.21-dev` carried 340 HIGH / 23 CRITICAL, the catalogue's second-worst, and no smaller variant would have helped: it was the frozen variant line of [the section below](#a-variant-line-that-froze), and getting out of it took a base-version decision, not a variant choice.
+
+### When no variant is the answer: `cargo-audit`
+
+`cargo-audit` was the one Rust preset the sweep above left on the full image. `rust:<version>-slim` ships no HTTP client — the official Dockerfile installs `wget` to fetch rustup and `apt-get remove`s it in the same layer — and the preset downloads the RustSec release binary rather than `cargo install`ing it, which #161 measured in minutes and #188 fixed for non-root. On `-slim` it failed with `sh: curl: not found`.
+
+That the rule had no move to offer was the tell. The question was never which variant of the Rust image to take: auditing a `Cargo.lock` reads a text file against an advisory list — no compiler, no crates, no toolchain — and one preset was holding the catalogue's worst image, **179 HIGH/CRITICAL findings against 415 for the other twenty put together**, in order to run a binary it downloads anyway (#287).
+
+So it left the family rather than the variant: `buildpack-deps:trixie-curl`, **179 → 41**, and the catalogue 594 → 456. That is the Docker Official base `rust:` is itself built on, minus the toolchain, carrying exactly what the preset's one line needs — `sh`, `curl`, `tar` and CA certificates. The command is unchanged but for one flag. **The rule generalises: before comparing variants, ask whether the tool needs that image at all.** A preset that fetches its own binary is coupled to a libc and a shell, not to a toolchain, and the second question is much cheaper to answer than the first.
+
+**Why not alpine, which measures 0 / 0 at 4 MB.** RustSec publishes a musl asset for `x86_64` only; `cargo-audit-aarch64-unknown-linux-musl` is a 404. A musl base would buy the last 41 findings by breaking every aarch64 user — [#195](#a-variant-line-that-froze) with the arrow reversed, and the second time this catalogue has refused alpine over libc. glibc keeps `$(uname -m)-unknown-linux-gnu` resolving on both architectures, exactly as the preset already did; the run was verified under `linux/arm64` as well as `linux/amd64`, detecting RUSTSEC-2021-0139 on each.
+
+**What it cost: the yanked-crate check.** cargo-audit shells out to `cargo -V` to learn which crates.io index protocol to use, so with no toolchain in the image it reports `couldn't update crates.io index: registry: No such file or directory`. The preset passes `--no-yanked` rather than print that on every run — a yank is not an advisory, the RustSec scan the preset exists for is untouched, and a project that wants the check back overrides `command` in its own `cidx.toml`. What the preset does **not** need is `git`: the release binary fetches the advisory database itself, measured on an image carrying no `git` at all.
+
+**What it gives up in exchange.** `buildpack-deps:trixie-curl` carries no version in its tag, so `cidx preset scan-targets` offers it no candidate — the same position `koalaman/shellcheck:stable` is already in. The digest keeps being scanned every week; what stops is automatic promotion, because a Debian suite is not a version to compare. Moving `trixie` on is a repin by hand, like the variant lines above.
 
 ### How the rules are applied
 
@@ -318,7 +330,7 @@ Four questions, in this order. The first that answers decides.
 - **Fix exists** → nothing to decide. The finding disappears when the publisher republishes, so the question is the image's age, not the vulnerability. **Never write an exception for one of these** — it would record a decision where there is only a wait.
 - **No fix at any version** → the only case where an exception is the right instrument.
 
-The split is real and it is per-image, not per-severity: `commitlint` is 100% fixable, `gitleaks` 98%, `ansible-dev-tools` 93% — pure image-freshness. `rust:1.97.0` is 19% fixable — genuinely exception territory.
+The split is real and it is per-image, not per-severity: `commitlint` is 100% fixable, `gitleaks` 98%, `ansible-dev-tools` 93% — pure image-freshness. `rust:1.97.0-slim` is 20% fixable — genuinely exception territory.
 
 The scanners say so directly, in a field each: Trivy's `FixedVersion` and Grype's `fix.versions`. `cidx security vuln add` reads them and **refuses** to record an exception for a vulnerability that has a fix, naming the version and pointing at the repin. There is no `--force`, because the correct action is not one that command performs. With no scan result for the image it says so and writes the entry: refusing on missing evidence would make the command unusable away from the audit's artifacts, and nothing is being promoted or deleted — the entry is argued again at its expiry. `cidx security vuln prune` names the entries already on file whose CVE turns out to have a fix, under **Fixed upstream**, and removes none of them: until the repin happens the entry still waives a finding the audit would otherwise fail on.
 
@@ -369,7 +381,7 @@ That is what an entry looks like now, and `first_seen` is the whole of what rema
   expires = "2026-03-02"
 ```
 
-Two consequences fall out of the key, and both are the point. An exception written for `rust` covers `rust:1.97.0` **and** `rust:1.97.0-slim` — the catalogue runs both, and the judgement was never about one of them. And a candidate the monitor proposes is a newer tag of a repository the catalogue already runs, so the scan gate honours the entries written for it without their being re-filed first; under the old key it did not, and promotions were held on findings reviewed months earlier.
+Two consequences fall out of the key, and both are the point. An exception written for `rust` covers every tag of it the catalogue runs — it covered `rust:1.97.0` **and** `rust:1.97.0-slim` while both were in, and all thirteen survived `cargo-audit` leaving the full image (#287) without one of them being re-filed, because the judgement was never about a tag. And a candidate the monitor proposes is a newer tag of a repository the catalogue already runs, so the scan gate honours the entries written for it without their being re-filed first; under the old key it did not, and promotions were held on findings reviewed months earlier.
 
 **Migrating the 33 entries that were on file.** All of them were recorded against `repo:tag`, and all of them named a tag the catalogue had passed — yet their 19 distinct CVEs were every one of them still carried by a live image. A repository derived from the old key would have been wrong for most: twelve kernel CVEs filed against `golangci-lint:v2.6.2` are carried by the Rust images today, because the linter moved to Alpine and stopped shipping `linux-libc-dev` at all. So the old key is not converted, it is _classified_: a whole `repo:tag` equals no repository, so the entry falls through to the CVE test and lands as carry-over on whichever repository the findings say carries it. `vuln prune -x` re-files it there. Thirteen entries went to `rust`, twenty to `ghcr.io/ansible/community-ansible-dev-tools`, where they collapsed onto six keys — 33 entries became 19, and none of the justifications was lost.
 
@@ -409,14 +421,14 @@ Three properties, each deliberate:
 - **It carries no generation date.** A timestamp would change the file on every run and make every diff meaningless. The same inputs produce byte-identical output, and a test pins that — map iteration order has flapped this repository's output twice already (#230, #233).
 - **It states what is carried and what is accepted, separately.** Those are different numbers, and publishing only the second is how the file came to read "0 accepted findings" while the catalogue carried 596 (#238). Accepted-but-unlisted would be a fiction; carried-but-unstated is the omission that made the fiction possible.
 
-Carried comes from the scan results (`--results`, the same artifacts `vuln prune` reads) and is counted **per image**: the same CVE on five of them is five things to look at and five repins. It is published split the way [Judging a finding](#judging-a-finding) splits it, because 594 findings reads as a catastrophe and the number that actually needs a human is the last line:
+Carried comes from the scan results (`--results`, the same artifacts `vuln prune` reads) and is counted **per image**: the same CVE on five of them is five things to look at and five repins. It is published split the way [Judging a finding](#judging-a-finding) splits it, because 456 findings reads as a catastrophe and the number that actually needs a human is the last line:
 
 | Population                | Count |
 | ------------------------- | ----- |
 | Go stdlib in a CLI binary | 40    |
-| Kernel headers            | 130   |
-| Fixed upstream            | 208   |
-| **Needing triage**        | 216   |
+| Kernel headers            | 65    |
+| Fixed upstream            | 201   |
+| **Needing triage**        | 150   |
 
 The class exemptions are labelled before fixability, which inverts the order the questions are asked in, deliberately. The questions are ordered by what to _do_ — a fix exists, so wait, and stop asking. The table labels findings by _why they are out of the queue_, and the class is the stabler answer: a Go stdlib finding is unreachable whether or not the Go team has shipped its fix yet, and most of them have one, so labelling by fix first would report zero stdlib findings on a catalogue full of them. **Needing triage** is the same number either way, which is the number that matters.
 

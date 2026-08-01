@@ -21,19 +21,19 @@ An entry past its expiry date waives nothing until it is reviewed; `cidx
 security vuln check` is what reports those, and `cidx security vuln prune`
 reports the ones no catalogue image carries any more.
 
-**21 images. 32 accepted HIGH/CRITICAL finding(s) across 3 of them.**
+**21 images. 19 accepted HIGH/CRITICAL finding(s) across 2 of them.**
 
 ## What the images carry
 
-The catalogue carries **594** HIGH/CRITICAL findings, counted per image — the
+The catalogue carries **456** HIGH/CRITICAL findings, counted per image — the
 same CVE on five images is five repins. They split into four populations:
 
 | Population | Count | What it means |
 | ---------- | ----- | ------------- |
 | Go stdlib in a CLI binary | 40 | Exempt by class: it goes away when the publisher recompiles, and `net/http` is unreachable in a tool that opens no listener. |
-| Kernel headers | 130 | Exempt by class: the kernel is the host's, not the container's. The scanner flags the headers package for its version string. |
-| Fixed upstream | 208 | A fix exists. This is the images' age, not a decision — an exception must never be written for one. |
-| **Needing triage** | **216** | No fix at any version, and not exempt. The only population an exception is the right instrument for. |
+| Kernel headers | 65 | Exempt by class: the kernel is the host's, not the container's. The scanner flags the headers package for its version string. |
+| Fixed upstream | 201 | A fix exists. This is the images' age, not a decision — an exception must never be written for one. |
+| **Needing triage** | **150** | No fix at any version, and not exempt. The only population an exception is the right instrument for. |
 
 None of them is in CISA KEV. The highest EPSS score seen is 0.10. Both are reported
 for a human to read; neither gates anything.
@@ -42,6 +42,7 @@ for a human to read; neither gates anything.
 
 | Image | Presets | Carried HIGH/CRITICAL | Accepted |
 | ----- | ------- | --------------------- | -------- |
+| `buildpack-deps:trixie-curl@sha256:ef554489e8f8b0245ef3cb2742b4c6b6e53c43bd64366b13f624982c854af2eb` | cargo-audit | 41 | none |
 | `commitizen/commitizen:4.16.5@sha256:451d0150ed7804c51cf201b2e9bd3f351867badbb7dc98f195cad740fdeaabaa` | commitizen | 8 | none |
 | `commitlint/commitlint:21.2.1@sha256:f4b38082bec66b4cd1b37a0357145dded515c4468e2b339ec9ba31f86461f6b9` | commitlint | 15 | none |
 | `dhi.io/alpine-base:3.24@sha256:84a21d3dfb87eb1c0bf1b532350f2aa0bf7d0df6246c398cc5c14b29002b7310` | test-hot-reload | 0 | none |
@@ -61,7 +62,6 @@ for a human to read; neither gates anything.
 | `maniator/gh:v2.95@sha256:c7e862eeb468003aba87847a03e214a21638cd898130d6e5894f019aec091913` | gh-release | 5 | none |
 | `pyfound/black:26.5.1@sha256:bcdafe3e6a60fd181fde19859f7ee4c498557f03bb30af3fa880f502a66e5b5f` | black | 44 | none |
 | `rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51` | cargo-build, cargo-publish, cargo-test, clippy, rustfmt | 87 | 13 |
-| `rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9` | cargo-audit | 179 | 13 |
 | `zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f` | gitleaks | 56 | none |
 
 ## Accepted findings
@@ -87,16 +87,3 @@ for a human to read; neither gates anything.
 | `rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51` | CVE-2025-38421 | HIGH | third-party | 2026-03-02 | Vulnerability in upstream third-party image |
 | `rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51` | CVE-2025-38636 | HIGH | third-party | 2026-03-02 | Vulnerability in upstream third-party image |
 | `rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51` | CVE-2025-59375 | HIGH | third-party | 2026-03-02 | Vulnerability in upstream third-party image |
-| `rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9` | CVE-2013-7445 | HIGH | third-party | 2026-03-02 | Vulnerability in upstream third-party image |
-| `rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9` | CVE-2019-19449 | HIGH | third-party | 2026-03-02 | Vulnerability in upstream third-party image |
-| `rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9` | CVE-2019-19814 | HIGH | third-party | 2026-03-02 | Vulnerability in upstream third-party image |
-| `rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9` | CVE-2021-3847 | HIGH | third-party | 2026-03-02 | Vulnerability in upstream third-party image |
-| `rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9` | CVE-2021-3864 | HIGH | third-party | 2026-03-02 | Vulnerability in upstream third-party image |
-| `rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9` | CVE-2024-21803 | HIGH | third-party | 2026-03-02 | Vulnerability in upstream third-party image |
-| `rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9` | CVE-2024-58015 | HIGH | third-party | 2026-03-02 | Vulnerability in upstream third-party image |
-| `rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9` | CVE-2025-22104 | HIGH | third-party | 2026-03-02 | Vulnerability in upstream third-party image |
-| `rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9` | CVE-2025-38137 | HIGH | third-party | 2026-03-02 | Vulnerability in upstream third-party image |
-| `rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9` | CVE-2025-38187 | HIGH | third-party | 2026-03-02 | Vulnerability in upstream third-party image |
-| `rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9` | CVE-2025-38421 | HIGH | third-party | 2026-03-02 | Vulnerability in upstream third-party image |
-| `rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9` | CVE-2025-38636 | HIGH | third-party | 2026-03-02 | Vulnerability in upstream third-party image |
-| `rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9` | CVE-2025-59375 | HIGH | third-party | 2026-03-02 | Vulnerability in upstream third-party image |

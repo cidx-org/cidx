@@ -941,16 +941,33 @@ command_flag = "-W clippy::pedantic"
 # (`cargo-audit audit` is RustSec's documented direct invocation) to avoid
 # depending on PATH.
 #
-# The one Rust preset still on the full image. `rust:1.97.0-slim` ships no HTTP
-# client at all — the official slim Dockerfile installs wget to fetch rustup and
-# apt-removes it in the same layer — so the download above fails with
-# `sh: curl: not found`. The other five presets run on `-slim` (429 HIGH/60
-# CRITICAL → 78/5); this one keeps the base that can fetch its own tool.
+# Not a Rust image at all. Auditing a Cargo.lock needs the lockfile and the
+# binary above, never a compiler, and the toolchain image was charging the whole
+# catalogue for one preset: `rust:1.97.0` measures 364 HIGH/60 CRITICAL against
+# 34/4 here (#287). `buildpack-deps:trixie-curl` is the Docker Official base
+# `rust:` is itself built on, minus the toolchain, and carries exactly what the
+# command needs — sh, curl, tar and CA certificates — so the command is
+# unchanged but for the flag below. `rust:1.97.0-slim` was never an option: the
+# official slim Dockerfile installs wget to fetch rustup and apt-removes it in
+# the same layer, so the download dies on `sh: curl: not found`.
+#
+# Deliberately not alpine, which measures 0/0. RustSec publishes a musl asset
+# for x86_64 only — `cargo-audit-aarch64-unknown-linux-musl` is a 404 — so a
+# musl base would trade every aarch64 user for the last 38 findings. That is
+# #195 with the arrow reversed, and glibc keeps both architectures on one line.
+#
+# --no-yanked because the yanked-crate check shells out to `cargo -V` to learn
+# the crates.io index protocol; with no toolchain in the image it fails with
+# `couldn't update crates.io index: registry: No such file or directory`.
+# Skipping it explicitly beats printing that on every run. The RustSec advisory
+# scan — the reason the preset exists — needs no cargo and no git binary either:
+# the release binary fetches the advisory DB itself, verified on both
+# architectures detecting RUSTSEC-2021-0139.
 [presets.cargo-audit]
 name = "cargo-audit"
 phase = "security"
-image = "rust:1.97.0@sha256:b92b8c8574f8f3b207fcb0912fb3e2de4041580b5934d90312d53938c9a038a9"
-command = "sh -c 'curl -sSfL https://github.com/rustsec/rustsec/releases/download/cargo-audit/v0.22.2/cargo-audit-$(uname -m)-unknown-linux-gnu-v0.22.2.tgz | tar xz --strip-components=1 -C /tmp && HOME=/tmp CARGO_HOME=/tmp/cargo /tmp/cargo-audit audit'"
+image = "buildpack-deps:trixie-curl@sha256:ef554489e8f8b0245ef3cb2742b4c6b6e53c43bd64366b13f624982c854af2eb"
+command = "sh -c 'curl -sSfL https://github.com/rustsec/rustsec/releases/download/cargo-audit/v0.22.2/cargo-audit-$(uname -m)-unknown-linux-gnu-v0.22.2.tgz | tar xz --strip-components=1 -C /tmp && HOME=/tmp CARGO_HOME=/tmp/cargo /tmp/cargo-audit audit --no-yanked'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
 

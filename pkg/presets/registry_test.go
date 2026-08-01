@@ -205,10 +205,20 @@ func TestRustupComponentPresetsInstallComponent(t *testing.T) {
 // root-owned and unwritable when the container runs as a non-root user (CI
 // runners, user-mapped local runs) — and HOME/CARGO_HOME must point at
 // writable locations so the advisory DB fetch works non-root too.
+//
+// And it keeps the preset off the Rust toolchain (issue #287). Downloading the
+// binary is the whole point: nothing in auditing a Cargo.lock needs a compiler,
+// and the toolchain image charged the catalogue 364 HIGH/60 CRITICAL findings
+// for this one preset. Putting it back on a `rust:` image would silently undo
+// that, which is exactly what a guard is for.
 func TestCargoAuditUsesPrebuiltBinary(t *testing.T) {
 	preset, err := Get("cargo-audit")
 	if err != nil {
 		t.Fatalf("Get(%q) unexpected error: %v", "cargo-audit", err)
+	}
+	if strings.HasPrefix(preset.Image, "rust:") {
+		t.Errorf("preset %q Image = %q, must not run on the Rust toolchain image — it downloads its own binary and audits a lockfile (see #287)",
+			"cargo-audit", preset.Image)
 	}
 	if strings.Contains(preset.Command, "cargo install") {
 		t.Errorf("preset %q Command = %q, must not compile cargo-audit at runtime via `cargo install`",
@@ -218,7 +228,7 @@ func TestCargoAuditUsesPrebuiltBinary(t *testing.T) {
 		t.Errorf("preset %q Command = %q, expected a pinned prebuilt binary download from RustSec releases",
 			"cargo-audit", preset.Command)
 	}
-	if !strings.HasSuffix(preset.Command, "audit'") {
+	if !strings.HasSuffix(preset.Command, "audit --no-yanked'") {
 		t.Errorf("preset %q Command = %q, expected the shell script to end with the audit invocation (options like deny append their command_flag after it)",
 			"cargo-audit", preset.Command)
 	}

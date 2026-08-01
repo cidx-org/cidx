@@ -19,7 +19,7 @@ Feature: Preset Option Flags
 
     Scenario: The reported cargo-audit override reaches cargo-audit
       When I resolve the preset "cargo-audit" with option "deny" set to "true"
-      Then the resolved command should contain "/tmp/cargo-audit audit --deny warnings'"
+      Then the resolved command should contain "/tmp/cargo-audit audit --no-yanked --deny warnings'"
 
   Rule: A boolean option is a switch, not a key/value pair
 
