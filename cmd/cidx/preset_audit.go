@@ -48,7 +48,7 @@ func presetAuditCommand() *cli.Command {
 
 			if vulns, err := loadVulnerabilities(vulnFile); err == nil {
 				for _, v := range vulns.Vulnerabilities {
-					knownVulns[v.Image] = append(knownVulns[v.Image], v)
+					knownVulns[v.Repository] = append(knownVulns[v.Repository], v)
 				}
 			}
 
@@ -71,9 +71,9 @@ func presetAuditCommand() *cli.Command {
 				}
 
 				// Check known CVEs for this image. Exceptions are recorded
-				// against `repo:tag`, so the digest the catalogue is pinned
-				// with (#242) must not be part of the lookup key.
-				if vulns, ok := knownVulns[refWithoutDigest(preset.Image)]; ok {
+				// against the repository (#238), so neither the tag nor the
+				// digest the catalogue is pinned with (#242) belongs in the key.
+				if vulns, ok := knownVulns[imageRepository(preset.Image)]; ok {
 					result.KnownCVEs = len(vulns)
 					for _, v := range vulns {
 						result.CVEDetails = append(result.CVEDetails, fmt.Sprintf("%s (%s)", v.CVE, v.Severity))

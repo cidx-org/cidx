@@ -15,29 +15,31 @@ type prunedEntry struct {
 	presets.ExceptionVerdict
 }
 
-// vulnPruneCommand reports — and, when asked, removes — the exceptions the
-// catalogue images no longer carry.
+// vulnPruneCommand reports — and, when asked, applies — what the lifecycle makes
+// of every exception on file.
 //
 // The criterion is the CVE, not the tag. `vuln list --stale` already says which
-// entries match no catalogue image (#248); what it cannot say is which of them
-// are safe to delete. An accepted CVE either went away with the image it was
-// recorded against, or followed the promotion into the image that replaced it —
-// and deleting the second kind loses the justification and turns the next audit
-// red for a finding that was reviewed months ago.
+// entries match no catalogue repository (#248); what it cannot say is what to do
+// about them. An accepted CVE either went away with the image it was recorded
+// against, or followed the promotion into the image that replaced it — and
+// deleting the second kind loses the justification and turns the next audit red
+// for a finding that was reviewed months ago.
 //
 // So this reads the findings rather than comparing tags, and it reports by
-// default: `-x` is what deletes, the same shape as `repo branch cleanup`. The
-// decision to stop waiving a CVE belongs to whoever accepted it.
+// default: `-x` is what writes, the same shape as `repo branch cleanup`. What it
+// writes is only ever mechanical — an obsolete entry removed, a carry-over entry
+// re-filed onto the repository that carries its CVE. Deciding to stop waiving a
+// CVE, or to accept one in the first place, belongs to whoever accepted it.
 func vulnPruneCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "prune",
-		Usage: "Report the exceptions no catalogue image carries any more, and remove them on request",
+		Usage: "Report what the exception lifecycle makes of every entry, and apply it on request",
 		Description: "Reads the scanner results the security audit and the container monitor\n" +
-			"produce, and classifies every exception: live (covers an image the\n" +
+			"produce, and classifies every exception: live (covers a repository the\n" +
 			"catalogue runs), carry-over (its CVE followed the promotion and the entry\n" +
 			"must be re-filed), obsolete (no catalogue image carries it any more) or\n" +
-			"unknown (no scan evidence). Only obsolete entries are ever removed, and\n" +
-			"only with --execute.",
+			"unknown (no scan evidence). With --execute, obsolete entries are removed\n" +
+			"and carry-over entries are re-filed; nothing else is touched.",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "file",
@@ -52,7 +54,7 @@ func vulnPruneCommand() *cli.Command {
 			&cli.BoolFlag{
 				Name:    "execute",
 				Aliases: []string{"x"},
-				Usage:   "Actually remove the obsolete exceptions (default: report only)",
+				Usage:   "Remove the obsolete entries and re-file the carry-over ones (default: report only)",
 			},
 		},
 		Action: func(c *cli.Context) error {
@@ -73,7 +75,7 @@ func vulnPruneCommand() *cli.Command {
 			for _, v := range vulns.Vulnerabilities {
 				entries = append(entries, prunedEntry{
 					Vulnerability:    v,
-					ExceptionVerdict: presets.ClassifyException(v.CVE, refWithoutDigest(v.Image), running, findings),
+					ExceptionVerdict: presets.ClassifyException(v.CVE, v.key(), running, findings),
 				})
 			}
 
@@ -88,25 +90,42 @@ func vulnPruneCommand() *cli.Command {
 }
 
 // catalogueFindings resolves what the catalogue runs today and what the scanners
-// found on it.
+// found on it, both keyed by repository — which is what exceptions are keyed by.
 //
 // The findings are read from result files already produced — security-audit.yml
 // scans every catalogue image daily, container-monitor.yml scans them weekly,
 // and both upload their JSON. Nothing is scanned here: a command that pulled
 // twenty images to answer a bookkeeping question would be run once and never
-// again. An image with no result file is simply absent from the map, which is
-// what makes the verdict fail-closed rather than optimistic.
-func catalogueFindings(imagePresets map[string][]string, resultsDir string) ([]string, map[string][]string) {
-	running := make([]string, 0, len(imagePresets))
-	findings := make(map[string][]string)
+// again.
+//
+// A repository appears in the map only when **every** image the catalogue runs
+// from it produced a result. The catalogue runs two tags of `rust`, and a CVE
+// present on only one of them must not read as absent because the other one
+// answered: partial evidence is what makes the verdict unknown rather than
+// obsolete, and merging the tags first would hide exactly that.
+func catalogueFindings(imagePresets map[string][]string, resultsDir string) ([]string, map[string][]presets.Finding) {
+	findings := make(map[string][]presets.Finding)
+	unscanned := make(map[string]bool)
+	seen := make(map[string]bool)
 
+	var running []string
 	for image := range imagePresets {
-		ref := refWithoutDigest(image)
-		running = append(running, ref)
-
-		if found, _, err := scanFindings(resultsDir, image); err == nil {
-			findings[ref] = found
+		repo := imageRepository(image)
+		if !seen[repo] {
+			seen[repo] = true
+			running = append(running, repo)
 		}
+
+		found, _, err := scanFindings(resultsDir, image)
+		if err != nil {
+			unscanned[repo] = true
+			continue
+		}
+		findings[repo] = append(findings[repo], found...)
+	}
+
+	for repo := range unscanned {
+		delete(findings, repo)
 	}
 
 	sort.Strings(running)
@@ -120,7 +139,8 @@ func printPruneReport(entries []prunedEntry, scanned, catalogue int, resultsDir 
 	fmt.Println("Vulnerability Exception Lifecycle")
 	fmt.Println("=================================")
 	fmt.Println()
-	fmt.Printf("Catalogue images: %d, of which %d have scanner results in %s\n", catalogue, scanned, resultsDir)
+	fmt.Printf("Catalogue repositories: %d, of which %d are fully covered by scanner results in %s\n",
+		catalogue, scanned, resultsDir)
 	fmt.Println()
 
 	sections := []struct {
@@ -129,9 +149,9 @@ func printPruneReport(entries []prunedEntry, scanned, catalogue int, resultsDir 
 		legend string
 	}{
 		{presets.ExceptionObsolete, "OBSOLETE", "no catalogue image carries these any more — --execute removes them"},
-		{presets.ExceptionCarryOver, "CARRY-OVER", "the CVE followed the promotion: re-file the entry against the image below, do not delete it"},
-		{presets.ExceptionUnknown, "UNKNOWN", "no scan result for some catalogue image, so nothing can be concluded"},
-		{presets.ExceptionLive, "LIVE", "covers an image the catalogue runs today"},
+		{presets.ExceptionCarryOver, "CARRY-OVER", "the CVE is carried by the repository named below — --execute re-files the entry onto it"},
+		{presets.ExceptionUnknown, "UNKNOWN", "some catalogue image has no scan result, so nothing can be concluded"},
+		{presets.ExceptionLive, "LIVE", "covers a repository the catalogue runs today"},
 	}
 
 	for _, section := range sections {
@@ -143,11 +163,26 @@ func printPruneReport(entries []prunedEntry, scanned, catalogue int, resultsDir 
 		fmt.Printf("%s (%d) — %s:\n", section.title, len(matching), section.legend)
 		fmt.Println(strings.Repeat("-", 50))
 		for _, e := range matching {
-			fmt.Printf("  %s | %s", e.CVE, e.Image)
+			fmt.Printf("  %s | %s", e.CVE, e.key())
 			if e.StillOn != "" {
-				fmt.Printf(" → still on %s", e.StillOn)
+				fmt.Printf(" → %s", e.StillOn)
+			}
+			if e.FixedIn != "" {
+				fmt.Printf("  [fixed upstream in %s]", e.FixedIn)
 			}
 			fmt.Println()
+		}
+		fmt.Println()
+	}
+
+	if fixable := entriesFixedUpstream(entries); len(fixable) > 0 {
+		fmt.Printf("FIXED UPSTREAM (%d) — a fix exists, so these are a question of the image's age,\n", len(fixable))
+		fmt.Println("not a decision. The policy says never to write an exception for one; repin the")
+		fmt.Println("image instead. Nothing is removed on their account — the entry still waives a")
+		fmt.Println("finding the audit would otherwise fail on until the repin happens.")
+		fmt.Println(strings.Repeat("-", 50))
+		for _, e := range fixable {
+			fmt.Printf("  %s | %s | fixed in %s\n", e.CVE, e.StillOn, e.FixedIn)
 		}
 		fmt.Println()
 	}
@@ -159,34 +194,82 @@ func printPruneReport(entries []prunedEntry, scanned, catalogue int, resultsDir 
 	}
 }
 
-// applyPrune removes the obsolete entries and nothing else. Carry-over and
-// unknown stay: one is information that has to be re-filed, the other is a
-// question nobody has answered, and deleting either would be the tool making a
-// call that is not its to make.
+// applyPrune removes the obsolete entries and re-files the carry-over ones.
+//
+// Both are mechanical consequences of the CVE criterion, and neither is an
+// acceptance decision: an obsolete entry waives nothing because nothing carries
+// its CVE, and a re-filed one waives exactly what it always did, against the
+// repository that turned out to carry it. Unknown entries stay untouched —
+// that is a question nobody has answered, and acting on it would be a guess.
 func applyPrune(path string, vulns *VulnerabilityFile, entries []prunedEntry) error {
 	obsolete := entriesInState(entries, presets.ExceptionObsolete)
-	if len(obsolete) == 0 {
-		fmt.Println("Nothing to remove.")
+	carried := entriesInState(entries, presets.ExceptionCarryOver)
+	if len(obsolete) == 0 && len(carried) == 0 {
+		fmt.Println("Nothing to remove and nothing to re-file.")
 		return nil
 	}
 
 	kept := make([]Vulnerability, 0, len(entries))
 	for _, e := range entries {
-		if e.State != presets.ExceptionObsolete {
+		switch e.State {
+		case presets.ExceptionObsolete:
+			continue
+		case presets.ExceptionCarryOver:
+			kept = append(kept, refile(e))
+		default:
 			kept = append(kept, e.Vulnerability)
 		}
 	}
-	vulns.Vulnerabilities = kept
+	vulns.Vulnerabilities = resolveRefiled(kept)
 
 	if err := saveVulnerabilities(path, vulns); err != nil {
 		return fmt.Errorf("failed to save %s: %w", path, err)
 	}
 
-	fmt.Printf("Removed %d obsolete exception(s) from %s.\n", len(obsolete), path)
-	if carried := entriesInState(entries, presets.ExceptionCarryOver); len(carried) > 0 {
-		fmt.Printf("%d carry-over entr(y/ies) left in place: they still describe a finding a catalogue image has.\n", len(carried))
-	}
+	fmt.Printf("Removed %d obsolete exception(s) and re-filed %d carry-over entr(y/ies) in %s.\n",
+		len(obsolete), len(carried), path)
+	fmt.Printf("%d entr(y/ies) remain.\n", len(vulns.Vulnerabilities))
 	return nil
+}
+
+// refile moves an entry onto the repository that carries its CVE, keeping every
+// word of the justification and the dates it was argued under. The reference it
+// was recorded against becomes `first_seen`, so the entry still says where the
+// finding came from.
+func refile(e prunedEntry) Vulnerability {
+	v := e.Vulnerability
+	if v.FirstSeen == "" {
+		v.FirstSeen = v.Repository
+	}
+	v.Repository = e.StillOn
+	return v
+}
+
+// resolveRefiled collapses entries that now share a key.
+//
+// Re-filing converges: four entries for the same runc CVE, recorded against four
+// images the catalogue has since replaced, all land on the one repository that
+// carries it today. Only one of them can be the exception, and the one to keep is
+// the one already written about that repository — it is the judgement that was
+// made about this image rather than about a neighbour. Failing that, the first in
+// file order, so the choice is stable across runs.
+func resolveRefiled(entries []Vulnerability) []Vulnerability {
+	index := make(map[string]int, len(entries))
+	var kept []Vulnerability
+
+	for _, v := range entries {
+		key := v.CVE + "|" + v.Repository
+		at, seen := index[key]
+		if !seen {
+			index[key] = len(kept)
+			kept = append(kept, v)
+			continue
+		}
+		if imageRepository(v.FirstSeen) == v.Repository && imageRepository(kept[at].FirstSeen) != v.Repository {
+			kept[at] = v
+		}
+	}
+	return kept
 }
 
 // entriesInState keeps the file's order, so two runs of the report list the same
@@ -199,4 +282,19 @@ func entriesInState(entries []prunedEntry, state string) []prunedEntry {
 		}
 	}
 	return matching
+}
+
+// entriesFixedUpstream lists the entries whose CVE the scanners report a fix
+// for. They are not a state — the lifecycle has already placed them — but they
+// are the population the policy says must never have been accepted, and the
+// report has to name them or the file goes on carrying decisions where a repin
+// was the answer.
+func entriesFixedUpstream(entries []prunedEntry) []prunedEntry {
+	var fixable []prunedEntry
+	for _, e := range entries {
+		if e.FixedIn != "" {
+			fixable = append(fixable, e)
+		}
+	}
+	return fixable
 }

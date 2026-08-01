@@ -150,7 +150,7 @@ func buildPromotionVerdicts(targets []scanTarget, resultsDir string, accepted ma
 			continue
 		}
 
-		decision := presets.EvaluateScan(found, acceptedFor(accepted, target))
+		decision := presets.EvaluateScan(presets.FindingIDs(found), acceptedFor(accepted, target))
 		verdict.Promote = decision.Promote
 		verdict.Reason = fmt.Sprintf("%s (scanned by %s)", decision.Reason, strings.Join(scanners, " and "))
 		verdict.Introduces = decision.Introduces
@@ -163,21 +163,20 @@ func buildPromotionVerdicts(targets []scanTarget, resultsDir string, accepted ma
 
 // acceptedFor is what "already accepted" means for one candidate.
 //
-// The entries recorded against the image the catalogue runs today are the
+// The entries recorded against the repository the catalogue runs today are the
 // status of the pinned image: security-audit.yml fails on any HIGH/CRITICAL
 // finding that is not on file, so that record is what the running image is
 // known to carry. A finding the candidate merely inherits from it is therefore
 // not a regression.
 //
-// Entries recorded against the candidate's own reference count too, for a
-// finding reviewed and accepted ahead of the promotion.
+// One lookup covers both sides of the promotion. A candidate is a newer tag of
+// the repository the catalogue already runs — `preset scan-targets` proposes
+// nothing else — so since #238 the running image and its candidate share the
+// same entries by construction. Before that, an exception had to be re-filed
+// against the candidate's own reference before the gate would honour it, and
+// nobody ever did.
 func acceptedFor(accepted map[string][]string, target scanTarget) []string {
-	running := accepted[refWithoutDigest(target.CurrentImage)]
-	candidate := accepted[refWithoutDigest(target.ScanImage)]
-
-	both := make([]string, 0, len(running)+len(candidate))
-	both = append(both, running...)
-	return append(both, candidate...)
+	return accepted[imageRepository(target.ScanImage)]
 }
 
 // errNoScanResults is the fail-closed case: nothing was scanned, or nothing was
@@ -229,17 +228,20 @@ var auditFileName = strings.NewReplacer("/", "_", ":", "_")
 // and holding every promotion because a registry login flaked would rebuild the
 // permanently-stuck gate this replaced. What the verdict must not do is imply a
 // scanner that never ran, which is what the returned names are for.
-func scanFindings(dir, image string) ([]string, []string, error) {
+func scanFindings(dir, image string) ([]presets.Finding, []string, error) {
 	scanners := []struct {
 		name  string // as the result file spells it
 		title string // as a human reading the verdict spells it
-		parse func([]byte) ([]string, error)
+		parse func([]byte) ([]presets.Finding, error)
 	}{
 		{"trivy", "Trivy", trivyFindings},
 		{"grype", "Grype", grypeFindings},
 	}
 
-	var found, read []string
+	var (
+		found []presets.Finding
+		read  []string
+	)
 
 	for _, scanner := range scanners {
 		data, err := readFirstResult(dir, scanResultFiles(scanner.name, image))
@@ -250,13 +252,13 @@ func scanFindings(dir, image string) ([]string, []string, error) {
 			return nil, nil, fmt.Errorf("%s result could not be read: %w", scanner.name, err)
 		}
 
-		ids, err := scanner.parse(data)
+		parsed, err := scanner.parse(data)
 		if err != nil {
 			return nil, nil, fmt.Errorf("%s result could not be read: %w", scanner.name, err)
 		}
 
 		read = append(read, scanner.title)
-		found = append(found, ids...)
+		found = append(found, parsed...)
 	}
 
 	if len(read) == 0 {
@@ -278,14 +280,25 @@ func readFirstResult(dir string, names []string) ([]byte, error) {
 	return nil, os.ErrNotExist
 }
 
-// trivyFindings reads the vulnerability identifiers out of `trivy image
-// --format json`.
-func trivyFindings(data []byte) ([]string, error) {
+// trivyFindings reads the HIGH/CRITICAL findings out of `trivy image --format
+// json`.
+//
+// `Type` is read off the enclosing result rather than the vulnerability: Trivy
+// groups by target, and the ecosystem — `gobinary`, `debian`, `alpine` — is a
+// property of the group. It is what tells a Go binary's embedded module list
+// apart from an OS package database, which the stdlib exemption turns on.
+//
+// Trivy reports neither EPSS nor KEV, so those stay zero here; Grype carries
+// them, and the triage reads whichever scanner knew.
+func trivyFindings(data []byte) ([]presets.Finding, error) {
 	var report struct {
 		Results []struct {
+			Type            string
 			Vulnerabilities []struct {
 				VulnerabilityID string
+				PkgName         string
 				Severity        string
+				FixedVersion    string
 			}
 		}
 	}
@@ -293,42 +306,83 @@ func trivyFindings(data []byte) ([]string, error) {
 		return nil, err
 	}
 
-	var ids []string
+	var findings []presets.Finding
 	for _, result := range report.Results {
 		for _, vuln := range result.Vulnerabilities {
-			if isHighOrCritical(vuln.Severity) {
-				ids = append(ids, vuln.VulnerabilityID)
+			if !isHighOrCritical(vuln.Severity) {
+				continue
 			}
+			findings = append(findings, presets.Finding{
+				ID:          vuln.VulnerabilityID,
+				Severity:    strings.ToUpper(vuln.Severity),
+				Package:     vuln.PkgName,
+				PackageType: result.Type,
+				FixedIn:     vuln.FixedVersion,
+			})
 		}
 	}
-	return ids, nil
+	return findings, nil
 }
 
-// grypeFindings reads the vulnerability identifiers out of `grype -o json`.
+// grypeFindings reads the HIGH/CRITICAL findings out of `grype -o json`.
 //
 // Grype reports every severity whatever `--fail-on` says, so the filter here is
 // not decoration: without it a NEGLIGIBLE finding would hold a promotion the
 // policy is not concerned with.
-func grypeFindings(data []byte) ([]string, error) {
+//
+// `fix.versions` is a list — one advisory can be fixed in several release
+// lines — and the first entry is enough for the only question asked of it: does
+// a fix exist at all. `kev` is present only for a vulnerability CISA lists, so
+// its absence is the answer rather than a gap; measured zero on this catalogue.
+func grypeFindings(data []byte) ([]presets.Finding, error) {
 	var report struct {
 		Matches []struct {
 			Vulnerability struct {
 				ID       string `json:"id"`
 				Severity string `json:"severity"`
+				Fix      struct {
+					Versions []string `json:"versions"`
+				} `json:"fix"`
+				EPSS []struct {
+					EPSS float64 `json:"epss"`
+				} `json:"epss"`
+				KEV []struct {
+					CVE string `json:"cve"`
+				} `json:"kev"`
 			} `json:"vulnerability"`
+			Artifact struct {
+				Name string `json:"name"`
+				Type string `json:"type"`
+			} `json:"artifact"`
 		} `json:"matches"`
 	}
 	if err := json.Unmarshal(data, &report); err != nil {
 		return nil, err
 	}
 
-	var ids []string
+	var findings []presets.Finding
 	for _, match := range report.Matches {
-		if isHighOrCritical(match.Vulnerability.Severity) {
-			ids = append(ids, match.Vulnerability.ID)
+		vuln := match.Vulnerability
+		if !isHighOrCritical(vuln.Severity) {
+			continue
 		}
+
+		finding := presets.Finding{
+			ID:          vuln.ID,
+			Severity:    strings.ToUpper(vuln.Severity),
+			Package:     match.Artifact.Name,
+			PackageType: match.Artifact.Type,
+			KEV:         len(vuln.KEV) > 0,
+		}
+		if len(vuln.Fix.Versions) > 0 {
+			finding.FixedIn = vuln.Fix.Versions[0]
+		}
+		if len(vuln.EPSS) > 0 {
+			finding.EPSS = vuln.EPSS[0].EPSS
+		}
+		findings = append(findings, finding)
 	}
-	return ids, nil
+	return findings, nil
 }
 
 // isHighOrCritical is the severity band the policy acts on, spelled the way

@@ -287,7 +287,7 @@ Python moved off the non-dev line at the same time. The minimal build ships no s
 
 A candidate that has served the full 14 days claims no waiver, even when the running image is vulnerable — a waiver line in the PR means the cooldown was actually bypassed, or the record stops being worth reading.
 
-That record only works while it points at what we actually run. Entries are keyed `repo:tag`, so every promotion leaves the ones recorded against the replaced version behind: they stop matching, which is correct, and then nothing says so — 138 of the file's 155 entries were keyed to tags the catalogue had passed, and rule 3's waiver had gone quiet with them (#248). `cidx security vuln list --stale` lists the entries matching no catalogue image.
+That record only works while it points at what we actually run. Entries were keyed `repo:tag`, so every promotion left the ones recorded against the replaced version behind: they stopped matching, which is correct, and then nothing said so — 138 of the file's 155 entries were keyed to tags the catalogue had passed, and rule 3's waiver had gone quiet with them (#248). Keying by repository ([below](#an-exception-dies-with-its-cve-not-with-a-tag)) removes the case a promotion creates; `cidx security vuln list --stale` lists what is left, the entries whose repository the catalogue no longer runs at all.
 
 **The catalogue, and only the catalogue.** These rules govern the built-in preset catalogue. `cidx preset scan-targets` therefore reads `pkg/presets/presets.toml` rather than the resolved preset registry, which also carries whatever the user and the project declared in their own `presets.toml` — images the policy does not govern and the promotion job could not update anyway (guardrail 1, #248).
 
@@ -320,6 +320,8 @@ Four questions, in this order. The first that answers decides.
 
 The split is real and it is per-image, not per-severity: `commitlint` is 100% fixable, `gitleaks` 98%, `ansible-dev-tools` 93% — pure image-freshness. `rust:1.97.0` is 19% fixable — genuinely exception territory.
 
+The scanners say so directly, in a field each: Trivy's `FixedVersion` and Grype's `fix.versions`. `cidx security vuln add` reads them and **refuses** to record an exception for a vulnerability that has a fix, naming the version and pointing at the repin. There is no `--force`, because the correct action is not one that command performs. With no scan result for the image it says so and writes the entry: refusing on missing evidence would make the command unusable away from the audit's artifacts, and nothing is being promoted or deleted — the entry is argued again at its expiry. `cidx security vuln prune` names the entries already on file whose CVE turns out to have a fix, under **Fixed upstream**, and removes none of them: until the repin happens the entry still waives a finding the audit would otherwise fail on.
+
 **3. Is it reachable here?** Read the CVSS vector against the threat model above, not in the abstract. `AV:N` means the attack path crosses a network _if something feeds it hostile input_; in a linter that opens no socket, it means "would be network-reachable in a server", not "is reachable in this container".
 
 Two classes are unreachable by construction and are exempt as classes, not case by case:
@@ -328,6 +330,19 @@ Two classes are unreachable by construction and are exempt as classes, not case 
 - **`linux-libc-dev` and kernel headers.** The kernel is the host's; it is not in the container. The scanner flags the headers package because it carries a version string.
 
 Together these were ~20% of findings and ~0% of risk (#238).
+
+**What exactly is excluded.** An exemption that is too broad hides findings that matter, so both tests are narrow and read off the scan results rather than off a list of CVEs:
+
+| Class          | Test                                                                                 | What it does **not** catch                                                         |
+| -------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| Go stdlib      | package named exactly `stdlib`, in a Go binary (Trivy `gobinary`, Grype `go-module`) | every other Go module in the same binary                                           |
+| Kernel headers | package named exactly `linux-libc-dev` or `linux-headers`                            | `util-linux`, `linux-pam`, and anything else whose name merely begins with `linux` |
+
+The second column is the point. The runc and containerd findings on the Ansible image are `gobinary` too — an exemption keyed on the ecosystem alone would have swallowed a container escape. And a finding the two scanners disagree about is **not** exempt: Trivy filing a CVE against `linux-libc-dev` while Grype files the same CVE against `openssl` is a reason to look, not a reason to skip. A finding is exempt only when every instance of it on that image is exempt under the same class; a fix, by contrast, counts as soon as one scanner reports it, since a fix does not stop existing because the other missed it.
+
+These findings leave the triage queue; they do not leave the record. They are counted and named in `SECURITY-BASELINE.md`, where they read as what they are — a signal about the images' age.
+
+**KEV and EPSS are carried, not thresholded.** Grype reports EPSS on every match and `kev` only for a vulnerability CISA lists; Trivy reports neither. Both travel through to the baseline, which prints the highest EPSS seen and names any KEV entry. Neither gates anything: they answer question 1, and question 1 is a judgement.
 
 **4. What does it cost to remove?** Only now. In increasing order: accept and document → wait for the rebuild → bump or replace the image → **disable the preset**. The last rung has to exist explicitly: without it, a preset whose image is genuinely dangerous gets kept because nothing else was on the menu.
 
@@ -341,6 +356,25 @@ Keying it to `repo:tag` was the original design and it was wrong. When the image
 
 So an exception is keyed by **repository and CVE**; the tag it was first seen on is context, not identity. It dies when its CVE is no longer carried by any catalogue image, or when its expiry falls — never because a tag moved.
 
+That is what an entry looks like now, and `first_seen` is the whole of what remains of the tag:
+
+```toml
+[[vulnerabilities]]
+  cve = "CVE-2013-7445"
+  repository = "rust"
+  first_seen = "golangci/golangci-lint:v2.6.2"
+  severity = "HIGH"
+  status = "third-party"
+  added = "2025-12-02"
+  expires = "2026-03-02"
+```
+
+Two consequences fall out of the key, and both are the point. An exception written for `rust` covers `rust:1.97.0` **and** `rust:1.97.0-slim` — the catalogue runs both, and the judgement was never about one of them. And a candidate the monitor proposes is a newer tag of a repository the catalogue already runs, so the scan gate honours the entries written for it without their being re-filed first; under the old key it did not, and promotions were held on findings reviewed months earlier.
+
+**Migrating the 33 entries that were on file.** All of them were recorded against `repo:tag`, and all of them named a tag the catalogue had passed — yet their 19 distinct CVEs were every one of them still carried by a live image. A repository derived from the old key would have been wrong for most: twelve kernel CVEs filed against `golangci-lint:v2.6.2` are carried by the Rust images today, because the linter moved to Alpine and stopped shipping `linux-libc-dev` at all. So the old key is not converted, it is _classified_: a whole `repo:tag` equals no repository, so the entry falls through to the CVE test and lands as carry-over on whichever repository the findings say carries it. `vuln prune -x` re-files it there. Thirteen entries went to `rust`, twenty to `ghcr.io/ansible/community-ansible-dev-tools`, where they collapsed onto six keys — 33 entries became 19, and none of the justifications was lost.
+
+The file is written by hand rather than by the TOML encoder, which re-indented every key it touched and turned a purge of 101 entries into 538 insertions and 1552 deletions (#289). Entries are sorted by repository then CVE, so the same content produces the same bytes and a removal reads as a removal.
+
 The tempting rule is "the tag changed, so delete it". It is wrong, and expensively so. When an image is promoted, an accepted CVE does one of two things:
 
 - **It went away with the image.** The exception has no object left. Delete it.
@@ -350,20 +384,22 @@ Tags cannot tell those apart. The findings can, so the criterion is the CVE: **i
 
 Every entry lands in one of four states:
 
-| State          | Meaning                                                               | What happens to it             |
-| -------------- | --------------------------------------------------------------------- | ------------------------------ |
-| **live**       | covers an image the catalogue runs today                              | nothing, it is doing its job   |
-| **carry-over** | its CVE followed the promotion and a catalogue image still carries it | reported, named, never deleted |
-| **obsolete**   | no catalogue image carries its CVE any more                           | removable                      |
-| **unknown**    | some catalogue image has no scan result                               | reported, never deleted        |
+| State          | Meaning                                            | What happens to it            |
+| -------------- | -------------------------------------------------- | ----------------------------- |
+| **live**       | covers a repository the catalogue runs today       | nothing, it is doing its job  |
+| **carry-over** | its CVE is carried by another catalogue repository | re-filed onto that repository |
+| **obsolete**   | no catalogue image carries its CVE any more        | removable                     |
+| **unknown**    | some catalogue image has no scan result            | reported, never deleted       |
 
-**Fail-closed, once more.** A CVE cannot be shown absent from an image nobody scanned, so a missing result makes the verdict `unknown`, not `obsolete` — the same posture as an unresolvable digest (rule 1), an undatable candidate (rule 2) and an unreadable scan (the scan gate).
+**Why `live` does not consult the findings.** It asks only whether the catalogue runs the repository, and that order is load-bearing rather than an optimisation. `security-audit.yml` builds its ignore file from these very entries, so a CVE accepted on a running repository is filtered out of that repository's own scan results by construction. Reading its absence as "gone" would purge every exception that is doing its job, and the next audit would go red on all of them at once.
 
-**And it only reports.** `vuln prune` prints; `vuln prune -x` removes, and removes obsolete entries alone. The convention is `repo branch cleanup`'s: the default run is the one that cannot destroy anything. Deciding to stop waiving a CVE — or to accept one in the first place — belongs to whoever has to live with it. The tool prepares the material and names what it found; the human decides.
+**Fail-closed, once more.** A CVE cannot be shown absent from an image nobody scanned, so a missing result makes the verdict `unknown`, not `obsolete` — the same posture as an unresolvable digest (rule 1), an undatable candidate (rule 2) and an unreadable scan (the scan gate). A repository counts as scanned only when _every_ image the catalogue runs from it produced a result: with two tags of `rust` in the catalogue, one answering is not an answer.
+
+**And it only reports.** `vuln prune` prints; `vuln prune -x` writes. What it writes is mechanical either way — an obsolete entry removed, because nothing carries its CVE and it therefore waives nothing; a carry-over entry re-filed, because it waives exactly what it always did, against the repository that turned out to carry it. Neither is an acceptance. Unknown entries are left alone: that is a question nobody has answered. The convention is `repo branch cleanup`'s: the default run is the one that changes nothing. Deciding to stop waiving a CVE — or to accept one in the first place — belongs to whoever has to live with it. The tool prepares the material and names what it found; the human decides.
 
 ### What the catalogue actually ships
 
-`known-vulnerabilities.toml` is a working record: keyed by `repo:tag`, full of entries for images the catalogue has moved past, written for the audit rather than for a reader. Nobody installing CIDX could tell from it which vulnerabilities the images they are about to run actually carry.
+`known-vulnerabilities.toml` is a working record: written for the audit rather than for a reader, and saying nothing at all about the findings nobody has accepted. Nobody installing CIDX could tell from it which vulnerabilities the images they are about to run actually carry.
 
 `cidx security baseline` writes that down, in `SECURITY-BASELINE.md` at the root of the repository: every image the built-in catalogue runs, pinned by digest, with the presets using it, and every HIGH/CRITICAL finding accepted on it — with the reason and the expiry date. Only the built-in catalogue: a preset your own `presets.toml` declares is yours, and CIDX makes no claim about it (guardrail 1).
 
@@ -372,6 +408,19 @@ Three properties, each deliberate:
 - **It is committed.** The diff is the point. A release that changes what the catalogue carries shows it as a changed line, and "what we ship by default" stops being something you have to reconstruct.
 - **It carries no generation date.** A timestamp would change the file on every run and make every diff meaningless. The same inputs produce byte-identical output, and a test pins that — map iteration order has flapped this repository's output twice already (#230, #233).
 - **It states what is carried and what is accepted, separately.** Those are different numbers, and publishing only the second is how the file came to read "0 accepted findings" while the catalogue carried 596 (#238). Accepted-but-unlisted would be a fiction; carried-but-unstated is the omission that made the fiction possible.
+
+Carried comes from the scan results (`--results`, the same artifacts `vuln prune` reads) and is counted **per image**: the same CVE on five of them is five things to look at and five repins. It is published split the way [Judging a finding](#judging-a-finding) splits it, because 594 findings reads as a catastrophe and the number that actually needs a human is the last line:
+
+| Population                | Count |
+| ------------------------- | ----- |
+| Go stdlib in a CLI binary | 40    |
+| Kernel headers            | 130   |
+| Fixed upstream            | 208   |
+| **Needing triage**        | 216   |
+
+The class exemptions are labelled before fixability, which inverts the order the questions are asked in, deliberately. The questions are ordered by what to _do_ — a fix exists, so wait, and stop asking. The table labels findings by _why they are out of the queue_, and the class is the stabler answer: a Go stdlib finding is unreachable whether or not the Go team has shipped its fix yet, and most of them have one, so labelling by fix first would report zero stdlib findings on a catalogue full of them. **Needing triage** is the same number either way, which is the number that matters.
+
+An image with no scan result is printed `not scanned`, never `0` — an absent number is not a zero, and that confusion is the one this file exists to remove.
 
 An entry past its expiry date is printed with that date and nothing else — the table states facts, and `cidx security vuln check` is what judges them.
 

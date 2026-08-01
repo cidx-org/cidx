@@ -114,7 +114,7 @@ func TestPromotionVerdictClearsAnInheritedFinding(t *testing.T) {
 	writeTrivyResult(t, dir, candidateRef, map[string]string{"CVE-2026-0001": "HIGH"})
 	writeGrypeResult(t, dir, candidateRef, map[string]string{"CVE-2026-0001": "High"})
 
-	accepted := map[string][]string{"tmknom/prettier:3.6.2": {"CVE-2026-0001"}}
+	accepted := map[string][]string{"tmknom/prettier": {"CVE-2026-0001"}}
 
 	verdict := onlyVerdict(t, buildPromotionVerdicts([]scanTarget{promotableTarget()}, dir, accepted))
 
@@ -136,7 +136,7 @@ func TestPromotionVerdictHoldsANewFinding(t *testing.T) {
 	})
 	writeGrypeResult(t, dir, candidateRef, nil)
 
-	accepted := map[string][]string{"tmknom/prettier:3.6.2": {"CVE-2026-0001"}}
+	accepted := map[string][]string{"tmknom/prettier": {"CVE-2026-0001"}}
 
 	verdict := onlyVerdict(t, buildPromotionVerdicts([]scanTarget{promotableTarget()}, dir, accepted))
 
@@ -151,14 +151,16 @@ func TestPromotionVerdictHoldsANewFinding(t *testing.T) {
 	}
 }
 
-// TestPromotionVerdictClearsAFindingAcceptedOnTheCandidate: an exception filed
-// against the candidate's own reference is a reviewed decision, and the gate
-// honours it like any other.
-func TestPromotionVerdictClearsAFindingAcceptedOnTheCandidate(t *testing.T) {
+// TestPromotionVerdictClearsAFindingAcceptedOnTheRepository: the candidate is a
+// newer tag of the repository the catalogue already runs, so the exception
+// written for that repository covers it without being re-filed first. Under the
+// old `repo:tag` key it did not, and the gate held promotions on findings that
+// had been reviewed months earlier (#238).
+func TestPromotionVerdictClearsAFindingAcceptedOnTheRepository(t *testing.T) {
 	dir := t.TempDir()
 	writeTrivyResult(t, dir, candidateRef, map[string]string{"CVE-2026-0002": "HIGH"})
 
-	accepted := map[string][]string{"tmknom/prettier:3.7.0": {"CVE-2026-0002"}}
+	accepted := map[string][]string{"tmknom/prettier": {"CVE-2026-0002"}}
 
 	verdict := onlyVerdict(t, buildPromotionVerdicts([]scanTarget{promotableTarget()}, dir, accepted))
 
@@ -294,7 +296,7 @@ func TestPromotionVerdictDoesNotLetAWaiverExcuseANewFinding(t *testing.T) {
 	waived.PolicyReason = "14-day cooldown waived: the running image is affected by CVE-2026-0001"
 	waived.CVEWaiver = []string{"CVE-2026-0001"}
 
-	accepted := map[string][]string{"tmknom/prettier:3.6.2": {"CVE-2026-0001"}}
+	accepted := map[string][]string{"tmknom/prettier": {"CVE-2026-0001"}}
 
 	verdict := onlyVerdict(t, buildPromotionVerdicts([]scanTarget{waived}, dir, accepted))
 
@@ -319,7 +321,7 @@ func TestPromotionVerdictClearsAWaivedCandidateThatFixesTheCVE(t *testing.T) {
 	waived.PolicyReason = "14-day cooldown waived: the running image is affected by CVE-2026-0001"
 	waived.CVEWaiver = []string{"CVE-2026-0001"}
 
-	accepted := map[string][]string{"tmknom/prettier:3.6.2": {"CVE-2026-0001"}}
+	accepted := map[string][]string{"tmknom/prettier": {"CVE-2026-0001"}}
 
 	verdict := onlyVerdict(t, buildPromotionVerdicts([]scanTarget{waived}, dir, accepted))
 
