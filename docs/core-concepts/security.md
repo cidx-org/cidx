@@ -291,9 +291,55 @@ That record only works while it points at what we actually run. Entries are keye
 
 **The catalogue, and only the catalogue.** These rules govern the built-in preset catalogue. `cidx preset scan-targets` therefore reads `pkg/presets/presets.toml` rather than the resolved preset registry, which also carries whatever the user and the project declared in their own `presets.toml` — images the policy does not govern and the promotion job could not update anyway (guardrail 1, #248).
 
-### An exception dies with the image it covers
+### What we are actually defending against
 
-An exception is written against one image, with a date on it so the acceptance gets argued again rather than inherited. When that image is replaced, the entry stops matching anything — and stays in the file for ever, because nothing ever asked whether it still had an object. All 155 entries reached that state, the most recent expiry dated 2026-03-02 (#238).
+Every judgement below rests on this. Without it, no finding can be called irrelevant, and the only available answer to any CVE is to patch it — which is how a catalogue ends up churning on findings nobody could have exploited.
+
+A CIDX container:
+
+- **lives for seconds**, the length of one phase, then is gone;
+- **exposes no service** — nothing listens, nothing routes to it, no attacker sends it anything;
+- **reads the repository's own code**, not input from unknown users;
+- **persists nothing** — no database, no state that survives the run;
+- **holds no durable secret.** The exception is the CI token, in scope only for the presets that publish (`gh-release`, `twine`, `kaniko`, the registry ones).
+
+So the realistic threat is a **compromised image**: an artefact that runs code we did not expect, on our source, with our token in reach. That is the threat rules 1–3 address, and the one no CVE scanner detects — a backdoor has no CVE until someone finds it.
+
+A vulnerability in a package sitting on the disk of a linter is a different thing entirely. `libcrypto` inside `golangci-lint` is a TLS implementation that nothing calls; a parser flaw in it is unreachable because no attacker-controlled bytes ever arrive. This is not an argument for ignoring findings — it is the difference between the ones that matter here and the ones that would matter in a public-facing server.
+
+### Judging a finding
+
+Four questions, in this order. The first that answers decides.
+
+**1. Is it being exploited?** Presence in [CISA KEV](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) means somebody is using it right now — act immediately, whatever the severity says. A high [EPSS](https://www.first.org/epss/) score (the probability of exploitation in the next 30 days) means examine it now rather than at the next cycle. Severity alone answers neither question: it describes what a flaw could do, not whether anyone does it. Measured on this catalogue: **zero KEV, highest EPSS 0.10, 95% below 0.02** (#238).
+
+**2. Is a fix available?** This splits the work in two, and the two halves need opposite treatment:
+
+- **Fix exists** → nothing to decide. The finding disappears when the publisher republishes, so the question is the image's age, not the vulnerability. **Never write an exception for one of these** — it would record a decision where there is only a wait.
+- **No fix at any version** → the only case where an exception is the right instrument.
+
+The split is real and it is per-image, not per-severity: `commitlint` is 100% fixable, `gitleaks` 98%, `ansible-dev-tools` 93% — pure image-freshness. `rust:1.97.0` is 19% fixable — genuinely exception territory.
+
+**3. Is it reachable here?** Read the CVSS vector against the threat model above, not in the abstract. `AV:N` means the attack path crosses a network *if something feeds it hostile input*; in a linter that opens no socket, it means "would be network-reachable in a server", not "is reachable in this container".
+
+Two classes are unreachable by construction and are exempt as classes, not case by case:
+
+- **Go standard library compiled into a CLI binary.** These vanish when the publisher recompiles, no action exists at our end, and the paths flagged (`net/http`, `crypto/*`) are unreachable in a tool that opens no listener.
+- **`linux-libc-dev` and kernel headers.** The kernel is the host's; it is not in the container. The scanner flags the headers package because it carries a version string.
+
+Together these were ~20% of findings and ~0% of risk (#238).
+
+**4. What does it cost to remove?** Only now. In increasing order: accept and document → wait for the rebuild → bump or replace the image → **disable the preset**. The last rung has to exist explicitly: without it, a preset whose image is genuinely dangerous gets kept because nothing else was on the menu.
+
+Paranoia is not a policy. Patching every finding on sight costs review attention that the real threat — a compromised image — then does not get.
+
+### An exception dies with its CVE, not with a tag
+
+An exception is written with a date on it, so the acceptance gets argued again rather than inherited. It records a judgement about **a CVE in an image, in our usage** — and that judgement survives a version bump, because none of what it rests on changed.
+
+Keying it to `repo:tag` was the original design and it was wrong. When the image was promoted, every entry stopped matching anything and stayed in the file for ever, because nothing asked whether it still had an object. All 155 entries reached that state, the most recent expiry dated 2026-03-02. Worse, the record silently lost track of what it covered: twelve kernel CVEs filed against `golangci-lint:v2.6.2` are carried today by the Rust images, and nothing connected the two (#238).
+
+So an exception is keyed by **repository and CVE**; the tag it was first seen on is context, not identity. It dies when its CVE is no longer carried by any catalogue image, or when its expiry falls — never because a tag moved.
 
 The tempting rule is "the tag changed, so delete it". It is wrong, and expensively so. When an image is promoted, an accepted CVE does one of two things:
 
@@ -325,7 +371,7 @@ Three properties, each deliberate:
 
 - **It is committed.** The diff is the point. A release that changes what the catalogue carries shows it as a changed line, and "what we ship by default" stops being something you have to reconstruct.
 - **It carries no generation date.** A timestamp would change the file on every run and make every diff meaningless. The same inputs produce byte-identical output, and a test pins that — map iteration order has flapped this repository's output twice already (#230, #233).
-- **It only lists what is accepted on an image the catalogue runs.** An entry recorded against a tag the catalogue passed waives nothing; publishing it would claim an acceptance that does not exist, which is the exact fiction this file removes. That is also why the two commands travel together: `vuln prune` is what keeps the record honest, and the baseline is what publishes it.
+- **It states what is carried and what is accepted, separately.** Those are different numbers, and publishing only the second is how the file came to read "0 accepted findings" while the catalogue carried 596 (#238). Accepted-but-unlisted would be a fiction; carried-but-unstated is the omission that made the fiction possible.
 
 An entry past its expiry date is printed with that date and nothing else — the table states facts, and `cidx security vuln check` is what judges them.
 
