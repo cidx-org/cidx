@@ -29,7 +29,7 @@ func scannedClean() map[string][]Finding {
 // out of that repository's own scan results; reading its absence as "gone" would
 // purge every exception that is doing its job.
 func TestExceptionOnARunningRepositoryIsLive(t *testing.T) {
-	verdict := ClassifyException("CVE-2026-0001", "dhi.io/trivy", catalogueRepos, scannedClean())
+	verdict := ClassifyException("CVE-2026-0001", "dhi.io/trivy", catalogueRepos, scannedClean(), nil)
 
 	if verdict.State != ExceptionLive {
 		t.Fatalf("state = %q (%s), want %q", verdict.State, verdict.Reason, ExceptionLive)
@@ -41,7 +41,7 @@ func TestExceptionOnARunningRepositoryIsLive(t *testing.T) {
 // judgement rests on, and under the old `repo:tag` key every entry for it
 // stopped matching anything on the day of the promotion.
 func TestExceptionSurvivesATagMove(t *testing.T) {
-	verdict := ClassifyException("CVE-2026-0001", "dhi.io/trivy", catalogueRepos, scannedClean())
+	verdict := ClassifyException("CVE-2026-0001", "dhi.io/trivy", catalogueRepos, scannedClean(), nil)
 
 	if verdict.State != ExceptionLive {
 		t.Fatalf("state = %q (%s), want %q: the tag is context, not identity", verdict.State, verdict.Reason, ExceptionLive)
@@ -56,7 +56,7 @@ func TestAnUnmigratedEntryMatchesNoRepository(t *testing.T) {
 	findings := scannedClean()
 	findings["dhi.io/trivy"] = []Finding{{ID: "CVE-2026-0001", Severity: "HIGH"}}
 
-	verdict := ClassifyException("CVE-2026-0001", "golangci/golangci-lint:v2.6.2", catalogueRepos, findings)
+	verdict := ClassifyException("CVE-2026-0001", "golangci/golangci-lint:v2.6.2", catalogueRepos, findings, nil)
 
 	if verdict.State != ExceptionCarryOver {
 		t.Fatalf("state = %q (%s), want %q", verdict.State, verdict.Reason, ExceptionCarryOver)
@@ -74,7 +74,7 @@ func TestExceptionSurvivingThePromotionIsCarriedOver(t *testing.T) {
 	findings := scannedClean()
 	findings["dhi.io/trivy"] = []Finding{{ID: "CVE-2026-0001", Severity: "HIGH"}}
 
-	verdict := ClassifyException("CVE-2026-0001", "aquasec/trivy", catalogueRepos, findings)
+	verdict := ClassifyException("CVE-2026-0001", "aquasec/trivy", catalogueRepos, findings, nil)
 
 	if verdict.State != ExceptionCarryOver {
 		t.Fatalf("state = %q (%s), want %q", verdict.State, verdict.Reason, ExceptionCarryOver)
@@ -92,10 +92,64 @@ func TestCarryOverNamesTheFixWhenThereIsOne(t *testing.T) {
 	findings := scannedClean()
 	findings["dhi.io/trivy"] = []Finding{{ID: "CVE-2026-0001", Severity: "HIGH", FixedIn: "1.2.8"}}
 
-	verdict := ClassifyException("CVE-2026-0001", "aquasec/trivy", catalogueRepos, findings)
+	verdict := ClassifyException("CVE-2026-0001", "aquasec/trivy", catalogueRepos, findings, nil)
 
 	if verdict.FixedIn != "1.2.8" {
 		t.Errorf("FixedIn = %q, want the version the scanners reported", verdict.FixedIn)
+	}
+}
+
+// TestLiveEntryNamesTheFixTheIgnoreFileHid is #312.
+//
+// A live entry with a fix upstream is the entry the policy says should never
+// have been written — a repin candidate, not a renewal — and it was the one case
+// `prune` said nothing about. It cannot be read from the scan results: the audit
+// builds its ignore file from these very entries, so a live entry's CVE is
+// filtered out of its own repository's scan by construction (#311). The evidence
+// is what the scanners recorded as suppressed, which is the second map.
+func TestLiveEntryNamesTheFixTheIgnoreFileHid(t *testing.T) {
+	// What a live entry's own repository reports: not one word about the CVE the
+	// entry accepts, because the entry itself filtered it out.
+	findings := scannedClean()
+	findings["dhi.io/trivy"] = []Finding{{ID: "CVE-2026-9999", Severity: "HIGH"}}
+
+	suppressed := map[string][]Finding{
+		"dhi.io/trivy": {{ID: "CVE-2026-0001", Severity: "HIGH", FixedIn: "0.71.1", Scanner: "Grype"}},
+	}
+
+	verdict := ClassifyException("CVE-2026-0001", "dhi.io/trivy", catalogueRepos, findings, suppressed)
+
+	if verdict.State != ExceptionLive {
+		t.Fatalf("state = %q (%s), want %q: a fix upstream is a repin, not a purge", verdict.State, verdict.Reason, ExceptionLive)
+	}
+	if verdict.FixedIn != "0.71.1" {
+		t.Errorf("FixedIn = %q, want the fix the scanners reported on the entry's own repository", verdict.FixedIn)
+	}
+}
+
+// TestLiveEntryNamesNoFixWhenNobodyReportedOne: an empty FixedIn says nobody
+// said, not that no fix exists — Trivy's ignore file deletes the finding instead
+// of recording it, so a fix only Trivy knows about leaves no trace to read.
+func TestLiveEntryNamesNoFixWhenNobodyReportedOne(t *testing.T) {
+	verdict := ClassifyException("CVE-2026-0001", "dhi.io/trivy", catalogueRepos, scannedClean(), map[string][]Finding{})
+
+	if verdict.FixedIn != "" {
+		t.Errorf("FixedIn = %q, want none reported", verdict.FixedIn)
+	}
+}
+
+// TestLiveEntryReadsOnlyItsOwnRepository: the suppressed findings are keyed by
+// repository like everything else here, and a fix reported on a neighbour says
+// nothing about this entry — it would name a version of another image entirely.
+func TestLiveEntryReadsOnlyItsOwnRepository(t *testing.T) {
+	suppressed := map[string][]Finding{
+		"golangci/golangci-lint": {{ID: "CVE-2026-0001", Severity: "HIGH", FixedIn: "2.13.0", Scanner: "Grype"}},
+	}
+
+	verdict := ClassifyException("CVE-2026-0001", "dhi.io/trivy", catalogueRepos, scannedClean(), suppressed)
+
+	if verdict.FixedIn != "" {
+		t.Errorf("FixedIn = %q, want the fix of another repository to be ignored", verdict.FixedIn)
 	}
 }
 
@@ -106,7 +160,7 @@ func TestCarryOverIsCaseInsensitive(t *testing.T) {
 	findings := scannedClean()
 	findings["dhi.io/trivy"] = []Finding{{ID: "ghsa-cgrx-mc8f-2prm", Severity: "HIGH"}}
 
-	verdict := ClassifyException("GHSA-cgrx-mc8f-2prm", "aquasec/trivy", catalogueRepos, findings)
+	verdict := ClassifyException("GHSA-cgrx-mc8f-2prm", "aquasec/trivy", catalogueRepos, findings, nil)
 
 	if verdict.State != ExceptionCarryOver {
 		t.Fatalf("state = %q (%s), want %q", verdict.State, verdict.Reason, ExceptionCarryOver)
@@ -119,7 +173,7 @@ func TestExceptionWhoseCVEIsGoneIsObsolete(t *testing.T) {
 	findings := scannedClean()
 	findings["dhi.io/trivy"] = []Finding{{ID: "CVE-2026-9999", Severity: "HIGH"}}
 
-	verdict := ClassifyException("CVE-2026-0001", "aquasec/trivy", catalogueRepos, findings)
+	verdict := ClassifyException("CVE-2026-0001", "aquasec/trivy", catalogueRepos, findings, nil)
 
 	if verdict.State != ExceptionObsolete {
 		t.Fatalf("state = %q (%s), want %q", verdict.State, verdict.Reason, ExceptionObsolete)
@@ -130,7 +184,7 @@ func TestExceptionWhoseCVEIsGoneIsObsolete(t *testing.T) {
 // an image nobody scanned. Fail-closed, like the cooldown on an undatable
 // candidate and the scan gate on an unreadable result.
 func TestExceptionWithoutScanEvidenceIsUnknown(t *testing.T) {
-	verdict := ClassifyException("CVE-2026-0001", "aquasec/trivy", catalogueRepos, nil)
+	verdict := ClassifyException("CVE-2026-0001", "aquasec/trivy", catalogueRepos, nil, nil)
 
 	if verdict.State != ExceptionUnknown {
 		t.Fatalf("state = %q (%s), want %q", verdict.State, verdict.Reason, ExceptionUnknown)
@@ -142,7 +196,7 @@ func TestExceptionWithoutScanEvidenceIsUnknown(t *testing.T) {
 func TestPartialScanEvidenceIsUnknown(t *testing.T) {
 	findings := map[string][]Finding{"dhi.io/trivy": nil}
 
-	verdict := ClassifyException("CVE-2026-0001", "aquasec/trivy", catalogueRepos, findings)
+	verdict := ClassifyException("CVE-2026-0001", "aquasec/trivy", catalogueRepos, findings, nil)
 
 	if verdict.State != ExceptionUnknown {
 		t.Fatalf("state = %q (%s), want %q", verdict.State, verdict.Reason, ExceptionUnknown)
@@ -154,7 +208,7 @@ func TestPartialScanEvidenceIsUnknown(t *testing.T) {
 func TestCarryOverBeatsMissingEvidence(t *testing.T) {
 	findings := map[string][]Finding{"dhi.io/trivy": {{ID: "CVE-2026-0001", Severity: "HIGH"}}}
 
-	verdict := ClassifyException("CVE-2026-0001", "aquasec/trivy", catalogueRepos, findings)
+	verdict := ClassifyException("CVE-2026-0001", "aquasec/trivy", catalogueRepos, findings, nil)
 
 	if verdict.State != ExceptionCarryOver {
 		t.Fatalf("state = %q (%s), want %q", verdict.State, verdict.Reason, ExceptionCarryOver)
@@ -174,7 +228,7 @@ func TestEveryVerdictStatesAReason(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		verdict := ClassifyException("CVE-2026-0001", "aquasec/trivy", catalogueRepos, tc.findings)
+		verdict := ClassifyException("CVE-2026-0001", "aquasec/trivy", catalogueRepos, tc.findings, nil)
 		if verdict.Reason == "" {
 			t.Errorf("%s: verdict %q states no reason", tc.name, verdict.State)
 		}

@@ -69,13 +69,13 @@ func vulnPruneCommand() *cli.Command {
 				return err
 			}
 
-			running, findings := catalogueFindings(imagePresets, c.String("results"))
+			running, findings, suppressed := catalogueFindings(imagePresets, c.String("results"))
 
 			entries := make([]prunedEntry, 0, len(vulns.Vulnerabilities))
 			for _, v := range vulns.Vulnerabilities {
 				entries = append(entries, prunedEntry{
 					Vulnerability:    v,
-					ExceptionVerdict: presets.ClassifyException(v.CVE, v.key(), running, findings),
+					ExceptionVerdict: presets.ClassifyException(v.CVE, v.key(), running, findings, suppressed),
 				})
 			}
 
@@ -103,8 +103,15 @@ func vulnPruneCommand() *cli.Command {
 // present on only one of them must not read as absent because the other one
 // answered: partial evidence is what makes the verdict unknown rather than
 // obsolete, and merging the tags first would hide exactly that.
-func catalogueFindings(imagePresets map[string][]string, resultsDir string) ([]string, map[string][]presets.Finding) {
+//
+// The third map is what the audit's ignore file kept out of those results, and
+// it is deliberately not held to that rule: nothing is removed on its account,
+// so a fix reported on one tag of a repository is a fix whether or not the other
+// tag was scanned. It is read for one thing only — whether a live entry has a
+// fix upstream, which its own results can never say (#312).
+func catalogueFindings(imagePresets map[string][]string, resultsDir string) ([]string, map[string][]presets.Finding, map[string][]presets.Finding) {
 	findings := make(map[string][]presets.Finding)
+	suppressed := make(map[string][]presets.Finding)
 	unscanned := make(map[string]bool)
 	seen := make(map[string]bool)
 
@@ -114,6 +121,10 @@ func catalogueFindings(imagePresets map[string][]string, resultsDir string) ([]s
 		if !seen[repo] {
 			seen[repo] = true
 			running = append(running, repo)
+		}
+
+		if ignored := suppressedFindings(resultsDir, image); len(ignored) > 0 {
+			suppressed[repo] = append(suppressed[repo], ignored...)
 		}
 
 		found, _, err := scanFindings(resultsDir, image)
@@ -129,7 +140,7 @@ func catalogueFindings(imagePresets map[string][]string, resultsDir string) ([]s
 	}
 
 	sort.Strings(running)
-	return running, findings
+	return running, findings, suppressed
 }
 
 // printPruneReport says what each state means before listing it. A report that
@@ -182,8 +193,15 @@ func printPruneReport(entries []prunedEntry, scanned, catalogue int, resultsDir 
 		fmt.Println("finding the audit would otherwise fail on until the repin happens.")
 		fmt.Println(strings.Repeat("-", 50))
 		for _, e := range fixable {
-			fmt.Printf("  %s | %s | fixed in %s\n", e.CVE, e.StillOn, e.FixedIn)
+			fmt.Printf("  %s | %s | fixed in %s\n", e.CVE, carryingRepository(e), e.FixedIn)
 		}
+		fmt.Println()
+		// The list is complete for a carry-over entry and partial for a live
+		// one, and a reader taking silence for "no fix" would renew exactly the
+		// entries the policy says should never have been written.
+		fmt.Println("For an entry on a running repository this is Grype's answer alone: the audit's")
+		fmt.Println("ignore file is built from these entries, and Grype records what it suppressed")
+		fmt.Println("where Trivy deletes it. A fix only Trivy reported is not visible here (#311).")
 		fmt.Println()
 	}
 
@@ -282,6 +300,16 @@ func entriesInState(entries []prunedEntry, state string) []prunedEntry {
 		}
 	}
 	return matching
+}
+
+// carryingRepository names the repository the fix was reported on: the one that
+// turned out to carry the CVE for a carry-over entry, and the entry's own for a
+// live one — which is the repository to repin either way.
+func carryingRepository(e prunedEntry) string {
+	if e.StillOn != "" {
+		return e.StillOn
+	}
+	return e.key()
 }
 
 // entriesFixedUpstream lists the entries whose CVE the scanners report a fix

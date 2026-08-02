@@ -83,3 +83,40 @@ func TestCatalogueImageDigestsAreConsistent(t *testing.T) {
 		presetByRef[ref] = name
 	}
 }
+
+// TestCataloguePinsOneReferencePerRepository is what makes the repository-keyed
+// alert fingerprint unambiguous (#313, docs/core-concepts/security.md).
+//
+// A triage alert is identified by its repository and its CVE, so that a repin
+// does not close it and reopen it. The price of dropping the reference from the
+// identity is that two references of one repository, pinned at the same time,
+// would produce two alerts sharing an identity — GitHub would show one, and the
+// second repin would never be surfaced. The catalogue pins one reference per
+// repository today, and this is where that stops being an assumption.
+//
+// If it ever has to pin two — as it did while `rust:1.97.0` and
+// `rust:1.97.0-slim` were both in (#287) — the alerts need a disambiguator that
+// survives a repin, and that is a decision to take rather than a line to change
+// here.
+func TestCataloguePinsOneReferencePerRepository(t *testing.T) {
+	catalogue, err := loadBasePresets()
+	if err != nil {
+		t.Fatalf("loadBasePresets() error = %v", err)
+	}
+
+	refByRepository := make(map[string]string)
+	for _, preset := range catalogue {
+		if preset.Image == "" {
+			continue // already reported by TestCatalogueImagesArePinnedByDigest
+		}
+		repository := repositoryOf(preset.Image)
+		if seen, ok := refByRepository[repository]; ok && seen != preset.Image {
+			t.Errorf("%s is pinned twice at once:\n  %s\n  %s\n\n"+
+				"Triage alerts are keyed on the repository so they survive a repin (#313),\n"+
+				"so these two would publish alerts sharing an identity and only one would be shown.",
+				repository, seen, preset.Image)
+			continue
+		}
+		refByRepository[repository] = preset.Image
+	}
+}

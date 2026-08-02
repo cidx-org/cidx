@@ -342,6 +342,66 @@ func TestScanResultFileMatchesTheWorkflowConvention(t *testing.T) {
 	}
 }
 
+// grypeWithAnIgnoredMatch is the document Grype writes for an image with an
+// exception on file, reduced to the fields that are read. The audit passes it
+// the ignore file `cidx security vuln ignore` generates, and the suppressed
+// match is *moved* to `ignoredMatches` rather than dropped — fix included, which
+// is what makes #312 answerable at all.
+const grypeWithAnIgnoredMatch = `{
+  "matches": [
+    {"vulnerability": {"id": "CVE-2026-0002", "severity": "High"},
+     "artifact": {"name": "libxml2", "type": "deb"}}
+  ],
+  "ignoredMatches": [
+    {"vulnerability": {"id": "GHSA-cgrx-mc8f-2prm", "severity": "High",
+                       "fix": {"versions": ["1.2.8"]}},
+     "artifact": {"name": "github.com/opencontainers/runc", "type": "go-module"},
+     "appliedIgnoreRules": [{"vulnerability": "GHSA-cgrx-mc8f-2prm"}]}
+  ]
+}`
+
+// TestGrypeFindingsIgnoreWhatTheIgnoreFileSuppressed: the scan gate and the
+// baseline count what the scanners actually report, and an accepted finding is
+// deliberately not one of them. Reading `ignoredMatches` here would put every
+// exception back into the numbers it was written to take out of them.
+func TestGrypeFindingsIgnoreWhatTheIgnoreFileSuppressed(t *testing.T) {
+	found, err := grypeFindings([]byte(grypeWithAnIgnoredMatch))
+	if err != nil {
+		t.Fatalf("grypeFindings: %v", err)
+	}
+	if len(found) != 1 || found[0].ID != "CVE-2026-0002" {
+		t.Errorf("findings = %+v, want the reported match alone", found)
+	}
+}
+
+// TestGrypeSuppressedFindingsReadTheIgnoredMatches: the other half. This is the
+// only evidence there is about a live entry, because the ignore file that hid
+// the finding was built from that entry.
+func TestGrypeSuppressedFindingsReadTheIgnoredMatches(t *testing.T) {
+	found, err := grypeSuppressedFindings([]byte(grypeWithAnIgnoredMatch))
+	if err != nil {
+		t.Fatalf("grypeSuppressedFindings: %v", err)
+	}
+	if len(found) != 1 {
+		t.Fatalf("suppressed = %+v, want the ignored match alone", found)
+	}
+	if found[0].ID != "GHSA-cgrx-mc8f-2prm" || found[0].FixedIn != "1.2.8" {
+		t.Errorf("suppressed = %+v, want the identifier and the fix Grype recorded", found[0])
+	}
+}
+
+// TestSuppressedFindingsAreSilentWithoutAGrypeResult: Trivy's `--ignorefile`
+// deletes the finding rather than recording it, so an image only Trivy answered
+// for yields nothing here. Silence, not "no fix".
+func TestSuppressedFindingsAreSilentWithoutAGrypeResult(t *testing.T) {
+	dir := t.TempDir()
+	writeTrivyResult(t, dir, candidateRef, map[string]string{"CVE-2026-0002": "HIGH"})
+
+	if found := suppressedFindings(dir, candidateRef); len(found) != 0 {
+		t.Errorf("suppressed = %+v, want nothing: Trivy records no suppressed finding", found)
+	}
+}
+
 // TestPromotionVerdictJSONContract pins the field names container-monitor.yml
 // reads with jq. Renaming one here breaks the workflow, not the build.
 func TestPromotionVerdictJSONContract(t *testing.T) {

@@ -95,6 +95,35 @@ Feature: Vulnerability Exception Lifecycle
       Then the exception should be carried over
       And the exception verdict should name the fix "1.2.8"
 
+    # A live entry is the case where this matters most and the one that said
+    # nothing: an entry accepted on a repository the catalogue still runs, whose
+    # CVE the publisher has since fixed, is an entry that should never have been
+    # written — a repin candidate, not a renewal (#312). The evidence cannot come
+    # from the scan results, because the audit builds its ignore file from these
+    # very entries and the finding is filtered out of its own repository's scan.
+    # Grype records what it suppressed; that is where the fix is read.
+
+    Scenario: The live entry's CVE turns out to have been fixed upstream
+      Given the catalogue runs "ghcr.io/ansible/community-ansible-dev-tools"
+      And every catalogue repository has been scanned
+      And the audit's ignore file suppressed "CVE-2025-52881" on "ghcr.io/ansible/community-ansible-dev-tools", fixed in "1.2.8"
+      And the exception "CVE-2025-52881" was recorded against "ghcr.io/ansible/community-ansible-dev-tools"
+      When the exception lifecycle is applied
+      Then the exception should be live
+      And the exception verdict should name the fix "1.2.8"
+
+    # Trivy's ignore file deletes the finding rather than recording it, so a fix
+    # only Trivy reported leaves no trace in the audit's artifacts. The verdict
+    # names no fix, which means nobody said — never that no fix exists.
+
+    Scenario: A live entry no scanner reported a fix for names none
+      Given the catalogue runs "ghcr.io/ansible/community-ansible-dev-tools"
+      And every catalogue repository has been scanned
+      And the exception "CVE-2025-52881" was recorded against "ghcr.io/ansible/community-ansible-dev-tools"
+      When the exception lifecycle is applied
+      Then the exception should be live
+      And the exception verdict should name no fix
+
   Rule: Without scan evidence nothing is concluded
 
     # Fail-closed, like the cooldown on an undatable candidate and the scan gate

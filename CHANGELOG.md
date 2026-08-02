@@ -6,6 +6,11 @@
 - **presets**: flag images whose base is approaching end of life (#305)
 - **audit**: publish the catalogue's scan results to GitHub code scanning (#301)
 
+### Fix
+
+- **security**: key code scanning alerts on the repository so a repin does not churn them (#313)
+- **security**: report the exceptions on running repositories that are fixed upstream (#312)
+
 ## v2.4.0 (2026-08-01)
 
 ### Feat

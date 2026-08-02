@@ -80,6 +80,14 @@ type ExceptionVerdict struct {
 // HIGH/CRITICAL results the scanners reported on them; a repository absent from
 // the map has an image that was not scanned.
 //
+// suppressed maps the same repositories to what the audit's own ignore file kept
+// out of those results, and it exists for one question: whether a **live** entry
+// has been fixed upstream since it was accepted. The audit builds that ignore
+// file from these very entries, so a live entry's CVE is absent from findings by
+// construction and no fix could ever be read from there (#311, #312). Grype
+// records what it ignored and Trivy deletes it, so the answer is Grype's alone —
+// an empty FixedIn on a live entry means nobody said, never that no fix exists.
+//
 // The criterion is the CVE, not the tag. An exception whose repository the
 // catalogue left behind is only obsolete once the findings show no catalogue
 // image carries its CVE any more — and only when every catalogue image has been
@@ -97,7 +105,7 @@ type ExceptionVerdict struct {
 // An entry still keyed the old way — a whole `repo:tag` where a repository
 // belongs — matches no repository, so it is judged on its CVE alone. That is
 // exactly what re-keying it requires, and it needs no special case.
-func ClassifyException(cve, repository string, running []string, findings map[string][]Finding) ExceptionVerdict {
+func ClassifyException(cve, repository string, running []string, findings, suppressed map[string][]Finding) ExceptionVerdict {
 	ordered := append([]string(nil), running...)
 	sort.Strings(ordered)
 
@@ -106,6 +114,14 @@ func ClassifyException(cve, repository string, running []string, findings map[st
 			return ExceptionVerdict{
 				State:  ExceptionLive,
 				Reason: "covers a repository the catalogue runs today",
+				// An exception must never be written for a vulnerability that is
+				// fixed upstream, so a live entry that turns out to have one is
+				// an entry that should not exist: a repin candidate, not a
+				// renewal. It stays live and stays on file — it still waives a
+				// finding the audit would fail on until the repin happens — and
+				// the report names it rather than letting it be renewed in
+				// silence (#312).
+				FixedIn: FixVersion(suppressed[repository], cve),
 			}
 		}
 	}

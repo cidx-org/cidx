@@ -75,6 +75,7 @@ func RegisterSecuritySteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Given(`^the scanners report "([^"]*)" on "([^"]*)"$`, tc.scannersReportOnImage)
 	ctx.Given(`^the scanners report "([^"]*)" on "([^"]*)", fixed in "([^"]*)"$`, tc.scannersReportFixedOnImage)
 	ctx.Given(`^the scanners report "([^"]*)" on "([^"]*)" in package "([^"]*)" of type "([^"]*)"$`, tc.scannersReportPackageOnImage)
+	ctx.Given(`^the audit's ignore file suppressed "([^"]*)" on "([^"]*)", fixed in "([^"]*)"$`, tc.suppressedFixedOnImage)
 	ctx.Given(`^the exception "([^"]*)" was recorded against "([^"]*)"$`, tc.exceptionRecordedAgainst)
 	ctx.When(`^the exception lifecycle is applied$`, tc.applyExceptionLifecycle)
 	ctx.When(`^the findings are triaged$`, tc.triageFindings)
@@ -85,6 +86,7 @@ func RegisterSecuritySteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Then(`^the exception verdict should mention "([^"]*)"$`, tc.exceptionVerdictShouldMention)
 	ctx.Then(`^the exception verdict should name the repository "([^"]*)"$`, tc.exceptionVerdictShouldNameImage)
 	ctx.Then(`^the exception verdict should name the fix "([^"]*)"$`, tc.exceptionVerdictShouldNameFix)
+	ctx.Then(`^the exception verdict should name no fix$`, tc.exceptionVerdictShouldNameNoFix)
 	ctx.Then(`^(\d+) finding\(s\) should be fixed upstream$`, tc.triageCountShouldBe("fixable"))
 	ctx.Then(`^(\d+) finding\(s\) should be exempt as Go stdlib$`, tc.triageCountShouldBe("go-stdlib"))
 	ctx.Then(`^(\d+) finding\(s\) should be exempt as kernel headers$`, tc.triageCountShouldBe("kernel-headers"))
@@ -145,6 +147,27 @@ func (tc *TestContext) scannersReportPackageOnImage(cve, image, pkg, pkgType str
 	return tc.stageFinding(image, presets.Finding{ID: cve, Severity: "HIGH", Package: pkg, PackageType: pkgType})
 }
 
+// suppressedFixedOnImage stages a finding the audit's own ignore file kept out
+// of the scan results. That is where a live entry's fix has to come from: the
+// ignore file is built from these very entries, so a live one filters its own
+// CVE out of its repository's results and nothing else can answer for it.
+func (tc *TestContext) suppressedFixedOnImage(cve, image, fix string) error {
+	suppressed := tc.suppressedFindings()
+	suppressed[image] = append(suppressed[image], presets.Finding{
+		ID: cve, Severity: "HIGH", FixedIn: fix, Scanner: "Grype",
+	})
+	return nil
+}
+
+func (tc *TestContext) suppressedFindings() map[string][]presets.Finding {
+	findings, ok := tc.Config["suppressed_findings"].(map[string][]presets.Finding)
+	if !ok {
+		findings = make(map[string][]presets.Finding)
+		tc.Config["suppressed_findings"] = findings
+	}
+	return findings
+}
+
 func (tc *TestContext) stageFinding(image string, finding presets.Finding) error {
 	findings := tc.exceptionFindings()
 	findings[image] = append(findings[image], finding)
@@ -171,7 +194,7 @@ func (tc *TestContext) applyExceptionLifecycle() error {
 		return fmt.Errorf("the scan evidence was not staged: say whether the catalogue repositories were scanned")
 	}
 
-	tc.Config["exception_verdict"] = presets.ClassifyException(cve, image, tc.catalogueImages(), findings)
+	tc.Config["exception_verdict"] = presets.ClassifyException(cve, image, tc.catalogueImages(), findings, tc.suppressedFindings())
 	return nil
 }
 
@@ -281,6 +304,21 @@ func (tc *TestContext) exceptionVerdictShouldNameFix(fix string) error {
 	}
 	if verdict.FixedIn != fix {
 		return fmt.Errorf("verdict reports the fix as %q, expected %q", verdict.FixedIn, fix)
+	}
+	return nil
+}
+
+// exceptionVerdictShouldNameNoFix is the other half of the claim: an empty
+// FixedIn says nobody reported one, which is what an entry with no fix and an
+// entry only Trivy knows the fix for both look like. The report says as much
+// rather than letting silence read as "no fix exists".
+func (tc *TestContext) exceptionVerdictShouldNameNoFix() error {
+	verdict, err := tc.exceptionVerdict()
+	if err != nil {
+		return err
+	}
+	if verdict.FixedIn != "" {
+		return fmt.Errorf("verdict reports a fix in %q, expected none", verdict.FixedIn)
 	}
 	return nil
 }
