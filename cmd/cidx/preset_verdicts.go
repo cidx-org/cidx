@@ -336,33 +336,73 @@ func trivyFindings(data []byte) ([]presets.Finding, error) {
 // a fix exist at all. `kev` is present only for a vulnerability CISA lists, so
 // its absence is the answer rather than a gap; measured zero on this catalogue.
 func grypeFindings(data []byte) ([]presets.Finding, error) {
-	var report struct {
-		Matches []struct {
-			Vulnerability struct {
-				ID       string `json:"id"`
-				Severity string `json:"severity"`
-				Fix      struct {
-					Versions []string `json:"versions"`
-				} `json:"fix"`
-				EPSS []struct {
-					EPSS float64 `json:"epss"`
-				} `json:"epss"`
-				KEV []struct {
-					CVE string `json:"cve"`
-				} `json:"kev"`
-			} `json:"vulnerability"`
-			Artifact struct {
-				Name string `json:"name"`
-				Type string `json:"type"`
-			} `json:"artifact"`
-		} `json:"matches"`
-	}
-	if err := json.Unmarshal(data, &report); err != nil {
+	report, err := parseGrype(data)
+	if err != nil {
 		return nil, err
 	}
+	return grypeFindingsOf(report.Matches), nil
+}
 
+// grypeSuppressedFindings reads the findings the ignore file kept out of
+// `matches` — the ones an exception on file is already doing its job on.
+//
+// It is a different question from the one above and the only evidence there is
+// for it. `security-audit.yml` builds each image's ignore file from the entries
+// accepted on that image's repository, so a live entry filters its own CVE out
+// of its own repository's results by construction (#238, #311): whether that CVE
+// has since been fixed upstream cannot be read from `matches` at all.
+//
+// Grype answers it anyway, because it records what it ignored rather than
+// dropping it, `fix.versions` included. Trivy's `--ignorefile` deletes the
+// finding outright and its report carries no trace of it, so a fix only Trivy
+// reported is unknowable here — which is silence about that entry, never a
+// claim that no fix exists.
+func grypeSuppressedFindings(data []byte) ([]presets.Finding, error) {
+	report, err := parseGrype(data)
+	if err != nil {
+		return nil, err
+	}
+	return grypeFindingsOf(report.IgnoredMatches), nil
+}
+
+// grypeReport is the part of `grype -o json` this reads. A match Grype filtered
+// out under an ignore rule keeps its shape and moves to `ignoredMatches`.
+type grypeReport struct {
+	Matches        []grypeMatch `json:"matches"`
+	IgnoredMatches []grypeMatch `json:"ignoredMatches"`
+}
+
+type grypeMatch struct {
+	Vulnerability struct {
+		ID       string `json:"id"`
+		Severity string `json:"severity"`
+		Fix      struct {
+			Versions []string `json:"versions"`
+		} `json:"fix"`
+		EPSS []struct {
+			EPSS float64 `json:"epss"`
+		} `json:"epss"`
+		KEV []struct {
+			CVE string `json:"cve"`
+		} `json:"kev"`
+	} `json:"vulnerability"`
+	Artifact struct {
+		Name string `json:"name"`
+		Type string `json:"type"`
+	} `json:"artifact"`
+}
+
+func parseGrype(data []byte) (grypeReport, error) {
+	var report grypeReport
+	if err := json.Unmarshal(data, &report); err != nil {
+		return grypeReport{}, err
+	}
+	return report, nil
+}
+
+func grypeFindingsOf(matches []grypeMatch) []presets.Finding {
 	var findings []presets.Finding
-	for _, match := range report.Matches {
+	for _, match := range matches {
 		vuln := match.Vulnerability
 		if !isHighOrCritical(vuln.Severity) {
 			continue
@@ -384,7 +424,23 @@ func grypeFindings(data []byte) ([]presets.Finding, error) {
 		}
 		findings = append(findings, finding)
 	}
-	return findings, nil
+	return findings
+}
+
+// suppressedFindings collects, for one image, what the audit's ignore file kept
+// out of its scan results. No result and no readable result are the same answer
+// here — nothing is known — because nothing is decided on this: it only ever
+// adds a fix to an entry the lifecycle has already placed.
+func suppressedFindings(dir, image string) []presets.Finding {
+	data, err := readFirstResult(dir, scanResultFiles("grype", image))
+	if err != nil {
+		return nil
+	}
+	found, err := grypeSuppressedFindings(data)
+	if err != nil {
+		return nil
+	}
+	return found
 }
 
 // isHighOrCritical is the severity band the policy acts on, spelled the way

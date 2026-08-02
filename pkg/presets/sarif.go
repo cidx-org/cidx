@@ -67,6 +67,13 @@ type Alert struct {
 	// from what the alert is about rather than from where it is written: both
 	// files gain and lose lines constantly, and a positional fingerprint would
 	// close and reopen every alert each time one preset moved.
+	//
+	// "What it is about" is the repository and the identifier — the key [RuleID]
+	// and `known-vulnerabilities.toml` already use — never the pinned reference.
+	// A fingerprint carrying the tag and the digest changed on every promotion,
+	// so a repin closed every alert on that image and opened near-identical ones,
+	// including for CVEs that never went away (#313). The reference travels in
+	// [Alert.Message], where it is informative rather than identifying.
 	Fingerprint string
 }
 
@@ -130,6 +137,13 @@ func ExpiredExceptions(exceptions []Exception, today time.Time) []Exception {
 // attention. Merging on the identifier gives 150 and loses nothing — the
 // attribution travels in the alert, which is where a reader deciding what to do
 // wants it anyway.
+//
+// The alert is keyed on the repository, not on the reference it was found on:
+// identifier, fingerprint and the `vuln add` line the body prints all drop the
+// tag and the digest, exactly as an exception does. What the reference decides
+// is where the alert *points* — [CatalogueFile] and the line pinning this image,
+// which a repin rewrites in place, so the link follows the promotion while the
+// identity survives it.
 func TriageAlerts(image string, usedBy []string, findings []Finding, line int) []Alert {
 	repository := repositoryOf(image)
 
@@ -165,7 +179,7 @@ func TriageAlerts(image string, usedBy []string, findings []Finding, line int) [
 			Severity:    strings.ToUpper(group[0].Severity),
 			File:        CatalogueFile,
 			Line:        line,
-			Fingerprint: fingerprint("triage", image, id),
+			Fingerprint: fingerprint("triage", repository, id),
 		})
 	}
 	return alerts

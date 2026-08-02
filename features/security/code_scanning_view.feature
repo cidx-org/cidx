@@ -102,6 +102,26 @@ Feature: The catalogue's state, published to code scanning
       When the catalogue findings are published to code scanning
       Then the alert for "CVE-2026-0010" should point at "known-vulnerabilities.toml"
 
+  Rule: An alert keeps its identity across a repin
+
+    # The fingerprint is what GitHub matches an alert on from one run to the
+    # next, and it was keyed on the pinned reference — tag and digest included.
+    # Every repin therefore changed the identity of every alert on that image:
+    # the tab closed all of them and opened near-identical replacements,
+    # including for CVEs that never went away (#313). It is keyed on the
+    # repository instead, exactly as the rule identifier and the exception are.
+    # The reference stays in the message, where it informs rather than identifies.
+
+    Scenario: Repinning an image does not close the alerts that survived it
+      Given the catalogue runs "rust:1.97.0-slim"
+      And the scanners report "CVE-2026-0011" on "rust:1.97.0-slim"
+      When the catalogue findings are published to code scanning
+      And "rust:1.97.0-slim" is repinned to "rust:1.98.0-slim"
+      And the catalogue findings are published to code scanning
+      Then "CVE-2026-0011" should be published as 1 alert
+      And the alert for "CVE-2026-0011" should have kept its identity
+      And the alert for "CVE-2026-0011" should say "rust:1.98.0-slim"
+
   Rule: An image nobody scanned carries no alerts and is not thereby clean
 
     # The absent number is not a zero — the confusion SECURITY-BASELINE.md was

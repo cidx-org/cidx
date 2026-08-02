@@ -22,11 +22,13 @@ func RegisterSarifSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Given(`^the exception "([^"]*)" on "([^"]*)" expired on "([^"]*)"$`, tc.exceptionExpiresOn)
 	ctx.Given(`^the exception "([^"]*)" on "([^"]*)" expires on "([^"]*)"$`, tc.exceptionExpiresOn)
 	ctx.When(`^the catalogue findings are published to code scanning$`, tc.publishToCodeScanning)
+	ctx.When(`^"([^"]*)" is repinned to "([^"]*)"$`, tc.imageIsRepinned)
 	ctx.Then(`^"([^"]*)" should be published as an alert$`, tc.shouldBePublished)
 	ctx.Then(`^"([^"]*)" should not be published as an alert$`, tc.shouldNotBePublished)
 	ctx.Then(`^"([^"]*)" should be published as (\d+) alert$`, tc.shouldBePublishedTimes)
 	ctx.Then(`^the alert for "([^"]*)" should say "([^"]*)"$`, tc.alertShouldSay)
 	ctx.Then(`^the alert for "([^"]*)" should point at "([^"]*)"$`, tc.alertShouldPointAt)
+	ctx.Then(`^the alert for "([^"]*)" should have kept its identity$`, tc.alertShouldHaveKeptItsIdentity)
 	ctx.Then(`^no alert should be published$`, tc.noAlertPublished)
 	ctx.Then(`^"([^"]*)" should be reported as unscanned$`, tc.shouldBeReportedUnscanned)
 }
@@ -52,12 +54,44 @@ func (tc *TestContext) exceptionExpiresOn(cve, repository, expires string) error
 	return nil
 }
 
+// imageIsRepinned promotes one catalogue image to a new reference, carrying its
+// scan results across: the findings a repin does not remove are exactly the ones
+// whose alerts must survive it.
+func (tc *TestContext) imageIsRepinned(from, to string) error {
+	images := tc.catalogueImages()
+	repinned := false
+	for i, image := range images {
+		if image == from {
+			images[i] = to
+			repinned = true
+		}
+	}
+	if !repinned {
+		return fmt.Errorf("the catalogue does not run %s", from)
+	}
+	tc.Config["catalogue_images"] = images
+
+	findings := tc.exceptionFindings()
+	if found, scanned := findings[from]; scanned {
+		findings[to] = found
+		delete(findings, from)
+	}
+	return nil
+}
+
 // publishToCodeScanning runs the render the audit's report job runs.
 //
 // An image staged with no findings entry at all is one no scanner answered for,
 // which is the distinction the last rule of the feature turns on: it produces no
 // alerts, and it is named rather than counted as clean.
+//
+// The previous run is kept, because "the alert is still the same alert" is a
+// claim about two consecutive publications and nothing else can express it.
 func (tc *TestContext) publishToCodeScanning() error {
+	if previous, published := tc.Config["sarif_log"]; published {
+		tc.Config["sarif_log_previous"] = previous
+	}
+
 	findings := tc.exceptionFindings()
 
 	var alerts []presets.Alert
@@ -96,13 +130,17 @@ func (tc *TestContext) alertsFor(cve string) ([]presets.SarifResult, presets.Sar
 		return nil, log, err
 	}
 
+	return resultsFor(log, cve), log, nil
+}
+
+func resultsFor(log presets.SarifLog, cve string) []presets.SarifResult {
 	var matched []presets.SarifResult
 	for _, result := range log.Runs[0].Results {
 		if strings.HasSuffix(result.RuleID, "/"+strings.ToUpper(cve)) {
 			matched = append(matched, result)
 		}
 	}
-	return matched, log, nil
+	return matched
 }
 
 func (tc *TestContext) shouldBePublished(cve string) error {
@@ -167,6 +205,37 @@ func (tc *TestContext) alertShouldPointAt(cve, file string) error {
 	got := matched[0].Locations[0].PhysicalLocation.ArtifactLocation.URI
 	if got != file {
 		return fmt.Errorf("the alert for %s points at %q, expected %q", cve, got, file)
+	}
+	return nil
+}
+
+// alertShouldHaveKeptItsIdentity compares two consecutive publications on what
+// GitHub matches an alert on: the rule identifier and the fingerprint. Anything
+// else about the alert may move — the message names the new reference, the
+// location follows the line that was rewritten — and a reader still sees the
+// finding they saw yesterday rather than a new one dated today.
+func (tc *TestContext) alertShouldHaveKeptItsIdentity(cve string) error {
+	previous, published := tc.Config["sarif_log_previous"].(presets.SarifLog)
+	if !published {
+		return fmt.Errorf("nothing was published before this run, so there is no identity to keep")
+	}
+
+	before := resultsFor(previous, cve)
+	after, _, err := tc.alertsFor(cve)
+	if err != nil {
+		return err
+	}
+	if len(before) != 1 || len(after) != 1 {
+		return fmt.Errorf("%s was published %d time(s) then %d time(s), expected once either side",
+			cve, len(before), len(after))
+	}
+
+	if before[0].RuleID != after[0].RuleID {
+		return fmt.Errorf("the alert for %s changed rule: %q then %q", cve, before[0].RuleID, after[0].RuleID)
+	}
+	was, is := before[0].PartialFingerprints["primaryLocationLineHash"], after[0].PartialFingerprints["primaryLocationLineHash"]
+	if was != is {
+		return fmt.Errorf("the alert for %s changed fingerprint: %s then %s — GitHub would close it and open a new one", cve, was, is)
 	}
 	return nil
 }
