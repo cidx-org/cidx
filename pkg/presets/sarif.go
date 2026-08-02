@@ -115,14 +115,14 @@ func TriageAlerts(image string, usedBy []string, findings []Finding, line int) [
 	var alerts []Alert
 	for _, group := range Actionable(findings) {
 		id := strings.ToUpper(group[0].ID)
-		packages := distinct(group, func(f Finding) string { return f.Package })
-		scanners := distinct(group, func(f Finding) string { return f.Scanner })
+		packages := join(distinct(group, func(f Finding) string { return f.Package }), "an unnamed package")
+		scanners := join(distinct(group, func(f Finding) string { return f.Scanner }), "an unnamed scanner")
 
 		var body strings.Builder
 		fmt.Fprintf(&body, "`%s` carries **%s** (%s) in %s.\n\n",
-			image, id, strings.ToUpper(group[0].Severity), join(packages))
+			image, id, strings.ToUpper(group[0].Severity), packages)
 		body.WriteString("No fix exists at any version and it is not exempt by class, so it is one of the findings the supply-chain policy asks a human to judge.\n\n")
-		fmt.Fprintf(&body, "- Reported by %s.\n", join(scanners))
+		fmt.Fprintf(&body, "- Reported by %s.\n", scanners)
 		fmt.Fprintf(&body, "- Used by preset(s): %s.\n", strings.Join(presetNames, ", "))
 		if epss := topEPSS(group); epss > 0 {
 			fmt.Fprintf(&body, "- EPSS %.2f — the probability of exploitation in the next 30 days. Reported, never thresholded.\n", epss)
@@ -137,7 +137,7 @@ func TriageAlerts(image string, usedBy []string, findings []Finding, line int) [
 			RuleID:      repository + "/" + id,
 			Title:       fmt.Sprintf("%s: %s needs triage — no fix upstream", repository, id),
 			Body:        body.String(),
-			Message:     fmt.Sprintf("%s in %s on `%s`, reported by %s. No fix at any version.", id, join(packages), image, join(scanners)),
+			Message:     fmt.Sprintf("%s in %s on `%s`, reported by %s. No fix at any version.", id, packages, image, scanners),
 			Severity:    strings.ToUpper(group[0].Severity),
 			File:        CatalogueFile,
 			Line:        line,
@@ -393,11 +393,13 @@ func distinct(group []Finding, field func(Finding) string) []string {
 }
 
 // join names things the way the scan gate's verdicts already do — "Trivy and
-// Grype", never a count.
-func join(names []string) string {
+// Grype", never a count. The fallback says so out loud rather than leaving a
+// gap in the sentence: a scanner that reported a finding against no package at
+// all is worth reading as odd.
+func join(names []string, empty string) string {
 	switch len(names) {
 	case 0:
-		return "an unnamed source"
+		return empty
 	case 1:
 		return names[0]
 	default:
