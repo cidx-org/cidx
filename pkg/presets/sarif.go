@@ -84,6 +84,30 @@ type Exception struct {
 	Line int
 }
 
+// ExpiredExceptions keeps the acceptances whose date has passed.
+//
+// One definition, because two views read it: the alert published to code
+// scanning (#301) and the count on the status page (#308). A page saying "19
+// past their date" beside a tab showing 18 alerts would be the one bug neither
+// of them could be trusted after.
+//
+// An entry whose date does not parse is not expired here. `cidx security vuln
+// check` is what reports a malformed date, as a warning naming the entry;
+// treating it as lapsed would file a typo as a decision somebody has to defend.
+func ExpiredExceptions(exceptions []Exception, today time.Time) []Exception {
+	day := today.UTC().Truncate(24 * time.Hour)
+
+	var expired []Exception
+	for _, e := range exceptions {
+		expires, err := time.Parse(time.DateOnly, e.Expires)
+		if err != nil || !expires.Before(day) {
+			continue
+		}
+		expired = append(expired, e)
+	}
+	return expired
+}
+
 // TriageAlerts turns one image's scan results into the alerts worth publishing.
 //
 // Only the findings [Summarise] counts under Actionable: no fix at any version,
@@ -161,14 +185,8 @@ func TriageAlerts(image string, usedBy []string, findings []Finding, line int) [
 // than inherited; past that date it records a decision nobody has stood behind
 // since it was taken.
 func ExpiredExceptionAlerts(exceptions []Exception, today time.Time) []Alert {
-	day := today.UTC().Truncate(24 * time.Hour)
-
 	var alerts []Alert
-	for _, e := range exceptions {
-		expires, err := time.Parse("2006-01-02", e.Expires)
-		if err != nil || !expires.Before(day) {
-			continue
-		}
+	for _, e := range ExpiredExceptions(exceptions, today) {
 		id := strings.ToUpper(e.CVE)
 
 		var body strings.Builder
