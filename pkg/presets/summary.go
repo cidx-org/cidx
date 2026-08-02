@@ -321,8 +321,8 @@ func writeSummaryCarried(sb *strings.Builder, s CatalogueSummary) {
 		return
 	}
 
-	fmt.Fprintf(sb, "**%d** HIGH/CRITICAL findings across %d scanned image(s), counted per image — the same CVE on five of them is five repins.\n\n",
-		s.Triage.Carried, s.Scanned())
+	fmt.Fprintf(sb, "**%d** HIGH/CRITICAL findings across %s, counted per image — the same CVE on five of them is five repins.\n\n",
+		s.Triage.Carried, plural(s.Scanned(), "scanned image", "scanned images"))
 	sb.WriteString("| Population | Count | What it means |\n")
 	sb.WriteString("| ---------- | ----- | ------------- |\n")
 	fmt.Fprintf(sb, "| Go stdlib in a CLI binary | %d | Exempt by class: unreachable in a tool that opens no listener, and gone when the publisher recompiles. |\n", s.Triage.GoStdlib)
