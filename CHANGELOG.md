@@ -2,6 +2,7 @@
 
 ### Feat
 
+- **audit**: publish a vulnerability status summary to a tracking issue (#308)
 - **presets**: flag images whose base is approaching end of life (#305)
 - **audit**: publish the catalogue's scan results to GitHub code scanning (#301)
 

@@ -504,6 +504,31 @@ The identifier is keyed by **repository**, exactly as an exception is, and for t
 
 **What a branch run means.** Code scanning attaches an analysis to the ref it ran on, so triggering the audit from a branch — `cidx workflow run security-audit.yml --ref <branch>` — files the alerts against that branch, and the alert list defaults to the default branch. They arrive on `main` when the scheduled run next executes there, on the same 21 images.
 
+### Where to look for what: the status page
+
+The Security tab answers "which finding, on which image, since when". It does not answer the question that comes before it — how much is there, how much of it needs a human, what has already lapsed — and it cannot: it is a list of 169 alerts, and a list is not a count. The end-of-support signal above is one fact about one image. So there were two views of the detail and none of the whole (#308).
+
+`cidx security summary` renders that whole, and `security-audit.yml` rewrites it into a tracking issue on every run: **[the vulnerability status page](https://github.com/cidx-org/cidx/issues?q=label%3Asecurity-status)**. Three places, and each answers one thing:
+
+| Question                                   | Where                                      | What it is                                            |
+| ------------------------------------------ | ------------------------------------------ | ----------------------------------------------------- |
+| Where does the catalogue stand             | the status issue (label `security-status`) | the synthesis, rewritten by every audit               |
+| Which finding, on which image, since when  | the Security tab                           | the detail, one alert per finding, dated              |
+| Does this acceptance still stand           | `known-vulnerabilities.toml`               | the source of truth — everything else is a view of it |
+| What the catalogue shipped on any past day | `SECURITY-BASELINE.md`, in `git log`       | the committed record, whose diff is the history       |
+
+**It recalculates nothing.** The partition comes from the same `Summarise` the baseline and the SARIF renderer read, the expiry test from the same `ExpiredExceptions` the alerts read, the base verdicts from the same `ClassifyBase` the run annotations read. That is the whole design: a page disagreeing with the tab about what the catalogue carries would be worse than no page, and the only way two views cannot disagree is for them to be two renderings of one computation.
+
+**One exception it does not restate: the cooldown.** "Which candidate is rule 2 still holding" is answered by `cidx preset scan-targets`, which reads the registries, from `container-monitor.yml`, which holds the credentials for the hardened ones. Recomputing it in the audit would mean a second answer from a job that would get 401s where the first got results — two sources for one fact, differing exactly where a reader would notice. The page names the monitor and links to its runs instead.
+
+**One issue, rewritten, found by its label.** A daily audit filing one issue per run would produce 365 a year, which is the noise this page exists to replace. The label is the key rather than the title, because a title is editable and carries no counts for that reason; no match means the issue does not exist yet and it is created, and more than one match fails the step naming them, because rewriting the body of an issue somebody else's label happened to match is the one failure that would go unnoticed.
+
+**No comment is ever posted.** The body is overwritten and yesterday's numbers are gone, deliberately. The history already exists twice: `git log SECURITY-BASELINE.md` is what the catalogue carried on any past day, `git log known-vulnerabilities.toml` is which acceptances stood, and code scanning dates every finding and closes it by itself. A comment per run would duplicate both. A comment on a threshold — "the triage queue crossed 200" — would need yesterday's numbers, which nothing in the audit keeps: that state would have to be invented before it could be compared, and it would be a worse copy of a diff that is already committed.
+
+**It is markdown, and it also carries JSON.** The body is read by a human and, increasingly, by an agent asked where the catalogue stands. Prose is what the human wants and what a script has to guess at — the wording will change, and a consumer keyed on a sentence breaks the first time it does. So the counts are repeated once, at the end, as a flat JSON object in a collapsed block: sixteen keys that do not move, no findings (they have an API of their own), and one test asserting the block and the page are rendered from the same value.
+
+**Permissions.** Rewriting an issue needs `issues: write`, granted to the `report` job alone, next to the `security-events: write` #301 already granted it. The workflow now also carries `permissions: contents: read` at the top level, which it had been documented as carrying and did not: without that floor the four scan jobs inherit the repository default, and a job-level grant restricts nothing.
+
 ### The scan gate is differential
 
 The cooldown decides whether a version is old enough to consider. What the scanners find on it decides whether it may actually replace the running image — and for a long time it decided nothing at all. Every scan step wrapped `docker run` in an `if … then … else …`, so a vulnerable image exited 0 and the job succeeded; the promote job read `needs.trivy-scan.result`, which was `success` by construction. The promotion PR claimed a check that had never run (#247).

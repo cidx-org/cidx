@@ -6,6 +6,16 @@ on:
     - cron: "0 6 * * *"
   workflow_dispatch:
 
+# The floor every job starts from, so that the two jobs needing more have to say
+# so and the rest cannot. #301 granted `security-events: write` to the `report`
+# job alone and #308 grants it `issues: write`; without this block the other
+# four would inherit whatever the repository's default happens to be, and the
+# job-level grants would restrict nothing. A job that declares `permissions:`
+# replaces this entirely rather than adding to it, which is why `report`
+# restates `contents: read`.
+permissions:
+  contents: read
+
 env:
   TRIVY_DB_REPOSITORY: ghcr.io/aquasecurity/trivy-db
   GRYPE_DB_AUTO_UPDATE: false
@@ -445,14 +455,17 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
 
-    # `security-events: write` is what uploading a SARIF costs, and it is granted
-    # here rather than at the top of the file: the scan jobs pull images and run
+    # `security-events: write` is what uploading a SARIF costs, and `issues:
+    # write` is what rewriting the tracking issue costs. Both are granted here
+    # rather than at the top of the file: the scan jobs pull images and run
     # third-party scanners on them, and none of that needs the ability to write
-    # this repository's security findings (#207). The job-level block replaces the
-    # global one entirely, so `contents: read` is restated rather than inherited.
+    # this repository's security findings, let alone its issues (#207, #301,
+    # #308). The job-level block replaces the global one entirely, so
+    # `contents: read` is restated rather than inherited.
     permissions:
       contents: read
       security-events: write
+      issues: write
 
     steps:
       - name: Checkout
@@ -687,6 +700,70 @@ jobs:
           # stay current. What distinguishes an image in the UI is the alert
           # itself, and that works inside a single analysis.
           category: catalogue
+
+      # Everything above is detail: one alert per finding in the Security tab,
+      # one annotation per base on the run, one artifact per scanner. None of it
+      # answers the question that comes first — how much is carried, how much of
+      # it needs a human, what has already lapsed (#308).
+      #
+      # `cidx security summary` assembles that page from what this job already
+      # holds. It is published to an issue rather than only to the run summary
+      # because a run summary is read by whoever opens that run: the issue has an
+      # address, a notification, and a body an agent can fetch.
+      #
+      # **One issue, rewritten.** A daily scan filing one issue per run would
+      # produce 365 a year, which is the noise this page exists to replace. The
+      # issue is found by its label and not by its title, which anyone can edit
+      # and which carries no counts for that reason. No match means it does not
+      # exist yet, so it is created; more than one match is ambiguous, and the
+      # step fails saying which ones rather than picking one and rewriting a body
+      # somebody else's issue was using.
+      #
+      # **No comment, ever.** The body is overwritten and the previous state is
+      # gone, deliberately. What the catalogue carried on any past day is the git
+      # log of SECURITY-BASELINE.md, and which acceptances stood is the git log
+      # of known-vulnerabilities.toml — both committed, both diffable, both
+      # already the record. Code scanning dates every finding and closes it by
+      # itself. A comment per run would duplicate two histories that exist, and
+      # a comment on a threshold would need yesterday's numbers, which nothing
+      # here keeps: that state would have to be invented before it could be
+      # compared.
+      #
+      # `if: always()` for the same reason as the two steps above: a run that
+      # went red is exactly the one whose status is worth reading, and the page
+      # names the images no scanner answered for rather than counting them clean.
+      - name: Publish the status summary
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TRACKING_LABEL: security-status
+        run: |
+          ./bin/cidx security summary --results artifacts -o "$RUNNER_TEMP/status.md"
+
+          # The label is the key, so it has to exist before it can be applied.
+          # Creating it here rather than by hand keeps the mechanism whole: a
+          # fresh fork running this workflow gets the same issue.
+          gh label create "$TRACKING_LABEL" \
+            --description "The rewritten vulnerability status page (cidx security summary)" \
+            --color 1D76DB >/dev/null 2>&1 || true
+
+          MATCHES=$(gh issue list --label "$TRACKING_LABEL" --state open --json number --jq '.[].number')
+          COUNT=$(printf '%s' "$MATCHES" | grep -c . || true)
+
+          if [ "$COUNT" -gt 1 ]; then
+            echo "::error title=Ambiguous vulnerability status issue::$COUNT open issues carry the '$TRACKING_LABEL' label ($(echo $MATCHES | tr '\n' ' ')). The audit will not guess which one is the status page - close the duplicates and re-run."
+            exit 1
+          fi
+
+          if [ "$COUNT" -eq 0 ]; then
+            gh issue create \
+              --label "$TRACKING_LABEL" \
+              --title "Vulnerability status: where the preset catalogue stands" \
+              --body-file "$RUNNER_TEMP/status.md"
+          else
+            gh issue edit "$MATCHES" --body-file "$RUNNER_TEMP/status.md"
+          fi
 
       - name: Final Status
         run: |
