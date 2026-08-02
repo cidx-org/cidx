@@ -2,6 +2,7 @@
 
 ### Feat
 
+- **presets**: flag images whose base is approaching end of life (#305)
 - **audit**: publish the catalogue's scan results to GitHub code scanning (#301)
 
 ## v2.4.0 (2026-08-01)

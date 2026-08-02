@@ -303,6 +303,42 @@ That record only works while it points at what we actually run. Entries were key
 
 **The catalogue, and only the catalogue.** These rules govern the built-in preset catalogue. `cidx preset scan-targets` therefore reads `pkg/presets/presets.toml` rather than the resolved preset registry, which also carries whatever the user and the project declared in their own `presets.toml` — images the policy does not govern and the promotion job could not update anyway (guardrail 1, #248).
 
+### A base that stopped being supported
+
+The two sections above are about a _reference_ going quiet: one deleted, one whose variant family stopped being published. There is a third, and it is wider than either, because it is a property of the **base** rather than of the tag.
+
+An image whose distribution has reached end of support receives no further security updates. Its packages are frozen at whatever they were on the day support ended, so the findings the scanners report on it are permanent — not "not fixed yet", but never. The tag can be current, the digest can resolve, the cooldown can promote it on schedule, and none of that changes the answer. Every question the [triage](#judging-a-finding) asks is downstream of this one: "is a fix available?" has no meaning for a base nobody is fixing.
+
+The catalogue is in this state today, and nothing said so. `ghcr.io/probatum-org/probatum:0.2.1` is built on Alpine 3.20, whose support ended on **2026-04-01**. It pulls, it scans, it reports zero accepted findings — and it will not improve again.
+
+**Where the base comes from.** Trivy already reports it, in `Metadata.OS` — `{"Family": "alpine", "Name": "3.20.10"}` — on every image it scans, and `security-audit.yml` scans every catalogue image daily. The field was being discarded. Nothing new is pulled, scanned or authenticated to obtain this.
+
+**Where the dates come from.** [endoflife.date](https://endoflife.date), one request per distinct OS family — three for a catalogue of twenty-two images. The families the catalogue runs are mapped explicitly:
+
+| Trivy family | endoflife.date product | Images |
+| ------------ | ---------------------- | ------ |
+| `alpine`     | `alpine-linux`         | 13     |
+| `debian`     | `debian`               | 4      |
+| `fedora`     | `fedora`               | 1      |
+
+Only Alpine needs translating: endoflife.date files it under `alpine-linux`, and `/api/alpine.json` is a redirect rather than a document. The other two match their own names — and the map holds them anyway, rather than falling back to the family name, because **an identity default is what turns a fail-closed check into a wrong answer.** With one, every unmapped family would look like a valid product and produce a 404 that is indistinguishable from an outage.
+
+A version is matched to a release line component-wise: Alpine `3.20.10` belongs to `3.20`, Debian `13.6` to `13`, Fedora `44` to `44`. The dot boundary is the whole of that rule — a plain string prefix files `3.20.10` under `3.2`, a line that ended in 2017, and the report would call a supported base long dead.
+
+**Fail-closed, once more.** A family this code does not map, a version no published line covers, or a line endoflife.date announces no date for, all report `unknown_base` and annotate as an error. None of them reads as "supported". This is the same posture as an unresolvable digest (rule 1), an undatable candidate (rule 2) and an unreadable scan (the scan gate): the check refuses rather than assumes, and an unrecognised family is a gap in _our_ mapping, one line away from being closed. Treating it as "nothing to worry about" is how a blind spot becomes permanent.
+
+An image with no distribution underneath it at all — kaniko, ruff and shellcheck are scratch or static builds, and Trivy reports no `Metadata.OS` for them — is a separate answer, `no_base`. A base that does not exist cannot stop being supported, and filing it with the ones nothing could resolve would manufacture three permanent false alarms.
+
+**The threshold is 90 days.** The two ends of the range are the argument. An end of support two years out is a fact about the calendar: nothing is decided by knowing it, and printing it daily is how a section teaches its reader to skip it. Two months out is too late to be comfortable — getting off an abandoned base is a repin by hand, and the escapes in [the section above](#a-variant-line-that-froze) moved a base version, a variant line and a language version at once. A quarter is the smallest window that leaves room to schedule that work rather than rush it, and it survives the slowest loop that could act on it: `container-monitor.yml` runs weekly, so it is roughly thirteen chances to notice, and the audit that actually reports it runs daily.
+
+**An outage never fails anything.** endoflife.date is a third party, and this check sits on top of a scan that already happened. When it does not answer, every base is reported `unchecked`, with the reason, once rather than per image — and nothing downstream changes its verdict. A scan, a monitor run and an audit all complete exactly as they did before. The one thing that must never happen is the outage reading as good news, so `unchecked` is stated rather than silently omitted.
+
+**What it does not say.** It is not a recommendation, for the same reason `frozen_variant` is not: which base to move to, and whether the tool still works on it, are decisions with a human behind them. It says nothing about _why_ a base is old — an image can sit on a supported base and still be abandoned, and a fresh base is not evidence that anything else about the image is maintained. And it is not a gate. A base past its date annotates as an error and reports; it does not fail the audit, because red there means "an unhandled vulnerability", and a repin decision is the same class as the frozen variant line that warns rather than breaks. The audit that cries wolf is the one nobody reads.
+
+**Where it lives.** `cidx security baseline`, which already reads exactly these scan results for exactly these images, and `security-audit.yml`, which runs it daily and turns the verdicts into run annotations. Deliberately _not_ `cidx preset scan-targets`, where `missing` and `frozen_variant` live: the base is only knowable from a scan result, and that command runs before anything has been scanned. The monitor's population is also the wrong one — it scans candidates, whose base is provisional until they are promoted.
+
+`SECURITY-BASELINE.md` therefore records the **base** and not the date. The base is a fact about what we ship and changes only when we change it, so it belongs in a committed file whose diff is the point. The date support ends is relative to the day it is read and comes from a third party: it would move those lines without anything changing about the catalogue, which is the same reason that file carries no generation date. The countdown is printed, not committed.
+
 ### What we are actually defending against
 
 Every judgement below rests on this. Without it, no finding can be called irrelevant, and the only available answer to any CVE is to patch it — which is how a catalogue ends up churning on findings nobody could have exploited.

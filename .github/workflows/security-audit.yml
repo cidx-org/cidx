@@ -618,6 +618,49 @@ jobs:
             echo "4. Commit and push changes" >> $GITHUB_STEP_SUMMARY
           fi
 
+      # A CVE scan says what is broken today; it never says whether anything
+      # will ever fix it. Once the distribution under an image stops being
+      # supported its packages receive no further updates, and every finding on
+      # it becomes permanent however fresh the tag is (#303).
+      #
+      # This runs here rather than in container-monitor.yml for two reasons.
+      # The base is only knowable from a scan result — Trivy reports it in
+      # `Metadata.OS` — and `cidx preset scan-targets`, where the sibling
+      # signals `missing` and `frozen_variant` live, runs before anything has
+      # been scanned. And this job already holds the Trivy results for every
+      # image the catalogue actually ships, daily, which is the population the
+      # signal is about; the monitor also scans candidates, whose base is
+      # provisional until they are promoted.
+      #
+      # `--output` goes to the runner's temp directory: the committed
+      # SECURITY-BASELINE.md is regenerated deliberately, from a full audit,
+      # never as a side effect of a report step.
+      #
+      # `if: always()` and `|| true`: this is a report on top of a scan that
+      # already happened. An outage at endoflife.date degrades to "not checked"
+      # inside the command, and nothing about this step may turn an audit red
+      # that its own findings did not.
+      - name: Report base end of support
+        if: always()
+        run: |
+          echo "## 📅 Base end of support" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The distribution each catalogue image is built on, and how long it still" >> $GITHUB_STEP_SUMMARY
+          echo "receives security updates. A base past its date will never be fixed again," >> $GITHUB_STEP_SUMMARY
+          echo "whatever the tag says — the same family of signal as a deleted image (#245)" >> $GITHUB_STEP_SUMMARY
+          echo "or a frozen variant line (#252)." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          ./bin/cidx security baseline \
+            --results artifacts \
+            --output "$RUNNER_TEMP/baseline.md" \
+            --annotate 2>&1 | tee "$RUNNER_TEMP/base-eol.txt" || true
+          # The annotations are re-emitted on their own line so GitHub picks
+          # them up; inside the fenced block above they are only text.
+          grep -v '^::' "$RUNNER_TEMP/base-eol.txt" >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          grep '^::' "$RUNNER_TEMP/base-eol.txt" || true
+
       # The summary above is written once per run and read by whoever happens to
       # open that run. The Security tab keeps the same findings across runs,
       # dates them, and closes them by itself when a repin removes them — which
