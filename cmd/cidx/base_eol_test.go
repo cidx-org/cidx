@@ -188,13 +188,12 @@ func TestResolveBaseSupportDegradesWhenTheAPIIsSilent(t *testing.T) {
 
 	// And the report says so out loud rather than printing an empty section
 	// that reads like a clean bill of health.
-	var out strings.Builder
-	renderBaseSupport(&out, support)
-	if !strings.Contains(out.String(), "endoflife.date did not answer") {
-		t.Errorf("the report does not state that the check was skipped:\n%s", out.String())
+	report := renderBaseSupport(support)
+	if !strings.Contains(report, "endoflife.date did not answer") {
+		t.Errorf("the report does not state that the check was skipped:\n%s", report)
 	}
-	if strings.Contains(out.String(), "Every base with a known support window is supported") {
-		t.Errorf("an unchecked catalogue was reported as healthy:\n%s", out.String())
+	if strings.Contains(report, "Every base with a known support window is supported") {
+		t.Errorf("an unchecked catalogue was reported as healthy:\n%s", report)
 	}
 }
 
@@ -291,9 +290,7 @@ func TestRenderBaseSupportLeadsWithWhatIsAlreadyDead(t *testing.T) {
 		"blind": {State: presets.BaseUnknown, Reason: "cannot be checked"},
 	}
 
-	var out strings.Builder
-	renderBaseSupport(&out, support)
-	report := out.String()
+	report := renderBaseSupport(support)
 
 	dead := strings.Index(report, "No longer supported")
 	soon := strings.Index(report, "Support ending soon")
@@ -302,7 +299,7 @@ func TestRenderBaseSupportLeadsWithWhatIsAlreadyDead(t *testing.T) {
 	if dead < 0 || soon < 0 || blind < 0 {
 		t.Fatalf("a section is missing:\n%s", report)
 	}
-	if !(dead < soon && soon < blind) {
+	if dead >= soon || soon >= blind {
 		t.Errorf("sections are out of order (%d, %d, %d):\n%s", dead, soon, blind, report)
 	}
 	if !strings.Contains(report, "3 image(s) flagged") {
@@ -313,14 +310,13 @@ func TestRenderBaseSupportLeadsWithWhatIsAlreadyDead(t *testing.T) {
 // TestRenderBaseSupportSaysSoWhenNothingIsWrong: a report that prints nothing
 // when everything is fine reads like a report that failed to run.
 func TestRenderBaseSupportSaysSoWhenNothingIsWrong(t *testing.T) {
-	var out strings.Builder
-	renderBaseSupport(&out, map[string]presets.BaseSupport{
+	report := renderBaseSupport(map[string]presets.BaseSupport{
 		"good":    {State: presets.BaseSupported},
 		"scratch": {State: presets.BaseNone},
 	})
 
-	if !strings.Contains(out.String(), "Every base with a known support window is supported") {
-		t.Errorf("a healthy catalogue produced no statement:\n%s", out.String())
+	if !strings.Contains(report, "Every base with a known support window is supported") {
+		t.Errorf("a healthy catalogue produced no statement:\n%s", report)
 	}
 }
 

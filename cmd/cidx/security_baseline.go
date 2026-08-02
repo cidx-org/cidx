@@ -91,7 +91,7 @@ func securityBaselineCommand() *cli.Command {
 			// committed precisely so that a changed line means something
 			// changed about the catalogue.
 			support := resolveBaseSupport(bases, time.Now().UTC())
-			renderBaseSupport(os.Stdout, support)
+			fmt.Print(renderBaseSupport(support))
 			if c.Bool("annotate") {
 				for _, annotation := range baseSupportAnnotations(support) {
 					fmt.Println(annotation)

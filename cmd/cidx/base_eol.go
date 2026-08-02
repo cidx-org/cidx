@@ -165,7 +165,10 @@ func resolveBaseSupport(bases map[string]presets.BaseOS, now time.Time) map[stri
 	return support
 }
 
-// renderBaseSupport writes the end-of-support report.
+// renderBaseSupport builds the end-of-support report.
+//
+// It returns a string for the same reason renderSecurityBaseline does: the
+// report is one value, tested by reading it rather than by capturing a writer.
 //
 // It goes to stdout and to the workflow summary, never into
 // SECURITY-BASELINE.md: every number here is relative to the day it was
@@ -176,7 +179,7 @@ func resolveBaseSupport(bases map[string]presets.BaseOS, now time.Time) map[stri
 //
 // The order is the one a reader needs: what has already ended, what is about to,
 // what could not be checked, then the rest.
-func renderBaseSupport(out io.Writer, support map[string]presets.BaseSupport) {
+func renderBaseSupport(support map[string]presets.BaseSupport) string {
 	byState := make(map[string][]string)
 	for image, s := range support {
 		byState[s.State] = append(byState[s.State], image)
@@ -185,7 +188,8 @@ func renderBaseSupport(out io.Writer, support map[string]presets.BaseSupport) {
 		sort.Strings(byState[state])
 	}
 
-	fmt.Fprintf(out, "\nBase end of support (endoflife.date, warning at %d days):\n", presets.BaseEOLWarningDays)
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "\nBase end of support (endoflife.date, warning at %d days):\n", presets.BaseEOLWarningDays)
 
 	sections := []struct {
 		state string
@@ -204,7 +208,7 @@ func renderBaseSupport(out io.Writer, support map[string]presets.BaseSupport) {
 			continue
 		}
 		flagged += len(images)
-		fmt.Fprintf(out, "\n  %s:\n", section.title)
+		fmt.Fprintf(&sb, "\n  %s:\n", section.title)
 
 		// An outage is one event, not one event per image: printing the same
 		// connection error twenty times buries the sections that do say
@@ -212,24 +216,25 @@ func renderBaseSupport(out io.Writer, support map[string]presets.BaseSupport) {
 		// because every other state is a separate decision.
 		if section.state == presets.BaseUnchecked {
 			for _, reason := range distinctReasons(support, images) {
-				fmt.Fprintf(out, "    %s\n", reason)
+				fmt.Fprintf(&sb, "    %s\n", reason)
 			}
-			fmt.Fprintf(out, "    %d image(s) affected; nothing is claimed about them either way.\n", len(images))
+			fmt.Fprintf(&sb, "    %d image(s) affected; nothing is claimed about them either way.\n", len(images))
 			continue
 		}
 
 		for _, image := range images {
-			fmt.Fprintf(out, "    %s\n      %s\n", image, support[image].Reason)
+			fmt.Fprintf(&sb, "    %s\n      %s\n", image, support[image].Reason)
 		}
 	}
 
 	if flagged == 0 {
-		fmt.Fprintf(out, "\n  Every base with a known support window is supported for more than %d days.\n",
+		fmt.Fprintf(&sb, "\n  Every base with a known support window is supported for more than %d days.\n",
 			presets.BaseEOLWarningDays)
 	}
 
-	fmt.Fprintf(out, "\n  %d supported, %d with no distribution base, %d image(s) flagged above.\n",
+	fmt.Fprintf(&sb, "\n  %d supported, %d with no distribution base, %d image(s) flagged above.\n",
 		len(byState[presets.BaseSupported]), len(byState[presets.BaseNone]), flagged)
+	return sb.String()
 }
 
 // distinctReasons collapses the images sharing one reason onto a single line,
