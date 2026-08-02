@@ -62,6 +62,15 @@ type Finding struct {
 	// Measured zero on this catalogue, which is exactly why the field is
 	// reported rather than acted on automatically.
 	KEV bool
+
+	// Scanner names the tool that reported this instance — "Trivy" or "Grype".
+	//
+	// The triage merges both and counts a vulnerability once, which is right for
+	// a count and lossy for a reader: on this catalogue Grype alone sees 102 of
+	// the 150 findings needing triage, and a reader deciding what to do about one
+	// wants to know whether the other scanner corroborated it. Nothing here
+	// weighs the answer; it travels through to the report.
+	Scanner string
 }
 
 // Fixed reports whether a fix exists upstream — question 2 of the policy.
@@ -173,15 +182,7 @@ type Triage struct {
 //   - fixable if *any* scanner found a fix — one of them knowing about it is
 //     enough for it to exist.
 func Summarise(findings []Finding) Triage {
-	byID := make(map[string][]Finding)
-	order := make([]string, 0, len(findings))
-	for _, f := range findings {
-		key := strings.ToUpper(f.ID)
-		if _, seen := byID[key]; !seen {
-			order = append(order, key)
-		}
-		byID[key] = append(byID[key], f)
-	}
+	order, byID := groupByID(findings)
 
 	var triage Triage
 	for _, id := range order {
@@ -198,12 +199,12 @@ func Summarise(findings []Finding) Triage {
 			}
 		}
 
-		switch {
-		case allExempt(group, ExemptGoStdlib):
+		switch classOf(group) {
+		case ExemptGoStdlib:
 			triage.GoStdlib++
-		case allExempt(group, ExemptKernelHeaders):
+		case ExemptKernelHeaders:
 			triage.KernelHeaders++
-		case anyFixed(group):
+		case classFixable:
 			triage.Fixable++
 		default:
 			triage.Actionable++
@@ -212,6 +213,63 @@ func Summarise(findings []Finding) Triage {
 
 	sort.Strings(triage.KEV)
 	return triage
+}
+
+// Actionable returns the findings Summarise counts under Actionable, grouped by
+// identifier and in the order the scanners reported them.
+//
+// It exists so a report can name what needs a human rather than only count it,
+// and it shares Summarise's grouping and classification on purpose: a view
+// listing a different population from the one the baseline counts would be a
+// second opinion, not a view of the same thing.
+func Actionable(findings []Finding) [][]Finding {
+	order, byID := groupByID(findings)
+
+	var groups [][]Finding
+	for _, id := range order {
+		if group := byID[id]; classOf(group) == "" {
+			groups = append(groups, group)
+		}
+	}
+	return groups
+}
+
+// groupByID collects the instances of each vulnerability, keyed case-insensitively
+// because the two scanners do not agree on the case of a GHSA identifier, and
+// returns the keys in the order they were first seen so the output is stable.
+func groupByID(findings []Finding) ([]string, map[string][]Finding) {
+	byID := make(map[string][]Finding)
+	order := make([]string, 0, len(findings))
+	for _, f := range findings {
+		key := strings.ToUpper(f.ID)
+		if _, seen := byID[key]; !seen {
+			order = append(order, key)
+		}
+		byID[key] = append(byID[key], f)
+	}
+	return order, byID
+}
+
+// classFixable labels a group that has a fix upstream. Unlike the two exempt
+// classes it is not a property of the vulnerability but of the image's age, so
+// it is internal to the classification rather than part of the vocabulary.
+const classFixable = "fixed-upstream"
+
+// classOf names why a group is out of the triage queue, or "" when it is still
+// in it — the Actionable population.
+//
+// The order matters and is the one Summarise documents: class before fixability,
+// because a Go stdlib finding is unreachable whether or not the fix has shipped.
+func classOf(group []Finding) string {
+	switch {
+	case allExempt(group, ExemptGoStdlib):
+		return ExemptGoStdlib
+	case allExempt(group, ExemptKernelHeaders):
+		return ExemptKernelHeaders
+	case anyFixed(group):
+		return classFixable
+	}
+	return ""
 }
 
 // Add accumulates another image's split into this one.

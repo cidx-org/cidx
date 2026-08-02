@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Feat
+
+- **audit**: publish the catalogue's scan results to GitHub code scanning (#300)
+
 ## v2.4.0 (2026-08-01)
 
 ### Feat

@@ -10,6 +10,7 @@ func securityCommand() *cli.Command {
 			vulnCommand(),
 			registryCommand(),
 			securityBaselineCommand(),
+			securitySarifCommand(),
 		},
 	}
 }

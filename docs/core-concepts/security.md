@@ -436,6 +436,38 @@ An image with no scan result is printed `not scanned`, never `0` — an absent n
 
 An entry past its expiry date is printed with that date and nothing else — the table states facts, and `cidx security vuln check` is what judges them.
 
+### Where to look: the Security tab
+
+Everything above produces evidence, and none of it was anywhere in particular. The daily audit's scan results lived in artifacts deleted after a day; the acceptances in `known-vulnerabilities.toml`; the totals in `SECURITY-BASELINE.md`; the reasoning in issue threads. Four places, and no one of them answers "where does the catalogue stand" without the other three (#300).
+
+`security-audit.yml` now publishes to GitHub code scanning, so the Security tab is that place: **[github.com/cidx-org/cidx/security/code-scanning](https://github.com/cidx-org/cidx/security/code-scanning)**. It keeps findings across runs, dates them, and closes them by itself when a repin removes one — which is the part no artifact and no generated file was ever going to do.
+
+**`known-vulnerabilities.toml` stays the source of truth. The tab is a view of it.** Nothing is accepted, waived or decided there; an alert is dismissed by editing the file and letting the next audit re-publish. That direction is the whole design, and it is why the alerts point where they do: a finding's alert is anchored to the line of `pkg/presets/presets.toml` that pins the image, and an expired acceptance's alert to its entry in `known-vulnerabilities.toml`. The Security tab links straight to the line to change.
+
+**What is published is what needs a human — 128 alerts, not 456.** The catalogue carries 456 HIGH/CRITICAL findings and the tab exists to make the state readable in ten seconds, so publishing the raw scan would defeat the purpose it was built for. The populations [Judging a finding](#judging-a-finding) already answers are left out, and the same code answers them, so the tab and `SECURITY-BASELINE.md` cannot come to disagree:
+
+| Population                | Published | Why                                                                                               |
+| ------------------------- | --------- | ------------------------------------------------------------------------------------------------- |
+| Needing triage            | yes       | No fix at any version, not exempt. The only population an exception is the right instrument for   |
+| Fixed upstream            | no        | The image's age, not a decision. `container-monitor.yml` is the loop that chases it               |
+| Go stdlib in a CLI binary | no        | Unreachable by construction                                                                       |
+| Kernel headers            | no        | Unreachable by construction                                                                       |
+| Expired exceptions        | yes       | An acceptance nobody has stood behind since its date — and nothing else surfaces them (see below) |
+
+That last row is the one the design turns on. `cidx security vuln ignore` writes every entry into the scanners' ignore file whatever its expiry date, so an expired exception goes on filtering its finding out of the audit's own results: the finding **cannot** appear as an alert, because the evidence for it was suppressed before the JSON was written. Today all 19 entries are in that state, five months past their date, and the only trace is an annotation on a workflow run nobody opens. So the view reads the file directly and says what the file says about itself. Re-dating an entry or deleting it closes the alert; that is the same act the record has always asked for, now with somewhere to see that it is pending.
+
+Neither scanner's native SARIF is used, for that reason and not for a stylistic one: Trivy has no "only unfixed" switch, and neither tool knows what `stdlib` in a Go binary or `linux-libc-dev` means in a container that listens on nothing. `cidx security sarif` renders the JSON the audit already uploaded, reusing the triage in `pkg/presets/findings.go`. The scanners are not run a second time.
+
+**One analysis for the catalogue, not one per image.** Code scanning tells uploads apart by `category`, and without distinct ones two uploads overwrite each other — so the alternative was 21 categories, one per image. It was rejected on what the reader gets: the alert list offers no way to filter by category, so 21 analyses would show as one undifferentiated list, while every one of them would have to be re-uploaded on each run to stay current. SARIF also caps a file at 20 runs, which rules out one run per image outright. What actually tells images apart in the UI is the alert: its rule identifier is `<repository>/<CVE>`, and its location is the line pinning that image. Both work inside a single run.
+
+The identifier is keyed by **repository**, exactly as an exception is, and for the same reason — the judgement survives a repin. An identifier carrying the digest would close every alert and open it again on each promotion. Two tags of one repository still produce two alerts, because they point at two different lines: the same CVE on two images is two repins, which is how the baseline counts it too.
+
+**Both scanners, each finding once.** Of the 150 findings needing triage, 39 are seen by both scanners, 102 by Grype alone and 9 by Trivy alone. Publishing a run per scanner would show 189 alerts for 150 problems, a third of them twice; publishing Trivy alone — the tempting simplification, since it is the one with native SARIF — would hide two thirds of what needs attention. They are merged on the identifier instead, and each alert names the scanners that reported it. That is the same posture as [the scan gate](#the-scan-gate-is-differential), which already holds a candidate on a finding only one scanner knows about: running two scanners buys nothing if only one is believed.
+
+**Permissions.** Uploading a SARIF needs `security-events: write`, and the workflow carries `contents: read` globally (#207). The write is granted to the `report` job alone: the scan jobs pull images and run third-party scanners on them, and none of that has any business being able to write this repository's security findings.
+
+**What a branch run means.** Code scanning attaches an analysis to the ref it ran on, so triggering the audit from a branch — `cidx workflow run security-audit.yml --ref <branch>` — files the alerts against that branch, and the alert list defaults to the default branch. They arrive on `main` when the scheduled run next executes there, on the same 21 images.
+
 ### The scan gate is differential
 
 The cooldown decides whether a version is old enough to consider. What the scanners find on it decides whether it may actually replace the running image — and for a long time it decided nothing at all. Every scan step wrapped `docker run` in an `if … then … else …`, so a vulnerable image exited 0 and the job succeeded; the promote job read `needs.trivy-scan.result`, which was `success` by construction. The promotion PR claimed a check that had never run (#247).
