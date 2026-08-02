@@ -97,6 +97,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	RegisterCommonSteps(ctx, testCtx)
 	RegisterEventSteps(ctx, testCtx)
 	RegisterSecuritySteps(ctx, testCtx)
+	RegisterBaseEOLSteps(ctx, testCtx)
 	RegisterSarifSteps(ctx, testCtx)
 	RegisterPipelineSteps(ctx, testCtx)
 	RegisterExecutorSteps(ctx, testCtx)

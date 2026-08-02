@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cidx-org/cidx/v2/pkg/presets"
 	"github.com/cucumber/godog"
@@ -644,4 +646,165 @@ func (tc *TestContext) iAmInGitLabCI() error {
 	tc.Provider = "GitLab CI"
 	tc.Environment = "CI"
 	return tc.setEnvVar("GITLAB_CI", "true")
+}
+
+// ---------------------------------------------------------------------------
+// End of support for the base an image is built on (#303)
+//
+// These steps run the real classification — presets.ClassifyBase and
+// presets.UncheckedBase — against the release lines endoflife.date publishes
+// today, held as a fixture. Nothing here performs a request: the whole point of
+// the seam in cmd/cidx is that the decision is testable without one.
+
+// endoflifeFixture is what endoflife.date answers for the three products the
+// catalogue's families map to, transcribed from the live API. Only the two
+// fields the signal reads are kept.
+//
+// It is a fixture rather than a call, deliberately. A test that reached the
+// real API would fail on a Friday outage and would silently change verdicts
+// whenever upstream revised a date — neither of which says anything about this
+// code.
+var endoflifeFixture = map[string]string{
+	"alpine-linux": `[
+		{"cycle":"3.24","eol":"2028-06-01"},
+		{"cycle":"3.23","eol":"2027-11-01"},
+		{"cycle":"3.22","eol":"2027-05-01"},
+		{"cycle":"3.21","eol":"2026-11-01"},
+		{"cycle":"3.20","eol":"2026-04-01"}
+	]`,
+	"debian": `[
+		{"cycle":"13","eol":"2028-08-09"},
+		{"cycle":"12","eol":"2026-07-11"},
+		{"cycle":"11","eol":"2024-08-14"}
+	]`,
+	"fedora": `[
+		{"cycle":"44","eol":"2027-06-02"},
+		{"cycle":"43","eol":"2026-12-09"}
+	]`,
+}
+
+// RegisterBaseEOLSteps registers the end-of-support step definitions.
+func RegisterBaseEOLSteps(ctx *godog.ScenarioContext, tc *TestContext) {
+	ctx.Given(`^the image is built on "([^"]*)" "([^"]*)"$`, tc.imageBuiltOn)
+	ctx.Given(`^the image is built on nothing at all$`, tc.imageBuiltOnNothing)
+	ctx.Given(`^endoflife\.date publishes the release lines it publishes today$`, tc.endoflifeAnswers)
+	ctx.Given(`^endoflife\.date does not answer$`, tc.endoflifeSilent)
+	ctx.When(`^the base is checked for end of support on "([^"]*)"$`, tc.checkBaseEndOfSupport)
+
+	ctx.Then(`^the base should be reported as supported$`, tc.baseShouldBe(presets.BaseSupported))
+	ctx.Then(`^the base should be reported as approaching end of support$`, tc.baseShouldBe(presets.BaseEndingSoon))
+	ctx.Then(`^the base should be reported as past end of support$`, tc.baseShouldBe(presets.BaseEnded))
+	ctx.Then(`^the base should be reported as unresolvable$`, tc.baseShouldBe(presets.BaseUnknown))
+	ctx.Then(`^the base should be reported as unchecked$`, tc.baseShouldBe(presets.BaseUnchecked))
+	ctx.Then(`^the base should be reported as having no distribution base$`, tc.baseShouldBe(presets.BaseNone))
+
+	ctx.Then(`^the report should ask for attention$`, tc.baseShouldAskForAttention(true))
+	ctx.Then(`^the report should not ask for attention$`, tc.baseShouldAskForAttention(false))
+	ctx.Then(`^the report should name the date "([^"]*)"$`, tc.baseReasonShouldContain)
+	ctx.Then(`^the report should name the family "([^"]*)"$`, tc.baseReasonShouldContain)
+	ctx.Then(`^the report should explain that its findings will never be fixed$`, tc.baseReasonShouldExplain("never be fixed"))
+	ctx.Then(`^the report should explain that the check did not happen$`, tc.baseReasonShouldExplain("not checked"))
+}
+
+func (tc *TestContext) imageBuiltOn(family, version string) error {
+	tc.Config["base_os"] = presets.BaseOS{Family: family, Version: version}
+	return nil
+}
+
+func (tc *TestContext) imageBuiltOnNothing() error {
+	tc.Config["base_os"] = presets.BaseOS{}
+	return nil
+}
+
+func (tc *TestContext) endoflifeAnswers() error {
+	tc.Config["endoflife_silent"] = false
+	return nil
+}
+
+func (tc *TestContext) endoflifeSilent() error {
+	tc.Config["endoflife_silent"] = true
+	return nil
+}
+
+// checkBaseEndOfSupport runs the real policy: the same functions the baseline
+// and the security audit call.
+func (tc *TestContext) checkBaseEndOfSupport(date string) error {
+	base, ok := tc.Config["base_os"].(presets.BaseOS)
+	if !ok {
+		return fmt.Errorf("no base was staged for the image")
+	}
+
+	now, err := time.Parse(time.DateOnly, date)
+	if err != nil {
+		return fmt.Errorf("could not read the date %q: %w", date, err)
+	}
+
+	if silent, _ := tc.Config["endoflife_silent"].(bool); silent {
+		tc.Config["base_support"] = presets.UncheckedBase(base, fmt.Errorf("endoflife.date could not be reached"))
+		return nil
+	}
+
+	var cycles []presets.EOLCycle
+	if product, mapped := presets.EOLProduct(base.Family); mapped {
+		document, published := endoflifeFixture[product]
+		if !published {
+			return fmt.Errorf("no fixture transcribed for the endoflife.date product %q", product)
+		}
+		if err := json.Unmarshal([]byte(document), &cycles); err != nil {
+			return fmt.Errorf("could not read the %q fixture: %w", product, err)
+		}
+	}
+
+	tc.Config["base_support"] = presets.ClassifyBase(base, cycles, now)
+	return nil
+}
+
+func (tc *TestContext) baseSupport() (presets.BaseSupport, error) {
+	support, ok := tc.Config["base_support"].(presets.BaseSupport)
+	if !ok {
+		return presets.BaseSupport{}, fmt.Errorf("the base was never checked")
+	}
+	return support, nil
+}
+
+func (tc *TestContext) baseShouldBe(state string) func() error {
+	return func() error {
+		support, err := tc.baseSupport()
+		if err != nil {
+			return err
+		}
+		if support.State != state {
+			return fmt.Errorf("base reported as %q, expected %q (%s)", support.State, state, support.Reason)
+		}
+		return nil
+	}
+}
+
+func (tc *TestContext) baseShouldAskForAttention(wanted bool) func() error {
+	return func() error {
+		support, err := tc.baseSupport()
+		if err != nil {
+			return err
+		}
+		if support.NeedsAttention() != wanted {
+			return fmt.Errorf("base in state %q asks for attention = %v, expected %v",
+				support.State, support.NeedsAttention(), wanted)
+		}
+		return nil
+	}
+}
+
+func (tc *TestContext) baseReasonShouldContain(text string) error {
+	support, err := tc.baseSupport()
+	if err != nil {
+		return err
+	}
+	if !strings.Contains(support.Reason, text) {
+		return fmt.Errorf("the reason %q does not mention %q", support.Reason, text)
+	}
+	return nil
+}
+
+func (tc *TestContext) baseReasonShouldExplain(text string) func() error {
+	return func() error { return tc.baseReasonShouldContain(text) }
 }

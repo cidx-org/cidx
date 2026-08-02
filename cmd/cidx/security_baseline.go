@@ -5,6 +5,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/cidx-org/cidx/v2/pkg/presets"
 	"github.com/urfave/cli/v2"
@@ -55,6 +56,10 @@ func securityBaselineCommand() *cli.Command {
 				Value:   defaultBaselineFile,
 				Usage:   "Where to write the baseline",
 			},
+			&cli.BoolFlag{
+				Name:  "annotate",
+				Usage: "Also emit GitHub Actions annotations for bases at or past end of support",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			imagePresets, err := catalogueImages()
@@ -70,15 +75,28 @@ func securityBaselineCommand() *cli.Command {
 			}
 
 			carried := carriedFindings(imagePresets, c.String("results"))
+			bases := catalogueBases(imagePresets, c.String("results"))
 
 			out := c.String("output")
-			if err := os.WriteFile(out, []byte(renderSecurityBaseline(imagePresets, accepted, carried)), 0644); err != nil {
+			if err := os.WriteFile(out, []byte(renderSecurityBaseline(imagePresets, accepted, carried, bases)), 0644); err != nil {
 				return fmt.Errorf("failed to write %s: %w", out, err)
 			}
 
 			triage := triageCatalogue(carried)
 			fmt.Printf("Wrote %s: %d catalogue image(s), %d carried HIGH/CRITICAL finding(s) (%d needing triage), %d accepted.\n",
 				out, len(imagePresets), triage.Carried, triage.Actionable, len(acceptedFindings(imagePresets, accepted)))
+
+			// The end-of-support verdict is printed, never written: every number
+			// in it is relative to today, and the file it would land in is
+			// committed precisely so that a changed line means something
+			// changed about the catalogue.
+			support := resolveBaseSupport(bases, time.Now().UTC())
+			renderBaseSupport(os.Stdout, support)
+			if c.Bool("annotate") {
+				for _, annotation := range baseSupportAnnotations(support) {
+					fmt.Println(annotation)
+				}
+			}
 			return nil
 		},
 	}
@@ -186,7 +204,7 @@ func acceptedFindings(imagePresets map[string][]string, accepted []Vulnerability
 	return findings
 }
 
-func renderSecurityBaseline(imagePresets map[string][]string, accepted []Vulnerability, carried map[string][]presets.Finding) string {
+func renderSecurityBaseline(imagePresets map[string][]string, accepted []Vulnerability, carried map[string][]presets.Finding, bases map[string]presets.BaseOS) string {
 	images := make([]string, 0, len(imagePresets))
 	for image := range imagePresets {
 		images = append(images, image)
@@ -226,8 +244,19 @@ func renderSecurityBaseline(imagePresets map[string][]string, accepted []Vulnera
 	writeCarriedSection(&sb, triage, len(carried), len(images))
 
 	sb.WriteString("## Images\n\n")
-	sb.WriteString("| Image | Presets | Carried HIGH/CRITICAL | Accepted |\n")
-	sb.WriteString("| ----- | ------- | --------------------- | -------- |\n")
+	sb.WriteString("The **Base** column is the distribution the image is built on, as the scanners\n")
+	sb.WriteString("report it. It is here because it decides whether the findings above can ever\n")
+	sb.WriteString("go away: once a base stops being supported, its packages receive no further\n")
+	sb.WriteString("updates and every finding on that image is permanent, however fresh the tag\n")
+	sb.WriteString("is. `none` is an image with no distribution underneath it — a scratch or\n")
+	sb.WriteString("static build — which is an answer, not a gap.\n\n")
+	sb.WriteString("The date that support ends is deliberately **not** in this file. It is\n")
+	sb.WriteString("relative to the day you read it and it comes from a third party, so it would\n")
+	sb.WriteString("change these lines without anything changing about the catalogue — the same\n")
+	sb.WriteString("reason there is no generation date. `cidx security baseline` prints it, and\n")
+	sb.WriteString("the daily security audit reports it.\n\n")
+	sb.WriteString("| Image | Presets | Base | Carried HIGH/CRITICAL | Accepted |\n")
+	sb.WriteString("| ----- | ------- | ---- | --------------------- | -------- |\n")
 	for _, image := range images {
 		names := append([]string(nil), imagePresets[image]...)
 		sort.Strings(names)
@@ -237,11 +266,13 @@ func renderSecurityBaseline(imagePresets map[string][]string, accepted []Vulnera
 			carriedCell = fmt.Sprintf("%d", presets.Summarise(found).Carried)
 		}
 
+		base, scanned := bases[image]
 		acceptedCell := "none"
 		if n := countByImage[image]; n > 0 {
 			acceptedCell = fmt.Sprintf("%d", n)
 		}
-		fmt.Fprintf(&sb, "| `%s` | %s | %s | %s |\n", image, strings.Join(names, ", "), carriedCell, acceptedCell)
+		fmt.Fprintf(&sb, "| `%s` | %s | %s | %s | %s |\n",
+			image, strings.Join(names, ", "), baseCell(base, scanned), carriedCell, acceptedCell)
 	}
 	sb.WriteString("\n")
 

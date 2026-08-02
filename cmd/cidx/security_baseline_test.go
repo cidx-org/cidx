@@ -21,6 +21,63 @@ func baselineCatalogue() map[string][]string {
 // are the two answers this file exists to keep apart.
 func noScanResults() map[string][]presets.Finding { return nil }
 
+// baselineBases is what the scanners reported as the base of each catalogue
+// image, and noBases is the state where nothing was scanned.
+func baselineBases() map[string]presets.BaseOS {
+	return map[string]presets.BaseOS{
+		"dhi.io/trivy:0.68@sha256:" + zeroDigest:                 {Family: "debian", Version: "13.6"},
+		"commitizen/commitizen:4.16.5@sha256:" + zeroDigest:      {Family: "alpine", Version: "3.24.1"},
+		"dhi.io/golang:1.23-alpine3.21-dev@sha256:" + zeroDigest: {Family: "alpine", Version: "3.21.4"},
+	}
+}
+
+func noBases() map[string]presets.BaseOS { return nil }
+
+// TestSecurityBaselineStatesTheBaseOfEveryImage: the base decides whether the
+// carried findings can ever go away, and it was the one thing the scans already
+// knew and the record threw away (#303).
+func TestSecurityBaselineStatesTheBaseOfEveryImage(t *testing.T) {
+	out := renderSecurityBaseline(baselineCatalogue(), nil, noScanResults(), baselineBases())
+
+	for _, want := range []string{"debian 13.6", "alpine 3.24.1", "alpine 3.21.4"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("baseline does not state the base %q:\n%s", want, out)
+		}
+	}
+}
+
+// TestSecurityBaselineNeverPrintsAnUnscannedBaseAsAbsent: an image nothing
+// scanned has an unknown base, and an image built on scratch has none. Printing
+// them the same way is the confusion this file exists to remove — the same
+// distinction the carried column makes between "not scanned" and 0.
+func TestSecurityBaselineNeverPrintsAnUnscannedBaseAsAbsent(t *testing.T) {
+	scratch := map[string]presets.BaseOS{
+		"dhi.io/trivy:0.68@sha256:" + zeroDigest: {},
+	}
+
+	out := renderSecurityBaseline(baselineCatalogue(), nil, noScanResults(), scratch)
+
+	if !strings.Contains(out, "| none |") {
+		t.Errorf("an image with no distribution base should read `none`:\n%s", out)
+	}
+	if strings.Count(out, "not scanned") < 2 {
+		t.Errorf("the two images nobody scanned should read `not scanned`:\n%s", out)
+	}
+}
+
+// TestSecurityBaselineCarriesNoEndOfSupportDate: the date support ends is
+// relative to the day it is read and comes from a third party, so it would
+// churn this committed file without anything changing about the catalogue —
+// exactly what keeping the generation date out prevents. The base is a fact
+// about what we ship; the countdown is not.
+func TestSecurityBaselineCarriesNoEndOfSupportDate(t *testing.T) {
+	out := renderSecurityBaseline(baselineCatalogue(), nil, noScanResults(), baselineBases())
+
+	if date := isoDate.FindString(out); date != "" {
+		t.Errorf("baseline carries the date %q, which no catalogue change would move", date)
+	}
+}
+
 // TestSecurityBaselineIsDeterministic: the file is committed so that its diff
 // says what changed. Map iteration order has already produced flapping output
 // twice in this repository (#230, #233), and a baseline that reordered itself
@@ -40,9 +97,9 @@ func TestSecurityBaselineIsDeterministic(t *testing.T) {
 		"dhi.io/golang:1.23-alpine3.21-dev@sha256:" + zeroDigest: nil,
 	}
 
-	first := renderSecurityBaseline(baselineCatalogue(), accepted, carried)
+	first := renderSecurityBaseline(baselineCatalogue(), accepted, carried, baselineBases())
 	for i := 0; i < 20; i++ {
-		if got := renderSecurityBaseline(baselineCatalogue(), accepted, carried); got != first {
+		if got := renderSecurityBaseline(baselineCatalogue(), accepted, carried, baselineBases()); got != first {
 			t.Fatalf("generation %d differs from the first:\n%s", i, got)
 		}
 	}
@@ -54,7 +111,7 @@ func TestSecurityBaselineIsDeterministic(t *testing.T) {
 var isoDate = regexp.MustCompile(`\d{4}-\d{2}-\d{2}`)
 
 func TestSecurityBaselineCarriesNoGenerationDate(t *testing.T) {
-	out := renderSecurityBaseline(baselineCatalogue(), nil, noScanResults())
+	out := renderSecurityBaseline(baselineCatalogue(), nil, noScanResults(), noBases())
 
 	if date := isoDate.FindString(out); date != "" {
 		t.Errorf("baseline of a catalogue with no accepted finding carries the date %q", date)
@@ -69,7 +126,7 @@ func TestSecurityBaselineSortsCriticalFirst(t *testing.T) {
 		{CVE: "CVE-2026-0001", Repository: "dhi.io/trivy", Severity: "CRITICAL", Expires: "2026-09-01"},
 	}
 
-	out := renderSecurityBaseline(baselineCatalogue(), accepted, noScanResults())
+	out := renderSecurityBaseline(baselineCatalogue(), accepted, noScanResults(), noBases())
 	critical, high := strings.Index(out, "CVE-2026-0001"), strings.Index(out, "CVE-2026-0002")
 
 	if critical < 0 || high < 0 {
@@ -89,7 +146,7 @@ func TestSecurityBaselineIgnoresExceptionsForRepositoriesNoLongerRun(t *testing.
 		{CVE: "CVE-2026-0001", Repository: "aquasec/trivy", Severity: "CRITICAL", Expires: "2026-09-01"},
 	}
 
-	out := renderSecurityBaseline(baselineCatalogue(), accepted, noScanResults())
+	out := renderSecurityBaseline(baselineCatalogue(), accepted, noScanResults(), noBases())
 
 	if strings.Contains(out, "CVE-2026-0001") {
 		t.Errorf("an exception for a repository the catalogue no longer runs is published as accepted:\n%s", out)
@@ -107,7 +164,7 @@ func TestSecurityBaselineMatchesOnTheRepository(t *testing.T) {
 		{CVE: "CVE-2026-0001", Repository: "dhi.io/trivy", Severity: "CRITICAL", Expires: "2026-09-01"},
 	}
 
-	out := renderSecurityBaseline(baselineCatalogue(), accepted, noScanResults())
+	out := renderSecurityBaseline(baselineCatalogue(), accepted, noScanResults(), noBases())
 
 	if !strings.Contains(out, "CVE-2026-0001") {
 		t.Errorf("the tag and digest kept the exception from matching its own image:\n%s", out)
@@ -122,7 +179,7 @@ func TestSecurityBaselineKeepsAJustificationInItsOwnRow(t *testing.T) {
 			Notes: "fixed upstream | not yet released"},
 	}
 
-	out := renderSecurityBaseline(baselineCatalogue(), accepted, noScanResults())
+	out := renderSecurityBaseline(baselineCatalogue(), accepted, noScanResults(), noBases())
 
 	if !strings.Contains(out, `fixed upstream \| not yet released`) {
 		t.Errorf("a pipe in the justification was not escaped:\n%s", out)
@@ -133,7 +190,7 @@ func TestSecurityBaselineKeepsAJustificationInItsOwnRow(t *testing.T) {
 // on it is the majority case and the most important one — the table has to say
 // "we ship this, and nothing is waived on it".
 func TestSecurityBaselineListsEveryCatalogueImage(t *testing.T) {
-	out := renderSecurityBaseline(baselineCatalogue(), nil, noScanResults())
+	out := renderSecurityBaseline(baselineCatalogue(), nil, noScanResults(), noBases())
 
 	for image := range baselineCatalogue() {
 		if !strings.Contains(out, image) {
@@ -158,7 +215,7 @@ func TestSecurityBaselineStatesCarriedAndAcceptedSeparately(t *testing.T) {
 		"dhi.io/golang:1.23-alpine3.21-dev@sha256:" + zeroDigest: nil,
 	}
 
-	out := renderSecurityBaseline(baselineCatalogue(), nil, carried)
+	out := renderSecurityBaseline(baselineCatalogue(), nil, carried, baselineBases())
 
 	for _, want := range []string{
 		"carries **4** HIGH/CRITICAL",
@@ -178,7 +235,7 @@ func TestSecurityBaselineStatesCarriedAndAcceptedSeparately(t *testing.T) {
 // not a zero, and the fiction this file removed must not come back through the
 // carried column.
 func TestSecurityBaselineNeverPrintsAnUnscannedImageAsClean(t *testing.T) {
-	out := renderSecurityBaseline(baselineCatalogue(), nil, noScanResults())
+	out := renderSecurityBaseline(baselineCatalogue(), nil, noScanResults(), noBases())
 
 	if strings.Contains(out, "| 0 |") {
 		t.Errorf("an image nobody scanned is reported as carrying nothing:\n%s", out)
