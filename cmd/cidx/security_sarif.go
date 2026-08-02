@@ -13,7 +13,7 @@ import (
 )
 
 // securitySarifCommand renders the catalogue's scan results as SARIF for GitHub
-// code scanning (#300).
+// code scanning (#301).
 //
 // The command is the I/O half: it reads the JSON the audit already uploaded,
 // resolves the line each alert should point at, and writes the file. What is

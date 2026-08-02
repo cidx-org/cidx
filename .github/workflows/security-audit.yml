@@ -621,7 +621,7 @@ jobs:
       # The summary above is written once per run and read by whoever happens to
       # open that run. The Security tab keeps the same findings across runs,
       # dates them, and closes them by itself when a repin removes them — which
-      # is the single place the catalogue's state was missing (#300).
+      # is the single place the catalogue's state was missing (#301).
       #
       # `if: always()` on both steps: the report step above can fail on a
       # malformed artifact, and the run is exactly the one whose findings are

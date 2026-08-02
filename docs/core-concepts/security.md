@@ -438,7 +438,7 @@ An entry past its expiry date is printed with that date and nothing else — the
 
 ### Where to look: the Security tab
 
-Everything above produces evidence, and none of it was anywhere in particular. The daily audit's scan results lived in artifacts deleted after a day; the acceptances in `known-vulnerabilities.toml`; the totals in `SECURITY-BASELINE.md`; the reasoning in issue threads. Four places, and no one of them answers "where does the catalogue stand" without the other three (#300).
+Everything above produces evidence, and none of it was anywhere in particular. The daily audit's scan results lived in artifacts deleted after a day; the acceptances in `known-vulnerabilities.toml`; the totals in `SECURITY-BASELINE.md`; the reasoning in issue threads. Four places, and no one of them answers "where does the catalogue stand" without the other three (#301).
 
 `security-audit.yml` now publishes to GitHub code scanning, so the Security tab is that place: **[github.com/cidx-org/cidx/security/code-scanning](https://github.com/cidx-org/cidx/security/code-scanning)**. It keeps findings across runs, dates them, and closes them by itself when a repin removes one — which is the part no artifact and no generated file was ever going to do.
 
