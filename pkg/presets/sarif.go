@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// Publishing the catalogue's state to GitHub code scanning (#300).
+// Publishing the catalogue's state to GitHub code scanning (#301).
 //
 // The evidence was scattered across four places — scan results in artifacts
 // deleted after a day, acceptances in `known-vulnerabilities.toml`, totals in a

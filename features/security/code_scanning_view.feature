@@ -6,7 +6,7 @@ Feature: The catalogue's state, published to code scanning
   # The evidence was scattered: scan results in artifacts deleted after a day,
   # acceptances in known-vulnerabilities.toml, totals in a generated markdown
   # table, reasoning in issue threads. None of them answers "where does the
-  # catalogue stand" without the other three (#300).
+  # catalogue stand" without the other three (#301).
   #
   # GitHub's code scanning is the place, and SARIF is what it reads. The file is
   # written from the JSON the audit already uploads — not asked of the scanners a
