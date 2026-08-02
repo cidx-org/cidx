@@ -445,6 +445,15 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
 
+    # `security-events: write` is what uploading a SARIF costs, and it is granted
+    # here rather than at the top of the file: the scan jobs pull images and run
+    # third-party scanners on them, and none of that needs the ability to write
+    # this repository's security findings (#207). The job-level block replaces the
+    # global one entirely, so `contents: read` is restated rather than inherited.
+    permissions:
+      contents: read
+      security-events: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -608,6 +617,33 @@ jobs:
             echo '   ```' >> $GITHUB_STEP_SUMMARY
             echo "4. Commit and push changes" >> $GITHUB_STEP_SUMMARY
           fi
+
+      # The summary above is written once per run and read by whoever happens to
+      # open that run. The Security tab keeps the same findings across runs,
+      # dates them, and closes them by itself when a repin removes them — which
+      # is the single place the catalogue's state was missing (#300).
+      #
+      # `if: always()` on both steps: the report step above can fail on a
+      # malformed artifact, and the run is exactly the one whose findings are
+      # worth publishing. A scan leg that died leaves no result, and the command
+      # says which images it therefore had nothing to say about — an image with
+      # no alerts here is not an image that is clean.
+      - name: Render findings as SARIF
+        if: always()
+        run: ./bin/cidx security sarif --results artifacts -o catalogue.sarif
+
+      - name: Publish to code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@7188fc363630916deb702c7fdcf4e481b751f97a # v4.37.1
+        with:
+          sarif_file: catalogue.sarif
+          # One analysis for the whole catalogue. The alternative — one upload
+          # per image, since two uploads without distinct categories overwrite
+          # each other — would be 21 analyses the alert list offers no way to
+          # filter by, all of which would have to be re-uploaded on every run to
+          # stay current. What distinguishes an image in the UI is the alert
+          # itself, and that works inside a single analysis.
+          category: catalogue
 
       - name: Final Status
         run: |

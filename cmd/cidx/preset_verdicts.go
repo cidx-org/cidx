@@ -318,6 +318,7 @@ func trivyFindings(data []byte) ([]presets.Finding, error) {
 				Package:     vuln.PkgName,
 				PackageType: result.Type,
 				FixedIn:     vuln.FixedVersion,
+				Scanner:     "Trivy",
 			})
 		}
 	}
@@ -373,6 +374,7 @@ func grypeFindings(data []byte) ([]presets.Finding, error) {
 			Package:     match.Artifact.Name,
 			PackageType: match.Artifact.Type,
 			KEV:         len(vuln.KEV) > 0,
+			Scanner:     "Grype",
 		}
 		if len(vuln.Fix.Versions) > 0 {
 			finding.FixedIn = vuln.Fix.Versions[0]
