@@ -13,6 +13,11 @@ import (
 // regressions: new hints must name the current paths (`cidx release ...`,
 // `cidx repo ...`, or the top-level aliases `cidx pr ...` / `cidx cpw`).
 func TestNoDeprecatedActionHintsInGoSources(t *testing.T) {
+	// The deprecation warning is the one source that must name the deprecated
+	// form: it names it to steer the user off it, and its own tests check that
+	// every mention is followed by the replacement (issue #235).
+	exempt := filepath.Join("cmd", "cidx", "action_deprecated.go")
+
 	err := filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -26,6 +31,9 @@ func TestNoDeprecatedActionHintsInGoSources(t *testing.T) {
 		// Test files are exempt: this one, and the forbidden-string lists in
 		// pkg/actions, legitimately mention the deprecated form.
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		if filepath.Clean(path) == exempt {
 			return nil
 		}
 
