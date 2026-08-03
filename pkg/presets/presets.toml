@@ -429,7 +429,7 @@ command_flag = "--fix"
 [presets.shellcheck]
 name = "shellcheck"
 phase = "code"
-image = "koalaman/shellcheck:stable@sha256:bb596a0d169b85ddd81d8b6d3a2ff6d5baf5fca10b97f575ebc647c3dff62b3d"
+image = "koalaman/shellcheck:v0.11.0@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d"
 entrypoint = ["sh", "-c"]
 command = "find . -type f -name \"*.sh\" | xargs -r shellcheck || true"
 workdir = "/work"

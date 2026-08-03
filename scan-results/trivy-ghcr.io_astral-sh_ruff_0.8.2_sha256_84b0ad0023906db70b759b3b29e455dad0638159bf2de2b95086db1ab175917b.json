@@ -1,0 +1,84 @@
+{
+  "SchemaVersion": 2,
+  "Trivy": {
+    "Version": "0.73.0"
+  },
+  "ReportID": "019fc795-7792-7338-b97c-40c12b758fb8",
+  "CreatedAt": "2026-08-03T12:24:49.298212711Z",
+  "ArtifactID": "sha256:3e96e57d6cdfa5f269986ddb5d2dba0ccec729aaa342ce7555eb85c064bb0692",
+  "ArtifactName": "ghcr.io/astral-sh/ruff:0.8.2@sha256:84b0ad0023906db70b759b3b29e455dad0638159bf2de2b95086db1ab175917b",
+  "ArtifactType": "container_image",
+  "Metadata": {
+    "Size": 25492480,
+    "ImageID": "sha256:2badaac71849b512029f18f176d18cc16d4813b22e1f873a1f2cf257df0cdaa1",
+    "DiffIDs": [
+      "sha256:b1e43dc86a16cbba4913546b2b3f1f00ff82c017d74f8617d8956cf50198c363",
+      "sha256:0c9423bb87779f66d153fbe035fa6a78b23db173dcc8e7f6644df96299c61196"
+    ],
+    "RepoDigests": [
+      "ghcr.io/astral-sh/ruff@sha256:84b0ad0023906db70b759b3b29e455dad0638159bf2de2b95086db1ab175917b"
+    ],
+    "Reference": "ghcr.io/astral-sh/ruff@sha256:84b0ad0023906db70b759b3b29e455dad0638159bf2de2b95086db1ab175917b",
+    "ImageConfig": {
+      "architecture": "amd64",
+      "created": "2024-12-05T12:44:51.378769122Z",
+      "history": [
+        {
+          "created": "2024-12-05T12:44:51.337988864Z",
+          "created_by": "COPY /ruff /ruff # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2024-12-05T12:44:51.378769122Z",
+          "created_by": "WORKDIR /io",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2024-12-05T12:44:51.378769122Z",
+          "created_by": "ENTRYPOINT [\"/ruff\"]",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        }
+      ],
+      "os": "linux",
+      "rootfs": {
+        "type": "layers",
+        "diff_ids": [
+          "sha256:b1e43dc86a16cbba4913546b2b3f1f00ff82c017d74f8617d8956cf50198c363",
+          "sha256:0c9423bb87779f66d153fbe035fa6a78b23db173dcc8e7f6644df96299c61196"
+        ]
+      },
+      "config": {
+        "Entrypoint": [
+          "/ruff"
+        ],
+        "Env": [
+          "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        ],
+        "Labels": {
+          "org.opencontainers.image.created": "2024-12-05T12:38:19.231Z",
+          "org.opencontainers.image.description": "An extremely fast Python linter and code formatter, written in Rust.",
+          "org.opencontainers.image.licenses": "MIT",
+          "org.opencontainers.image.revision": "b0e26e6fc8ad60e368b8b03b367b6ac408acf9f7",
+          "org.opencontainers.image.source": "https://github.com/astral-sh/ruff",
+          "org.opencontainers.image.title": "ruff",
+          "org.opencontainers.image.url": "https://github.com/astral-sh/ruff",
+          "org.opencontainers.image.version": "0.8.2"
+        },
+        "WorkingDir": "/io"
+      }
+    },
+    "Layers": [
+      {
+        "Size": 25490944,
+        "Digest": "sha256:2f0629e9e1b5fd4e87e9861940a7cd850718791f69de593d8ad612bc45959d54",
+        "DiffID": "sha256:b1e43dc86a16cbba4913546b2b3f1f00ff82c017d74f8617d8956cf50198c363"
+      },
+      {
+        "Size": 1536,
+        "Digest": "sha256:4426496b331c1bf5f9d940aeb48bd2fe9d1a302c89db7153809a22fd2ad3f633",
+        "DiffID": "sha256:0c9423bb87779f66d153fbe035fa6a78b23db173dcc8e7f6644df96299c61196"
+      }
+    ]
+  }
+}

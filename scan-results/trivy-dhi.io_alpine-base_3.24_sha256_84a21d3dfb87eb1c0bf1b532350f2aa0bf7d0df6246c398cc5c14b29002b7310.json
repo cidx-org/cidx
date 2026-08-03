@@ -1,0 +1,349 @@
+{
+  "SchemaVersion": 2,
+  "Trivy": {
+    "Version": "0.73.0"
+  },
+  "ReportID": "019fc795-96c4-7eb3-a614-1a15b9c9f3c9",
+  "CreatedAt": "2026-08-03T12:24:57.284964556Z",
+  "ArtifactID": "sha256:f1dcb6f2afac7ea11a1e1c1ab505aeef37cd32b6ab012de42f75f3d37e4fe08f",
+  "ArtifactName": "dhi.io/alpine-base:3.24@sha256:84a21d3dfb87eb1c0bf1b532350f2aa0bf7d0df6246c398cc5c14b29002b7310",
+  "ArtifactType": "container_image",
+  "Metadata": {
+    "Size": 8031232,
+    "OS": {
+      "Family": "alpine",
+      "Name": "3.24"
+    },
+    "ImageID": "sha256:765a27116678b13927b798df58734d621d8e33f3991fc2d58d53d25b3297ce8a",
+    "DiffIDs": [
+      "sha256:caac022d711f691cd2d0b0df9d9c20bc1a694feef63d5c47055d3981629ea24f",
+      "sha256:a17733118d6f70ed90156cb1ea6ac62c84f6a949b79300eed8f0d550299f8e81",
+      "sha256:77bcb00315ebcf45c5e33060d189d8b8cde856a38fdf38e460a030a367905961",
+      "sha256:0f82a742ff7f2785b9fbf6225cdae791a94ebf64a46083ce1b3888c7e5d8e114"
+    ],
+    "RepoDigests": [
+      "dhi.io/alpine-base@sha256:84a21d3dfb87eb1c0bf1b532350f2aa0bf7d0df6246c398cc5c14b29002b7310"
+    ],
+    "Reference": "dhi.io/alpine-base@sha256:84a21d3dfb87eb1c0bf1b532350f2aa0bf7d0df6246c398cc5c14b29002b7310",
+    "ImageConfig": {
+      "architecture": "amd64",
+      "created": "2026-07-25T03:19:34Z",
+      "history": [
+        {
+          "created": "2026-07-25T01:05:34.134974107Z",
+          "created_by": "add root layout",
+          "comment": "buildkit.exporter.image.v0"
+        },
+        {
+          "created": "2026-07-25T03:19:34Z",
+          "created_by": "mount /out from exec sh -c /install amd64",
+          "comment": "buildkit.exporter.image.v0"
+        },
+        {
+          "created": "2026-07-25T03:19:34Z",
+          "created_by": "add users and groups",
+          "comment": "buildkit.exporter.image.v0"
+        },
+        {
+          "created": "2026-07-25T03:19:34Z",
+          "created_by": "add metadata",
+          "comment": "buildkit.exporter.image.v0"
+        }
+      ],
+      "os": "linux",
+      "rootfs": {
+        "type": "layers",
+        "diff_ids": [
+          "sha256:caac022d711f691cd2d0b0df9d9c20bc1a694feef63d5c47055d3981629ea24f",
+          "sha256:a17733118d6f70ed90156cb1ea6ac62c84f6a949b79300eed8f0d550299f8e81",
+          "sha256:77bcb00315ebcf45c5e33060d189d8b8cde856a38fdf38e460a030a367905961",
+          "sha256:0f82a742ff7f2785b9fbf6225cdae791a94ebf64a46083ce1b3888c7e5d8e114"
+        ]
+      },
+      "config": {
+        "Cmd": [
+          "/bin/sh"
+        ],
+        "Env": [
+          "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt"
+        ],
+        "Labels": {
+          "com.docker.dhi.chain-id": "sha256:a8463f7c39acef71a598b8ad5359eca11f81222385ca0b6e92beff9ce58367dd",
+          "com.docker.dhi.compliance": "cis",
+          "com.docker.dhi.created": "2026-07-25T03:19:34Z",
+          "com.docker.dhi.date.end-of-life": "2028-06-01",
+          "com.docker.dhi.date.release": "2026-06-09",
+          "com.docker.dhi.definition": "image/alpine-base/alpine-3.24/3.24",
+          "com.docker.dhi.distro": "alpine-3.24",
+          "com.docker.dhi.entitlement": "public",
+          "com.docker.dhi.flavor": "",
+          "com.docker.dhi.name": "dhi/alpine-base",
+          "com.docker.dhi.package-manager": "",
+          "com.docker.dhi.shell": "busybox",
+          "com.docker.dhi.title": "Alpine 3.24 Base",
+          "com.docker.dhi.url": "https://dhi.io/catalog/alpine-base",
+          "com.docker.dhi.variant": "runtime",
+          "com.docker.dhi.version": "3.24-alpine3.24"
+        },
+        "User": "65532",
+        "WorkingDir": "/"
+      }
+    },
+    "Layers": [
+      {
+        "Size": 18944,
+        "Digest": "sha256:e06bb05e7e7e95c3d1d446dd55a10d9fe0ffc2dafe4cb08f379d9c3f0ad06f13",
+        "DiffID": "sha256:caac022d711f691cd2d0b0df9d9c20bc1a694feef63d5c47055d3981629ea24f"
+      },
+      {
+        "Size": 7982592,
+        "Digest": "sha256:5715463c9daf1d087b53b27a3c8e4beec44eac849e3f3745807ce01417526b40",
+        "DiffID": "sha256:a17733118d6f70ed90156cb1ea6ac62c84f6a949b79300eed8f0d550299f8e81"
+      },
+      {
+        "Size": 5632,
+        "Digest": "sha256:9bd6618d9bdabe3e8f18b581e87dd6f04720e19d3162ce16226971ebfc7b4bb5",
+        "DiffID": "sha256:77bcb00315ebcf45c5e33060d189d8b8cde856a38fdf38e460a030a367905961"
+      },
+      {
+        "Size": 24064,
+        "Digest": "sha256:3be03168fb0de8ee2e5f89e251a9cd0369d9cf9a4fa0d1a5a12ac44f02e70acd",
+        "DiffID": "sha256:0f82a742ff7f2785b9fbf6225cdae791a94ebf64a46083ce1b3888c7e5d8e114"
+      }
+    ]
+  },
+  "Results": [
+    {
+      "Target": "dhi.io/alpine-base:3.24@sha256:84a21d3dfb87eb1c0bf1b532350f2aa0bf7d0df6246c398cc5c14b29002b7310 (alpine 3.24)",
+      "Class": "os-pkgs",
+      "Type": "alpine",
+      "Packages": [
+        {
+          "ID": "alpine-baselayout-data@3.7.2-r1",
+          "Name": "alpine-baselayout-data",
+          "Identifier": {
+            "PURL": "pkg:apk/alpine/alpine-baselayout-data@3.7.2-r1?arch=noarch\u0026distro=3.24",
+            "UID": "692924369c421c9d"
+          },
+          "Version": "3.7.2-r1",
+          "Arch": "noarch",
+          "SrcName": "alpine-baselayout",
+          "SrcVersion": "3.7.2-r1",
+          "Licenses": [
+            "GPL-2.0-only"
+          ],
+          "Maintainer": "Docker Hardened Images \u003cdhi@docker.com\u003e",
+          "Layer": {
+            "Digest": "sha256:5715463c9daf1d087b53b27a3c8e4beec44eac849e3f3745807ce01417526b40",
+            "DiffID": "sha256:a17733118d6f70ed90156cb1ea6ac62c84f6a949b79300eed8f0d550299f8e81"
+          },
+          "Digest": "sha1:b5f6431a31bb3ec2af96f4963b2badff14921933",
+          "InstalledFiles": [
+            "etc/fstab",
+            "etc/group",
+            "etc/hostname",
+            "etc/hosts",
+            "etc/inittab",
+            "etc/modules",
+            "etc/mtab",
+            "etc/nsswitch.conf",
+            "etc/passwd",
+            "etc/profile",
+            "etc/protocols",
+            "etc/services",
+            "etc/shadow",
+            "etc/shells",
+            "etc/sysctl.conf"
+          ],
+          "AnalyzedBy": "apk"
+        },
+        {
+          "ID": "busybox@1.38.0_git20260724-r5",
+          "Name": "busybox",
+          "Identifier": {
+            "PURL": "pkg:apk/alpine/busybox@1.38.0_git20260724-r5?arch=x86_64\u0026distro=3.24",
+            "UID": "6928a25d61c72a88"
+          },
+          "Version": "1.38.0_git20260724-r5",
+          "Arch": "x86_64",
+          "SrcName": "busybox",
+          "SrcVersion": "1.38.0_git20260724-r5",
+          "Licenses": [
+            "GPL-2.0-only"
+          ],
+          "Maintainer": "Docker Hardened Images \u003cdhi@docker.com\u003e",
+          "DependsOn": [
+            "musl@1.2.6-r2"
+          ],
+          "Layer": {
+            "Digest": "sha256:5715463c9daf1d087b53b27a3c8e4beec44eac849e3f3745807ce01417526b40",
+            "DiffID": "sha256:a17733118d6f70ed90156cb1ea6ac62c84f6a949b79300eed8f0d550299f8e81"
+          },
+          "Digest": "sha1:eea8982a52bd443c2db6751508de78bce9c6c9b1",
+          "InstalledFiles": [
+            "bin/busybox",
+            "etc/securetty",
+            "etc/busybox-paths.d/busybox",
+            "etc/logrotate.d/acpid",
+            "etc/network/if-up.d/dad",
+            "etc/udhcpc/udhcpc.conf",
+            "usr/share/udhcpc/default.script"
+          ],
+          "AnalyzedBy": "apk"
+        },
+        {
+          "ID": "ca-certificates-bundle@20260611-r0",
+          "Name": "ca-certificates-bundle",
+          "Identifier": {
+            "PURL": "pkg:apk/alpine/ca-certificates-bundle@20260611-r0?arch=noarch\u0026distro=3.24",
+            "UID": "57aefb93b5a0361f"
+          },
+          "Version": "20260611-r0",
+          "Arch": "noarch",
+          "SrcName": "ca-certificates",
+          "SrcVersion": "20260611-r0",
+          "Licenses": [
+            "MPL-2.0",
+            "MIT"
+          ],
+          "Maintainer": "Docker Hardened Images \u003cdhi@docker.com\u003e",
+          "Layer": {
+            "Digest": "sha256:5715463c9daf1d087b53b27a3c8e4beec44eac849e3f3745807ce01417526b40",
+            "DiffID": "sha256:a17733118d6f70ed90156cb1ea6ac62c84f6a949b79300eed8f0d550299f8e81"
+          },
+          "Digest": "sha1:e2f6dc98f35b7f7c5e5acc348f9e82df1b9e9e1d",
+          "InstalledFiles": [
+            "etc/ssl/cert.pem",
+            "etc/ssl/certs/ca-certificates.crt",
+            "etc/ssl1.1/cert.pem",
+            "etc/ssl1.1/certs"
+          ],
+          "AnalyzedBy": "apk"
+        },
+        {
+          "ID": "libcrypto3@3.5.7-r1",
+          "Name": "libcrypto3",
+          "Identifier": {
+            "PURL": "pkg:apk/alpine/libcrypto3@3.5.7-r1?arch=x86_64\u0026distro=3.24",
+            "UID": "8a177ad7062142fc"
+          },
+          "Version": "3.5.7-r1",
+          "Arch": "x86_64",
+          "SrcName": "openssl",
+          "SrcVersion": "3.5.7-r1",
+          "Licenses": [
+            "Apache-2.0"
+          ],
+          "Maintainer": "Docker Hardened Images \u003cdhi@docker.com\u003e",
+          "DependsOn": [
+            "musl@1.2.6-r2"
+          ],
+          "Layer": {
+            "Digest": "sha256:5715463c9daf1d087b53b27a3c8e4beec44eac849e3f3745807ce01417526b40",
+            "DiffID": "sha256:a17733118d6f70ed90156cb1ea6ac62c84f6a949b79300eed8f0d550299f8e81"
+          },
+          "Digest": "sha1:4cd9c7d32d57c333c77696248cdfdd198e2b5e7c",
+          "InstalledFiles": [
+            "etc/ssl/ct_log_list.cnf",
+            "etc/ssl/ct_log_list.cnf.dist",
+            "etc/ssl/openssl.cnf",
+            "etc/ssl/openssl.cnf.dist",
+            "usr/lib/libcrypto.so.3",
+            "usr/lib/engines-3/afalg.so",
+            "usr/lib/engines-3/capi.so",
+            "usr/lib/engines-3/loader_attic.so",
+            "usr/lib/engines-3/padlock.so",
+            "usr/lib/ossl-modules/legacy.so"
+          ],
+          "AnalyzedBy": "apk"
+        },
+        {
+          "ID": "libssl3@3.5.7-r1",
+          "Name": "libssl3",
+          "Identifier": {
+            "PURL": "pkg:apk/alpine/libssl3@3.5.7-r1?arch=x86_64\u0026distro=3.24",
+            "UID": "c0c0ac136d0c28d3"
+          },
+          "Version": "3.5.7-r1",
+          "Arch": "x86_64",
+          "SrcName": "openssl",
+          "SrcVersion": "3.5.7-r1",
+          "Licenses": [
+            "Apache-2.0"
+          ],
+          "Maintainer": "Docker Hardened Images \u003cdhi@docker.com\u003e",
+          "DependsOn": [
+            "libcrypto3@3.5.7-r1",
+            "musl@1.2.6-r2"
+          ],
+          "Layer": {
+            "Digest": "sha256:5715463c9daf1d087b53b27a3c8e4beec44eac849e3f3745807ce01417526b40",
+            "DiffID": "sha256:a17733118d6f70ed90156cb1ea6ac62c84f6a949b79300eed8f0d550299f8e81"
+          },
+          "Digest": "sha1:e7a4564d3a402a305c46f9879af296b8d27bed33",
+          "InstalledFiles": [
+            "usr/lib/libssl.so.3"
+          ],
+          "AnalyzedBy": "apk"
+        },
+        {
+          "ID": "musl@1.2.6-r2",
+          "Name": "musl",
+          "Identifier": {
+            "PURL": "pkg:apk/alpine/musl@1.2.6-r2?arch=x86_64\u0026distro=3.24",
+            "UID": "380793802c07237d"
+          },
+          "Version": "1.2.6-r2",
+          "Arch": "x86_64",
+          "SrcName": "musl",
+          "SrcVersion": "1.2.6-r2",
+          "Licenses": [
+            "MIT"
+          ],
+          "Maintainer": "Docker Hardened Images \u003cdhi@docker.com\u003e",
+          "Layer": {
+            "Digest": "sha256:5715463c9daf1d087b53b27a3c8e4beec44eac849e3f3745807ce01417526b40",
+            "DiffID": "sha256:a17733118d6f70ed90156cb1ea6ac62c84f6a949b79300eed8f0d550299f8e81"
+          },
+          "Digest": "sha1:587d27540a8631f7be15bccce982d2ecf55cb3b5",
+          "InstalledFiles": [
+            "lib/ld-musl-x86_64.so.1",
+            "lib/libc.musl-x86_64.so.1"
+          ],
+          "AnalyzedBy": "apk"
+        },
+        {
+          "ID": "ssl_client@1.38.0_git20260724-r5",
+          "Name": "ssl_client",
+          "Identifier": {
+            "PURL": "pkg:apk/alpine/ssl_client@1.38.0_git20260724-r5?arch=x86_64\u0026distro=3.24",
+            "UID": "bd78c1ee050f8e94"
+          },
+          "Version": "1.38.0_git20260724-r5",
+          "Arch": "x86_64",
+          "SrcName": "busybox",
+          "SrcVersion": "1.38.0_git20260724-r5",
+          "Licenses": [
+            "GPL-2.0-only"
+          ],
+          "Maintainer": "Docker Hardened Images \u003cdhi@docker.com\u003e",
+          "DependsOn": [
+            "libcrypto3@3.5.7-r1",
+            "libssl3@3.5.7-r1",
+            "musl@1.2.6-r2"
+          ],
+          "Layer": {
+            "Digest": "sha256:5715463c9daf1d087b53b27a3c8e4beec44eac849e3f3745807ce01417526b40",
+            "DiffID": "sha256:a17733118d6f70ed90156cb1ea6ac62c84f6a949b79300eed8f0d550299f8e81"
+          },
+          "Digest": "sha1:d3e28eadb77dbdd3cea1d085a388f9068de63a54",
+          "InstalledFiles": [
+            "usr/bin/ssl_client"
+          ],
+          "AnalyzedBy": "apk"
+        }
+      ]
+    }
+  ]
+}

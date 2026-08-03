@@ -1,0 +1,83 @@
+{
+  "SchemaVersion": 2,
+  "Trivy": {
+    "Version": "0.73.0"
+  },
+  "ReportID": "019fc795-e121-70d4-8e06-d131c32442d7",
+  "CreatedAt": "2026-08-03T12:25:16.32105675Z",
+  "ArtifactID": "sha256:5b1ada51dcc187e5dbe27b30f95d3d5dbe9eaf0c05833f98d60eed6c2c6bb088",
+  "ArtifactName": "koalaman/shellcheck:v0.11.0@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d",
+  "ArtifactType": "container_image",
+  "Metadata": {
+    "Size": 16217088,
+    "ImageID": "sha256:1b75f92cc7117e0b61c8f18ee987bd333a62454b214838a3e2718101b4f191d7",
+    "DiffIDs": [
+      "sha256:47b2be9a854e7fa962acdab1d1e7fc47b3f33b8f0329f5113c4ac3825a77574a",
+      "sha256:cf2b129aa73bb82b0f6079cb4cdf5fbf92b12cf152be4c5085f404d9903f84e7"
+    ],
+    "RepoDigests": [
+      "koalaman/shellcheck@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d"
+    ],
+    "Reference": "koalaman/shellcheck@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d",
+    "ImageConfig": {
+      "architecture": "amd64",
+      "created": "2025-08-04T00:45:42.043820492Z",
+      "history": [
+        {
+          "created": "2025-08-04T00:45:41.003776531Z",
+          "created_by": "LABEL maintainer=Vidar Holen \u003cvidar@vidarholen.net\u003e",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        },
+        {
+          "created": "2025-08-04T00:45:41.003776531Z",
+          "created_by": "WORKDIR /mnt",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2025-08-04T00:45:42.043820492Z",
+          "created_by": "COPY /bin/shellcheck /bin/ # buildkit",
+          "comment": "buildkit.dockerfile.v0"
+        },
+        {
+          "created": "2025-08-04T00:45:42.043820492Z",
+          "created_by": "ENTRYPOINT [\"/bin/shellcheck\"]",
+          "comment": "buildkit.dockerfile.v0",
+          "empty_layer": true
+        }
+      ],
+      "os": "linux",
+      "rootfs": {
+        "type": "layers",
+        "diff_ids": [
+          "sha256:47b2be9a854e7fa962acdab1d1e7fc47b3f33b8f0329f5113c4ac3825a77574a",
+          "sha256:cf2b129aa73bb82b0f6079cb4cdf5fbf92b12cf152be4c5085f404d9903f84e7"
+        ]
+      },
+      "config": {
+        "Entrypoint": [
+          "/bin/shellcheck"
+        ],
+        "Env": [
+          "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        ],
+        "Labels": {
+          "maintainer": "Vidar Holen \u003cvidar@vidarholen.net\u003e"
+        },
+        "WorkingDir": "/mnt"
+      }
+    },
+    "Layers": [
+      {
+        "Size": 1536,
+        "Digest": "sha256:957cfdbf2dcf7346f03c3dc4c6863d25c2b55e2e132add443af348c23f4d3c32",
+        "DiffID": "sha256:47b2be9a854e7fa962acdab1d1e7fc47b3f33b8f0329f5113c4ac3825a77574a"
+      },
+      {
+        "Size": 16215552,
+        "Digest": "sha256:08ea58bc53cfcc7a503b8d01bd95189dda23435693c7c0a21bf3a6fe522145fa",
+        "DiffID": "sha256:cf2b129aa73bb82b0f6079cb4cdf5fbf92b12cf152be4c5085f404d9903f84e7"
+      }
+    ]
+  }
+}
