@@ -104,7 +104,21 @@ func checkWorkflowAction(c *cli.Context) error {
 
 	if pipelineName != "" {
 		// Validate specific pipeline
-		workflowFile := filepath.Join(workflowDir, pipelineName+".yml")
+		pipeline, exists := cfg.Pipelines[pipelineName]
+		if !exists {
+			return fmt.Errorf("pipeline '%s' not found in configuration", pipelineName)
+		}
+
+		// A pipeline can state that no workflow implements it. Asking for it by
+		// name then has a real answer — nothing to compare — rather than a
+		// comparison with a file that only shares its name (issue #233).
+		workflowName := pipeline.WorkflowFile(pipelineName)
+		if workflowName == "" {
+			fmt.Printf("ℹ️  Pipeline '%s' declares workflow = %q — no workflow implements it, nothing to compare\n", pipelineName, config.NoWorkflow)
+			return nil
+		}
+
+		workflowFile := filepath.Join(workflowDir, workflowName)
 		if _, err := os.Stat(workflowFile); os.IsNotExist(err) {
 			logrus.Errorf("Workflow file not found: %s", workflowFile)
 			return fmt.Errorf("workflow file not found: %s", workflowFile)

@@ -221,10 +221,24 @@ remote), `release create` refuses to start a second one and points at the open P
 
 **The release workflow** (`.github/workflows/release.yml`):
 
-- Runs full CI checks (security, code quality, tests, build)
-- Builds Docker image → pushes to `ghcr.io/cidx-org/cidx:VERSION`
-- Creates GitHub Release with changelog and binaries
-- Publishes release artifacts
+- Cross-compiles the binaries for Linux, macOS and Windows, natively
+- Builds the Docker image with `cidx run docker` → pushes to `ghcr.io/cidx-org/cidx:VERSION`
+- Creates the GitHub Release with `softprops/action-gh-release`, changelog and binaries attached
+
+It does **not** re-run security, code and test: the tag is cut from a `main`
+commit those phases already passed on in `ci.yml`. And it publishes the release
+natively, because release publishing is deliberately outside cidx's scope —
+cross-compilation plus asset attachment is a handful of lines of shell run once
+per release, and a preset for it would add complexity for no friction removed
+(guardrail 3).
+
+So `release.yml` is the _publication_ workflow, not an implementation of
+`[pipelines.release]`. That pipeline is the end-to-end rehearsal `cidx run
+release` walks locally with the guardrails on (`gh-release` drafts, `kaniko`
+does not push) — see [Local Safety](../core-concepts/security.md). The two are
+not meant to coincide, which is why `cidx.toml` states `workflow = "none"` on
+`[pipelines.release]` so `cidx check workflow` does not compare them (issue
+#233). See [`cidx check workflow`](../reference/cli.md#cidx-check-workflow).
 
 **Options**:
 

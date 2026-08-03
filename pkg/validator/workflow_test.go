@@ -482,3 +482,208 @@ func TestEqualOrder(t *testing.T) {
 		})
 	}
 }
+
+// stageWorkflows writes the given workflow files into a fresh .github/workflows
+// directory and returns it.
+func stageWorkflows(t *testing.T, files map[string]string) string {
+	t.Helper()
+
+	dir := filepath.Join(t.TempDir(), ".github", "workflows")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+// The two workflows this repository actually has: a CI workflow that mirrors
+// [pipelines.ci] through cidx, and a release workflow that publishes natively
+// and delegates a single phase.
+const (
+	mirrorCIWorkflow = `name: CI
+jobs:
+  security:
+    steps:
+      - run: ./bin/cidx run security
+  code:
+    needs: [security]
+    steps:
+      - run: ./bin/cidx run code
+  test:
+    needs: [code]
+    steps:
+      - run: ./bin/cidx --verbose run test
+  build:
+    needs: [test]
+    steps:
+      - run: ./bin/cidx run build
+`
+
+	nativeReleaseWorkflow = `name: Release
+jobs:
+  build:
+    steps:
+      - run: GOOS=linux go build -o dist/cidx ./cmd/cidx
+  docker:
+    needs: [build]
+    steps:
+      - run: ./bin/cidx run docker
+  release:
+    needs: [build, docker]
+    steps:
+      - uses: softprops/action-gh-release@v3
+`
+)
+
+func releaseRepoConfig(releaseWorkflow string) *config.Config {
+	return &config.Config{
+		Pipelines: map[string]config.Pipeline{
+			"ci":      {Phases: []string{"security", "code", "test", "build"}},
+			"pr":      {Phases: []string{"security", "code", "test"}},
+			"release": {Phases: []string{"security", "code", "test", "build", "docker", "release"}, Workflow: releaseWorkflow},
+		},
+	}
+}
+
+func pipelinesValidated(results []*ValidationResult) []string {
+	names := make([]string, 0, len(results))
+	for _, r := range results {
+		names = append(names, r.Pipeline)
+	}
+	return names
+}
+
+// TestValidateAllWorkflows_SkipsAPipelineNoWorkflowImplements is the second half
+// of #233: `check workflow` exited 1 on this repository because release.yml
+// shares a name with [pipelines.release]. It never was that pipeline's mirror —
+// it publishes the release natively and delegates only `docker` to cidx, while
+// the pipeline is the end-to-end rehearsal `cidx run release` walks locally.
+// The pairing is now declared, so the two are no longer compared.
+func TestValidateAllWorkflows_SkipsAPipelineNoWorkflowImplements(t *testing.T) {
+	dir := stageWorkflows(t, map[string]string{
+		"ci.yml":      mirrorCIWorkflow,
+		"release.yml": nativeReleaseWorkflow,
+	})
+
+	results, err := ValidateAllWorkflows(testApp(), releaseRepoConfig(config.NoWorkflow), dir)
+	if err != nil {
+		t.Fatalf("ValidateAllWorkflows: %v", err)
+	}
+
+	if got := pipelinesValidated(results); !reflect.DeepEqual(got, []string{"ci"}) {
+		t.Fatalf("validated pipelines = %v, want [ci]", got)
+	}
+	if !results[0].Success {
+		t.Errorf("expected ci to be in sync, got:\n%s", FormatResult(results[0]))
+	}
+}
+
+// TestValidateAllWorkflows_ComparesByConventionWhenNothingIsDeclared is the
+// guard on the fix above: the exception has to be written down to apply. A
+// project whose release.yml really does run the release pipeline keeps the
+// filename convention, and keeps failing when the two disagree.
+func TestValidateAllWorkflows_ComparesByConventionWhenNothingIsDeclared(t *testing.T) {
+	dir := stageWorkflows(t, map[string]string{
+		"ci.yml":      mirrorCIWorkflow,
+		"release.yml": nativeReleaseWorkflow,
+	})
+
+	results, err := ValidateAllWorkflows(testApp(), releaseRepoConfig(""), dir)
+	if err != nil {
+		t.Fatalf("ValidateAllWorkflows: %v", err)
+	}
+
+	if got := pipelinesValidated(results); !reflect.DeepEqual(got, []string{"ci", "release"}) {
+		t.Fatalf("validated pipelines = %v, want [ci release]", got)
+	}
+	if results[1].Success {
+		t.Error("expected the undeclared release pipeline to be compared with release.yml and fail")
+	}
+}
+
+// TestValidateAllWorkflows_StillReportsRealDriftOnCI is the reason the fix is
+// an explicit declaration rather than a softer verdict on the "declared but not
+// executed" direction: on ci.yml that direction is exactly the drift the check
+// exists to catch. Both ways of drifting a mirror workflow must keep failing.
+func TestValidateAllWorkflows_StillReportsRealDriftOnCI(t *testing.T) {
+	cfg := releaseRepoConfig(config.NoWorkflow)
+
+	t.Run("a phase the workflow stopped running", func(t *testing.T) {
+		// The test job survives, its `cidx run test` call does not.
+		drifted := strings.Replace(mirrorCIWorkflow, "./bin/cidx --verbose run test", "echo 'tests disabled'", 1)
+		dir := stageWorkflows(t, map[string]string{"ci.yml": drifted, "release.yml": nativeReleaseWorkflow})
+
+		results, err := ValidateAllWorkflows(testApp(), cfg, dir)
+		if err != nil {
+			t.Fatalf("ValidateAllWorkflows: %v", err)
+		}
+		if len(results) != 1 || results[0].Success {
+			t.Fatalf("expected ci to be reported out of sync, got %d result(s)", len(results))
+		}
+		if !reflect.DeepEqual(results[0].MissingInGH, []string{"test"}) {
+			t.Errorf("missing in workflow = %v, want [test]", results[0].MissingInGH)
+		}
+	})
+
+	t.Run("a phase added to the pipeline only", func(t *testing.T) {
+		extended := &config.Config{Pipelines: map[string]config.Pipeline{
+			"ci":      {Phases: []string{"security", "code", "test", "build", "docker"}},
+			"release": {Phases: []string{"docker"}, Workflow: config.NoWorkflow},
+		}}
+		dir := stageWorkflows(t, map[string]string{"ci.yml": mirrorCIWorkflow, "release.yml": nativeReleaseWorkflow})
+
+		results, err := ValidateAllWorkflows(testApp(), extended, dir)
+		if err != nil {
+			t.Fatalf("ValidateAllWorkflows: %v", err)
+		}
+		if len(results) != 1 || results[0].Success {
+			t.Fatalf("expected ci to be reported out of sync, got %d result(s)", len(results))
+		}
+		if !reflect.DeepEqual(results[0].MissingInGH, []string{"docker"}) {
+			t.Errorf("missing in workflow = %v, want [docker]", results[0].MissingInGH)
+		}
+	})
+
+	t.Run("a phase the workflow runs without declaring it", func(t *testing.T) {
+		trimmed := &config.Config{Pipelines: map[string]config.Pipeline{
+			"ci": {Phases: []string{"security", "code", "test"}},
+		}}
+		dir := stageWorkflows(t, map[string]string{"ci.yml": mirrorCIWorkflow})
+
+		results, err := ValidateAllWorkflows(testApp(), trimmed, dir)
+		if err != nil {
+			t.Fatalf("ValidateAllWorkflows: %v", err)
+		}
+		if len(results) != 1 || results[0].Success {
+			t.Fatalf("expected ci to be reported out of sync, got %d result(s)", len(results))
+		}
+		if !reflect.DeepEqual(results[0].MissingInLocal, []string{"build"}) {
+			t.Errorf("missing in cidx.toml = %v, want [build]", results[0].MissingInLocal)
+		}
+	})
+}
+
+// TestValidateAllWorkflows_IsDeterministic guards what the first half of #233
+// fixed one level up: the pipelines are now walked from a Go map, so they have
+// to be sorted before they are reported.
+func TestValidateAllWorkflows_IsDeterministic(t *testing.T) {
+	dir := stageWorkflows(t, map[string]string{
+		"ci.yml":      mirrorCIWorkflow,
+		"release.yml": nativeReleaseWorkflow,
+	})
+	cfg := releaseRepoConfig("")
+
+	for i := 0; i < 20; i++ {
+		results, err := ValidateAllWorkflows(testApp(), cfg, dir)
+		if err != nil {
+			t.Fatalf("ValidateAllWorkflows: %v", err)
+		}
+		if got := pipelinesValidated(results); !reflect.DeepEqual(got, []string{"ci", "release"}) {
+			t.Fatalf("run %d: validated pipelines = %v, want [ci release]", i, got)
+		}
+	}
+}

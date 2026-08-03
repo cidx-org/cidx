@@ -57,6 +57,10 @@ CIDX **does not** manage:
 
 If a capability is better handled by the platform natively, CIDX should not duplicate it.
 
+**What that costs, and where it is paid**: this repository's own `release.yml` is therefore a _publication_ workflow, not an implementation of `[pipelines.release]`. It cross-compiles natively, delegates the `docker` phase to `cidx run docker`, and publishes with `softprops/action-gh-release`; it does not re-run security/code/test, which `ci.yml` already ran on the commit the tag is cut from. `[pipelines.release]` is the end-to-end rehearsal `cidx run release` walks locally with the guardrails on. The two are not meant to coincide, so `cidx.toml` declares `workflow = "none"` on that pipeline and `cidx check workflow` leaves it alone (issue #233).
+
+The declaration is written down rather than inferred because no inference can be sound here: from the outside, a job doing its phase natively and a job that lost its `cidx run` call look identical, so any rule lenient enough to excuse the first would also excuse the second — and the second is exactly the drift the check exists to catch.
+
 ### The Golden Rule: Discussion Before Code
 
 Every feature follows this cycle:

@@ -107,6 +107,66 @@ severity = "HIGH,CRITICAL"
 	}
 }
 
+// TestPipelineWorkflowFile covers the pairing `check workflow` reads: the
+// filename convention by default, an explicit file when the workflow is named
+// otherwise, and nothing at all when the pipeline declares that no workflow
+// implements it (issue #233).
+func TestPipelineWorkflowFile(t *testing.T) {
+	tests := []struct {
+		name     string
+		pipeline string
+		declared string
+		want     string
+	}{
+		{"convention when unset", "ci", "", "ci.yml"},
+		{"convention follows the pipeline name", "release", "", "release.yml"},
+		{"an explicitly named workflow", "ci", "main.yml", "main.yml"},
+		{"no workflow implements it", "release", NoWorkflow, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := Pipeline{Phases: []string{"security"}, Workflow: tt.declared}
+			if got := p.WorkflowFile(tt.pipeline); got != tt.want {
+				t.Errorf("WorkflowFile(%q) with workflow = %q = %q, want %q", tt.pipeline, tt.declared, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestLoad_PipelineWorkflow checks the key survives the real loader — the
+// pipeline section is decoded through a typed struct, so an unlisted key would
+// be dropped in silence.
+func TestLoad_PipelineWorkflow(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "cidx.toml")
+	configContent := `
+[security]
+containers = ["trivy"]
+
+[pipelines.ci]
+phases = ["security"]
+
+[pipelines.release]
+phases = ["security"]
+workflow = "none"
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to create test config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if got := cfg.Pipelines["ci"].WorkflowFile("ci"); got != "ci.yml" {
+		t.Errorf("ci pipeline workflow = %q, want %q", got, "ci.yml")
+	}
+	if got := cfg.Pipelines["release"].WorkflowFile("release"); got != "" {
+		t.Errorf("release pipeline workflow = %q, want none", got)
+	}
+}
+
 func TestLoad_NonExistentFile(t *testing.T) {
 	_, err := Load("/nonexistent/config.toml")
 	if err == nil {

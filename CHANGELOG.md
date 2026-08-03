@@ -8,6 +8,7 @@
 
 ### Fix
 
+- **validator**: compare a pipeline with the workflow it declares rather than the one its name suggests; `[pipelines.*] workflow` names that file, or `"none"` when no workflow implements the pipeline (#233)
 - **validator**: read the phases of a workflow by parsing the cidx invocations instead of matching a substring, so a flag between the binary and `run` no longer hides a phase (#233)
 - **security**: key code scanning alerts on the repository so a repin does not churn them (#313)
 - **security**: report the exceptions on running repositories that are fixed upstream (#312)

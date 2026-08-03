@@ -164,6 +164,14 @@ func (tc *TestContext) declaredPipelines() map[string][]string {
 	return map[string][]string{"ci": {"security", "code"}}
 }
 
+// pipelineWorkflows returns the `workflow` key each pipeline states, keyed by
+// pipeline name. A pipeline absent from the map states none, and follows the
+// <pipeline>.yml convention.
+func (tc *TestContext) pipelineWorkflows() map[string]string {
+	workflows, _ := tc.Config["pipeline_workflows"].(map[string]string)
+	return workflows
+}
+
 // writeStagedConfig writes the cidx.toml the scenario described into its
 // project directory and returns the path. The phase sections are derived from
 // the declared pipelines so the file is one a user could have written.
@@ -204,7 +212,11 @@ func (tc *TestContext) writeStagedConfig() (string, error) {
 			}
 			fmt.Fprintf(&b, "%q", phase)
 		}
-		b.WriteString("]\n\n")
+		b.WriteString("]\n")
+		if workflow, stated := tc.pipelineWorkflows()[name]; stated {
+			fmt.Fprintf(&b, "workflow = %q\n", workflow)
+		}
+		b.WriteString("\n")
 	}
 
 	path := filepath.Join(dir, "cidx.toml")

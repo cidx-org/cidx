@@ -48,6 +48,16 @@ phases = ["security", "code", "test", "build", "release", "docker"]
 description = "Publishes all artifacts for a new release."
 ```
 
+**Optional: `workflow`** — names the CI workflow file that implements the pipeline. `cidx check workflow` compares the two. Unset, it follows the convention `<pipeline>.yml`; set it when the workflow is named otherwise, or to `"none"` when no workflow implements the pipeline at all.
+
+```toml
+[pipelines.release]
+phases = ["security", "code", "test", "build", "docker", "release"]
+# The release workflow publishes natively and only delegates one phase to cidx,
+# so it is not this pipeline's implementation — nothing to compare.
+workflow = "none"
+```
+
 ### 2. Defining Phases and Containers
 
 A `phase` is a logical group of containers. You define a phase by creating a top-level section with its name.
