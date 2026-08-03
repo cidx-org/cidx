@@ -81,6 +81,8 @@ func RegisterSecuritySteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Given(`^the exception "([^"]*)" was recorded against "([^"]*)"$`, tc.exceptionRecordedAgainst)
 	ctx.When(`^the exception lifecycle is applied$`, tc.applyExceptionLifecycle)
 	ctx.When(`^the findings are triaged$`, tc.triageFindings)
+	ctx.When(`^the catalogue's carried findings are counted$`, tc.countCarriedFindings)
+	ctx.Then(`^the catalogue should carry (\d+) findings?$`, tc.triageCountShouldBe("carried"))
 	ctx.Then(`^the exception should be live$`, tc.exceptionShouldBe(presets.ExceptionLive))
 	ctx.Then(`^the exception should be obsolete$`, tc.exceptionShouldBe(presets.ExceptionObsolete))
 	ctx.Then(`^the exception should be carried over$`, tc.exceptionShouldBe(presets.ExceptionCarryOver))
@@ -256,6 +258,31 @@ func (tc *TestContext) triageFindings() error {
 	return nil
 }
 
+// countCarriedFindings runs the real rule `cidx security baseline` publishes —
+// what the reports show, plus the accepted findings the ignore file took out of
+// them, and nothing else the scanners suppressed of their own accord (#310).
+func (tc *TestContext) countCarriedFindings() error {
+	found, scanned := tc.Config["exception_findings"].(map[string][]presets.Finding)
+	if !scanned {
+		return fmt.Errorf("the scan evidence was not staged: say whether the catalogue repositories were scanned")
+	}
+
+	cve, _ := tc.Config["exception_cve"].(string)
+	on, _ := tc.Config["exception_image"].(string)
+
+	var triage presets.Triage
+	for _, image := range tc.catalogueImages() {
+		var accepted []string
+		if image == on && cve != "" {
+			accepted = []string{cve}
+		}
+		triage.Add(presets.Summarise(presets.Carried(found[image], tc.suppressedFindings()[image], accepted)))
+	}
+
+	tc.Config["triage"] = triage
+	return nil
+}
+
 func (tc *TestContext) triageCountShouldBe(population string) func(int) error {
 	return func(want int) error {
 		triage, ok := tc.Config["triage"].(presets.Triage)
@@ -265,6 +292,8 @@ func (tc *TestContext) triageCountShouldBe(population string) func(int) error {
 
 		var got int
 		switch population {
+		case "carried":
+			got = triage.Carried
 		case "fixable":
 			got = triage.Fixable
 		case "go-stdlib":
