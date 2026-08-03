@@ -39,6 +39,13 @@ go.work.sum
 Thumbs.db
 .claude/settings.local.json
 
+# Scanner artifacts: the default --results directory of `security vuln prune`,
+# `security baseline` and `preset scan-verdicts`. Downloading a workflow's
+# artifacts here and committing them swept 43 files and 201k lines into a branch
+# (#323), and gitleaks — which scans every ref — then failed the Security job of
+# every CI run in the repository on CVE text that pattern-matches an API token.
+scan-results/
+
 # Internal notes
 .cidx/ideas/
 
