@@ -75,6 +75,8 @@ func RegisterSecuritySteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Given(`^the scanners report "([^"]*)" on "([^"]*)"$`, tc.scannersReportOnImage)
 	ctx.Given(`^the scanners report "([^"]*)" on "([^"]*)", fixed in "([^"]*)"$`, tc.scannersReportFixedOnImage)
 	ctx.Given(`^the scanners report "([^"]*)" on "([^"]*)" in package "([^"]*)" of type "([^"]*)"$`, tc.scannersReportPackageOnImage)
+	ctx.Given(`^the audit's ignore file suppressed "([^"]*)" on "([^"]*)"$`, tc.suppressedOnImage)
+	ctx.Given(`^the scan results record nothing they suppressed$`, tc.resultsRecordNoSuppression)
 	ctx.Given(`^the audit's ignore file suppressed "([^"]*)" on "([^"]*)", fixed in "([^"]*)"$`, tc.suppressedFixedOnImage)
 	ctx.Given(`^the exception "([^"]*)" was recorded against "([^"]*)"$`, tc.exceptionRecordedAgainst)
 	ctx.When(`^the exception lifecycle is applied$`, tc.applyExceptionLifecycle)
@@ -147,15 +149,27 @@ func (tc *TestContext) scannersReportPackageOnImage(cve, image, pkg, pkgType str
 	return tc.stageFinding(image, presets.Finding{ID: cve, Severity: "HIGH", Package: pkg, PackageType: pkgType})
 }
 
-// suppressedFixedOnImage stages a finding the audit's own ignore file kept out
-// of the scan results. That is where a live entry's fix has to come from: the
-// ignore file is built from these very entries, so a live one filters its own
-// CVE out of its repository's results and nothing else can answer for it.
+// suppressedOnImage stages a finding the audit's own ignore file kept out of
+// the scan results. That is where an accepted CVE has to be looked for: the
+// ignore file is built from these very entries, so a live one is deleted from
+// its own repository's results and nothing else can answer for it. Both
+// scanners record it — Grype in `ignoredMatches`, Trivy in
+// `ExperimentalModifiedFindings` under `--show-suppressed`.
+func (tc *TestContext) suppressedOnImage(cve, image string) error {
+	return tc.stageSuppressed(image, presets.Finding{ID: cve, Severity: "HIGH", Scanner: "Grype"})
+}
+
+// suppressedFixedOnImage is the same with the fix the scanner recorded next to
+// it — the population the policy says an exception must never be written for.
 func (tc *TestContext) suppressedFixedOnImage(cve, image, fix string) error {
-	suppressed := tc.suppressedFindings()
-	suppressed[image] = append(suppressed[image], presets.Finding{
+	return tc.stageSuppressed(image, presets.Finding{
 		ID: cve, Severity: "HIGH", FixedIn: fix, Scanner: "Grype",
 	})
+}
+
+func (tc *TestContext) stageSuppressed(image string, finding presets.Finding) error {
+	suppressed := tc.suppressedFindings()
+	suppressed[image] = append(suppressed[image], finding)
 	return nil
 }
 
@@ -194,7 +208,26 @@ func (tc *TestContext) applyExceptionLifecycle() error {
 		return fmt.Errorf("the scan evidence was not staged: say whether the catalogue repositories were scanned")
 	}
 
-	tc.Config["exception_verdict"] = presets.ClassifyException(cve, image, tc.catalogueImages(), findings, tc.suppressedFindings())
+	// The scenarios are written against results that keep the record of what
+	// their ignore file removed, which is what security-audit.yml produces since
+	// it started passing `--show-suppressed`. The one scenario about results
+	// that do not says so in its own step.
+	recorded, stated := tc.Config["suppressions_recorded"].(bool)
+	if !stated {
+		recorded = true
+	}
+
+	tc.Config["exception_verdict"] = presets.ClassifyException(
+		cve, image, tc.catalogueImages(), findings, tc.suppressedFindings(), recorded)
+	return nil
+}
+
+// resultsRecordNoSuppression is the evidence state the fail-closed gate exists
+// for: results that show findings but keep no record of what their ignore file
+// took out of them. Trivy produces exactly that without `--show-suppressed`,
+// and its report carries no way to tell the two apart.
+func (tc *TestContext) resultsRecordNoSuppression() error {
+	tc.Config["suppressions_recorded"] = false
 	return nil
 }
 

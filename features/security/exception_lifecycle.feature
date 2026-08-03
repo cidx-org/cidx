@@ -14,17 +14,21 @@ Feature: Vulnerability Exception Lifecycle
   # followed the promotion — and only the first is a purge. The findings decide,
   # not the tags.
 
-  Rule: An exception covering a running repository is never in question
+  Rule: An exception on a running repository lives exactly as long as its CVE
 
-    # The repository is checked before the findings, and that order is
-    # load-bearing: the security audit builds its ignore file from these very
-    # entries, so a CVE accepted on a running repository is filtered out of that
-    # repository's own scan results. Reading its absence as "gone" would purge
-    # every exception that is doing its job.
+    # The audit builds its ignore file from these very entries, so an accepted
+    # CVE is deleted from its own repository's scan results by construction.
+    # Reading that absence as "gone" would purge every exception doing its job —
+    # which is why the repository match used to answer live before consulting
+    # the findings at all, and why an exception could then never be retired by a
+    # repin of the same repository (#311). The evidence is what the scanners
+    # recorded as suppressed: Grype in `ignoredMatches`, Trivy in
+    # `ExperimentalModifiedFindings` under `--show-suppressed`.
 
-    Scenario: The catalogue still runs the repository the exception was written for
+    Scenario: The catalogue still runs the repository and still carries the CVE
       Given the catalogue runs "dhi.io/trivy"
       And every catalogue repository has been scanned
+      And the audit's ignore file suppressed "CVE-2026-0001" on "dhi.io/trivy"
       And the exception "CVE-2026-0001" was recorded against "dhi.io/trivy"
       When the exception lifecycle is applied
       Then the exception should be live
@@ -32,9 +36,64 @@ Feature: Vulnerability Exception Lifecycle
     Scenario: The tag moved under the exception
       Given the catalogue runs "dhi.io/trivy"
       And every catalogue repository has been scanned
+      And the audit's ignore file suppressed "CVE-2026-0001" on "dhi.io/trivy"
       And the exception "CVE-2026-0001" was recorded against "dhi.io/trivy"
       When the exception lifecycle is applied
       Then the exception should be live
+
+    # The monitor generates no ignore file at all, so its results show
+    # everything and suppress nothing. A CVE visible there is carried just as
+    # plainly, and the lifecycle must not need to know which workflow produced
+    # the artifacts it was pointed at.
+
+    Scenario: The results were not filtered at all
+      Given the catalogue runs "dhi.io/trivy"
+      And every catalogue repository has been scanned
+      And the scanners report "CVE-2026-0001" on "dhi.io/trivy"
+      And the exception "CVE-2026-0001" was recorded against "dhi.io/trivy"
+      When the exception lifecycle is applied
+      Then the exception should be live
+
+    # The case the lifecycle could not close. A repin of the same repository is
+    # the most ordinary way for an accepted CVE to disappear, and it changes
+    # nothing about the repository — so nothing mechanical could ever retire the
+    # entry, and `cidx security vuln check` went on reporting it as expired.
+
+    Scenario: A repin removed the CVE from the repository the catalogue still runs
+      Given the catalogue runs "dhi.io/trivy"
+      And every catalogue repository has been scanned
+      And the audit's ignore file suppressed "CVE-2026-0002" on "dhi.io/trivy"
+      And the exception "CVE-2026-0001" was recorded against "dhi.io/trivy"
+      When the exception lifecycle is applied
+      Then the exception should be obsolete
+      And the exception verdict should mention "no image of it carries"
+
+    # Fail-closed applies to a running repository too: the catalogue running it
+    # is not evidence about the CVE, and conflating the two is what #311 was.
+
+    Scenario: The running repository produced no scan result
+      Given the catalogue runs "dhi.io/trivy"
+      And no catalogue repository has been scanned
+      And the exception "CVE-2026-0001" was recorded against "dhi.io/trivy"
+      When the exception lifecycle is applied
+      Then the exception should be unresolved
+      And the exception verdict should mention "cannot be shown to have gone"
+
+    # And to the evidence itself. Trivy keeps the record of what its ignore file
+    # removed only under `--show-suppressed`, and its report says nothing about
+    # whether the flag was passed — a scan that hid four findings without
+    # recording them looks exactly like one that hid none. Measured on the
+    # audit's artifacts from the day before the flag landed: four ansible
+    # entries, every one still carried, all four would have been deleted.
+
+    Scenario: The results keep no record of what they suppressed
+      Given the catalogue runs "dhi.io/trivy"
+      And every catalogue repository has been scanned
+      And the scan results record nothing they suppressed
+      And the exception "CVE-2026-0001" was recorded against "dhi.io/trivy"
+      When the exception lifecycle is applied
+      Then the exception should be unresolved
+      And the exception verdict should mention "cannot be told apart"
 
   Rule: An exception whose CVE went with its image is obsolete
 
@@ -79,6 +138,19 @@ Feature: Vulnerability Exception Lifecycle
       When the exception lifecycle is applied
       Then the exception should be carried over
 
+    # The repository that carries it has an accepted entry of its own, so the
+    # CVE is filtered out of its results too. Judging on the visible findings
+    # alone reads it as gone and deletes a justification the audit still needs.
+
+    Scenario: The repository carrying it suppressed it as well
+      Given the catalogue runs "dhi.io/trivy"
+      And every catalogue repository has been scanned
+      And the audit's ignore file suppressed "CVE-2026-0001" on "dhi.io/trivy"
+      And the exception "CVE-2026-0001" was recorded against "aquasec/trivy"
+      When the exception lifecycle is applied
+      Then the exception should be carried over
+      And the exception verdict should name the repository "dhi.io/trivy"
+
   Rule: An exception is never the answer to a CVE that is fixed upstream
 
     # A fix upstream means the finding disappears when the publisher republishes,
@@ -112,13 +184,14 @@ Feature: Vulnerability Exception Lifecycle
       Then the exception should be live
       And the exception verdict should name the fix "1.2.8"
 
-    # Trivy's ignore file deletes the finding rather than recording it, so a fix
-    # only Trivy reported leaves no trace in the audit's artifacts. The verdict
-    # names no fix, which means nobody said — never that no fix exists.
+    # A fix nobody reported is silence, never a claim that no fix exists. The
+    # finding is on the record as suppressed, so the entry is plainly still
+    # doing its job — neither scanner named a version to repin to.
 
     Scenario: A live entry no scanner reported a fix for names none
       Given the catalogue runs "ghcr.io/ansible/community-ansible-dev-tools"
       And every catalogue repository has been scanned
+      And the audit's ignore file suppressed "CVE-2025-52881" on "ghcr.io/ansible/community-ansible-dev-tools"
       And the exception "CVE-2025-52881" was recorded against "ghcr.io/ansible/community-ansible-dev-tools"
       When the exception lifecycle is applied
       Then the exception should be live

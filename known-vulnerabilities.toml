@@ -219,14 +219,3 @@
   expires = "2026-03-02"
   notes = "Vulnerability in upstream third-party image"
   references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2025-59375"
-  repository = "rust"
-  first_seen = "golangci/golangci-lint:v2.6.2"
-  severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
-  references = []

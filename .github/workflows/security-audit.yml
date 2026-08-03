@@ -177,6 +177,17 @@ jobs:
           # `cidx security vuln prune`, which reads exactly these files to decide
           # whether an accepted CVE is still present (#238). The .txt capture
           # below still keeps stderr, which is where the auth check reads it.
+          #
+          # `--show-suppressed` is what lets an exception ever be retired.
+          # The ignore file is generated from the accepted entries themselves, so
+          # without it a live entry's CVE is deleted from its own image's report
+          # and "still carried" is indistinguishable from "fixed and gone" — the
+          # lifecycle could not close on a repin of the same repository (#311).
+          # The flag moves those findings to `ExperimentalModifiedFindings`
+          # instead of dropping them, `FixedVersion` included, which is the same
+          # record Grype keeps in `ignoredMatches`. `Vulnerabilities` is
+          # untouched, so every other reader of this artifact sees what it always
+          # saw. TestTheAuditRecordsWhatItSuppressed pins the flag here.
           docker run --rm \
             "${DOCKER_AUTH[@]}" \
             -v "$(pwd)/.trivyignore:/root/.trivyignore:ro" \
@@ -185,6 +196,7 @@ jobs:
             --severity HIGH,CRITICAL \
             --ignorefile /root/.trivyignore \
             --skip-db-update \
+            --show-suppressed \
             --format json \
             "$IMAGE" > results/trivy-${SAFE_NAME}.json 2>/dev/null || true
 

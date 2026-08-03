@@ -281,48 +281,110 @@ func readFirstResult(dir string, names []string) ([]byte, error) {
 }
 
 // trivyFindings reads the HIGH/CRITICAL findings out of `trivy image --format
-// json`.
-//
-// `Type` is read off the enclosing result rather than the vulnerability: Trivy
-// groups by target, and the ecosystem — `gobinary`, `debian`, `alpine` — is a
-// property of the group. It is what tells a Go binary's embedded module list
-// apart from an OS package database, which the stdlib exemption turns on.
-//
-// Trivy reports neither EPSS nor KEV, so those stay zero here; Grype carries
-// them, and the triage reads whichever scanner knew.
+// json` — the ones the report shows, which is what the ignore file has already
+// been applied to.
 func trivyFindings(data []byte) ([]presets.Finding, error) {
-	var report struct {
-		Results []struct {
-			Type            string
-			Vulnerabilities []struct {
-				VulnerabilityID string
-				PkgName         string
-				Severity        string
-				FixedVersion    string
-			}
-		}
-	}
-	if err := json.Unmarshal(data, &report); err != nil {
+	report, err := parseTrivy(data)
+	if err != nil {
 		return nil, err
 	}
 
 	var findings []presets.Finding
 	for _, result := range report.Results {
-		for _, vuln := range result.Vulnerabilities {
-			if !isHighOrCritical(vuln.Severity) {
+		findings = append(findings, trivyFindingsOf(result.Type, result.Vulnerabilities)...)
+	}
+	return findings, nil
+}
+
+// trivySuppressedFindings reads the findings the ignore file kept out of
+// `Vulnerabilities` — the counterpart of Grype's `ignoredMatches`, and the half
+// of the evidence that was missing until #311.
+//
+// Trivy deletes a suppressed finding from its report by default, which is why
+// `prune` could never tell a live entry still doing its job from one whose CVE
+// the publisher had fixed and removed. With `--show-suppressed` the finding
+// moves to `ExperimentalModifiedFindings` instead, whole — severity, package,
+// `FixedVersion` — and `--severity` still applies to it, so the band matches the
+// visible findings rather than widening behind them.
+//
+// Only `Status: "ignored"` is read. That field also carries Trivy's VEX
+// statuses, which say a finding was assessed rather than waived, and reading
+// those as "the image carries this" would be a different claim from the one the
+// ignore file makes.
+func trivySuppressedFindings(data []byte) ([]presets.Finding, error) {
+	report, err := parseTrivy(data)
+	if err != nil {
+		return nil, err
+	}
+
+	var findings []presets.Finding
+	for _, result := range report.Results {
+		for _, modified := range result.ExperimentalModifiedFindings {
+			if modified.Status != "ignored" {
 				continue
 			}
-			findings = append(findings, presets.Finding{
-				ID:          vuln.VulnerabilityID,
-				Severity:    strings.ToUpper(vuln.Severity),
-				Package:     vuln.PkgName,
-				PackageType: result.Type,
-				FixedIn:     vuln.FixedVersion,
-				Scanner:     "Trivy",
-			})
+			findings = append(findings, trivyFindingsOf(result.Type, []trivyVulnerability{modified.Finding})...)
 		}
 	}
 	return findings, nil
+}
+
+// trivyReport is the part of `trivy image --format json` this reads.
+//
+// `Type` is read off the enclosing result rather than the vulnerability: Trivy
+// groups by target, and the ecosystem — `gobinary`, `debian`, `alpine` — is a
+// property of the group. It is what tells a Go binary's embedded module list
+// apart from an OS package database, which the stdlib exemption turns on.
+type trivyReport struct {
+	Results []struct {
+		Type            string
+		Vulnerabilities []trivyVulnerability
+
+		// ExperimentalModifiedFindings is what `--show-suppressed` adds. It is
+		// omitted entirely when a result suppressed nothing, so its absence says
+		// nothing about whether the flag was passed — the audit passing it is a
+		// contract with this code, pinned by a test rather than sniffed here.
+		ExperimentalModifiedFindings []struct {
+			Status  string
+			Finding trivyVulnerability
+		}
+	}
+}
+
+type trivyVulnerability struct {
+	VulnerabilityID string
+	PkgName         string
+	Severity        string
+	FixedVersion    string
+}
+
+func parseTrivy(data []byte) (trivyReport, error) {
+	var report trivyReport
+	if err := json.Unmarshal(data, &report); err != nil {
+		return trivyReport{}, err
+	}
+	return report, nil
+}
+
+// trivyFindingsOf keeps the severity band the policy acts on. Trivy reports
+// neither EPSS nor KEV, so those stay zero here; Grype carries them, and the
+// triage reads whichever scanner knew.
+func trivyFindingsOf(packageType string, vulns []trivyVulnerability) []presets.Finding {
+	var findings []presets.Finding
+	for _, vuln := range vulns {
+		if !isHighOrCritical(vuln.Severity) {
+			continue
+		}
+		findings = append(findings, presets.Finding{
+			ID:          vuln.VulnerabilityID,
+			Severity:    strings.ToUpper(vuln.Severity),
+			Package:     vuln.PkgName,
+			PackageType: packageType,
+			FixedIn:     vuln.FixedVersion,
+			Scanner:     "Trivy",
+		})
+	}
+	return findings
 }
 
 // grypeFindings reads the HIGH/CRITICAL findings out of `grype -o json`.
@@ -346,17 +408,16 @@ func grypeFindings(data []byte) ([]presets.Finding, error) {
 // grypeSuppressedFindings reads the findings the ignore file kept out of
 // `matches` — the ones an exception on file is already doing its job on.
 //
-// It is a different question from the one above and the only evidence there is
-// for it. `security-audit.yml` builds each image's ignore file from the entries
-// accepted on that image's repository, so a live entry filters its own CVE out
-// of its own repository's results by construction (#238, #311): whether that CVE
-// has since been fixed upstream cannot be read from `matches` at all.
+// It is a different question from the one above, and the results the ignore file
+// was applied to cannot answer it. `security-audit.yml` builds each image's
+// ignore file from the entries accepted on that image's repository, so a live
+// entry filters its own CVE out of its own repository's results by construction
+// (#238, #311): neither "is it still carried" nor "has it been fixed since" can
+// be read from `matches` at all.
 //
-// Grype answers it anyway, because it records what it ignored rather than
-// dropping it, `fix.versions` included. Trivy's `--ignorefile` deletes the
-// finding outright and its report carries no trace of it, so a fix only Trivy
-// reported is unknowable here — which is silence about that entry, never a
-// claim that no fix exists.
+// Grype answers both, because it moves what it ignored to `ignoredMatches`
+// rather than dropping it, `fix.versions` included. Trivy does the same under
+// `--show-suppressed`, which the audit now passes (#311).
 func grypeSuppressedFindings(data []byte) ([]presets.Finding, error) {
 	report, err := parseGrype(data)
 	if err != nil {
@@ -428,17 +489,38 @@ func grypeFindingsOf(matches []grypeMatch) []presets.Finding {
 }
 
 // suppressedFindings collects, for one image, what the audit's ignore file kept
-// out of its scan results. No result and no readable result are the same answer
-// here — nothing is known — because nothing is decided on this: it only ever
-// adds a fix to an entry the lifecycle has already placed.
+// out of its scan results — from both scanners, because both record it now.
+//
+// This is the other half of what an image carries. `scanFindings` returns what
+// the report shows; the accepted findings were removed from it by the ignore
+// file the audit generated out of the accepted entries themselves. Read
+// together the two say what the scanners actually saw, which is the only way to
+// ask whether an accepted CVE is still there (#311).
+//
+// No result and no readable result are the same answer here — nothing was
+// suppressed as far as this can tell. Which of the two it was is not decided
+// here: `scanFindings` is what says whether the image produced evidence at all,
+// and a repository with none is `unknown` rather than purgeable.
 func suppressedFindings(dir, image string) []presets.Finding {
-	data, err := readFirstResult(dir, scanResultFiles("grype", image))
-	if err != nil {
-		return nil
+	scanners := []struct {
+		name  string
+		parse func([]byte) ([]presets.Finding, error)
+	}{
+		{"trivy", trivySuppressedFindings},
+		{"grype", grypeSuppressedFindings},
 	}
-	found, err := grypeSuppressedFindings(data)
-	if err != nil {
-		return nil
+
+	var found []presets.Finding
+	for _, scanner := range scanners {
+		data, err := readFirstResult(dir, scanResultFiles(scanner.name, image))
+		if err != nil {
+			continue
+		}
+		parsed, err := scanner.parse(data)
+		if err != nil {
+			continue
+		}
+		found = append(found, parsed...)
 	}
 	return found
 }

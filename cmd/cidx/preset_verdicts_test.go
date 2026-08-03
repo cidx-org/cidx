@@ -390,15 +390,137 @@ func TestGrypeSuppressedFindingsReadTheIgnoredMatches(t *testing.T) {
 	}
 }
 
-// TestSuppressedFindingsAreSilentWithoutAGrypeResult: Trivy's `--ignorefile`
-// deletes the finding rather than recording it, so an image only Trivy answered
-// for yields nothing here. Silence, not "no fix".
-func TestSuppressedFindingsAreSilentWithoutAGrypeResult(t *testing.T) {
+// TestSuppressedFindingsAreSilentWithoutARecordedSuppression: a report showing
+// nothing suppressed says nothing was suppressed as far as this can tell. It is
+// not "no fix" and not "the CVE is gone" — what settles the latter is whether
+// the image produced a scan result at all, which `scanFindings` answers.
+func TestSuppressedFindingsAreSilentWithoutARecordedSuppression(t *testing.T) {
 	dir := t.TempDir()
 	writeTrivyResult(t, dir, candidateRef, map[string]string{"CVE-2026-0002": "HIGH"})
 
 	if found := suppressedFindings(dir, candidateRef); len(found) != 0 {
-		t.Errorf("suppressed = %+v, want nothing: Trivy records no suppressed finding", found)
+		t.Errorf("suppressed = %+v, want nothing: the report records no suppressed finding", found)
+	}
+}
+
+// trivyWithASuppressedFinding is what `trivy image --show-suppressed` writes for
+// an image with an exception on file, reduced to the fields that are read.
+//
+// Measured against Trivy 0.72.0: the suppressed finding is *moved* to
+// `ExperimentalModifiedFindings` with `Status: "ignored"`, the source of the
+// rule, and the whole finding underneath — `FixedVersion` included. `--severity`
+// still applies to it, so the band matches the visible findings. A CVE in the
+// ignore file that the image does not carry produces no entry at all, which is
+// exactly the signal #311 needed.
+const trivyWithASuppressedFinding = `{
+  "ArtifactName": "example.io/tool:1.0",
+  "Results": [
+    {"Type": "alpine",
+     "Vulnerabilities": [
+       {"VulnerabilityID": "CVE-2026-0002", "PkgName": "libxml2", "Severity": "HIGH"}
+     ],
+     "ExperimentalModifiedFindings": [
+       {"Status": "ignored", "Source": "/root/.trivyignore",
+        "Finding": {"VulnerabilityID": "CVE-2026-0001", "PkgName": "nghttp2-libs",
+                    "Severity": "HIGH", "FixedVersion": "1.68.1"}},
+       {"Status": "ignored", "Source": "/root/.trivyignore",
+        "Finding": {"VulnerabilityID": "CVE-2026-0003", "PkgName": "busybox",
+                    "Severity": "MEDIUM"}},
+       {"Status": "not_affected", "Source": "vex.json",
+        "Finding": {"VulnerabilityID": "CVE-2026-0004", "PkgName": "openssl",
+                    "Severity": "HIGH"}}
+     ]}
+  ]
+}`
+
+// TestTrivyFindingsIgnoreWhatWasSuppressed: the scan gate and the baseline count
+// what the report shows, and an accepted finding is deliberately not one of
+// them. Reading the suppressed list here would put every exception back into the
+// numbers it was written to take out of.
+func TestTrivyFindingsIgnoreWhatWasSuppressed(t *testing.T) {
+	found, err := trivyFindings([]byte(trivyWithASuppressedFinding))
+	if err != nil {
+		t.Fatalf("trivyFindings: %v", err)
+	}
+	if len(found) != 1 || found[0].ID != "CVE-2026-0002" {
+		t.Errorf("findings = %+v, want the reported vulnerability alone", found)
+	}
+}
+
+// TestTrivySuppressedFindingsReadTheModifiedFindings is the half #311 adds. The
+// ignore file is generated from the entries themselves, so this is where an
+// accepted CVE has to be looked for before it can be called gone.
+func TestTrivySuppressedFindingsReadTheModifiedFindings(t *testing.T) {
+	found, err := trivySuppressedFindings([]byte(trivyWithASuppressedFinding))
+	if err != nil {
+		t.Fatalf("trivySuppressedFindings: %v", err)
+	}
+	if len(found) != 1 {
+		t.Fatalf("suppressed = %+v, want the ignored HIGH finding alone", found)
+	}
+	if found[0].ID != "CVE-2026-0001" || found[0].FixedIn != "1.68.1" {
+		t.Errorf("suppressed = %+v, want the identifier and the fix Trivy recorded", found[0])
+	}
+	if found[0].PackageType != "alpine" {
+		t.Errorf("PackageType = %q, want the ecosystem of the enclosing result", found[0].PackageType)
+	}
+}
+
+// TestTrivySuppressedFindingsIgnoreVEXStatuses: `ExperimentalModifiedFindings`
+// also carries Trivy's VEX statuses, which say a finding was assessed rather
+// than waived by our ignore file. Reading `not_affected` as "the image carries
+// this" would keep an entry alive on somebody else's assessment.
+func TestTrivySuppressedFindingsIgnoreVEXStatuses(t *testing.T) {
+	found, err := trivySuppressedFindings([]byte(trivyWithASuppressedFinding))
+	if err != nil {
+		t.Fatalf("trivySuppressedFindings: %v", err)
+	}
+	for _, f := range found {
+		if f.ID == "CVE-2026-0004" {
+			t.Errorf("suppressed = %+v, want only the findings the ignore file removed", found)
+		}
+	}
+}
+
+// TestSuppressedFindingsReadBothScanners: the union is what an image is known to
+// carry, and either scanner may be the only one that saw a given CVE. Two of the
+// six ansible entries are Trivy-only, and they were invisible here until the
+// audit started passing `--show-suppressed` (#311, #315).
+func TestSuppressedFindingsReadBothScanners(t *testing.T) {
+	dir := t.TempDir()
+	writeJSON(t, filepath.Join(dir, scanResultFile("trivy", candidateRef)), json.RawMessage(trivyWithASuppressedFinding))
+	writeJSON(t, filepath.Join(dir, scanResultFile("grype", candidateRef)), json.RawMessage(grypeWithAnIgnoredMatch))
+
+	found := suppressedFindings(dir, candidateRef)
+
+	ids := make(map[string]bool, len(found))
+	for _, f := range found {
+		ids[f.ID] = true
+	}
+	if !ids["CVE-2026-0001"] || !ids["GHSA-cgrx-mc8f-2prm"] {
+		t.Errorf("suppressed = %+v, want what both scanners recorded", found)
+	}
+}
+
+// TestTheAuditRecordsWhatItSuppressed pins the other end of the evidence
+// contract. `ClassifyException` calls an accepted CVE gone when neither the
+// visible findings nor the suppressed record mention it, and Trivy only keeps
+// that record under `--show-suppressed`. Its report carries no trace of whether
+// the flag was passed — `ExperimentalModifiedFindings` is simply omitted when a
+// result suppressed nothing — so nothing downstream can notice the day this
+// flag is dropped from security-audit.yml. This test is what notices.
+func TestTheAuditRecordsWhatItSuppressed(t *testing.T) {
+	workflow, err := os.ReadFile(filepath.Join("..", "..", ".github", "workflows", "security-audit.yml"))
+	if err != nil {
+		t.Fatalf("could not read the audit workflow: %v", err)
+	}
+
+	scan, _, found := strings.Cut(string(workflow), "results/trivy-${SAFE_NAME}.json")
+	if !found {
+		t.Fatal("the audit no longer writes results/trivy-${SAFE_NAME}.json: this test is looking at the wrong step")
+	}
+	if !strings.Contains(scan, "--show-suppressed") {
+		t.Error("the audit's JSON scan drops --show-suppressed: an accepted CVE would read as gone and `vuln prune -x` would delete the exception waiving it (#311)")
 	}
 }
 

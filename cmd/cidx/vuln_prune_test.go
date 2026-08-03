@@ -26,7 +26,7 @@ func TestCatalogueFindingsKeysOnTheRepository(t *testing.T) {
 	writeTrivyResult(t, dir, "dhi.io/trivy:0.68@sha256:"+zeroDigest, map[string]string{"CVE-2026-0001": "HIGH"})
 	writeTrivyResult(t, dir, "golangci/golangci-lint:v2.12.2-alpine@sha256:"+zeroDigest, nil)
 
-	running, findings, _ := catalogueFindings(pruneCatalogue(), dir)
+	running, findings, _, _ := catalogueFindings(pruneCatalogue(), dir)
 
 	if len(running) != 2 || running[0] != "dhi.io/trivy" {
 		t.Fatalf("running = %v, want the repositories sorted", running)
@@ -50,7 +50,7 @@ func TestCatalogueFindingsMergesTheTagsOfOneRepository(t *testing.T) {
 	writeTrivyResult(t, dir, "rust:1.97.0@sha256:"+zeroDigest, map[string]string{"CVE-2026-0001": "HIGH"})
 	writeTrivyResult(t, dir, "rust:1.97.0-slim@sha256:"+zeroDigest, map[string]string{"CVE-2026-0002": "HIGH"})
 
-	running, findings, _ := catalogueFindings(catalogue, dir)
+	running, findings, _, _ := catalogueFindings(catalogue, dir)
 
 	if len(running) != 1 || running[0] != "rust" {
 		t.Fatalf("running = %v, want one repository", running)
@@ -80,7 +80,7 @@ func TestCatalogueFindingsCollectsWhatTheIgnoreFileSuppressed(t *testing.T) {
 	})
 	writeTrivyResult(t, dir, "golangci/golangci-lint:v2.12.2-alpine@sha256:"+zeroDigest, nil)
 
-	_, findings, suppressed := catalogueFindings(pruneCatalogue(), dir)
+	_, findings, suppressed, _ := catalogueFindings(pruneCatalogue(), dir)
 
 	if got := presets.FindingIDs(findings["dhi.io/trivy"]); len(got) != 0 {
 		t.Errorf("findings = %v, want the accepted CVE absent from the results it filtered itself out of", got)
@@ -102,7 +102,7 @@ func TestCatalogueFindingsLeavesPartlyScannedRepositoriesAbsent(t *testing.T) {
 	}
 	writeTrivyResult(t, dir, "rust:1.97.0@sha256:"+zeroDigest, nil)
 
-	_, findings, _ := catalogueFindings(catalogue, dir)
+	_, findings, _, _ := catalogueFindings(catalogue, dir)
 
 	if _, scanned := findings["rust"]; scanned {
 		t.Errorf("a repository with an unscanned tag was recorded as scanned: %v", findings)
@@ -115,7 +115,7 @@ func TestCatalogueFindingsLeavesUnscannedImagesAbsent(t *testing.T) {
 	dir := t.TempDir()
 	writeTrivyResult(t, dir, "dhi.io/trivy:0.68@sha256:"+zeroDigest, nil)
 
-	_, findings, _ := catalogueFindings(pruneCatalogue(), dir)
+	_, findings, _, _ := catalogueFindings(pruneCatalogue(), dir)
 
 	if _, scanned := findings["golangci/golangci-lint"]; scanned {
 		t.Errorf("an image with no result file was recorded as scanned: %v", findings)
@@ -136,7 +136,7 @@ func TestCatalogueFindingsReadsTheAuditFileNames(t *testing.T) {
 	name := "trivy-" + auditFileName.Replace(image) + ".json"
 	writeTrivyResultAs(t, dir, name, map[string]string{"CVE-2026-0001": "HIGH"})
 
-	_, findings, _ := catalogueFindings(pruneCatalogue(), dir)
+	_, findings, _, _ := catalogueFindings(pruneCatalogue(), dir)
 
 	if got := presets.FindingIDs(findings["dhi.io/trivy"]); len(got) != 1 {
 		t.Errorf("findings = %v, want the audit's result file to be read", got)
@@ -295,12 +295,30 @@ func TestPruneReportNamesTheFindingsThatAreFixedUpstream(t *testing.T) {
 		},
 	}
 
-	out := captureStdout(t, func() { printPruneReport(entries, 1, 1, "scan-results") })
+	out := captureStdout(t, func() { printPruneReport(entries, 1, 1, "scan-results", true) })
 
 	for _, want := range []string{"FIXED UPSTREAM (1)", "fixed in 1.2.8", "never to write an exception"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("report does not state %q:\n%s", want, out)
 		}
+	}
+}
+
+// TestPruneReportSaysWhenTheResultsKeptNoReceipt: with nothing recorded as
+// suppressed, no entry can be shown obsolete — and a report that stayed silent
+// about why would read as "nothing to purge", which is a different claim.
+func TestPruneReportSaysWhenTheResultsKeptNoReceipt(t *testing.T) {
+	entries := []prunedEntry{
+		{
+			Vulnerability{CVE: "CVE-2025-52881", Repository: "ghcr.io/ansible/dev-tools"},
+			presets.ExceptionVerdict{State: presets.ExceptionUnknown, Reason: "nothing was recorded"},
+		},
+	}
+
+	out := captureStdout(t, func() { printPruneReport(entries, 1, 1, "scan-results", false) })
+
+	if !strings.Contains(out, "--show-suppressed") {
+		t.Errorf("report does not say what evidence is missing or where to get it:\n%s", out)
 	}
 }
 
