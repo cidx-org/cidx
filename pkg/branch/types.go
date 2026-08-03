@@ -131,16 +131,19 @@ type PRReviewsInfo struct {
 
 // CleanupOptions configures the cleanup operation
 type CleanupOptions struct {
-	DryRun        bool // Show what would be deleted without actually deleting
-	IncludeStale  bool // Also delete stale branches
-	IncludeOrphan bool // Also delete orphan branches
-	Force         bool // Force delete even if not fully merged
+	DryRun        bool   // Show what would be deleted without actually deleting
+	Branch        string // Branch to clean up (default: the current branch)
+	All           bool   // Sweep every merged branch instead of a single one
+	IncludeStale  bool   // Also delete stale branches (with All)
+	IncludeOrphan bool   // Also delete orphan branches (with All)
+	Force         bool   // Delete a branch the repository is not finished with
 }
 
 // CleanupResult contains the result of a cleanup operation
 type CleanupResult struct {
 	Deleted       []DeletedBranch
 	Skipped       []SkippedBranch
+	Scope         string // Branch the run was limited to, empty when it swept
 	TotalDeleted  int
 	LocalDeleted  int
 	RemoteDeleted int

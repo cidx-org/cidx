@@ -118,28 +118,50 @@ func branchListCommand() *cli.Command {
 func branchCleanupCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "cleanup",
-		Usage: "Delete merged branches (local and remote)",
+		Usage: "Delete a merged branch (local and remote)",
+		Description: "Cleans up one branch: the one named by --branch, or the current one.\n" +
+			"   A branch goes when the repository is finished with it -- merged, or its PR\n" +
+			"   merged or closed. An open PR needs --force. --all sweeps every merged branch.",
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:    "execute",
 				Aliases: []string{"x"},
 				Usage:   "Actually delete branches (default is dry-run)",
 			},
+			&cli.StringFlag{
+				Name:    "branch",
+				Aliases: []string{"b"},
+				Usage:   "Branch to clean up (default: the current branch)",
+			},
+			&cli.BoolFlag{
+				Name:    "all",
+				Aliases: []string{"a"},
+				Usage:   "Sweep every merged branch in the repository",
+			},
 			&cli.BoolFlag{
 				Name:  "stale",
-				Usage: "Also delete stale branches (inactive > N days)",
+				Usage: "Also sweep stale branches (inactive > N days), with --all",
 			},
 			&cli.BoolFlag{
 				Name:  "orphan",
-				Usage: "Also delete orphan branches (PR closed without merge)",
+				Usage: "Also sweep orphan branches (PR closed without merge), with --all",
 			},
 			&cli.BoolFlag{
 				Name:    "force",
 				Aliases: []string{"f"},
-				Usage:   "Force delete even if not fully merged",
+				Usage:   "Delete a branch the repository is not finished with",
 			},
 		},
 		Action: func(c *cli.Context) error {
+			// --stale and --orphan widen a sweep; on their own they would
+			// silently select nothing, which is the shape of bug #269 itself.
+			if !c.Bool("all") && (c.Bool("stale") || c.Bool("orphan")) {
+				return fmt.Errorf("--stale and --orphan select branches to sweep: pass --all with them")
+			}
+			if c.Bool("all") && c.String("branch") != "" {
+				return fmt.Errorf("--branch names one branch and --all sweeps them all: pick one")
+			}
+
 			// Load config for branch settings
 			cfg, _ := config.Load("cidx.toml")
 
@@ -166,6 +188,8 @@ func branchCleanupCommand() *cli.Command {
 			dryRun := !c.Bool("execute")
 			opts := branch.CleanupOptions{
 				DryRun:        dryRun,
+				Branch:        c.String("branch"),
+				All:           c.Bool("all"),
 				IncludeStale:  c.Bool("stale"),
 				IncludeOrphan: c.Bool("orphan"),
 				Force:         c.Bool("force"),

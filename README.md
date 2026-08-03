@@ -129,7 +129,8 @@ cidx repo cpw -m "commit message"         # Commit, push, watch CI
 cidx repo pr watch -q                     # Watch CI checks (quiet)
 cidx repo pr merge                        # Squash merge + cleanup
 cidx repo branch list --stale             # Find stale branches
-cidx repo branch cleanup -x              # Delete merged branches
+cidx repo branch cleanup --branch feat/x -x  # Delete one merged branch
+cidx repo branch cleanup --all -x         # Sweep every merged branch
 
 # Workflow runs (no PR required, e.g. direct push to main)
 cidx repo workflow run ci                 # Trigger on current branch, then watch it

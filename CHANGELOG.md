@@ -9,6 +9,7 @@
 
 ### Fix
 
+- **branch**: scope `repo branch cleanup` to one branch — the one `--branch` names, or the current one — and refuse a branch with an open PR unless `--force`; the repository-wide sweep it used to do unconditionally now needs `--all`, a **behaviour change** for anyone running `cleanup -x` for it (#269)
 - **validator**: compare a pipeline with the workflow it declares rather than the one its name suggests; `[pipelines.*] workflow` names that file, or `"none"` when no workflow implements the pipeline (#233)
 - **validator**: read the phases of a workflow by parsing the cidx invocations instead of matching a substring, so a flag between the binary and `run` no longer hides a phase (#233)
 - **security**: key code scanning alerts on the repository so a repin does not churn them (#313)

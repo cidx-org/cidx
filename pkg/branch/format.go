@@ -406,6 +406,13 @@ func truncate(s string, maxLen int) string {
 func FormatCleanup(result *CleanupResult, dryRun bool) string {
 	var sb strings.Builder
 
+	// Say out loud how wide the run is: the incident behind issue #269 was a
+	// scope nobody had asked for and nothing announced.
+	if result.Scope != "" {
+		fmt.Fprintf(&sb, "\n%sScope:%s branch '%s' (--all sweeps every merged branch)\n",
+			colorBold, colorReset, result.Scope)
+	}
+
 	if dryRun {
 		fmt.Fprintf(&sb, "\n%s=== DRY RUN ===%s\n", colorYellow, colorReset)
 		sb.WriteString("The following branches would be deleted:\n\n")
