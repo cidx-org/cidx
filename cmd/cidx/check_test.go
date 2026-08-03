@@ -3,9 +3,12 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/cidx-org/cidx/v2/pkg/config"
+	"github.com/cidx-org/cidx/v2/pkg/validator"
 	"github.com/urfave/cli/v2"
 )
 
@@ -149,6 +152,38 @@ func TestGenerateRegenerationHintNamesTheOutputPath(t *testing.T) {
 				t.Errorf("the header still points at the default path %q", tc.defaultPath)
 			}
 		})
+	}
+}
+
+// TestCheckWorkflow_RealCIWorkflowKeepsItsPhases is the standing guard for the
+// second half of #233: `check workflow` extracted phases by matching the
+// substring "cidx run ", so `./bin/cidx --verbose run test` — the form ci.yml
+// has used since #271 — lost the test phase entirely. The command then reported
+// it missing while `check drift` reported it in sync, on the same file. It
+// reads this repository's own files only: no network, no workflow run.
+func TestCheckWorkflow_RealCIWorkflowKeepsItsPhases(t *testing.T) {
+	const ciWorkflow = repoWorkflowDir + "/ci.yml"
+
+	workflow, err := validator.ParseWorkflow(newApp(), ciWorkflow)
+	if err != nil {
+		t.Fatalf("ParseWorkflow: %v", err)
+	}
+	if !slices.Contains(workflow.Phases, "test") {
+		t.Errorf("the test phase is run by %s but was extracted as %v", ciWorkflow, workflow.Phases)
+	}
+
+	// And the whole comparison agrees: this is `cidx check workflow ci`.
+	cfg, err := config.Load("../../cidx.toml")
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
+	result, err := validator.ValidateWorkflow(newApp(), cfg, "ci", ciWorkflow)
+	if err != nil {
+		t.Fatalf("ValidateWorkflow: %v", err)
+	}
+	if !result.Success {
+		t.Errorf("check workflow ci is out of sync: cidx.toml %v, ci.yml %v (missing in workflow: %v, missing in config: %v, order differs: %v)",
+			result.LocalOrder, result.GitHubOrder, result.MissingInGH, result.MissingInLocal, result.OrderMismatch)
 	}
 }
 

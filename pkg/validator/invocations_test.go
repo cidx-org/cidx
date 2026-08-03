@@ -22,7 +22,10 @@ func testApp() *cli.App {
 			&cli.BoolFlag{Name: "verbose"},
 		},
 		Commands: []*cli.Command{
-			{Name: "run", Action: noop, Flags: []cli.Flag{&cli.BoolFlag{Name: "dry-run"}}},
+			{Name: "run", Action: noop, Flags: []cli.Flag{
+				&cli.BoolFlag{Name: "dry-run", Aliases: []string{"n"}},
+				&cli.IntFlag{Name: "concurrency", Aliases: []string{"j"}},
+			}},
 			{Name: "validate", Action: noop},
 			{Name: "check", Subcommands: []*cli.Command{
 				{Name: "drift", Action: noop},
@@ -33,6 +36,11 @@ func testApp() *cli.App {
 					{Name: "list", Action: noop},
 					{Name: "check", Action: noop},
 				}},
+			}},
+			// A `run` that is not the run command: `cidx workflow run` triggers a
+			// CI workflow, it does not execute a phase.
+			{Name: "workflow", Subcommands: []*cli.Command{
+				{Name: "run", Action: noop},
 			}},
 			{Name: "preset", Subcommands: []*cli.Command{
 				{Name: "images", Action: noop},

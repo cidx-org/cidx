@@ -3,10 +3,90 @@ package validator
 import (
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/cidx-org/cidx/v2/pkg/config"
 )
+
+// phasesFromStep parses a one-job workflow whose only step runs script, and
+// returns the phases extracted from it.
+func phasesFromStep(t *testing.T, script string) []string {
+	t.Helper()
+
+	var block strings.Builder
+	for _, line := range strings.Split(script, "\n") {
+		block.WriteString("          " + line + "\n")
+	}
+	content := "name: CI\njobs:\n  only:\n    steps:\n      - run: |\n" + block.String()
+
+	workflowPath := filepath.Join(t.TempDir(), "ci.yml")
+	if err := os.WriteFile(workflowPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	workflow, err := ParseWorkflow(testApp(), workflowPath)
+	if err != nil {
+		t.Fatalf("ParseWorkflow: %v", err)
+	}
+	return workflow.Phases
+}
+
+// TestParseWorkflow_ExtractsPhasesFromEveryInvocationForm is the regression for
+// the second half of #233: the phases were extracted by matching the substring
+// "cidx run ", which `./bin/cidx --verbose run test` — the form ci.yml has used
+// since #271 — does not contain. `check workflow` then reported the test phase
+// as missing from a workflow that runs it, while `check drift` saw it. Reading
+// the command line with the invocation parser of #239 covers every form the
+// workflows really use, and keeps its refusal to judge what it cannot read.
+func TestParseWorkflow_ExtractsPhasesFromEveryInvocationForm(t *testing.T) {
+	tests := []struct {
+		name   string
+		script string
+		want   []string
+	}{
+		{"plain invocation", "cidx run ci", []string{"ci"}},
+		{"built binary", "./bin/cidx run security", []string{"security"}},
+		{"relative binary", "bin/cidx run code", []string{"code"}},
+		{"global flag before the subcommand", "./bin/cidx --verbose run test", []string{"test"}},
+		{"valued global flag before", "cidx --config ci/pipeline.toml run ci", []string{"ci"}},
+		{"valued global flag in --flag=value form", "cidx --config=ci/pipeline.toml run build", []string{"build"}},
+		{"short valued global flag", "cidx -c other.toml run ci", []string{"ci"}},
+		{"flag after the subcommand", "cidx run --dry-run security", []string{"security"}},
+		{"valued flag after the subcommand", "cidx run -j 4 security", []string{"security"}},
+		{"go run", "go run ./cmd/cidx run ci", []string{"ci"}},
+		{"line continuation", "./bin/cidx run \\\n  security", []string{"security"}},
+		{"several invocations in one step", "./bin/cidx run security\n./bin/cidx run code", []string{"security", "code"}},
+		{"the same phase twice", "./bin/cidx run test\n./bin/cidx run test", []string{"test"}},
+		{"multi-line script", "chmod +x bin/cidx\n./bin/cidx --verbose run test", []string{"test"}},
+		{"after a shell keyword", "if ./bin/cidx run security; then", []string{"security"}},
+
+		// Forms the parser deliberately refuses to judge: no phase is better
+		// than a wrong one.
+		{"invoked through a variable", "$CIDX run ci", nil},
+		{"heredoc body", "cat <<'EOF' > doc\ncidx run ci\nEOF", nil},
+		{"commented out", "# cidx run ci", nil},
+		{"documented in an echo", `echo "Run it with: cidx run ci"`, nil},
+		{"phase through a variable", "./bin/cidx run $PHASE", nil},
+		{"unknown flag hides the subcommand", "./bin/cidx --unknown value run ci", nil},
+		{"building the binary", "go build -o bin/cidx ./cmd/cidx", nil},
+		{"another subcommand", "./bin/cidx check drift", nil},
+		{"a run that is not the run command", "./bin/cidx workflow run ci.yml", nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := phasesFromStep(t, tt.script)
+			if len(got) == 0 && len(tt.want) == 0 {
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("phases of %q = %v, want %v", tt.script, got, tt.want)
+			}
+		})
+	}
+}
 
 func TestParseWorkflow(t *testing.T) {
 	// Create a temporary workflow file
@@ -45,7 +125,7 @@ jobs:
 	}
 
 	// Parse the workflow
-	workflow, err := ParseWorkflow(workflowPath)
+	workflow, err := ParseWorkflow(testApp(), workflowPath)
 	if err != nil {
 		t.Fatalf("Failed to parse workflow: %v", err)
 	}
@@ -120,7 +200,7 @@ jobs:
 
 	want := []string{"security", "code", "test", "build"}
 	for i := 0; i < 30; i++ {
-		workflow, err := ParseWorkflow(workflowPath)
+		workflow, err := ParseWorkflow(testApp(), workflowPath)
 		if err != nil {
 			t.Fatalf("Failed to parse workflow: %v", err)
 		}
@@ -180,7 +260,7 @@ jobs:
 	}
 
 	// Validate workflow
-	result, err := ValidateWorkflow(cfg, "ci", workflowPath)
+	result, err := ValidateWorkflow(testApp(), cfg, "ci", workflowPath)
 	if err != nil {
 		t.Fatalf("Validation failed: %v", err)
 	}
@@ -255,7 +335,7 @@ jobs:
 	}
 
 	// Validate workflow
-	result, err := ValidateWorkflow(cfg, "ci", workflowPath)
+	result, err := ValidateWorkflow(testApp(), cfg, "ci", workflowPath)
 	if err != nil {
 		t.Fatalf("Validation failed: %v", err)
 	}
@@ -297,11 +377,11 @@ func TestTopologicalSort(t *testing.T) {
 		},
 	}
 
-	jobPhases := map[string]string{
-		"security": "security",
-		"code":     "code",
-		"test":     "test",
-		"build":    "build",
+	jobPhases := map[string][]string{
+		"security": {"security"},
+		"code":     {"code"},
+		"test":     {"test"},
+		"build":    {"build"},
 	}
 
 	phases := topologicalSort(jobs, jobPhases, []string{"setup", "security", "code", "test", "build"})
