@@ -686,6 +686,52 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
           grep '^::' "$RUNNER_TEMP/base-eol.txt" || true
 
+      # The committed SECURITY-BASELINE.md is written by a hand-run command, and
+      # nothing said when it had stopped describing the catalogue: the file on
+      # main went months without the `Base` column #305 emits, and releases
+      # attached it as an asset all the same (#310).
+      #
+      # `TestSecurityBaselineIsCurrent` closes the half a test can close — the
+      # shape, the images, the presets, the acceptances — and fails any PR that
+      # moves the catalogue without regenerating the file. It cannot close the
+      # other half: those numbers are measured by scanner databases that move
+      # without any commit, and the evidence for them is the artifacts this job
+      # just downloaded, which live for a day and exist nowhere else.
+      #
+      # So the drift is reported here, where the evidence is, and gates nothing.
+      # Red in this workflow means "an unhandled vulnerability"; a count that
+      # moved because a CVE was published is not one, and an audit that is red
+      # every morning is ignored exactly like one that is green every morning
+      # (#247). The regeneration above already produced today's file — this says
+      # how far the committed one is behind it, and how to catch it up.
+      - name: Report how far the committed baseline is behind
+        if: always()
+        run: |
+          echo "## 📄 The committed SECURITY-BASELINE.md" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ ! -f "$RUNNER_TEMP/baseline.md" ]; then
+            echo "Not regenerated in this run, so there is nothing to compare it against." >> $GITHUB_STEP_SUMMARY
+          elif diff -u SECURITY-BASELINE.md "$RUNNER_TEMP/baseline.md" > "$RUNNER_TEMP/baseline.diff"; then
+            echo "✅ It says exactly what today's scans measure." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "It is behind today's scan results. Regenerate it from this run's artifacts" >> $GITHUB_STEP_SUMMARY
+            echo "and commit the result:" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```bash' >> $GITHUB_STEP_SUMMARY
+            echo "gh run download ${{ github.run_id }} -p 'trivy-*' -p 'grype-*' -D artifacts" >> $GITHUB_STEP_SUMMARY
+            echo "cidx security baseline --results artifacts" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "<details><summary>What has changed since it was written</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```diff' >> $GITHUB_STEP_SUMMARY
+            cat "$RUNNER_TEMP/baseline.diff" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+
       # The summary above is written once per run and read by whoever happens to
       # open that run. The Security tab keeps the same findings across runs,
       # dates them, and closes them by itself when a repin removes them — which

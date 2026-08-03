@@ -129,6 +129,43 @@ func (f Finding) Exempt() string {
 	return ""
 }
 
+// Carried is what one image actually carries: the findings its scan results
+// still show, plus the accepted ones the audit's ignore file took out of them.
+//
+// The second half is the one that was missing (#310). `security-audit.yml`
+// generates each image's ignore file out of the entries accepted on that image's
+// repository, so an accepted finding is deleted from that image's own results by
+// construction (#238) — and a count reading only what the report shows publishes
+// what the catalogue carries *minus the part it has already argued about*. Both
+// scanners keep the removed half now: Grype in `ignoredMatches`, Trivy in
+// `ExperimentalModifiedFindings` under `--show-suppressed` (#311).
+//
+// accepted is the identifiers on file for this image's repository, and nothing
+// outside that list is read back. A scanner suppresses more than the ignore file
+// asks it to — Grype ships a default rule dropping indirect `linux-libc-dev`
+// matches, 188 of them on the Rust image — and counting those would move a
+// committed number by a scanner's defaults rather than by anything the catalogue
+// ships. An accepted CVE the image no longer carries appears in neither half and
+// is counted nowhere, which is the same evidence the exception lifecycle reads
+// to retire it.
+//
+// Summarise groups by identifier, so a CVE one scanner suppressed while the
+// other still showed it is counted once.
+func Carried(found, suppressed []Finding, accepted []string) []Finding {
+	waived := make(map[string]bool, len(accepted))
+	for _, cve := range accepted {
+		waived[strings.ToUpper(cve)] = true
+	}
+
+	carried := found
+	for _, f := range suppressed {
+		if waived[strings.ToUpper(f.ID)] {
+			carried = append(carried, f)
+		}
+	}
+	return carried
+}
+
 // Triage is what a set of findings splits into. The four counts partition the
 // set: Fixable + GoStdlib + KernelHeaders + Actionable == Carried.
 type Triage struct {

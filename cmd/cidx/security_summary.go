@@ -94,7 +94,10 @@ func buildCatalogueSummary(
 	accepted []Vulnerability,
 	now time.Time,
 ) presets.CatalogueSummary {
-	carried := carriedFindings(imagePresets, resultsDir)
+	// The same population SECURITY-BASELINE.md counts, suppressed half
+	// included (#310): this page and that file answer the same question, and
+	// two numbers for it would be the confusion #308 built the page to end.
+	carried, _ := carriedFindings(imagePresets, resultsDir, accepted)
 
 	var unscanned []string
 	for image := range imagePresets {

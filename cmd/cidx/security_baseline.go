@@ -34,7 +34,9 @@ const defaultBaselineFile = "SECURITY-BASELINE.md"
 // The output is deliberately free of any generation timestamp. A date would
 // change every run and make the diff — the only reason to commit the file —
 // unreadable. Two generations of the same inputs produce byte-identical output;
-// TestSecurityBaselineIsDeterministic pins that.
+// TestSecurityBaselineIsDeterministic pins that, and it is what makes the file
+// checkable at all — TestSecurityBaselineIsCurrent fails a change to the
+// catalogue that was not regenerated here (#310).
 func securityBaselineCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "baseline",
@@ -74,11 +76,11 @@ func securityBaselineCommand() *cli.Command {
 				accepted = vulns.Vulnerabilities
 			}
 
-			carried := carriedFindings(imagePresets, c.String("results"))
+			carried, recorded := carriedFindings(imagePresets, c.String("results"), accepted)
 			bases := catalogueBases(imagePresets, c.String("results"))
 
 			out := c.String("output")
-			if err := os.WriteFile(out, []byte(renderSecurityBaseline(imagePresets, accepted, carried, bases)), 0644); err != nil {
+			if err := os.WriteFile(out, []byte(renderSecurityBaseline(imagePresets, accepted, carried, bases, recorded)), 0644); err != nil {
 				return fmt.Errorf("failed to write %s: %w", out, err)
 			}
 
@@ -113,20 +115,53 @@ type baselineFinding struct {
 	Notes    string
 }
 
-// carriedFindings reads what the scanners actually reported for every catalogue
-// image, keyed by the pinned reference.
+// carriedFindings reads what the scanners saw on every catalogue image, keyed by
+// the pinned reference: the findings their reports still show, plus the accepted
+// ones their reports no longer do.
+//
+// That second half is #310. `security-audit.yml` generates each image's ignore
+// file out of the entries accepted on that image's repository, so an accepted
+// finding is deleted from its own image's results by construction (#238):
+// reading only what the report shows publishes everything the catalogue carries
+// *except the part it has already argued about*, under a heading claiming to say
+// what it carries. Grype has always kept that half in `ignoredMatches`; Trivy
+// keeps it in `ExperimentalModifiedFindings` under `--show-suppressed`, which
+// the audit passes since #311 — the evidence this number needed did not exist
+// before, which is why it was never counted.
+//
+// Which of the two halves counts is `presets.Carried`'s decision, not this
+// function's: this is the I/O half, exactly as `cidx security sarif` is.
 //
 // An image with no result is simply absent, and the baseline says so rather than
 // printing a zero: "not scanned" and "carries nothing" are the two answers this
 // file must never confuse.
-func carriedFindings(imagePresets map[string][]string, resultsDir string) map[string][]presets.Finding {
-	carried := make(map[string][]presets.Finding)
-	for image := range imagePresets {
-		if found, _, err := scanFindings(resultsDir, image); err == nil {
-			carried[image] = found
-		}
+//
+// The second return says whether anything in these results was recorded as
+// suppressed by Trivy — the sighting `vuln prune` already gates its deletions on
+// (#311), read here for the same reason. `ExperimentalModifiedFindings` is
+// `omitempty`, so a report produced without the flag reads exactly like one that
+// hid nothing; on such results the accepted findings cannot be added back and
+// the count is a floor. Which of the two it is cannot be decided here, so it is
+// reported rather than assumed.
+func carriedFindings(imagePresets map[string][]string, resultsDir string, accepted []Vulnerability) (map[string][]presets.Finding, bool) {
+	waived := make(map[string][]string, len(accepted))
+	for _, v := range accepted {
+		waived[v.Repository] = append(waived[v.Repository], v.CVE)
 	}
-	return carried
+
+	carried := make(map[string][]presets.Finding)
+	recorded := false
+	for image := range imagePresets {
+		found, _, err := scanFindings(resultsDir, image)
+		if err != nil {
+			continue
+		}
+
+		hidden := suppressedFindings(resultsDir, image)
+		recorded = recorded || reportedBy(hidden, "Trivy")
+		carried[image] = presets.Carried(found, hidden, waived[imageRepository(image)])
+	}
+	return carried, recorded
 }
 
 // triageCatalogue splits the findings image by image and sums the result.
@@ -204,7 +239,7 @@ func acceptedFindings(imagePresets map[string][]string, accepted []Vulnerability
 	return findings
 }
 
-func renderSecurityBaseline(imagePresets map[string][]string, accepted []Vulnerability, carried map[string][]presets.Finding, bases map[string]presets.BaseOS) string {
+func renderSecurityBaseline(imagePresets map[string][]string, accepted []Vulnerability, carried map[string][]presets.Finding, bases map[string]presets.BaseOS, recorded bool) string {
 	images := make([]string, 0, len(imagePresets))
 	for image := range imagePresets {
 		images = append(images, image)
@@ -227,7 +262,10 @@ func renderSecurityBaseline(imagePresets map[string][]string, accepted []Vulnera
 	sb.WriteString("them — with the reason it was accepted and the date that acceptance has to be\n")
 	sb.WriteString("argued again.\n\n")
 	sb.WriteString("Carried and accepted are different numbers, and both are stated. A file saying\n")
-	sb.WriteString("only what is accepted read \"0 accepted findings\" on a catalogue carrying 596.\n\n")
+	sb.WriteString("only what is accepted read \"0 accepted findings\" on a catalogue carrying 596.\n")
+	sb.WriteString("Accepted is a subset of carried: accepting a finding records that it was looked\n")
+	sb.WriteString("at, it does not take it out of the image — so the carried count includes what\n")
+	sb.WriteString("the audit's ignore file removes from its own scan results (#310).\n\n")
 	sb.WriteString("This file is committed, so its diff is the history of what the catalogue\n")
 	sb.WriteString("delivers, and it carries no generation date: the same inputs produce the same\n")
 	sb.WriteString("bytes, and a changed line means something actually changed.\n\n")
@@ -242,6 +280,22 @@ func renderSecurityBaseline(imagePresets map[string][]string, accepted []Vulnera
 
 	sb.WriteString("## What the images carry\n\n")
 	writeCarriedSection(&sb, triage, len(carried), len(images))
+
+	// #311's posture applied to a count rather than to a deletion: an absence
+	// only means something once something has been recorded as suppressed.
+	// Trivy keeps that record under `--show-suppressed` alone and its report
+	// says nothing about whether the flag was passed, so results produced
+	// without it hide every accepted finding from the number above. Saying so
+	// is the difference between publishing a total and publishing a floor —
+	// the same difference the `not scanned` cell makes below.
+	if len(carried) > 0 && len(findings) > 0 && !recorded {
+		sb.WriteString("Nothing in these results is recorded as suppressed, so the number above counts\n")
+		sb.WriteString("only what the scanners still showed: the accepted findings listed below were\n")
+		sb.WriteString("removed from their own images' reports by the ignore file the audit generates\n")
+		sb.WriteString("from them, and cannot be counted back. Read it as a floor. Trivy keeps that\n")
+		sb.WriteString("record under `--show-suppressed`, which the daily security audit passes —\n")
+		sb.WriteString("generate from its artifacts for the whole number (#311).\n\n")
+	}
 
 	sb.WriteString("## Images\n\n")
 	sb.WriteString("The **Base** column is the distribution the image is built on, as the scanners\n")

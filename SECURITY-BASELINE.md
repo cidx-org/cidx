@@ -9,6 +9,9 @@ argued again.
 
 Carried and accepted are different numbers, and both are stated. A file saying
 only what is accepted read "0 accepted findings" on a catalogue carrying 596.
+Accepted is a subset of carried: accepting a finding records that it was looked
+at, it does not take it out of the image — so the carried count includes what
+the audit's ignore file removes from its own scan results (#310).
 
 This file is committed, so its diff is the history of what the catalogue
 delivers, and it carries no generation date: the same inputs produce the same
@@ -21,18 +24,18 @@ An entry past its expiry date waives nothing until it is reviewed; `cidx
 security vuln check` is what reports those, and `cidx security vuln prune`
 reports the ones no catalogue image carries any more.
 
-**21 images. 19 accepted HIGH/CRITICAL finding(s) across 2 of them.**
+**21 images. 18 accepted HIGH/CRITICAL finding(s) across 2 of them.**
 
 ## What the images carry
 
-The catalogue carries **456** HIGH/CRITICAL findings, counted per image — the
+The catalogue carries **465** HIGH/CRITICAL findings, counted per image — the
 same CVE on five images is five repins. They split into four populations:
 
 | Population | Count | What it means |
 | ---------- | ----- | ------------- |
 | Go stdlib in a CLI binary | 40 | Exempt by class: it goes away when the publisher recompiles, and `net/http` is unreachable in a tool that opens no listener. |
-| Kernel headers | 65 | Exempt by class: the kernel is the host's, not the container's. The scanner flags the headers package for its version string. |
-| Fixed upstream | 201 | A fix exists. This is the images' age, not a decision — an exception must never be written for one. |
+| Kernel headers | 69 | Exempt by class: the kernel is the host's, not the container's. The scanner flags the headers package for its version string. |
+| Fixed upstream | 206 | A fix exists. This is the images' age, not a decision — an exception must never be written for one. |
 | **Needing triage** | **150** | No fix at any version, and not exempt. The only population an exception is the right instrument for. |
 
 None of them is in CISA KEV. The highest EPSS score seen is 0.10. Both are reported
@@ -40,29 +43,42 @@ for a human to read; neither gates anything.
 
 ## Images
 
-| Image | Presets | Carried HIGH/CRITICAL | Accepted |
-| ----- | ------- | --------------------- | -------- |
-| `buildpack-deps:trixie-curl@sha256:ef554489e8f8b0245ef3cb2742b4c6b6e53c43bd64366b13f624982c854af2eb` | cargo-audit | 41 | none |
-| `commitizen/commitizen:4.16.5@sha256:451d0150ed7804c51cf201b2e9bd3f351867badbb7dc98f195cad740fdeaabaa` | commitizen | 8 | none |
-| `commitlint/commitlint:21.2.1@sha256:f4b38082bec66b4cd1b37a0357145dded515c4468e2b339ec9ba31f86461f6b9` | commitlint | 15 | none |
-| `dhi.io/alpine-base:3.24@sha256:84a21d3dfb87eb1c0bf1b532350f2aa0bf7d0df6246c398cc5c14b29002b7310` | test-hot-reload | 0 | none |
-| `dhi.io/docker:29-cli@sha256:5962df1dad91fbf81be7c795c00d6137c6a46ac28acada6af9f0af7c92133966` | docker-buildx | 10 | none |
-| `dhi.io/golang:1.26.5-alpine-dev@sha256:29fe0a7d2a5ab0c236fbde3a7f63801755585ed260b6f2f564e831c92bfa9f34` | go-build, go-mod-tidy, go-test, godog, gofmt, govulncheck | 2 | none |
-| `dhi.io/python:3.13.14-alpine-dev@sha256:8c3820102033dff6a1e5de0fad001747c7b0979c372d6ffc1ac95dd0e03eed82` | bandit, mypy, pip-audit, pytest, python-build, twine | 5 | none |
-| `dhi.io/trivy:0.71@sha256:fd727baaf00f823f59c2936f2c797c61750e2440b736c5b787722c18dd9518aa` | trivy | 2 | none |
-| `ghcr.io/ansible/community-ansible-dev-tools:v26.7.1@sha256:4d4db3e75c48ce64763d26adbca58ff3f8b93a8ddae785373ac973b4f20a7d92` | ansible-galaxy-build, ansible-galaxy-publish, ansible-lint, ansible-syntax, ansible-test, molecule, yamllint | 86 | 6 |
-| `ghcr.io/astral-sh/ruff:0.8.2@sha256:84b0ad0023906db70b759b3b29e455dad0638159bf2de2b95086db1ab175917b` | ruff | 0 | none |
-| `ghcr.io/osscontainertools/kaniko:v1.28.0@sha256:f072b11159668f4d11ba3a38d489db7ff18eb961b8140de91a437c71c1747583` | kaniko | 4 | none |
-| `ghcr.io/probatum-org/probatum:0.2.1@sha256:c78575afc4469d5d310f449f8133927d4b2859e6ea66a720d82205e1dfb09ef1` | probatum | 0 | none |
-| `ghcr.io/securego/gosec:2.28.0@sha256:4342ad119a7c69f3f4e4ce78d81ba183dc774a70a7a4c6eeb15fe9e511f214f0` | gosec | 6 | none |
-| `golangci/golangci-lint:v2.12.2-alpine@sha256:91b27804074a0bacea298707f016911e60cf0cdbc6c7bf5ccacb5f0606d18d60` | golangci-lint | 49 | none |
-| `goreleaser/goreleaser:v2.17.0@sha256:054eefd282c02233a2556ce2d1a60cd2f51dc565ffc2520dc38b5deb4dd1ad30` | goreleaser | 32 | none |
-| `jauderho/prettier:3.9.4@sha256:b233d9c847048561850a1a107e35318b28361cd9a850eac7edcd5d8bfd82cea2` | prettier | 4 | none |
-| `koalaman/shellcheck:stable@sha256:bb596a0d169b85ddd81d8b6d3a2ff6d5baf5fca10b97f575ebc647c3dff62b3d` | shellcheck | 0 | none |
-| `maniator/gh:v2.95@sha256:c7e862eeb468003aba87847a03e214a21638cd898130d6e5894f019aec091913` | gh-release | 5 | none |
-| `pyfound/black:26.5.1@sha256:bcdafe3e6a60fd181fde19859f7ee4c498557f03bb30af3fa880f502a66e5b5f` | black | 44 | none |
-| `rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51` | cargo-build, cargo-publish, cargo-test, clippy, rustfmt | 87 | 13 |
-| `zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f` | gitleaks | 56 | none |
+The **Base** column is the distribution the image is built on, as the scanners
+report it. It is here because it decides whether the findings above can ever
+go away: once a base stops being supported, its packages receive no further
+updates and every finding on that image is permanent, however fresh the tag
+is. `none` is an image with no distribution underneath it — a scratch or
+static build — which is an answer, not a gap.
+
+The date that support ends is deliberately **not** in this file. It is
+relative to the day you read it and it comes from a third party, so it would
+change these lines without anything changing about the catalogue — the same
+reason there is no generation date. `cidx security baseline` prints it, and
+the daily security audit reports it.
+
+| Image | Presets | Base | Carried HIGH/CRITICAL | Accepted |
+| ----- | ------- | ---- | --------------------- | -------- |
+| `buildpack-deps:trixie-curl@sha256:ef554489e8f8b0245ef3cb2742b4c6b6e53c43bd64366b13f624982c854af2eb` | cargo-audit | debian 13.6 | 41 | none |
+| `commitizen/commitizen:4.16.5@sha256:451d0150ed7804c51cf201b2e9bd3f351867badbb7dc98f195cad740fdeaabaa` | commitizen | alpine 3.24.1 | 8 | none |
+| `commitlint/commitlint:21.2.1@sha256:f4b38082bec66b4cd1b37a0357145dded515c4468e2b339ec9ba31f86461f6b9` | commitlint | alpine 3.24.1 | 15 | none |
+| `dhi.io/alpine-base:3.24@sha256:84a21d3dfb87eb1c0bf1b532350f2aa0bf7d0df6246c398cc5c14b29002b7310` | test-hot-reload | alpine 3.24 | 0 | none |
+| `dhi.io/docker:29-cli@sha256:5962df1dad91fbf81be7c795c00d6137c6a46ac28acada6af9f0af7c92133966` | docker-buildx | debian 13.6 | 10 | none |
+| `dhi.io/golang:1.26.5-alpine-dev@sha256:29fe0a7d2a5ab0c236fbde3a7f63801755585ed260b6f2f564e831c92bfa9f34` | go-build, go-mod-tidy, go-test, godog, gofmt, govulncheck | alpine 3.24 | 2 | none |
+| `dhi.io/python:3.13.14-alpine-dev@sha256:8c3820102033dff6a1e5de0fad001747c7b0979c372d6ffc1ac95dd0e03eed82` | bandit, mypy, pip-audit, pytest, python-build, twine | alpine 3.24 | 5 | none |
+| `dhi.io/trivy:0.71@sha256:fd727baaf00f823f59c2936f2c797c61750e2440b736c5b787722c18dd9518aa` | trivy | debian 13.6 | 2 | none |
+| `ghcr.io/ansible/community-ansible-dev-tools:v26.7.1@sha256:4d4db3e75c48ce64763d26adbca58ff3f8b93a8ddae785373ac973b4f20a7d92` | ansible-galaxy-build, ansible-galaxy-publish, ansible-lint, ansible-syntax, ansible-test, molecule, yamllint | fedora 44 | 93 | 6 |
+| `ghcr.io/astral-sh/ruff:0.8.2@sha256:84b0ad0023906db70b759b3b29e455dad0638159bf2de2b95086db1ab175917b` | ruff | none | 0 | none |
+| `ghcr.io/osscontainertools/kaniko:v1.28.0@sha256:f072b11159668f4d11ba3a38d489db7ff18eb961b8140de91a437c71c1747583` | kaniko | none | 4 | none |
+| `ghcr.io/probatum-org/probatum:0.2.1@sha256:c78575afc4469d5d310f449f8133927d4b2859e6ea66a720d82205e1dfb09ef1` | probatum | alpine 3.20.10 | 0 | none |
+| `ghcr.io/securego/gosec:2.28.0@sha256:4342ad119a7c69f3f4e4ce78d81ba183dc774a70a7a4c6eeb15fe9e511f214f0` | gosec | alpine 3.24.1 | 6 | none |
+| `golangci/golangci-lint:v2.12.2-alpine@sha256:91b27804074a0bacea298707f016911e60cf0cdbc6c7bf5ccacb5f0606d18d60` | golangci-lint | alpine 3.23.4 | 48 | none |
+| `goreleaser/goreleaser:v2.17.0@sha256:054eefd282c02233a2556ce2d1a60cd2f51dc565ffc2520dc38b5deb4dd1ad30` | goreleaser | alpine 3.24.1 | 32 | none |
+| `jauderho/prettier:3.9.4@sha256:b233d9c847048561850a1a107e35318b28361cd9a850eac7edcd5d8bfd82cea2` | prettier | alpine 3.24.1 | 4 | none |
+| `koalaman/shellcheck:stable@sha256:bb596a0d169b85ddd81d8b6d3a2ff6d5baf5fca10b97f575ebc647c3dff62b3d` | shellcheck | none | 0 | none |
+| `maniator/gh:v2.95@sha256:c7e862eeb468003aba87847a03e214a21638cd898130d6e5894f019aec091913` | gh-release | alpine 3.24.1 | 5 | none |
+| `pyfound/black:26.5.1@sha256:bcdafe3e6a60fd181fde19859f7ee4c498557f03bb30af3fa880f502a66e5b5f` | black | debian 13.4 | 44 | none |
+| `rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51` | cargo-build, cargo-publish, cargo-test, clippy, rustfmt | debian 13.6 | 91 | 12 |
+| `zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f` | gitleaks | alpine 3.22.3 | 55 | none |
 
 ## Accepted findings
 
@@ -86,4 +102,3 @@ for a human to read; neither gates anything.
 | `rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51` | CVE-2025-38187 | HIGH | third-party | 2026-03-02 | Vulnerability in upstream third-party image |
 | `rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51` | CVE-2025-38421 | HIGH | third-party | 2026-03-02 | Vulnerability in upstream third-party image |
 | `rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51` | CVE-2025-38636 | HIGH | third-party | 2026-03-02 | Vulnerability in upstream third-party image |
-| `rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51` | CVE-2025-59375 | HIGH | third-party | 2026-03-02 | Vulnerability in upstream third-party image |
