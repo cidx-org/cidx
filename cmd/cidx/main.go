@@ -104,11 +104,13 @@ func buildApp() *cli.App {
 				Subcommands: workflowCommand().Subcommands,
 			},
 
-			// Deprecated — will be removed
+			// Deprecated — removed in v3.0.0 (issue #235). Every invocation
+			// warns and names its exact replacement; see action_deprecated.go.
 			{
 				Name:   "action",
-				Usage:  "Deprecated: use 'repo', 'release', or 'security' instead",
+				Usage:  "Deprecated: use 'repo', 'release', or 'security' instead — removed in cidx " + actionRemovedIn,
 				Hidden: true,
+				Before: warnDeprecatedAction,
 				Subcommands: []*cli.Command{
 					cpwCommand(),
 					prCommand(),

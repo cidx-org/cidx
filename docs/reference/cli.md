@@ -275,3 +275,29 @@ This is declared rather than inferred on purpose: from the outside, a job doing 
    Differences:
       • Missing in GitHub workflow: security, code, test, build, release
 ```
+
+---
+
+### `cidx action` (deprecated — removed in v3.0.0)
+
+The command tree that preceded the `repo` / `release` / `security` namespaces. Hidden since 2026-04-09, kept working since, and **removed in v3.0.0** (issue #235).
+
+Every invocation still runs, and prints the command that replaces it:
+
+```text
+$ cidx action pr create --help
+⚠️  'cidx action pr create' is deprecated and will be removed in cidx v3.0.0 -- use: 'cidx pr create'
+```
+
+The warning goes to stderr, so redirecting the command's output does not hide it.
+
+| Deprecated                      | Replacement              |
+| ------------------------------- | ------------------------ |
+| `cidx action pr ...`            | `cidx pr ...`            |
+| `cidx action cpw`               | `cidx cpw`               |
+| `cidx action commit-push-watch` | `cidx cpw`               |
+| `cidx action tag ...`           | `cidx release tag ...`   |
+| `cidx action release ...`       | `cidx release ...`       |
+| `cidx action artifact ...`      | `cidx repo artifact ...` |
+
+Subcommands are unchanged on both sides: `cidx action tag prepare` is `cidx release tag prepare`, and so on.

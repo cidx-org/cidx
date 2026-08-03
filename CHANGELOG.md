@@ -2,6 +2,7 @@
 
 ### Feat
 
+- **cli**: warn on every `cidx action ...` invocation, naming the exact command that replaces it and the release it disappears in (v3.0.0); the tree keeps working until then (#235)
 - **audit**: publish a vulnerability status summary to a tracking issue (#308)
 - **presets**: flag images whose base is approaching end of life (#305)
 - **audit**: publish the catalogue's scan results to GitHub code scanning (#301)
