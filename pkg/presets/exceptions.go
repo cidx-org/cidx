@@ -30,8 +30,9 @@ import (
 // The four states an exception can be in. They are the vocabulary the report
 // and the docs share, so they are spelled once, here.
 const (
-	// ExceptionLive covers a repository the catalogue runs today. Nothing to
-	// decide.
+	// ExceptionLive covers a repository the catalogue runs today, for a CVE the
+	// scanners still see on it. It is waiving a finding the audit would fail on;
+	// nothing to decide.
 	ExceptionLive = "live"
 
 	// ExceptionCarryOver covers a repository the catalogue has left behind, for
@@ -39,13 +40,14 @@ const (
 	// the justification and block the next scan; it has to be re-filed instead.
 	ExceptionCarryOver = "carry-over"
 
-	// ExceptionObsolete covers a repository the catalogue has left behind, for a
-	// CVE no catalogue image carries any more. It waives nothing and can go.
+	// ExceptionObsolete covers a CVE no catalogue image carries any more,
+	// whether or not the catalogue still runs the repository it was written
+	// against. It waives nothing and can go.
 	ExceptionObsolete = "obsolete"
 
-	// ExceptionUnknown covers a repository the catalogue has left behind, with
-	// no scan evidence to say whether the CVE survived the move. Fail-closed:
-	// not purgeable, because a purge on no evidence is a guess.
+	// ExceptionUnknown covers an entry with no scan evidence to settle whether
+	// its CVE is still carried. Fail-closed: not purgeable, because a purge on
+	// no evidence is a guess.
 	ExceptionUnknown = "unknown"
 )
 
@@ -77,70 +79,116 @@ type ExceptionVerdict struct {
 //
 // running is the set of repositories the catalogue runs today — registry and
 // path, no tag, no digest. findings maps those same repositories to the
-// HIGH/CRITICAL results the scanners reported on them; a repository absent from
+// HIGH/CRITICAL results the scanners' reports **show**; a repository absent from
 // the map has an image that was not scanned.
 //
-// suppressed maps the same repositories to what the audit's own ignore file kept
-// out of those results, and it exists for one question: whether a **live** entry
-// has been fixed upstream since it was accepted. The audit builds that ignore
-// file from these very entries, so a live entry's CVE is absent from findings by
-// construction and no fix could ever be read from there (#311, #312). Grype
-// records what it ignored and Trivy deletes it, so the answer is Grype's alone —
-// an empty FixedIn on a live entry means nobody said, never that no fix exists.
+// suppressed maps the same repositories to what the audit's ignore file kept out
+// of those reports. The two together are what the scanners saw, and only the two
+// together can be asked whether a CVE is still carried: the audit generates that
+// ignore file from these very entries, so an accepted CVE is deleted from its own
+// repository's visible results by construction. Reading that absence as "gone"
+// would purge every exception doing its job — which is why this test used to
+// return live on the repository alone, and why the lifecycle could then never
+// close on a repin of the same repository (#311). An exception only ever left the
+// file when its repository did.
 //
-// The criterion is the CVE, not the tag. An exception whose repository the
-// catalogue left behind is only obsolete once the findings show no catalogue
-// image carries its CVE any more — and only when every catalogue image has been
-// scanned, since a CVE cannot be shown absent from an image nobody looked at.
-// Anything less is reported as unknown rather than purged, the same fail-closed
-// posture the cooldown and the scan gate take.
+// Both scanners record what they suppressed: Grype in `ignoredMatches`, Trivy in
+// `ExperimentalModifiedFindings` under `--show-suppressed`, which
+// `security-audit.yml` passes for exactly this reason.
 //
-// The repository test comes first and does not consult the findings, which is
-// load-bearing rather than an optimisation: the security audit generates its
-// ignore file from these very exceptions, so a CVE accepted on a repository the
-// catalogue runs is filtered out of that repository's own scan results by
-// construction. Reading its absence as "gone" would delete every exception that
-// is doing its job, and the next audit would go red on all of them.
+// recordsSuppressions is whether the results in hand actually carry that record,
+// and it gates the *absence* conclusion alone. Trivy's report keeps no trace of
+// whether the flag was passed — the field is simply omitted when a scan
+// suppressed nothing — so results produced without it are indistinguishable from
+// results that suppressed nothing, and reading them as the latter deletes every
+// exception the ignore file was hiding. Measured on the audit's own artifacts
+// from the day before the flag landed: four ansible entries, all still carried,
+// all reported obsolete. Positive evidence never needs the gate — a CVE seen is
+// a CVE carried, whichever half of the report it was seen in.
+//
+// The criterion is the CVE, not the tag, and it is the same one wherever the
+// entry sits. An exception is obsolete once no catalogue image carries its CVE
+// any more — and only when every catalogue image has been scanned, since a CVE
+// cannot be shown absent from an image nobody looked at. Anything less is
+// reported as unknown rather than purged, the same fail-closed posture the
+// cooldown and the scan gate take.
 //
 // An entry still keyed the old way — a whole `repo:tag` where a repository
 // belongs — matches no repository, so it is judged on its CVE alone. That is
 // exactly what re-keying it requires, and it needs no special case.
-func ClassifyException(cve, repository string, running []string, findings, suppressed map[string][]Finding) ExceptionVerdict {
+func ClassifyException(cve, repository string, running []string, findings, suppressed map[string][]Finding, recordsSuppressions bool) ExceptionVerdict {
 	ordered := append([]string(nil), running...)
 	sort.Strings(ordered)
 
+	carries := func(repo string) bool {
+		return containsFold(FindingIDs(findings[repo]), cve) ||
+			containsFold(FindingIDs(suppressed[repo]), cve)
+	}
+
+	// A fix is read from wherever it was reported. An exception must never be
+	// written for a vulnerability that is fixed upstream, so an entry that turns
+	// out to have one is an entry that should not exist: a repin candidate, not
+	// a renewal. It keeps its state and stays on file — it still waives a
+	// finding the audit would fail on until the repin happens — and the report
+	// names it rather than letting it be renewed in silence (#312).
+	fixFor := func(repo string) string {
+		if fix := FixVersion(findings[repo], cve); fix != "" {
+			return fix
+		}
+		return FixVersion(suppressed[repo], cve)
+	}
+
+	scanned := func(repo string) bool {
+		_, ok := findings[repo]
+		return ok
+	}
+
+	// unrecorded is the reason an entry stays put when the results cannot say
+	// what their ignore file took out of them. It is not "no finding" — it is
+	// "nobody kept the receipt", and the two must never read the same.
+	unrecorded := fmt.Sprintf("the scan results record nothing they suppressed, so %s cannot be told apart from a finding the audit's own ignore file removed", cve)
+
 	for _, repo := range ordered {
-		if repo == repository {
+		if repo != repository {
+			continue
+		}
+		switch {
+		case carries(repository):
 			return ExceptionVerdict{
-				State:  ExceptionLive,
-				Reason: "covers a repository the catalogue runs today",
-				// An exception must never be written for a vulnerability that is
-				// fixed upstream, so a live entry that turns out to have one is
-				// an entry that should not exist: a repin candidate, not a
-				// renewal. It stays live and stays on file — it still waives a
-				// finding the audit would fail on until the repin happens — and
-				// the report names it rather than letting it be renewed in
-				// silence (#312).
-				FixedIn: FixVersion(suppressed[repository], cve),
+				State:   ExceptionLive,
+				Reason:  fmt.Sprintf("the catalogue runs %s and it still carries %s", repository, cve),
+				FixedIn: fixFor(repository),
+			}
+		case !scanned(repository):
+			return ExceptionVerdict{
+				State:  ExceptionUnknown,
+				Reason: fmt.Sprintf("%s has no scan result, so %s cannot be shown to have gone", repository, cve),
+			}
+		case !recordsSuppressions:
+			return ExceptionVerdict{State: ExceptionUnknown, Reason: unrecorded}
+		default:
+			return ExceptionVerdict{
+				State:  ExceptionObsolete,
+				Reason: fmt.Sprintf("the catalogue still runs %s, but no image of it carries %s any more", repository, cve),
 			}
 		}
 	}
 
 	for _, repo := range ordered {
-		if !containsFold(FindingIDs(findings[repo]), cve) {
+		if !carries(repo) {
 			continue
 		}
 		return ExceptionVerdict{
 			State:   ExceptionCarryOver,
 			Reason:  fmt.Sprintf("the catalogue runs no image from %s, but %s still carries %s: re-file the exception against it rather than deleting the justification", repository, repo, cve),
 			StillOn: repo,
-			FixedIn: FixVersion(findings[repo], cve),
+			FixedIn: fixFor(repo),
 		}
 	}
 
 	var unscanned []string
 	for _, repo := range ordered {
-		if _, ok := findings[repo]; !ok {
+		if !scanned(repo) {
 			unscanned = append(unscanned, repo)
 		}
 	}
@@ -150,6 +198,9 @@ func ClassifyException(cve, repository string, running []string, findings, suppr
 			Reason: fmt.Sprintf("the catalogue runs no image from %s, and %s has no scan result, so %s cannot be shown to have gone",
 				repository, unscannedList(unscanned), cve),
 		}
+	}
+	if !recordsSuppressions {
+		return ExceptionVerdict{State: ExceptionUnknown, Reason: unrecorded}
 	}
 
 	return ExceptionVerdict{
