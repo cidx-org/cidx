@@ -89,9 +89,19 @@ description = "Pull request validation (no build artifacts)"
 phases = ["security", "code", "test", "build"]
 description = "Main branch pipeline (builds artifacts)"
 
+# The end-to-end release rehearsal, run locally: `cidx run release` walks every
+# phase with the local guardrails on (gh-release drafts, kaniko does not push),
+# which is the whole point of declaring it here.
+#
+# No workflow implements it. `release.yml` is the *publication* workflow: it
+# cross-compiles and attaches assets with softprops/action-gh-release — release
+# publishing is deliberately not cidx's job (CLAUDE.md, "Scope") — and delegates
+# only the `docker` phase to `cidx run`. Comparing it with this list compares
+# two things that are not meant to coincide, so it is declared out (#233).
 [pipelines.release]
 phases = ["security", "code", "test", "build", "docker", "release"]
 description = "Complete release pipeline"
+workflow = "none"
 
 # ─── release-create action (commitizen version bump, routed through a PR) ───
 [actions.release-create]

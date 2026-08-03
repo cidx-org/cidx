@@ -421,9 +421,19 @@ description = "Main branch pipeline (builds artifacts)"
 # Maps to: .github/workflows/release.yml
 # Trigger: Git tag pushed (e.g., v1.2.3)
 # Purpose: Full validation + build + publish release artifacts
+#
+# `workflow` names the CI workflow that implements this pipeline, which is what
+# `cidx check workflow` compares it against. Unset, it follows the convention
+# <pipeline>.yml — release.yml here. Set it to another filename when the
+# workflow is named otherwise (workflow = "publish.yml"), or to "none" when no
+# workflow implements the pipeline: a release workflow that cross-compiles and
+# attaches assets natively, delegating a single phase to `cidx run`, is not an
+# implementation of this list and comparing the two reports a difference that
+# is not one.
 [pipelines.release]
 phases = ["security", "code", "test", "build", "docker", "release"]  # Complete workflow
 description = "Complete release pipeline (CI only)"
+# workflow = "none"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Publish Pipeline: Artifact publishing only (part of release workflow)

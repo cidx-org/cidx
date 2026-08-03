@@ -206,9 +206,40 @@ type Phase struct {
 	Containers []string `toml:"containers"`
 }
 
+// NoWorkflow is the value `[pipelines.<name>] workflow` takes when no CI
+// workflow implements the pipeline. `cidx check workflow` then has nothing to
+// compare it against and leaves it alone.
+const NoWorkflow = "none"
+
 // Pipeline defines a sequence of phases to execute
 type Pipeline struct {
 	Phases []string `toml:"phases"`
+
+	// Workflow names the CI workflow file that implements this pipeline.
+	// Unset follows the convention <pipeline>.yml; NoWorkflow states that none
+	// does. See WorkflowFile.
+	Workflow string `toml:"workflow"`
+}
+
+// WorkflowFile returns the CI workflow file expected to implement the pipeline
+// called name, or "" when the pipeline declares that no workflow does.
+//
+// The default is the filename convention — [pipelines.ci] ↔ ci.yml — which
+// holds whenever a workflow mirrors a pipeline. It does not hold for every
+// workflow, and nothing in a workflow file says which case it is: a job that
+// does its phase natively and a job that lost its `cidx run` call look exactly
+// alike from the outside. Inferring the pairing therefore cannot distinguish
+// the intended shape from the drift the check exists to find, which is why the
+// exception is declared rather than guessed (issue #233).
+func (p Pipeline) WorkflowFile(name string) string {
+	switch p.Workflow {
+	case "":
+		return name + ".yml"
+	case NoWorkflow:
+		return ""
+	default:
+		return p.Workflow
+	}
 }
 
 // ContainerConfig represents a fully resolved container configuration after merging preset + overrides

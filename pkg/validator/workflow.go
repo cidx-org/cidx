@@ -178,18 +178,53 @@ func ValidateWorkflow(app *cli.App, cfg *config.Config, pipelineName string, wor
 	}, nil
 }
 
-// ValidateAllWorkflows validates all pipelines against their corresponding workflows
+// WorkflowPath returns the path of the workflow file that implements the named
+// pipeline, or "" when the pipeline is not implemented by a workflow — either
+// because it declares `workflow = "none"`, or because the file it points at
+// does not exist.
+//
+// This is the single place the pipeline ↔ workflow pairing is decided, so
+// `check workflow <pipeline>` and `check workflow` cannot answer differently.
+func WorkflowPath(cfg *config.Config, pipelineName, workflowDir string) string {
+	pipeline, exists := cfg.Pipelines[pipelineName]
+	if !exists {
+		return ""
+	}
+
+	file := pipeline.WorkflowFile(pipelineName)
+	if file == "" {
+		return ""
+	}
+
+	path := filepath.Join(workflowDir, file)
+	if _, err := os.Stat(path); err != nil {
+		return ""
+	}
+	return path
+}
+
+// ValidateAllWorkflows validates every pipeline that a workflow implements.
+//
+// A pipeline with no workflow is skipped rather than compared against a file
+// that merely shares its name: `release.yml` publishes a release natively and
+// delegates a single phase to cidx, so it never was `[pipelines.release]`'s
+// mirror (issue #233). Which pipelines have a workflow is read from the config
+// — see config.Pipeline.WorkflowFile.
 func ValidateAllWorkflows(app *cli.App, cfg *config.Config, workflowDir string) ([]*ValidationResult, error) {
 	results := []*ValidationResult{}
 
-	// Pipelines and their workflow file, in a fixed order: a Go map would
-	// report the same repository in a different order on every run (#233).
-	for _, pipelineName := range []string{"ci", "release"} {
-		workflowPath := filepath.Join(workflowDir, pipelineName+".yml")
+	// Sorted, because a Go map would report the same repository in a different
+	// order on every run (#233).
+	names := make([]string, 0, len(cfg.Pipelines))
+	for name := range cfg.Pipelines {
+		names = append(names, name)
+	}
+	sort.Strings(names)
 
-		// Check if workflow file exists
-		if _, err := os.Stat(workflowPath); os.IsNotExist(err) {
-			continue // Skip if workflow doesn't exist
+	for _, pipelineName := range names {
+		workflowPath := WorkflowPath(cfg, pipelineName, workflowDir)
+		if workflowPath == "" {
+			continue
 		}
 
 		result, err := ValidateWorkflow(app, cfg, pipelineName, workflowPath)

@@ -240,15 +240,38 @@ cidx check workflow --verbose    # Show detailed validation info
 - Phase order: Verifies phases execute in the correct order
 - Consistency: Detects mismatches between local and CI/CD configurations
 
+**Which workflow a pipeline is compared with:**
+
+By convention, `[pipelines.ci]` is compared with `ci.yml`, `[pipelines.release]` with `release.yml`. A pipeline with no workflow file of that name is skipped.
+
+Not every workflow mirrors a pipeline, though. A release workflow that publishes natively — cross-compilation, then `softprops/action-gh-release` — and only delegates one phase to `cidx run` is not an implementation of `[pipelines.release]`, and comparing the two reports a difference that is not a difference. Say so in the pipeline:
+
+```toml
+[pipelines.release]
+phases = ["security", "code", "test", "build", "docker", "release"]
+workflow = "none"   # no workflow implements this pipeline
+```
+
+`workflow` accepts a filename too, for a workflow that implements a pipeline under another name (`workflow = "main.yml"`). Left unset, the convention applies.
+
+This is declared rather than inferred on purpose: from the outside, a job doing its phase natively and a job that lost its `cidx run` call look exactly alike, so any rule clever enough to excuse the first would also excuse the second — which is the drift this command exists to catch (issue #233).
+
 **Example output:**
 
 ```text
-✅ Workflow ci.yml matches pipeline 'ci'
-   Phases: [security, code, test, build]
+✅ Pipeline 'ci' ↔ Workflow ci.yml
+   Both execute phases: [security, code, test, build]
+   Status: In sync ✓
 
-⚠️  Workflow release.yml has differences with pipeline 'release'
-   Missing in GitHub:  [docker]
-   Order mismatch:
-     Local:  [security, code, test, build, docker, release]
-     GitHub: [security, code, test, build, release]
+⚠️  Pipeline 'release' ↔ Workflow release.yml
+   Status: Out of sync ✗
+
+   📄 cidx.toml [pipelines.release]:
+      phases = [security, code, test, build, docker, release]
+
+   🔧 GitHub Actions [release.yml]:
+      executes = [docker]
+
+   Differences:
+      • Missing in GitHub workflow: security, code, test, build, release
 ```
