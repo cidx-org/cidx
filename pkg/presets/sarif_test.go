@@ -123,3 +123,69 @@ func TestExpiredExceptionAlertIdentityIsKeyedOnTheRepository(t *testing.T) {
 		t.Errorf("the expired-exception alert and the triage alert share a fingerprint (%s)", alert.Fingerprint)
 	}
 }
+
+// One alert per repository and CVE (#303)
+//
+// The two families could not collide before the ignore file started honouring
+// `expires`: a lapsed acceptance filtered its finding out of the audit's own
+// results, so TriageAlerts never saw it. Now it does, and the same CVE on the
+// same repository has one alert from each.
+
+// TestAnExpiredAcceptanceSupersedesTheTriageAlert: one CVE, one repository, one
+// decision — and the alert that survives is the one naming the judgement that
+// lapsed, because it points at the entry a human edits rather than at the image
+// pin, and it does not offer `vuln add` for a CVE that already has an entry.
+func TestAnExpiredAcceptanceSupersedesTheTriageAlert(t *testing.T) {
+	triage := TriageAlerts(ansibleBefore, []string{"ansible-lint"}, unfixed("CVE-2025-31133"), 172)
+	expired := ExpiredExceptionAlerts([]Exception{{
+		CVE:        "CVE-2025-31133",
+		Repository: "ghcr.io/ansible/community-ansible-dev-tools",
+		Severity:   "HIGH",
+		Expires:    "2026-03-02",
+		Line:       36,
+	}}, day("2026-08-02"))
+
+	alert := onlyAlert(t, MergeAlerts(triage, expired))
+	if alert.File != ExceptionsFile {
+		t.Errorf("the surviving alert points at %s, want the entry that expired", alert.File)
+	}
+	if alert.Fingerprint != expired[0].Fingerprint {
+		t.Error("the surviving alert is not the one code scanning has been showing since #301")
+	}
+}
+
+// TestAnExpiredAcceptanceOnlySupersedesItsOwnCVE: the suppression is keyed on
+// the repository and the identifier, exactly as everything else here is. A
+// lapsed acceptance must not silence the rest of an image's queue.
+func TestAnExpiredAcceptanceOnlySupersedesItsOwnCVE(t *testing.T) {
+	triage := TriageAlerts(ansibleBefore, []string{"ansible-lint"}, unfixed("CVE-2025-52565"), 172)
+	expired := ExpiredExceptionAlerts([]Exception{{
+		CVE:        "CVE-2025-31133",
+		Repository: "ghcr.io/ansible/community-ansible-dev-tools",
+		Severity:   "HIGH",
+		Expires:    "2026-03-02",
+	}}, day("2026-08-02"))
+
+	merged := MergeAlerts(triage, expired)
+	if len(merged) != 2 {
+		t.Fatalf("merged alerts = %d, want the triage alert and the expired one", len(merged))
+	}
+}
+
+// TestAnAcceptanceStillWithinItsDateSupersedesNothing: it is still filtering,
+// so there is no triage alert to collide with — and nothing may be dropped on
+// its account either.
+func TestAnAcceptanceStillWithinItsDateSupersedesNothing(t *testing.T) {
+	triage := TriageAlerts(ansibleBefore, []string{"ansible-lint"}, unfixed("CVE-2025-31133"), 172)
+	expired := ExpiredExceptionAlerts([]Exception{{
+		CVE:        "CVE-2025-31133",
+		Repository: "ghcr.io/ansible/community-ansible-dev-tools",
+		Severity:   "HIGH",
+		Expires:    "2999-01-01",
+	}}, day("2026-08-02"))
+
+	alert := onlyAlert(t, MergeAlerts(triage, expired))
+	if alert.File != CatalogueFile {
+		t.Errorf("the surviving alert points at %s, want the line pinning the image", alert.File)
+	}
+}

@@ -16,6 +16,7 @@
 - **security**: let an exception retire when its CVE is gone, by reading what the scanners recorded as suppressed alongside what their reports show; the audit passes `--show-suppressed` so Trivy keeps that record, and an absence with nothing recorded reads `unknown` rather than purgeable (#311)
 - **security**: key code scanning alerts on the repository so a repin does not churn them (#313)
 - **security**: report the exceptions on running repositories that are fixed upstream (#312)
+- **security**: stop an expired acceptance from filtering anything — `cidx security vuln ignore` honours `expires` when it builds the scanners' ignore file, so a lapsed entry waives nothing and its finding is back in the audit's scan results. A **behaviour change**: the 18 entries that lapsed on 2026-03-02 stop suppressing today, no entry is renewed or removed on their account, and the code scanning alert for a lapsed acceptance supersedes the finding's own so one CVE on one repository stays one alert. The named day is included, and a missing or unreadable date waives nothing (#303)
 
 ## v2.4.0 (2026-08-01)
 

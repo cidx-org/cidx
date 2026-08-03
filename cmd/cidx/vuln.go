@@ -61,6 +61,21 @@ func (v Vulnerability) key() string {
 	return v.FirstSeen
 }
 
+// waiving keeps the entries that still remove something from a scan run on
+// `day`, which is what the scanners' ignore file is built from.
+//
+// The judgement is [presets.Waives] — one definition, so that the entry the
+// ignore file drops is exactly the entry the Security tab reports as lapsed.
+func waiving(vulns []Vulnerability, day time.Time) []Vulnerability {
+	var live []Vulnerability
+	for _, v := range vulns {
+		if presets.Waives(v.Expires, day) {
+			live = append(live, v)
+		}
+	}
+	return live
+}
+
 // VulnerabilityFile represents the known-vulnerabilities.toml structure
 type VulnerabilityFile struct {
 	Vulnerabilities []Vulnerability `toml:"vulnerabilities"`
@@ -695,12 +710,20 @@ func vulnIgnoreCommand() *cli.Command {
 				}
 			}
 
+			// An acceptance past its date waives nothing (#303). Until then
+			// every entry was written out whatever its date, so a lapsed one
+			// went on removing its finding from the audit's own results — and
+			// the finding could not surface anywhere downstream, because the
+			// JSON is written after the filter.
+			live := waiving(filtered, time.Now())
+			lapsed := len(filtered) - len(live)
+
 			var output string
 			switch format {
 			case "trivy":
-				output = generateTrivyIgnore(filtered)
+				output = generateTrivyIgnore(live)
 			case "grype":
-				output = generateGrypeIgnore(filtered)
+				output = generateGrypeIgnore(live)
 			default:
 				return cli.Exit(fmt.Sprintf("Unknown format: %s (use trivy or grype)", format), 1)
 			}
@@ -710,7 +733,14 @@ func vulnIgnoreCommand() *cli.Command {
 				if err := os.WriteFile(outPath, []byte(output), 0644); err != nil {
 					return fmt.Errorf("failed to write %s: %w", outPath, err)
 				}
-				fmt.Fprintf(os.Stderr, "Generated %s with %d exception(s) for %s\n", outPath, len(filtered), repository)
+				fmt.Fprintf(os.Stderr, "Generated %s with %d exception(s) for %s", outPath, len(live), repository)
+				if lapsed > 0 {
+					// Said out loud on the run that produced the results: an
+					// ignore file that shrank is the one thing that explains a
+					// scan reporting more than it did yesterday.
+					fmt.Fprintf(os.Stderr, ", %d past their expiry date and waiving nothing", lapsed)
+				}
+				fmt.Fprintln(os.Stderr)
 			} else {
 				fmt.Print(output)
 			}
@@ -780,9 +810,12 @@ func vulnVerifyCommand() *cli.Command {
 				return err
 			}
 
-			// Get unique images with exceptions
+			// Get unique images with exceptions. Only the ones still within
+			// their date: this command exists to check that the ignore file
+			// suppresses what it claims to, so it has to be built from the same
+			// entries `vuln ignore` writes (#303).
 			imageExceptions := make(map[string][]Vulnerability)
-			for _, v := range vulns.Vulnerabilities {
+			for _, v := range waiving(vulns.Vulnerabilities, time.Now()) {
 				imageExceptions[v.Repository] = append(imageExceptions[v.Repository], v)
 			}
 
