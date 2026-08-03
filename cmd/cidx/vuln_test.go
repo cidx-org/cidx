@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/cidx-org/cidx/v2/pkg/presets"
 )
 
 // TestStaleVulnerabilities: an exception recorded against a repository the
@@ -274,5 +277,117 @@ func TestVulnerabilityJSONContract(t *testing.T) {
 	}
 	if _, ok := decoded["Image"]; ok {
 		t.Errorf("the legacy image key is still serialised, and it is always empty")
+	}
+}
+
+// The expiry date decides what the ignore file carries (#303)
+//
+// `generateTrivyIgnore` emitted every entry's CVE with no date check at all, so
+// the eighteen acceptances that lapsed on 2026-03-02 went on removing their
+// findings from the audit's own scan results — the JSON is written after the
+// filter, so nothing downstream could see them. The `expires` field was
+// decorative, and it was the mechanism meant to force the review.
+
+// TestTheIgnoreFileDropsAnExpiredAcceptance runs the two generators over the
+// entries the command actually hands them, which is the whole of the change:
+// a live acceptance still suppresses its finding, a lapsed one suppresses
+// nothing.
+func TestTheIgnoreFileDropsAnExpiredAcceptance(t *testing.T) {
+	today := time.Date(2026, 8, 3, 0, 0, 0, 0, time.UTC)
+
+	entries := []Vulnerability{
+		{CVE: "CVE-2026-0001", Repository: "rust", Expires: "2026-12-01"},
+		{CVE: "CVE-2026-0002", Repository: "rust", Expires: "2026-03-02"},
+	}
+
+	live := waiving(entries, today)
+	if len(live) != 1 || live[0].CVE != "CVE-2026-0001" {
+		t.Fatalf("the entries still waiving something are %v, want CVE-2026-0001 alone", live)
+	}
+
+	trivy := generateTrivyIgnore(live)
+	if !strings.Contains(trivy, "CVE-2026-0001") {
+		t.Error("the live acceptance is missing from the trivy ignore file")
+	}
+	if strings.Contains(trivy, "CVE-2026-0002") {
+		t.Error("the expired acceptance is still filtering its finding out of the trivy scan")
+	}
+
+	grype := generateGrypeIgnore(live)
+	if !strings.Contains(grype, "CVE-2026-0001") {
+		t.Error("the live acceptance is missing from the grype ignore file")
+	}
+	if strings.Contains(grype, "CVE-2026-0002") {
+		t.Error("the expired acceptance is still filtering its finding out of the grype scan")
+	}
+}
+
+// TestTheExpiryDayIsIncluded pins the boundary, which is the one thing a date
+// check can get wrong quietly: "expires on 2026-03-02" is a deadline, not a
+// cut-off, so the entry waives its finding all through that day and stops the
+// next morning.
+func TestTheExpiryDayIsIncluded(t *testing.T) {
+	entry := []Vulnerability{{CVE: "CVE-2026-0001", Repository: "rust", Expires: "2026-03-02"}}
+
+	cases := map[string]bool{
+		"2026-03-01": true,  // the day before
+		"2026-03-02": true,  // the day named — still covered
+		"2026-03-03": false, // the day after — lapsed
+	}
+
+	for date, want := range cases {
+		day, err := time.Parse(time.DateOnly, date)
+		if err != nil {
+			t.Fatalf("parse %q: %v", date, err)
+		}
+		if got := len(waiving(entry, day)) == 1; got != want {
+			t.Errorf("on %s the acceptance waives = %v, want %v", date, got, want)
+		}
+	}
+}
+
+// TestTheExpiryDayIsReadInUTC: a scan runs on a runner in whatever zone GitHub
+// gives it, and an acceptance is dated to the day. An instant late on the last
+// day, read in a zone ahead of UTC, must not retire the entry early.
+func TestTheExpiryDayIsReadInUTC(t *testing.T) {
+	entry := []Vulnerability{{CVE: "CVE-2026-0001", Repository: "rust", Expires: "2026-03-02"}}
+
+	late := time.Date(2026, 3, 2, 23, 30, 0, 0, time.FixedZone("UTC+11", 11*3600))
+	if len(waiving(entry, late)) != 1 {
+		t.Error("the acceptance stopped waiving before its day was over in UTC")
+	}
+}
+
+// TestAnAcceptanceWithNoDateWaivesNothing: fail-closed, the posture an
+// unresolvable digest, an undatable candidate and an unreadable scan all take.
+// An acceptance is a dated judgement; with no readable date there is nothing
+// saying it is still one somebody has taken. `cidx security vuln check` names
+// the malformed date, and the finding reaches the audit like any other.
+func TestAnAcceptanceWithNoDateWaivesNothing(t *testing.T) {
+	today := time.Date(2026, 8, 3, 0, 0, 0, 0, time.UTC)
+
+	for _, expires := range []string{"", "soon", "2026-13-45", "02/03/2026"} {
+		entry := []Vulnerability{{CVE: "CVE-2026-0001", Repository: "rust", Expires: expires}}
+		if got := waiving(entry, today); len(got) != 0 {
+			t.Errorf("an entry dated %q still waives its finding", expires)
+		}
+	}
+}
+
+// TestTheIgnoreFileAndTheTabAgreeOnTheBoundary: the file drops the entry on the
+// day the Security tab starts calling it expired, never a day either side.
+// Two answers to "has this acceptance lapsed" is the one bug neither view could
+// be trusted after.
+func TestTheIgnoreFileAndTheTabAgreeOnTheBoundary(t *testing.T) {
+	entry := Vulnerability{CVE: "CVE-2026-0001", Repository: "rust", Expires: "2026-03-02"}
+	exception := []presets.Exception{{CVE: entry.CVE, Repository: entry.Repository, Expires: entry.Expires}}
+
+	for day := time.Date(2026, 2, 27, 0, 0, 0, 0, time.UTC); day.Before(time.Date(2026, 3, 7, 0, 0, 0, 0, time.UTC)); day = day.AddDate(0, 0, 1) {
+		filters := len(waiving([]Vulnerability{entry}, day)) == 1
+		expired := len(presets.ExpiredExceptions(exception, day)) == 1
+		if filters == expired {
+			t.Errorf("on %s the ignore file filters = %v and the tab reports expired = %v",
+				day.Format(time.DateOnly), filters, expired)
+		}
 	}
 }

@@ -268,10 +268,10 @@ func writeSummaryWaiting(sb *strings.Builder, s CatalogueSummary) {
 // writeExpiredDetails names the acceptances rather than only counting them.
 //
 // These are named where the findings are not, and the asymmetry is the point: a
-// finding has an alert of its own in code scanning, dated and closing by itself.
-// An expired acceptance has nothing — `cidx security vuln ignore` writes every
-// entry into the scanners' ignore file whatever its date, so the finding it
-// waives never reaches a scan result at all.
+// finding is one line of a count, and what a reader has to act on here is the
+// entry — its CVE, its repository, and the justification that stopped standing.
+// Since #303 the finding it waived is back in the scan results, so it is the
+// acceptance rather than the finding that carries the alert in code scanning.
 func writeExpiredDetails(sb *strings.Builder, s CatalogueSummary) {
 	if len(s.Expired) == 0 {
 		return

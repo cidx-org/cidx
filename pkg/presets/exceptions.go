@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 )
 
 // The lifecycle of a vulnerability exception
@@ -207,6 +208,53 @@ func ClassifyException(cve, repository string, running []string, findings, suppr
 		State:  ExceptionObsolete,
 		Reason: fmt.Sprintf("the catalogue runs no image from %s, and no catalogue image carries %s any more", repository, cve),
 	}
+}
+
+// Waives reports whether an acceptance expiring on `expires` still removes its
+// finding from a scan run on `today`.
+//
+// This is what `cidx security vuln ignore` writes the scanners' ignore file
+// from, and until #303 it asked nothing at all: every entry was emitted whatever
+// its date, so a lapsed acceptance went on filtering its finding out of the
+// audit's own results exactly as a live one did, indefinitely. The `expires`
+// field was decorative — and it was the whole of the mechanism meant to force
+// the acceptance to be argued again rather than inherited.
+//
+// **The named day is included.** An entry expiring on 2026-03-02 waives its
+// finding all through 2026-03-02 and stops on 2026-03-03. "Expires on" reads as
+// a deadline rather than a cut-off, and it is the same boundary
+// [ExpiredExceptions] already applied to publish the alert — so the day an entry
+// stops filtering is the day the Security tab says it lapsed, rather than the
+// day before it.
+//
+// **A date that is missing or unreadable waives nothing.** That is the policy's
+// fail-closed posture, the one an unresolvable digest, an undatable candidate
+// and an unreadable scan all take, applied to the only field that says whether
+// this entry is still a decision somebody has taken. It is deliberately not the
+// answer [ExpiredExceptions] gives, which does not call such an entry expired:
+// "past a date it carries" and "carries a date that has not passed" are
+// different questions, and an entry with no date never began rather than having
+// lapsed. Nothing goes quiet either way — `cidx security vuln check` names the
+// malformed date, and the finding the entry stops hiding reaches the audit like
+// any other finding.
+func Waives(expires string, today time.Time) bool {
+	date, err := time.Parse(time.DateOnly, expires)
+	return err == nil && !date.Before(utcDay(today))
+}
+
+// lapsed reports whether an acceptance is past a date it actually carries. It
+// shares [Waives]'s parse and boundary so the two views cannot drift apart.
+func lapsed(expires string, today time.Time) bool {
+	date, err := time.Parse(time.DateOnly, expires)
+	return err == nil && date.Before(utcDay(today))
+}
+
+// utcDay reduces an instant to the day it falls on, in UTC. A scan runs on a
+// runner in whatever zone GitHub gives it, and an acceptance is dated to the
+// day: comparing the two without this would move the boundary by the runner's
+// offset.
+func utcDay(t time.Time) time.Time {
+	return t.UTC().Truncate(24 * time.Hour)
 }
 
 // unscannedList names the repositories that leave the question open, and stops

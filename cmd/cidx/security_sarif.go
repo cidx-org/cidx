@@ -121,8 +121,12 @@ func catalogueAlerts(
 		alerts = append(alerts, presets.TriageAlerts(image, imagePresets[image], found, catalogueLines[image])...)
 	}
 
-	alerts = append(alerts, presets.ExpiredExceptionAlerts(exceptionsFor(accepted, vulnFile), today)...)
-	return alerts, scanned, missing
+	// One alert per repository and CVE. Since #303 a lapsed acceptance stops
+	// filtering, so its finding reaches the triage above as well — and the
+	// alert about the entry is the one that survives, because it names the
+	// judgement that lapsed and points at the line to edit.
+	expired := presets.ExpiredExceptionAlerts(exceptionsFor(accepted, vulnFile), today)
+	return presets.MergeAlerts(alerts, expired), scanned, missing
 }
 
 // exceptionsFor reduces the accepted entries to what an alert about one says,

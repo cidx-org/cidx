@@ -21,7 +21,11 @@ func RegisterSarifSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Given(`^"([^"]*)" reports "([^"]*)" on "([^"]*)"$`, tc.scannerReportsOnImage)
 	ctx.Given(`^the exception "([^"]*)" on "([^"]*)" expired on "([^"]*)"$`, tc.exceptionExpiresOn)
 	ctx.Given(`^the exception "([^"]*)" on "([^"]*)" expires on "([^"]*)"$`, tc.exceptionExpiresOn)
+	ctx.Given(`^the exception "([^"]*)" on "([^"]*)" carries no expiry date$`, tc.exceptionCarriesNoExpiry)
 	ctx.When(`^the catalogue findings are published to code scanning$`, tc.publishToCodeScanning)
+	ctx.When(`^the scanners' ignore file is built on "([^"]*)"$`, tc.buildIgnoreFile)
+	ctx.Then(`^the ignore file should carry "([^"]*)"$`, tc.ignoreFileShouldCarry(true))
+	ctx.Then(`^the ignore file should not carry "([^"]*)"$`, tc.ignoreFileShouldCarry(false))
 	ctx.When(`^"([^"]*)" is repinned to "([^"]*)"$`, tc.imageIsRepinned)
 	ctx.Then(`^"([^"]*)" should be published as an alert$`, tc.shouldBePublished)
 	ctx.Then(`^"([^"]*)" should not be published as an alert$`, tc.shouldNotBePublished)
@@ -52,6 +56,53 @@ func (tc *TestContext) exceptionExpiresOn(cve, repository, expires string) error
 		Notes:      "staged by a scenario",
 	})
 	return nil
+}
+
+func (tc *TestContext) exceptionCarriesNoExpiry(cve, repository string) error {
+	return tc.exceptionExpiresOn(cve, repository, "")
+}
+
+// buildIgnoreFile applies the real decision the scanners' ignore file is built
+// from: `cidx security vuln ignore` writes one line per entry presets.Waives
+// keeps, and nothing else decides what that file contains. The generators
+// themselves are a `for` range over the result, pinned by
+// TestTheIgnoreFileDropsAnExpiredAcceptance in cmd/cidx.
+func (tc *TestContext) buildIgnoreFile(date string) error {
+	day, err := time.Parse(time.DateOnly, date)
+	if err != nil {
+		return fmt.Errorf("could not read the date %q: %w", date, err)
+	}
+
+	staged, _ := tc.Config["sarif_exceptions"].([]presets.Exception)
+	var carried []string
+	for _, e := range staged {
+		if presets.Waives(e.Expires, day) {
+			carried = append(carried, strings.ToUpper(e.CVE))
+		}
+	}
+	tc.Config["ignore_file"] = carried
+	return nil
+}
+
+func (tc *TestContext) ignoreFileShouldCarry(want bool) func(string) error {
+	return func(cve string) error {
+		carried, built := tc.Config["ignore_file"].([]string)
+		if !built {
+			return fmt.Errorf("no ignore file was built")
+		}
+
+		found := false
+		for _, id := range carried {
+			if strings.EqualFold(id, cve) {
+				found = true
+			}
+		}
+		if found != want {
+			return fmt.Errorf("the ignore file carries %s = %v, expected %v (it carries %v)",
+				cve, found, want, carried)
+		}
+		return nil
+	}
 }
 
 // imageIsRepinned promotes one catalogue image to a new reference, carrying its
@@ -105,8 +156,11 @@ func (tc *TestContext) publishToCodeScanning() error {
 		alerts = append(alerts, presets.TriageAlerts(image, []string{"staged-preset"}, found, 0)...)
 	}
 
+	// One alert per repository and CVE. Since #303 a lapsed acceptance stops
+	// filtering, so its finding reaches the triage above too — and it is the
+	// alert about the entry that survives the merge.
 	staged, _ := tc.Config["sarif_exceptions"].([]presets.Exception)
-	alerts = append(alerts, presets.ExpiredExceptionAlerts(staged, time.Now())...)
+	alerts = presets.MergeAlerts(alerts, presets.ExpiredExceptionAlerts(staged, time.Now()))
 
 	tc.Config["sarif_log"] = presets.SARIF(alerts)
 	tc.Config["sarif_unscanned"] = unscanned

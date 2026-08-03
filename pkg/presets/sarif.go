@@ -40,6 +40,11 @@ const (
 
 	// ExceptionsFile is where the accepted findings are recorded.
 	ExceptionsFile = "known-vulnerabilities.toml"
+
+	// expiredRule prefixes the identifier of an alert about a lapsed
+	// acceptance, so that the two alert families sharing a repository and a CVE
+	// stay tellable apart — which is what [MergeAlerts] reads.
+	expiredRule = "expired/"
 )
 
 // Alert is one thing the catalogue needs a human for, before it becomes SARIF.
@@ -101,16 +106,15 @@ type Exception struct {
 // An entry whose date does not parse is not expired here. `cidx security vuln
 // check` is what reports a malformed date, as a warning naming the entry;
 // treating it as lapsed would file a typo as a decision somebody has to defend.
+// It waives nothing all the same — see [Waives], which shares this parse and
+// this boundary so that the day an entry stops filtering is the day this says it
+// lapsed.
 func ExpiredExceptions(exceptions []Exception, today time.Time) []Exception {
-	day := today.UTC().Truncate(24 * time.Hour)
-
 	var expired []Exception
 	for _, e := range exceptions {
-		expires, err := time.Parse(time.DateOnly, e.Expires)
-		if err != nil || !expires.Before(day) {
-			continue
+		if lapsed(e.Expires, today) {
+			expired = append(expired, e)
 		}
-		expired = append(expired, e)
 	}
 	return expired
 }
@@ -187,17 +191,18 @@ func TriageAlerts(image string, usedBy []string, findings []Finding, line int) [
 
 // ExpiredExceptionAlerts reports the acceptances that have lapsed.
 //
-// Nothing else surfaces them. The audit builds its scanner ignore file from
-// every entry whatever its date, so an expired one goes on filtering its finding
-// out of the audit's own results — the finding therefore cannot appear as an
-// alert above, because the evidence for it was suppressed before the JSON was
-// written, and the only trace left is an annotation on a workflow run.
-//
 // This is the case for the file being the source of truth and the tab being a
 // view: the view reads the file and says what the file says about itself. An
 // exception is written with a date so the acceptance gets argued again rather
 // than inherited; past that date it records a decision nobody has stood behind
 // since it was taken.
+//
+// Until #303 nothing else could surface these at all: the audit built its
+// ignore file from every entry whatever its date, so a lapsed one went on
+// filtering its finding out of the audit's own results, and the finding could
+// not reach [TriageAlerts] because the evidence for it was suppressed before the
+// JSON was written. Now it can, and both would fire on the same repository and
+// CVE — [MergeAlerts] is where that is settled.
 func ExpiredExceptionAlerts(exceptions []Exception, today time.Time) []Alert {
 	var alerts []Alert
 	for _, e := range ExpiredExceptions(exceptions, today) {
@@ -208,11 +213,11 @@ func ExpiredExceptionAlerts(exceptions []Exception, today time.Time) []Alert {
 		if e.Notes != "" {
 			fmt.Fprintf(&body, "> %s\n\n", e.Notes)
 		}
-		body.WriteString("An exception is written with a date so the acceptance gets argued again rather than inherited. Past that date it waives nothing until it is reviewed.\n\n")
+		body.WriteString("An exception is written with a date so the acceptance gets argued again rather than inherited. Past that date it waives nothing: the finding is back in the audit's scan results, and it is waiting on a decision again.\n\n")
 		fmt.Fprintf(&body, "Re-date it if the judgement still holds, or delete it: `cidx security vuln check` lists them, and `cidx security vuln prune` reports the ones no catalogue image carries any more. Recorded %s, status `%s`.\n", e.Added, e.Status)
 
 		alerts = append(alerts, Alert{
-			RuleID:      "expired/" + e.Repository + "/" + id,
+			RuleID:      expiredRule + e.Repository + "/" + id,
 			Title:       fmt.Sprintf("%s: the exception for %s expired on %s", e.Repository, id, e.Expires),
 			Body:        body.String(),
 			Message:     fmt.Sprintf("%s is accepted on %s by an exception that expired on %s and waives nothing until it is reviewed.", id, e.Repository, e.Expires),
@@ -225,6 +230,48 @@ func ExpiredExceptionAlerts(exceptions []Exception, today time.Time) []Alert {
 
 	sort.Slice(alerts, func(i, j int) bool { return alerts[i].RuleID < alerts[j].RuleID })
 	return alerts
+}
+
+// MergeAlerts publishes one alert per repository and CVE.
+//
+// The two families could not collide before #303. A lapsed acceptance went on
+// filtering its finding out of the audit's results, so [TriageAlerts] never saw
+// it — which is precisely why [ExpiredExceptionAlerts] was added, and why it
+// said so. Honouring the date removes the suppression, the finding comes back,
+// and the same CVE on the same repository now has one alert from each.
+//
+// Two alerts is the wrong answer. It is one CVE, on one repository, awaiting one
+// decision; the second is the same question asked twice, one of them gets
+// dismissed to clear the list, and which one is a coin toss. So the expired
+// alert supersedes the triage alert for that key.
+//
+// **The expired one is kept because it says strictly more.** It carries the
+// judgement somebody already wrote and the date it lapsed, and it points at the
+// entry in [ExceptionsFile] — the line a human edits to re-date or delete it.
+// The triage alert points at the image pin and offers `cidx security vuln add`,
+// which is the wrong instruction for a CVE that already has an entry: that
+// command refuses a duplicate. Keeping the expired one also leaves the alert a
+// reader has been looking at since #301 exactly where it was, rather than
+// closing eighteen and opening near-identical replacements — the churn #313
+// removed from repins, for the same reason.
+//
+// A lapsed acceptance whose finding is exempt by class, fixed upstream or no
+// longer carried produces no triage alert to supersede, and its own alert stands
+// alone as it always did.
+func MergeAlerts(triage, expired []Alert) []Alert {
+	superseded := make(map[string]bool, len(expired))
+	for _, a := range expired {
+		superseded[strings.TrimPrefix(a.RuleID, expiredRule)] = true
+	}
+
+	merged := make([]Alert, 0, len(triage)+len(expired))
+	for _, a := range triage {
+		if superseded[a.RuleID] {
+			continue
+		}
+		merged = append(merged, a)
+	}
+	return append(merged, expired...)
 }
 
 // SARIF renders the alerts as a single SARIF 2.1.0 run.

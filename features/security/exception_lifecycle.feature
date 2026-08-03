@@ -95,6 +95,59 @@ Feature: Vulnerability Exception Lifecycle
       Then the exception should be unresolved
       And the exception verdict should mention "cannot be told apart"
 
+  Rule: An acceptance past its date waives nothing
+
+    # The other half of "how long does an exception live", and for a long time
+    # it was not enforced at all: `cidx security vuln ignore` emitted every
+    # entry's CVE with no date check, so the eighteen acceptances that lapsed on
+    # 2026-03-02 went on removing their findings from the audit's own scan
+    # results, five months past their date, exactly as a live one does. The JSON
+    # is written after the filter, so those findings could not appear anywhere
+    # downstream — and `expires` was the whole of the mechanism meant to force
+    # the acceptance to be argued again rather than inherited (#303).
+
+    Scenario: An acceptance within its date still filters its finding out
+      Given the exception "CVE-2026-0001" on "rust" expires on "2026-12-01"
+      When the scanners' ignore file is built on "2026-08-03"
+      Then the ignore file should carry "CVE-2026-0001"
+
+    Scenario: An acceptance past its date filters nothing
+      Given the exception "CVE-2026-0002" on "rust" expired on "2026-03-02"
+      When the scanners' ignore file is built on "2026-08-03"
+      Then the ignore file should not carry "CVE-2026-0002"
+
+    # "Expires on 2026-03-02" reads as a deadline, not as a cut-off, so the
+    # named day is included. It is also the boundary the Security tab already
+    # applied to call an entry expired: the day an acceptance stops filtering is
+    # the day the tab says it lapsed, rather than the day before it.
+
+    Scenario: The day named is the last one it covers
+      Given the exception "CVE-2026-0003" on "rust" expires on "2026-03-02"
+      When the scanners' ignore file is built on "2026-03-02"
+      Then the ignore file should carry "CVE-2026-0003"
+
+    Scenario: The morning after, it covers nothing
+      Given the exception "CVE-2026-0003" on "rust" expires on "2026-03-02"
+      When the scanners' ignore file is built on "2026-03-03"
+      Then the ignore file should not carry "CVE-2026-0003"
+
+    # Fail-closed, the posture an unresolvable digest, an undatable candidate
+    # and an unreadable scan all take. An acceptance is a *dated* judgement, and
+    # with no readable date nothing says it is still one somebody has taken. It
+    # is not reported expired — an entry with no date never began rather than
+    # having lapsed — so `cidx security vuln check` names the malformed date,
+    # and the finding it stops hiding reaches the audit like any other.
+
+    Scenario: An acceptance carrying no expiry date at all covers nothing
+      Given the exception "CVE-2026-0004" on "rust" carries no expiry date
+      When the scanners' ignore file is built on "2026-08-03"
+      Then the ignore file should not carry "CVE-2026-0004"
+
+    Scenario: An acceptance whose date cannot be read covers nothing
+      Given the exception "CVE-2026-0005" on "rust" expires on "next quarter"
+      When the scanners' ignore file is built on "2026-08-03"
+      Then the ignore file should not carry "CVE-2026-0005"
+
   Rule: An exception whose CVE went with its image is obsolete
 
     Scenario: The repository was replaced and the finding did not follow

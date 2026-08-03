@@ -72,22 +72,49 @@ Feature: The catalogue's state, published to code scanning
 
   Rule: An acceptance past its expiry date is a thing to argue again
 
-    # Nothing else surfaces these. `cidx security vuln ignore` emits every entry
-    # whatever its date, so an expired one goes on filtering its finding out of
-    # the audit's own scan results — the finding cannot appear as an alert,
-    # because the evidence for it was suppressed before the JSON was written.
-    # The only trace left is an annotation on a workflow run.
+    # An exception is written with a date so the acceptance gets argued again
+    # rather than inherited. Past it the entry waives nothing (#303), and this
+    # is where a reader finds out that one has lapsed.
 
     Scenario: An expired exception is published
       Given the exception "CVE-2026-0007" on "rust" expired on "2020-01-01"
       When the catalogue findings are published to code scanning
       Then "CVE-2026-0007" should be published as an alert
-      And the alert for "CVE-2026-0007" should say "waives nothing until it is reviewed"
+      And the alert for "CVE-2026-0007" should say "the finding is back in the audit's scan results"
 
     Scenario: An exception still within its date is not published
       Given the exception "CVE-2026-0008" on "rust" expires on "2999-01-01"
       When the catalogue findings are published to code scanning
       Then "CVE-2026-0008" should not be published as an alert
+
+  Rule: One alert per repository and CVE, whatever raised it
+
+    # The two families could not collide until the ignore file started honouring
+    # `expires`: a lapsed acceptance filtered its finding out of the results, so
+    # the finding never reached the triage above — which is exactly why the
+    # expired alert was added. Now it does reach it, and both would fire on the
+    # same CVE. Two alerts is one decision asked about twice: one of them gets
+    # dismissed to clear the list, and which one is a coin toss.
+    #
+    # The expired one survives because it says strictly more: it carries the
+    # judgement somebody already wrote and the date it lapsed, and it points at
+    # the entry to re-date or delete rather than at the image pin.
+
+    Scenario: The finding a lapsed acceptance stopped waiving is not published twice
+      Given the catalogue runs "rust"
+      And the scanners report "CVE-2026-0012" on "rust"
+      And the exception "CVE-2026-0012" on "rust" expired on "2020-01-01"
+      When the catalogue findings are published to code scanning
+      Then "CVE-2026-0012" should be published as 1 alert
+      And the alert for "CVE-2026-0012" should point at "known-vulnerabilities.toml"
+
+    Scenario: A lapsed acceptance silences nothing but its own CVE
+      Given the catalogue runs "rust"
+      And the scanners report "CVE-2026-0013" on "rust"
+      And the exception "CVE-2026-0014" on "rust" expired on "2020-01-01"
+      When the catalogue findings are published to code scanning
+      Then "CVE-2026-0013" should be published as an alert
+      And the alert for "CVE-2026-0013" should point at "pkg/presets/presets.toml"
 
   Rule: An alert points at the line that has to change
 
