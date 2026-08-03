@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/cidx-org/cidx/v2/pkg/config"
+	"github.com/urfave/cli/v2"
 	"gopkg.in/yaml.v3"
 )
 
@@ -63,8 +64,10 @@ type WorkflowStepYAML struct {
 	Run  string `yaml:"run"`
 }
 
-// ParseWorkflow parses a GitHub Actions workflow file and extracts phase information
-func ParseWorkflow(workflowPath string) (*WorkflowDefinition, error) {
+// ParseWorkflow parses a GitHub Actions workflow file and extracts phase
+// information. The command tree comes from the running app, so the phases are
+// read off the same command line the CLI would parse (issue #233).
+func ParseWorkflow(app *cli.App, workflowPath string) (*WorkflowDefinition, error) {
 	data, err := os.ReadFile(workflowPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read workflow file: %w", err)
@@ -79,7 +82,7 @@ func ParseWorkflow(workflowPath string) (*WorkflowDefinition, error) {
 	workflowName := strings.TrimSuffix(filepath.Base(workflowPath), filepath.Ext(workflowPath))
 
 	jobs := make(map[string]Job)
-	jobPhases := make(map[string]string) // jobID -> phase
+	jobPhases := make(map[string][]string) // jobID -> phases it runs, in order
 
 	for jobID, jobYAML := range wf.Jobs {
 		// Parse needs field (can be string or []string)
@@ -99,18 +102,18 @@ func ParseWorkflow(workflowPath string) (*WorkflowDefinition, error) {
 
 		// Parse steps
 		steps := make([]Step, 0, len(jobYAML.Steps))
-		var jobPhase string
 		for _, stepYAML := range jobYAML.Steps {
 			steps = append(steps, Step(stepYAML))
 
-			// Extract phase from "cidx run <phase>" commands
-			if strings.Contains(stepYAML.Run, "cidx run ") {
-				parts := strings.Fields(stepYAML.Run)
-				for i, part := range parts {
-					if part == "run" && i+1 < len(parts) {
-						jobPhase = parts[i+1]
-						jobPhases[jobID] = jobPhase
-					}
+			// Extract the phases from the `cidx run <phase>` invocations of the
+			// step. This used to match the substring "cidx run ", which any flag
+			// between the binary and the subcommand defeated — ci.yml runs
+			// `./bin/cidx --verbose run test` and the phase went missing (#233).
+			// Every invocation counts: a job that runs two phases used to report
+			// only the last one, losing the other exactly the same way.
+			for _, inv := range ExtractInvocations(stepYAML.Run) {
+				if target := RunTarget(app, inv.Args); target != "" {
+					jobPhases[jobID] = append(jobPhases[jobID], target)
 				}
 			}
 		}
@@ -134,7 +137,7 @@ func ParseWorkflow(workflowPath string) (*WorkflowDefinition, error) {
 }
 
 // ValidateWorkflow compares a pipeline definition with a GitHub Actions workflow
-func ValidateWorkflow(cfg *config.Config, pipelineName string, workflowPath string) (*ValidationResult, error) {
+func ValidateWorkflow(app *cli.App, cfg *config.Config, pipelineName string, workflowPath string) (*ValidationResult, error) {
 	// Get pipeline from config
 	pipeline, exists := cfg.Pipelines[pipelineName]
 	if !exists {
@@ -142,7 +145,7 @@ func ValidateWorkflow(cfg *config.Config, pipelineName string, workflowPath stri
 	}
 
 	// Parse GitHub workflow
-	workflow, err := ParseWorkflow(workflowPath)
+	workflow, err := ParseWorkflow(app, workflowPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse workflow: %w", err)
 	}
@@ -176,7 +179,7 @@ func ValidateWorkflow(cfg *config.Config, pipelineName string, workflowPath stri
 }
 
 // ValidateAllWorkflows validates all pipelines against their corresponding workflows
-func ValidateAllWorkflows(cfg *config.Config, workflowDir string) ([]*ValidationResult, error) {
+func ValidateAllWorkflows(app *cli.App, cfg *config.Config, workflowDir string) ([]*ValidationResult, error) {
 	results := []*ValidationResult{}
 
 	// Pipelines and their workflow file, in a fixed order: a Go map would
@@ -189,7 +192,7 @@ func ValidateAllWorkflows(cfg *config.Config, workflowDir string) ([]*Validation
 			continue // Skip if workflow doesn't exist
 		}
 
-		result, err := ValidateWorkflow(cfg, pipelineName, workflowPath)
+		result, err := ValidateWorkflow(app, cfg, pipelineName, workflowPath)
 		if err != nil {
 			return nil, err
 		}
@@ -251,7 +254,7 @@ func jobOrder(data []byte) []string {
 // and returns the phases in execution order. Jobs are visited in declaration
 // order, so jobs that run in parallel keep the order the workflow lists them
 // in and the result is the same on every run (issue #233).
-func topologicalSort(jobs map[string]Job, jobPhases map[string]string, order []string) []string {
+func topologicalSort(jobs map[string]Job, jobPhases map[string][]string, order []string) []string {
 	// Fall back to a sorted job list rather than a randomised map iteration
 	// when the declaration order is unavailable.
 	if len(order) != len(jobs) {
@@ -309,8 +312,8 @@ func topologicalSort(jobs map[string]Job, jobPhases map[string]string, order []s
 	phases := []string{}
 	seenPhases := make(map[string]bool)
 	for _, jobID := range sortedJobs {
-		if phase, exists := jobPhases[jobID]; exists && phase != "" {
-			if !seenPhases[phase] {
+		for _, phase := range jobPhases[jobID] {
+			if phase != "" && !seenPhases[phase] {
 				phases = append(phases, phase)
 				seenPhases[phase] = true
 			}

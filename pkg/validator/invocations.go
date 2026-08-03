@@ -252,6 +252,48 @@ func Resolve(app *cli.App, args []string) string {
 	return resolve(args, app.Commands, app.Flags, false, app.Name)
 }
 
+// RunTarget returns the phase, tool or pipeline named by a `cidx run <target>`
+// invocation, and "" for anything else — another subcommand, or a `run` whose
+// target cannot be read with certainty.
+//
+// `check workflow` used to look for the literal substring "cidx run " in the
+// step, which lost the phase as soon as a flag sat between the binary and the
+// subcommand: `./bin/cidx --verbose run test` reported no phase at all, so the
+// command claimed a phase was missing from a workflow that runs it (issue #233).
+// Reading the command line is what the parser above already does, flags
+// included, so `run` is resolved the same way `validate` resolves every other
+// invocation.
+//
+// It inherits the refusals of Resolve: a target the shell would rewrite, or
+// flags that cannot be parsed with certainty, yield no target rather than a
+// wrong one.
+func RunTarget(app *cli.App, args []string) string {
+	args, stop := skipFlags(args, app.Flags)
+	if stop || len(args) == 0 {
+		return ""
+	}
+
+	// Looked up in the live tree rather than compared to "run", so the aliases
+	// of the command are honoured and a rename cannot leave this behind.
+	cmd := lookup(app.Commands, args[0])
+	if cmd == nil || cmd.Name != "run" {
+		return ""
+	}
+
+	// Flags may also sit between the subcommand and its argument:
+	// `cidx run --dry-run security`.
+	args, stop = skipFlags(args[1:], cmd.Flags)
+	if stop || len(args) == 0 {
+		return ""
+	}
+
+	target := args[0]
+	if strings.ContainsAny(target, "$`'\"*?") || strings.HasPrefix(target, "-") {
+		return ""
+	}
+	return target
+}
+
 func resolve(args []string, commands []*cli.Command, flags []cli.Flag, hasAction bool, cmdPath string) string {
 	for {
 		// A command without subcommands takes arguments, not commands.

@@ -110,7 +110,7 @@ func checkWorkflowAction(c *cli.Context) error {
 			return fmt.Errorf("workflow file not found: %s", workflowFile)
 		}
 
-		result, err := validator.ValidateWorkflow(cfg, pipelineName, workflowFile)
+		result, err := validator.ValidateWorkflow(c.App, cfg, pipelineName, workflowFile)
 		if err != nil {
 			logrus.Errorf("Validation failed: %v", err)
 			return err
@@ -118,7 +118,7 @@ func checkWorkflowAction(c *cli.Context) error {
 		results = []*validator.ValidationResult{result}
 	} else {
 		// Validate all workflows
-		results, err = validator.ValidateAllWorkflows(cfg, workflowDir)
+		results, err = validator.ValidateAllWorkflows(c.App, cfg, workflowDir)
 		if err != nil {
 			logrus.Errorf("Validation failed: %v", err)
 			return err

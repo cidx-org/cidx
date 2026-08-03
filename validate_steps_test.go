@@ -23,9 +23,10 @@ func RegisterValidateSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 }
 
 // invocationCommandTree mirrors the shape of the real cidx tree: namespaces
-// with no action of their own, leaf commands that take arguments, and `vuln`
-// living under `security`. The real tree is covered where it is built, by
-// TestValidate_RealWorkflowsResolve in cmd/cidx.
+// with no action of their own, leaf commands that take arguments, `vuln` living
+// under `security`, and the flags `run` accepts before its phase. The real tree
+// is covered where it is built, by TestValidate_RealWorkflowsResolve and
+// TestCheckWorkflow_RealCIWorkflowKeepsItsPhases in cmd/cidx.
 func invocationCommandTree() *cli.App {
 	noop := func(*cli.Context) error { return nil }
 	return &cli.App{
@@ -36,7 +37,10 @@ func invocationCommandTree() *cli.App {
 			&cli.BoolFlag{Name: "version", Aliases: []string{"v"}},
 		},
 		Commands: []*cli.Command{
-			{Name: "run", Action: noop},
+			{Name: "run", Action: noop, Flags: []cli.Flag{
+				&cli.BoolFlag{Name: "dry-run", Aliases: []string{"n"}},
+				&cli.IntFlag{Name: "concurrency", Aliases: []string{"j"}},
+			}},
 			{Name: "validate", Action: noop},
 			{Name: "check", Subcommands: []*cli.Command{
 				{Name: "drift", Action: noop},
