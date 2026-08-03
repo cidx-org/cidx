@@ -219,6 +219,46 @@ cidx release <command> [flags]
 
 ---
 
+### `cidx repo branch cleanup`
+
+Delete a branch the repository is finished with, locally and on the remote.
+
+```bash
+cidx repo branch cleanup                      # dry run on the current branch
+cidx repo branch cleanup --branch feat/x -x   # delete feat/x
+cidx repo branch cleanup --all -x             # delete every merged branch
+```
+
+**Options:**
+
+- `--execute, -x`: actually delete; without it the run only prints what it would do
+- `--branch, -b`: branch to clean up (default: the current branch)
+- `--all, -a`: sweep every merged branch in the repository
+- `--stale`: with `--all`, also sweep branches inactive for more than `[branch] stale_days`
+- `--orphan`: with `--all`, also sweep branches whose PR was closed without merging
+- `--force, -f`: delete a branch the repository is not finished with
+
+**Scope**
+
+A run deletes one branch: the one `--branch` names, or the current one. `--all` restores the repository-wide sweep, which is what this command used to do with no way to narrow it — reaching for it to remove a single merged branch removed seventeen (issue #269). The scope is printed on every run.
+
+The current branch cannot be deleted: git refuses to remove the branch you are standing on. So `cleanup` with no flags reports that and stops — on `main`, because it is protected; on a feature branch, because it is where you are. Deleting the branch you just merged is `cidx pr merge`'s job, which switches to `main` first.
+
+**Which branches may go**
+
+A named branch is deleted when the repository is visibly finished with it — merged into the main branch, or carrying a PR that was merged or closed without merging (the same verdicts `cidx repo branch list --merged` and `--orphan` show). Anything else, above all a branch with an open PR, is refused by name:
+
+```text
+Scope: branch 'feat/wip' (--all sweeps every merged branch)
+
+Skipped branches:
+  ⊘ feat/wip (PR #42 is still open -- pass --force to delete anyway)
+```
+
+`--force` overrides that. It does not override protection: `main`, `master` and `develop` (or whatever `[branch] protected` lists) are never deleted.
+
+---
+
 ### `cidx check workflow`
 
 Validate that cidx.toml pipelines match GitHub Actions workflows.
