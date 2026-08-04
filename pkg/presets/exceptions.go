@@ -75,6 +75,75 @@ type ExceptionVerdict struct {
 	FixedIn string
 }
 
+// SuppressionEvidence is what a directory of scan results says about its own
+// filtering. It gates exactly one conclusion — that a CVE absent from those
+// results is a CVE nothing carries — and nothing else.
+//
+// Two independent things can settle that, and the second is #327's:
+//
+//   - **Something was recorded as suppressed.** Then the scan kept the receipt,
+//     and what is missing from it is missing for real. Grype always keeps it, in
+//     `ignoredMatches`; Trivy keeps it only under `--show-suppressed`, and its
+//     report carries no trace of whether the flag was passed —
+//     `ExperimentalModifiedFindings` is simply omitted when a result suppressed
+//     nothing. So a sighting is the only positive proof available from a Trivy
+//     report, and it is per workflow run rather than per image: one settles the
+//     whole directory.
+//   - **The ignore file had nothing in it.** Then nothing could have been hidden,
+//     and every absence is an absence. No sighting can ever say this — an empty
+//     ignore file suppresses nothing, so it leaves exactly the silence a dropped
+//     flag leaves. It has to be *stated*, which is what [SuppressionEvidence.Declared]
+//     carries: `cidx security vuln ignore` writes down how many entries it put in
+//     the file it generated, next to the results the scan then produced.
+//
+// That second case is not hypothetical, it is the state the catalogue is in.
+// Since #303 stopped an expired acceptance from filtering anything, all eighteen
+// entries on file waive nothing and every ignore file the audit writes is empty —
+// so nothing is ever recorded as suppressed, and the sighting test alone reads
+// the evidence as missing for ever. `vuln prune` and `SECURITY-BASELINE.md`
+// hedged every number on the one ground that makes a number certain (#327).
+//
+// The zero value states nothing and concludes nothing, which is the posture a
+// results directory produced before any of this — or assembled by hand — has to
+// get: fail-closed, like an unresolvable digest (rule 1), an undatable candidate
+// (rule 2) and an unreadable scan (the scan gate).
+type SuppressionEvidence struct {
+	// Sighted records that something in these results was kept as suppressed
+	// rather than dropped, by the scanner whose report cannot otherwise be
+	// trusted for an absence.
+	Sighted bool
+
+	// Declared maps a catalogue repository to the number of accepted entries the
+	// audit states it wrote into that repository's ignore file. A declared zero
+	// is the case Sighted can never cover; a declared count above zero says
+	// something was filtering and leaves the sighting to settle it.
+	//
+	// A repository with no entry here is one nothing was declared for, which is
+	// silence rather than a zero — the same distinction `not scanned` makes
+	// against `0` in the baseline.
+	Declared map[string]int
+}
+
+// Conclusive reports whether an absence from these results settles that the
+// named repositories no longer carry a CVE.
+//
+// Every repository has to answer, because the claim made of several of them is
+// "no catalogue image carries it any more" and one unreadable result is enough
+// to make that a guess. With no repository named at all it is false: there is
+// nothing to have looked at, and a conclusion drawn from an empty list is the
+// purest form of the mistake this type exists to prevent.
+func (e SuppressionEvidence) Conclusive(repositories ...string) bool {
+	for _, repository := range repositories {
+		if entries, declared := e.Declared[repository]; declared && entries == 0 {
+			continue
+		}
+		if !e.Sighted {
+			return false
+		}
+	}
+	return len(repositories) > 0
+}
+
 // ClassifyException decides what becomes of the exception recorded for cve
 // against repository.
 //
@@ -97,15 +166,11 @@ type ExceptionVerdict struct {
 // `ExperimentalModifiedFindings` under `--show-suppressed`, which
 // `security-audit.yml` passes for exactly this reason.
 //
-// recordsSuppressions is whether the results in hand actually carry that record,
-// and it gates the *absence* conclusion alone. Trivy's report keeps no trace of
-// whether the flag was passed — the field is simply omitted when a scan
-// suppressed nothing — so results produced without it are indistinguishable from
-// results that suppressed nothing, and reading them as the latter deletes every
-// exception the ignore file was hiding. Measured on the audit's own artifacts
-// from the day before the flag landed: four ansible entries, all still carried,
-// all reported obsolete. Positive evidence never needs the gate — a CVE seen is
-// a CVE carried, whichever half of the report it was seen in.
+// evidence is what those results say about their own filtering, and it gates the
+// *absence* conclusion alone. Positive evidence never needs it — a CVE seen is a
+// CVE carried, whichever half of the report it was seen in. See
+// [SuppressionEvidence] for the two things that can settle an absence and why
+// neither implies the other.
 //
 // The criterion is the CVE, not the tag, and it is the same one wherever the
 // entry sits. An exception is obsolete once no catalogue image carries its CVE
@@ -117,7 +182,7 @@ type ExceptionVerdict struct {
 // An entry still keyed the old way — a whole `repo:tag` where a repository
 // belongs — matches no repository, so it is judged on its CVE alone. That is
 // exactly what re-keying it requires, and it needs no special case.
-func ClassifyException(cve, repository string, running []string, findings, suppressed map[string][]Finding, recordsSuppressions bool) ExceptionVerdict {
+func ClassifyException(cve, repository string, running []string, findings, suppressed map[string][]Finding, evidence SuppressionEvidence) ExceptionVerdict {
 	ordered := append([]string(nil), running...)
 	sort.Strings(ordered)
 
@@ -146,8 +211,10 @@ func ClassifyException(cve, repository string, running []string, findings, suppr
 
 	// unrecorded is the reason an entry stays put when the results cannot say
 	// what their ignore file took out of them. It is not "no finding" — it is
-	// "nobody kept the receipt", and the two must never read the same.
-	unrecorded := fmt.Sprintf("the scan results record nothing they suppressed, so %s cannot be told apart from a finding the audit's own ignore file removed", cve)
+	// "nobody kept the receipt", and the two must never read the same. Nor is it
+	// "the ignore file was empty", which is a receipt of its own and the reason
+	// the audit now states what it wrote.
+	unrecorded := fmt.Sprintf("the scan results record nothing they suppressed and state nothing about what went into their ignore file, so %s cannot be told apart from a finding the audit's own ignore file removed", cve)
 
 	for _, repo := range ordered {
 		if repo != repository {
@@ -165,7 +232,7 @@ func ClassifyException(cve, repository string, running []string, findings, suppr
 				State:  ExceptionUnknown,
 				Reason: fmt.Sprintf("%s has no scan result, so %s cannot be shown to have gone", repository, cve),
 			}
-		case !recordsSuppressions:
+		case !evidence.Conclusive(repository):
 			return ExceptionVerdict{State: ExceptionUnknown, Reason: unrecorded}
 		default:
 			return ExceptionVerdict{
@@ -200,7 +267,9 @@ func ClassifyException(cve, repository string, running []string, findings, suppr
 				repository, unscannedList(unscanned), cve),
 		}
 	}
-	if !recordsSuppressions {
+	// Every running repository has to answer here, not just one: the verdict
+	// below claims that *no* catalogue image carries the CVE any more.
+	if !evidence.Conclusive(ordered...) {
 		return ExceptionVerdict{State: ExceptionUnknown, Reason: unrecorded}
 	}
 

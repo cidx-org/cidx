@@ -69,17 +69,17 @@ func vulnPruneCommand() *cli.Command {
 				return err
 			}
 
-			running, findings, suppressed, recorded := catalogueFindings(imagePresets, c.String("results"))
+			running, findings, suppressed, evidence := catalogueFindings(imagePresets, c.String("results"))
 
 			entries := make([]prunedEntry, 0, len(vulns.Vulnerabilities))
 			for _, v := range vulns.Vulnerabilities {
 				entries = append(entries, prunedEntry{
 					Vulnerability:    v,
-					ExceptionVerdict: presets.ClassifyException(v.CVE, v.key(), running, findings, suppressed, recorded),
+					ExceptionVerdict: presets.ClassifyException(v.CVE, v.key(), running, findings, suppressed, evidence.SuppressionEvidence),
 				})
 			}
 
-			printPruneReport(entries, len(findings), len(running), c.String("results"), recorded)
+			printPruneReport(entries, len(findings), running, c.String("results"), evidence)
 
 			if !c.Bool("execute") {
 				return nil
@@ -116,26 +116,20 @@ func vulnPruneCommand() *cli.Command {
 // scanned, and so is a fix reported there. What decides that a CVE is *absent*
 // is the findings map having a key for the repository, which is the strict rule.
 //
-// The last return says whether these results record what they suppressed at all,
-// and it gates every absence conclusion. Grype always keeps that record; Trivy
-// keeps it only under `--show-suppressed`, and its report says nothing about
-// whether the flag was passed — the field is omitted when a scan suppressed
-// nothing, so a report produced without it reads exactly like one that hid
-// nothing. Sighting one Trivy-suppressed finding anywhere in the directory
-// settles it for the whole run, since the flag is passed per workflow rather
-// than per image. Without that sighting nothing is purged: on the audit's
-// artifacts from the day before the flag landed, four ansible entries that are
-// still carried would otherwise have been deleted.
-func catalogueFindings(imagePresets map[string][]string, resultsDir string) ([]string, map[string][]presets.Finding, map[string][]presets.Finding, bool) {
+// The last return says what these results state about their own filtering, and
+// it gates every absence conclusion — see [presets.SuppressionEvidence] for the
+// two things that can settle one and why neither implies the other. Without
+// either, nothing is purged: on the audit's artifacts from the day before
+// `--show-suppressed` landed, four ansible entries that are still carried would
+// otherwise have been deleted.
+func catalogueFindings(imagePresets map[string][]string, resultsDir string) ([]string, map[string][]presets.Finding, map[string][]presets.Finding, ignoreEvidence) {
 	findings := make(map[string][]presets.Finding)
 	suppressed := make(map[string][]presets.Finding)
 	unscanned := make(map[string]bool)
 	seen := make(map[string]bool)
 
-	var (
-		running  []string
-		recorded bool
-	)
+	var running []string
+	evidence := newIgnoreEvidence()
 	for image := range imagePresets {
 		repo := imageRepository(image)
 		if !seen[repo] {
@@ -143,10 +137,11 @@ func catalogueFindings(imagePresets map[string][]string, resultsDir string) ([]s
 			running = append(running, repo)
 		}
 
-		if ignored := suppressedFindings(resultsDir, image); len(ignored) > 0 {
+		ignored := suppressedFindings(resultsDir, image)
+		if len(ignored) > 0 {
 			suppressed[repo] = append(suppressed[repo], ignored...)
-			recorded = recorded || reportedBy(ignored, "Trivy")
 		}
+		evidence.observe(resultsDir, image, ignored)
 
 		found, _, err := scanFindings(resultsDir, image)
 		if err != nil {
@@ -161,7 +156,7 @@ func catalogueFindings(imagePresets map[string][]string, resultsDir string) ([]s
 	}
 
 	sort.Strings(running)
-	return running, findings, suppressed, recorded
+	return running, findings, suppressed, *evidence
 }
 
 // reportedBy reports whether one of the scanners produced any of these findings.
@@ -177,12 +172,12 @@ func reportedBy(findings []presets.Finding, scanner string) bool {
 // printPruneReport says what each state means before listing it. A report that
 // only printed counts would be read as "155 to delete", which is exactly the
 // mistake it exists to prevent.
-func printPruneReport(entries []prunedEntry, scanned, catalogue int, resultsDir string, recorded bool) {
+func printPruneReport(entries []prunedEntry, scanned int, running []string, resultsDir string, evidence ignoreEvidence) {
 	fmt.Println("Vulnerability Exception Lifecycle")
 	fmt.Println("=================================")
 	fmt.Println()
 	fmt.Printf("Catalogue repositories: %d, of which %d are fully covered by scanner results in %s\n",
-		catalogue, scanned, resultsDir)
+		len(running), scanned, resultsDir)
 	fmt.Println()
 
 	sections := []struct {
@@ -244,12 +239,26 @@ func printPruneReport(entries []prunedEntry, scanned, catalogue int, resultsDir 
 		return
 	}
 
-	if !recorded {
-		fmt.Println("No result in this directory records a finding its ignore file removed, so an")
-		fmt.Println("accepted CVE that is absent cannot be told from one the audit hid. Nothing is")
-		fmt.Println("reported obsolete on that basis (#311). Trivy keeps that record only under")
-		fmt.Println("--show-suppressed, which the Security Audit passes; point --results at its")
-		fmt.Println("artifacts to let entries retire.")
+	// The audit's own account of what it filtered (#327). Said before the
+	// caveat, because it is what removes it: an ignore file with nothing in it
+	// hid nothing, and no scan result can state that on its own — the silence it
+	// leaves is exactly the silence a dropped `--show-suppressed` leaves.
+	if empty := evidence.emptyIgnoreFiles(); empty > 0 && !evidence.Sighted {
+		fmt.Printf("The audit states it wrote an empty ignore file for %d of these repositories", empty)
+		if lapsed := evidence.expiredAcceptances(); lapsed > 0 {
+			fmt.Printf(",\n%d acceptance(s) having been left out of them as past their date", lapsed)
+		}
+		fmt.Println(": nothing was")
+		fmt.Println("filtered out of their results, so an absence there is an absence.")
+		fmt.Println()
+	}
+
+	if !evidence.Conclusive(running...) {
+		fmt.Println("Not every repository here can say what its ignore file took out of the results,")
+		fmt.Println("so an accepted CVE that is absent cannot be told from one the audit hid. Nothing")
+		fmt.Println("is reported obsolete on that basis (#311). Trivy keeps that record only under")
+		fmt.Println("--show-suppressed and the audit states what it wrote alongside its results;")
+		fmt.Println("point --results at the Security Audit's artifacts to let entries retire.")
 		fmt.Println()
 	}
 }

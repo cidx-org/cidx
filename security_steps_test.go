@@ -77,6 +77,8 @@ func RegisterSecuritySteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Given(`^the scanners report "([^"]*)" on "([^"]*)" in package "([^"]*)" of type "([^"]*)"$`, tc.scannersReportPackageOnImage)
 	ctx.Given(`^the audit's ignore file suppressed "([^"]*)" on "([^"]*)"$`, tc.suppressedOnImage)
 	ctx.Given(`^the scan results record nothing they suppressed$`, tc.resultsRecordNoSuppression)
+	ctx.Given(`^the audit declared an empty ignore file for "([^"]*)"$`, tc.declaredEmptyIgnoreFile)
+	ctx.Given(`^the audit declared an ignore file of (\d+) entries for "([^"]*)"$`, tc.declaredIgnoreFileOf)
 	ctx.Given(`^the audit's ignore file suppressed "([^"]*)" on "([^"]*)", fixed in "([^"]*)"$`, tc.suppressedFixedOnImage)
 	ctx.Given(`^the exception "([^"]*)" was recorded against "([^"]*)"$`, tc.exceptionRecordedAgainst)
 	ctx.When(`^the exception lifecycle is applied$`, tc.applyExceptionLifecycle)
@@ -212,15 +214,44 @@ func (tc *TestContext) applyExceptionLifecycle() error {
 
 	// The scenarios are written against results that keep the record of what
 	// their ignore file removed, which is what security-audit.yml produces since
-	// it started passing `--show-suppressed`. The one scenario about results
-	// that do not says so in its own step.
+	// it started passing `--show-suppressed`. The scenarios about results that do
+	// not, and about an ignore file the audit declared, say so in their own step.
 	recorded, stated := tc.Config["suppressions_recorded"].(bool)
 	if !stated {
 		recorded = true
 	}
 
 	tc.Config["exception_verdict"] = presets.ClassifyException(
-		cve, image, tc.catalogueImages(), findings, tc.suppressedFindings(), recorded)
+		cve, image, tc.catalogueImages(), findings, tc.suppressedFindings(),
+		presets.SuppressionEvidence{Sighted: recorded, Declared: tc.declaredIgnoreFiles()})
+	return nil
+}
+
+// declaredIgnoreFiles is what the audit states it wrote into each repository's
+// ignore file — the evidence a suppression sighting can never supply, because an
+// empty file suppresses nothing and leaves the same silence a dropped
+// `--show-suppressed` leaves (#327).
+func (tc *TestContext) declaredIgnoreFiles() map[string]int {
+	declared, ok := tc.Config["declared_ignore_files"].(map[string]int)
+	if !ok {
+		declared = make(map[string]int)
+		tc.Config["declared_ignore_files"] = declared
+	}
+	return declared
+}
+
+// declaredEmptyIgnoreFile is the state the catalogue is actually in: every
+// acceptance is past its date, so the file the audit generates has nothing in it
+// and filters nothing out of the results it produced.
+func (tc *TestContext) declaredEmptyIgnoreFile(repository string) error {
+	tc.declaredIgnoreFiles()[repository] = 0
+	return nil
+}
+
+// declaredIgnoreFileOf is the other side: the audit says it did filter, so an
+// absence still needs the record of what was filtered before it can be read.
+func (tc *TestContext) declaredIgnoreFileOf(entries int, repository string) error {
+	tc.declaredIgnoreFiles()[repository] = entries
 	return nil
 }
 

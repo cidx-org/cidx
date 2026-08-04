@@ -97,7 +97,10 @@ func buildCatalogueSummary(
 	// The same population SECURITY-BASELINE.md counts, suppressed half
 	// included (#310): this page and that file answer the same question, and
 	// two numbers for it would be the confusion #308 built the page to end.
-	carried, _ := carriedFindings(imagePresets, resultsDir, accepted)
+	//
+	// Including the caveat, for the same reason. A count the results cannot
+	// vouch for is a floor in both places or in neither (#327).
+	carried, accounted := carriedFindings(imagePresets, resultsDir, accepted)
 
 	var unscanned []string
 	for image := range imagePresets {
@@ -110,14 +113,15 @@ func buildCatalogueSummary(
 	exceptions := exceptionsFor(accepted, presets.ExceptionsFile)
 
 	return presets.CatalogueSummary{
-		Images:    len(imagePresets),
-		Unscanned: unscanned,
-		Triage:    triageCatalogue(carried),
-		Accepted:  len(acceptedFindings(imagePresets, accepted)),
-		Expired:   presets.ExpiredExceptions(exceptions, now),
-		Bases:     baseNotes(catalogueBases(imagePresets, resultsDir), now),
-		Day:       now,
-		Links:     summaryLinks(),
+		Images:       len(imagePresets),
+		Unscanned:    unscanned,
+		CarriedFloor: !accounted,
+		Triage:       triageCatalogue(carried),
+		Accepted:     len(acceptedFindings(imagePresets, accepted)),
+		Expired:      presets.ExpiredExceptions(exceptions, now),
+		Bases:        baseNotes(catalogueBases(imagePresets, resultsDir), now),
+		Day:          now,
+		Links:        summaryLinks(),
 	}
 }
 

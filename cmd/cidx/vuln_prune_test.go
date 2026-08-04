@@ -295,7 +295,9 @@ func TestPruneReportNamesTheFindingsThatAreFixedUpstream(t *testing.T) {
 		},
 	}
 
-	out := captureStdout(t, func() { printPruneReport(entries, 1, 1, "scan-results", true) })
+	out := captureStdout(t, func() {
+		printPruneReport(entries, 1, []string{"ghcr.io/ansible/dev-tools"}, "scan-results", sightedEvidence())
+	})
 
 	for _, want := range []string{"FIXED UPSTREAM (1)", "fixed in 1.2.8", "never to write an exception"} {
 		if !strings.Contains(out, want) {
@@ -315,11 +317,53 @@ func TestPruneReportSaysWhenTheResultsKeptNoReceipt(t *testing.T) {
 		},
 	}
 
-	out := captureStdout(t, func() { printPruneReport(entries, 1, 1, "scan-results", false) })
+	out := captureStdout(t, func() {
+		printPruneReport(entries, 1, []string{"ghcr.io/ansible/dev-tools"}, "scan-results", *newIgnoreEvidence())
+	})
 
 	if !strings.Contains(out, "--show-suppressed") {
 		t.Errorf("report does not say what evidence is missing or where to get it:\n%s", out)
 	}
+}
+
+// TestPruneReportSaysWhatTheAuditStatedItFiltered is the other half, and the one
+// the report was silent about: results that record no suppression because the
+// ignore file was empty are results nothing was hidden from, and the report has
+// to say so rather than print the caveat that fits the opposite case. Since #303
+// that is the state of every catalogue repository (#327).
+func TestPruneReportSaysWhatTheAuditStatedItFiltered(t *testing.T) {
+	entries := []prunedEntry{
+		{
+			Vulnerability{CVE: "CVE-2025-52881", Repository: "ghcr.io/ansible/dev-tools"},
+			presets.ExceptionVerdict{State: presets.ExceptionObsolete, Reason: "nothing carries it"},
+		},
+	}
+
+	evidence := newIgnoreEvidence()
+	evidence.Declared["ghcr.io/ansible/dev-tools"] = 0
+	evidence.expired["ghcr.io/ansible/dev-tools"] = 4
+
+	out := captureStdout(t, func() {
+		printPruneReport(entries, 1, []string{"ghcr.io/ansible/dev-tools"}, "scan-results", *evidence)
+	})
+
+	for _, want := range []string{"empty ignore file for 1", "4 acceptance(s)", "an absence there is an absence"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("report does not state %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "--show-suppressed") {
+		t.Errorf("report hedges results that state they filtered nothing:\n%s", out)
+	}
+}
+
+// sightedEvidence is a directory whose scanners kept the record of what their
+// ignore file removed — what security-audit.yml produces under
+// `--show-suppressed`.
+func sightedEvidence() ignoreEvidence {
+	evidence := newIgnoreEvidence()
+	evidence.Sighted = true
+	return *evidence
 }
 
 // writeTrivyResultAs writes a Trivy report under an explicit file name, for the

@@ -76,11 +76,11 @@ func securityBaselineCommand() *cli.Command {
 				accepted = vulns.Vulnerabilities
 			}
 
-			carried, recorded := carriedFindings(imagePresets, c.String("results"), accepted)
+			carried, accounted := carriedFindings(imagePresets, c.String("results"), accepted)
 			bases := catalogueBases(imagePresets, c.String("results"))
 
 			out := c.String("output")
-			if err := os.WriteFile(out, []byte(renderSecurityBaseline(imagePresets, accepted, carried, bases, recorded)), 0644); err != nil {
+			if err := os.WriteFile(out, []byte(renderSecurityBaseline(imagePresets, accepted, carried, bases, accounted)), 0644); err != nil {
 				return fmt.Errorf("failed to write %s: %w", out, err)
 			}
 
@@ -136,13 +136,15 @@ type baselineFinding struct {
 // printing a zero: "not scanned" and "carries nothing" are the two answers this
 // file must never confuse.
 //
-// The second return says whether anything in these results was recorded as
-// suppressed by Trivy — the sighting `vuln prune` already gates its deletions on
-// (#311), read here for the same reason. `ExperimentalModifiedFindings` is
-// `omitempty`, so a report produced without the flag reads exactly like one that
-// hid nothing; on such results the accepted findings cannot be added back and
-// the count is a floor. Which of the two it is cannot be decided here, so it is
-// reported rather than assumed.
+// The second return says whether the suppressed half is accounted for, which is
+// the difference between publishing a total and publishing a floor. It is the
+// same question `vuln prune` gates its deletions on
+// ([presets.SuppressionEvidence]), asked of one number instead of one entry: the
+// count is complete when every scanned repository carrying an acceptance can say
+// what its ignore file took out of its results — because something was recorded
+// as suppressed, or because the audit stated the file was empty (#327). A
+// repository with no acceptance subtracts nothing from this count and is not
+// asked.
 func carriedFindings(imagePresets map[string][]string, resultsDir string, accepted []Vulnerability) (map[string][]presets.Finding, bool) {
 	waived := make(map[string][]string, len(accepted))
 	for _, v := range accepted {
@@ -150,18 +152,26 @@ func carriedFindings(imagePresets map[string][]string, resultsDir string, accept
 	}
 
 	carried := make(map[string][]presets.Finding)
-	recorded := false
+	evidence := newIgnoreEvidence()
 	for image := range imagePresets {
+		hidden := suppressedFindings(resultsDir, image)
+		evidence.observe(resultsDir, image, hidden)
+
 		found, _, err := scanFindings(resultsDir, image)
 		if err != nil {
 			continue
 		}
-
-		hidden := suppressedFindings(resultsDir, image)
-		recorded = recorded || reportedBy(hidden, "Trivy")
 		carried[image] = presets.Carried(found, hidden, waived[imageRepository(image)])
 	}
-	return carried, recorded
+
+	accounted := true
+	for image := range carried {
+		repository := imageRepository(image)
+		if len(waived[repository]) > 0 && !evidence.Conclusive(repository) {
+			accounted = false
+		}
+	}
+	return carried, accounted
 }
 
 // triageCatalogue splits the findings image by image and sums the result.
@@ -239,7 +249,7 @@ func acceptedFindings(imagePresets map[string][]string, accepted []Vulnerability
 	return findings
 }
 
-func renderSecurityBaseline(imagePresets map[string][]string, accepted []Vulnerability, carried map[string][]presets.Finding, bases map[string]presets.BaseOS, recorded bool) string {
+func renderSecurityBaseline(imagePresets map[string][]string, accepted []Vulnerability, carried map[string][]presets.Finding, bases map[string]presets.BaseOS, accounted bool) string {
 	images := make([]string, 0, len(imagePresets))
 	for image := range imagePresets {
 		images = append(images, image)
@@ -282,19 +292,21 @@ func renderSecurityBaseline(imagePresets map[string][]string, accepted []Vulnera
 	writeCarriedSection(&sb, triage, len(carried), len(images))
 
 	// #311's posture applied to a count rather than to a deletion: an absence
-	// only means something once something has been recorded as suppressed.
-	// Trivy keeps that record under `--show-suppressed` alone and its report
-	// says nothing about whether the flag was passed, so results produced
-	// without it hide every accepted finding from the number above. Saying so
-	// is the difference between publishing a total and publishing a floor —
-	// the same difference the `not scanned` cell makes below.
-	if len(carried) > 0 && len(findings) > 0 && !recorded {
-		sb.WriteString("Nothing in these results is recorded as suppressed, so the number above counts\n")
-		sb.WriteString("only what the scanners still showed: the accepted findings listed below were\n")
-		sb.WriteString("removed from their own images' reports by the ignore file the audit generates\n")
-		sb.WriteString("from them, and cannot be counted back. Read it as a floor. Trivy keeps that\n")
-		sb.WriteString("record under `--show-suppressed`, which the daily security audit passes —\n")
-		sb.WriteString("generate from its artifacts for the whole number (#311).\n\n")
+	// only means something once the results can say what was taken out of them.
+	// Two things settle that and the second was missing until #327 — something
+	// recorded as suppressed, or the audit stating that the ignore file it built
+	// was empty. With neither, the accepted findings below are missing from the
+	// number above and cannot be added back. Saying so is the difference between
+	// publishing a total and publishing a floor — the same difference the `not
+	// scanned` cell makes below.
+	if len(carried) > 0 && len(findings) > 0 && !accounted {
+		sb.WriteString("These results cannot say what their ignore file took out of them, so the number\n")
+		sb.WriteString("above counts only what the scanners still showed: the accepted findings listed\n")
+		sb.WriteString("below were removed from their own images' reports by the ignore file the audit\n")
+		sb.WriteString("generates from them, and cannot be counted back. Read it as a floor. Trivy keeps\n")
+		sb.WriteString("that record under `--show-suppressed` and the audit states how many entries it\n")
+		sb.WriteString("wrote alongside its results — generate from its artifacts for the whole number\n")
+		sb.WriteString("(#311, #327).\n\n")
 	}
 
 	sb.WriteString("## Images\n\n")
