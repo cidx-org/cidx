@@ -58,6 +58,13 @@ type CatalogueSummary struct {
 	Images    int
 	Unscanned []string
 
+	// CarriedFloor says the results could not account for what their ignore
+	// file removed, so Triage.Carried counts only what the scanners still
+	// showed. It is the same caveat SECURITY-BASELINE.md prints, on the same
+	// number, and this page has to agree with that file or one of them is
+	// wrong (#327).
+	CarriedFloor bool
+
 	// Triage is the partition [Summarise] produces, summed per image.
 	Triage Triage
 
@@ -323,6 +330,15 @@ func writeSummaryCarried(sb *strings.Builder, s CatalogueSummary) {
 
 	fmt.Fprintf(sb, "**%d** HIGH/CRITICAL findings across %s, counted per image — the same CVE on five of them is five repins.\n\n",
 		s.Triage.Carried, plural(s.Scanned(), "scanned image", "scanned images"))
+
+	// The accepted findings are removed from their own images' reports by the
+	// ignore file the audit builds out of them, so they are only in this count
+	// when the results can say what was removed. When they cannot, the number is
+	// a floor and stays one until somebody points this at artifacts that do
+	// (#327).
+	if s.CarriedFloor {
+		sb.WriteString("> These results cannot say what their ignore file took out of them, so the accepted findings are missing from that number and cannot be added back. Read it as a floor, not a count — `SECURITY-BASELINE.md` says the same of the same number.\n\n")
+	}
 	sb.WriteString("| Population | Count | What it means |\n")
 	sb.WriteString("| ---------- | ----- | ------------- |\n")
 	fmt.Fprintf(sb, "| Go stdlib in a CLI binary | %d | Exempt by class: unreachable in a tool that opens no listener, and gone when the publisher recompiles. |\n", s.Triage.GoStdlib)

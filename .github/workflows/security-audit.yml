@@ -137,10 +137,18 @@ jobs:
           restore-keys: trivy-db-
           fail-on-cache-miss: true
 
+      # `--results` states what went into the file, next to the JSON the scan is
+      # about to write there. Without it a reader can only infer the filtering
+      # from what the report kept as suppressed — and an ignore file with nothing
+      # in it suppresses nothing, so it leaves exactly the silence a dropped
+      # `--show-suppressed` leaves. Since #303 every acceptance on file is past
+      # its date, so that is the state of every image here, and every downstream
+      # number was being hedged on the one ground that makes it certain (#327).
+      # TestTheAuditStatesWhatItFiltered pins the flag here.
       - name: Generate ignore file
         run: |
           IMAGE="${{ matrix.image }}"
-          ./bin/cidx security vuln ignore --format trivy -o .trivyignore "$IMAGE"
+          ./bin/cidx security vuln ignore --format trivy --results results -o .trivyignore "$IMAGE"
 
       - name: Scan and save results
         id: scan
@@ -305,10 +313,13 @@ jobs:
           restore-keys: grype-db-
           fail-on-cache-miss: true
 
+      # Same as the Trivy job, and the same file: the declaration is about the
+      # entries, which are the same whichever syntax they are written in, so both
+      # legs state the same thing and `merge-multiple` folds them into one (#327).
       - name: Generate ignore file
         run: |
           IMAGE="${{ matrix.image }}"
-          ./bin/cidx security vuln ignore --format grype -o .grype.yaml "$IMAGE"
+          ./bin/cidx security vuln ignore --format grype --results results -o .grype.yaml "$IMAGE"
 
       - name: Scan and save results
         id: scan

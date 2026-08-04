@@ -95,6 +95,39 @@ Feature: Vulnerability Exception Lifecycle
       Then the exception should be unresolved
       And the exception verdict should mention "cannot be told apart"
 
+    # And the state that guard then became blind to. Since #303 stopped an
+    # expired acceptance from filtering anything, every entry on file is past
+    # its date, every ignore file the audit writes is empty and nothing is ever
+    # recorded as suppressed — so the guard above held every absence as
+    # unreadable, on the one ground that makes an absence readable. An empty
+    # ignore file hid nothing. No scan result can state that, because what it
+    # leaves behind is exactly the silence a dropped flag leaves, so the step
+    # that builds the file states it instead (#327).
+
+    Scenario: The audit states it filtered nothing, so an absence is an absence
+      Given the catalogue runs "dhi.io/trivy"
+      And every catalogue repository has been scanned
+      And the scan results record nothing they suppressed
+      And the audit declared an empty ignore file for "dhi.io/trivy"
+      And the exception "CVE-2026-0001" was recorded against "dhi.io/trivy"
+      When the exception lifecycle is applied
+      Then the exception should be obsolete
+      And the exception verdict should mention "no image of it carries"
+
+    # The declaration settles an absence only when it says nothing was filtered.
+    # An ignore file with entries in it did remove something, and what that was
+    # still has to be on the record before a missing CVE means anything.
+
+    Scenario: The audit states it did filter, and nothing recorded what it removed
+      Given the catalogue runs "dhi.io/trivy"
+      And every catalogue repository has been scanned
+      And the scan results record nothing they suppressed
+      And the audit declared an ignore file of 3 entries for "dhi.io/trivy"
+      And the exception "CVE-2026-0001" was recorded against "dhi.io/trivy"
+      When the exception lifecycle is applied
+      Then the exception should be unresolved
+      And the exception verdict should mention "cannot be told apart"
+
   Rule: An acceptance past its date waives nothing
 
     # The other half of "how long does an exception live", and for a long time
@@ -270,6 +303,32 @@ Feature: Vulnerability Exception Lifecycle
       And the exception "CVE-2026-0001" was recorded against "aquasec/trivy"
       When the exception lifecycle is applied
       Then the exception should be unresolved
+
+    # "No catalogue image carries it any more" is a claim about all of them, so
+    # every repository has to be able to say what it filtered. One that cannot
+    # holds the verdict, exactly as one that was never scanned does.
+
+    Scenario: One catalogue repository cannot say what it filtered
+      Given the catalogue runs "dhi.io/trivy"
+      And the catalogue runs "golangci/golangci-lint"
+      And every catalogue repository has been scanned
+      And the scan results record nothing they suppressed
+      And the audit declared an empty ignore file for "dhi.io/trivy"
+      And the exception "CVE-2026-0001" was recorded against "aquasec/trivy"
+      When the exception lifecycle is applied
+      Then the exception should be unresolved
+
+    Scenario: Every catalogue repository states it filtered nothing
+      Given the catalogue runs "dhi.io/trivy"
+      And the catalogue runs "golangci/golangci-lint"
+      And every catalogue repository has been scanned
+      And the scan results record nothing they suppressed
+      And the audit declared an empty ignore file for "dhi.io/trivy"
+      And the audit declared an empty ignore file for "golangci/golangci-lint"
+      And the exception "CVE-2026-0001" was recorded against "aquasec/trivy"
+      When the exception lifecycle is applied
+      Then the exception should be obsolete
+      And the exception verdict should mention "no catalogue image carries"
 
   Rule: Two classes of finding never enter the triage queue
 

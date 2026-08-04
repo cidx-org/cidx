@@ -683,6 +683,13 @@ func vulnIgnoreCommand() *cli.Command {
 				Aliases: []string{"o"},
 				Usage:   "Output file path (default: stdout)",
 			},
+			// The other end of #327. Everything the readers need to tell an
+			// absence apart from a suppression is known right here, and was
+			// only ever printed to a run log; this puts it where they look.
+			&cli.StringFlag{
+				Name:  "results",
+				Usage: "Directory to state what this ignore file suppresses in, next to the scan results (default: state nothing)",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			if c.NArg() < 1 {
@@ -726,6 +733,22 @@ func vulnIgnoreCommand() *cli.Command {
 				output = generateGrypeIgnore(live)
 			default:
 				return cli.Exit(fmt.Sprintf("Unknown format: %s (use trivy or grype)", format), 1)
+			}
+
+			// Said next to the results before the scan runs, so that an
+			// absence in them can be read for what it is. An empty ignore file
+			// hid nothing, and no scan result can ever say so on its own: what
+			// it leaves behind is exactly the silence a dropped
+			// `--show-suppressed` leaves (#327).
+			if dir := c.String("results"); dir != "" {
+				if err := writeIgnoreDeclaration(dir, ignoreDeclaration{
+					Image:      c.Args().Get(0),
+					Repository: repository,
+					Entries:    len(live),
+					Expired:    lapsed,
+				}); err != nil {
+					return err
+				}
 			}
 
 			// Write output
