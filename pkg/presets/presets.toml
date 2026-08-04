@@ -123,11 +123,18 @@ config_files = [".gitleaks.toml"]
 # Official image: commitlint/commitlint (official Docker image)
 # ✅ Container-first: No npm install needed, image is ready-to-run
 # Validates: commit message format (feat:, fix:, docs:, etc.)
+#
+# The command carries arguments only: the image's ENTRYPOINT is `commitlint`
+# itself, so naming the tool again made it its own first positional argument and
+# every run died on `Unknown argument: commitlint` (#278). Same shape as
+# `prettier`, the other entrypoint-is-the-tool image in the catalogue; presets
+# that need a shell around such an image override the entrypoint on purpose
+# (`gh-release`, `commitizen`), which this one does not.
 [presets.commitlint]
 name = "commitlint"
 phase = "code"
 image = "commitlint/commitlint:21.2.1@sha256:f4b38082bec66b4cd1b37a0357145dded515c4468e2b339ec9ba31f86461f6b9"
-command = "commitlint --from ${FROM} --to ${TO}"
+command = "--default-config --from ${FROM} --to ${TO}"
 workdir = "/work"
 volumes = [
     "${WORKSPACE}:/work",
@@ -166,11 +173,21 @@ config_files = [
     "pyproject.toml",
 ]
 
+# The `rmdir` is the whole of #279. ansible-lint always builds a cache under
+# `<project>/.ansible` — ansible_compat's get_cache_dir ignores ANSIBLE_HOME
+# unless `--offline` is passed, and passing it would silently stop the linter
+# installing the collections a requirements.yml asks for — so the directory
+# lands in the bind mount and stays there, owned by whoever the container ran
+# as. On a run with no galaxy dependencies it holds three empty directories and
+# nothing else, so `rmdir` clears it and, being `rmdir`, refuses on a cache that
+# actually has something in it: a populated cache (or one the user already had)
+# survives untouched. `rc` is captured first so the cleanup cannot mask a
+# lint failure.
 [presets.ansible-lint]
 name = "ansible-lint"
 phase = "code"
 image = "ghcr.io/ansible/community-ansible-dev-tools:v26.7.1@sha256:4d4db3e75c48ce64763d26adbca58ff3f8b93a8ddae785373ac973b4f20a7d92"
-command = "ansible-lint"
+command = "sh -c 'ansible-lint; rc=$?; rmdir .ansible/* .ansible 2>/dev/null; exit $rc'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
 config_files = [".ansible-lint"]
@@ -385,12 +402,19 @@ GOTOOLCHAIN = "auto"
 # GOPATH is /go on every golang image. cidx runs the container as the invoking
 # uid, so the first write dies with `mkdir /go/pkg: permission denied`. The five
 # sibling Go presets all pin /tmp/go; this one did not, on any image.
+#
+# `-diff` and nothing else: the previous command copied go.mod/go.sum to `.bak`,
+# ran a real `go mod tidy`, diffed against the copies — and left both copies
+# behind, untracked and not gitignored, in a workspace it was only asked to
+# inspect (#295). `go mod tidy -diff` (Go 1.23+, and this image is 1.26) prints
+# the diff and exits non-zero instead of writing anything at all, so the check
+# now touches nothing.
 [presets.go-mod-tidy]
 name = "go-mod-tidy"
 phase = "code"
 image = "dhi.io/golang:1.26.5-alpine-dev@sha256:29fe0a7d2a5ab0c236fbde3a7f63801755585ed260b6f2f564e831c92bfa9f34"
 hardened = true
-command = "sh -c 'cp go.mod go.mod.bak && cp go.sum go.sum.bak && go mod tidy && diff go.mod go.mod.bak && diff go.sum go.sum.bak && echo \"go.mod is tidy\"'"
+command = "go mod tidy -diff"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
 
@@ -599,12 +623,20 @@ default = true
 description = "Enable layer caching"
 command_flag = "--cache"
 
+# Arguments only, and no shell: the image's ENTRYPOINT is `docker`, so the
+# previous `sh -c '...'` ran as `docker sh -c ...` and died on `docker: unknown
+# command: docker sh` — and clearing the entrypoint would not have helped, since
+# this DHI variant ships no shell at all (`exec: "sh": executable file not
+# found`, the same wall the Python pack hit in #293). Nobody saw it because
+# local runs stop at the no-push dry-run and no pipeline here lists the preset
+# (#278's sweep). `--push` stays in the string: local safety strips that exact
+# token before the command is built.
 [presets.docker-buildx]
 name = "docker-buildx"
 phase = "docker"
 image = "dhi.io/docker:29-cli@sha256:5962df1dad91fbf81be7c795c00d6137c6a46ac28acada6af9f0af7c92133966"
 hardened = true
-command = "sh -c 'docker buildx build --platform linux/amd64,linux/arm64 -t ${IMAGE_NAME}:${IMAGE_TAG} --push .'"
+command = "buildx build --platform linux/amd64,linux/arm64 -t ${IMAGE_NAME}:${IMAGE_TAG} --push ."
 workdir = "/work"
 volumes = [
     "${WORKSPACE}:/work",
@@ -657,11 +689,16 @@ default = ""
 description = "Path to release notes file (overrides auto-detection)"
 command_flag = "--notes-file"
 
+# Arguments only: the image's entrypoint script already ends in `goreleaser
+# "$@"`, so naming the tool again produced `unknown command "goreleaser" for
+# "goreleaser release"`. Identical defect to commitlint's (#278), and hidden the
+# same way — local runs stop at the draft dry-run, so the command string was
+# never handed to a container.
 [presets.goreleaser]
 name = "goreleaser"
 phase = "release"
 image = "goreleaser/goreleaser:v2.17.0@sha256:054eefd282c02233a2556ce2d1a60cd2f51dc565ffc2520dc38b5deb4dd1ad30"
-command = "goreleaser release --clean"
+command = "release --clean"
 workdir = "/work"
 volumes = [
     "${WORKSPACE}:/work",
@@ -709,11 +746,18 @@ command_flag = "--skip=publish"
 # Ruff: Extremely fast Python linter and formatter (replaces flake8, isort, black)
 # Official image: ghcr.io/astral-sh/ruff (maintained by Astral)
 # ✅ Container-first: Ready-to-run, blazingly fast
+# --no-cache, not a redirected cache: ruff writes .ruff_cache/ into the
+# directory it lints, which is the bind mount, so the check left a directory
+# behind in a workspace it was only asked to read (#279's family). Pointing
+# --cache-dir (or RUFF_CACHE_DIR) at /tmp is not an option on this image — it is
+# distroless and its /tmp is root-owned, so a non-root run dies on `Failed to
+# initialize cache at /tmp/.ruff_cache: Permission denied`, and cidx never runs
+# a container as root.
 [presets.ruff]
 name = "ruff"
 phase = "code"
 image = "ghcr.io/astral-sh/ruff:0.8.2@sha256:84b0ad0023906db70b759b3b29e455dad0638159bf2de2b95086db1ab175917b"
-command = "check ."
+command = "check --no-cache ."
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
 config_files = ["ruff.toml", "pyproject.toml", ".ruff.toml"]
@@ -834,8 +878,14 @@ workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
 config_files = ["pytest.ini", "pyproject.toml", "setup.cfg", "tox.ini"]
 
+# Same family as ruff's --no-cache: a test run left .pytest_cache/ and a
+# __pycache__/ tree in the bind mount. This image's HOME is already /tmp and
+# writable, so the cache only needs redirecting; PYTHONDONTWRITEBYTECODE stops
+# the bytecode tree being written at all.
 [presets.pytest.env]
 HOME = "/tmp"
+PYTHONDONTWRITEBYTECODE = "1"
+PYTEST_ADDOPTS = "-o cache_dir=/tmp/.pytest_cache"
 
 [presets.pytest.options.verbose]
 type = "bool"
