@@ -82,6 +82,12 @@ func RegisterPresetSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.When(`^I look for the family that superseded "([^"]*)"$`, tc.lookForSupersedingFamily)
 	ctx.Then(`^the superseding variant family should be "([^"]*)"$`, tc.supersedingFamilyShouldBe)
 	ctx.Then(`^no superseding variant family should be reported$`, tc.noSupersedingFamilyShouldBeReported)
+
+	// Development channels, and tags that carry no version at all (#328)
+	ctx.Given(`^today is "([^"]*)"$`, tc.todayIs)
+	ctx.When(`^I ask whether "([^"]*)" carries a version$`, tc.askWhetherTagCarriesAVersion)
+	ctx.Then(`^the tag should carry a version$`, tc.tagShouldCarryAVersion)
+	ctx.Then(`^the tag should carry no version$`, tc.tagShouldCarryNoVersion)
 }
 
 // registryListsTags stages the tag names a registry answers `tags/list` with.
@@ -95,12 +101,60 @@ func (tc *TestContext) registryListsTags(tags string) error {
 	return nil
 }
 
+// todayIs fixes the day a scenario is read against. Only the rule that refuses
+// a release dated in the future turns on it, and a scenario about October has
+// to hold in every month (#328).
+func (tc *TestContext) todayIs(day string) error {
+	now, err := time.Parse("2006-01-02", day)
+	if err != nil {
+		return fmt.Errorf("could not read %q as a date: %w", day, err)
+	}
+	tc.Config["today"] = now
+	return nil
+}
+
+// scenarioToday is the staged day, or the real one for the scenarios that do
+// not care which it is.
+func (tc *TestContext) scenarioToday() time.Time {
+	if now, ok := tc.Config["today"].(time.Time); ok {
+		return now
+	}
+	return time.Now()
+}
+
 func (tc *TestContext) lookForVersionNewerThan(currentTag string) error {
 	listed, ok := tc.Config["listed_tags"].([]string)
 	if !ok {
 		return fmt.Errorf("no tag listing was staged")
 	}
-	tc.Config["newest_offered"] = presets.NewerTag(currentTag, listed)
+	tc.Config["newest_offered"] = presets.NewerTag(currentTag, listed, tc.scenarioToday())
+	return nil
+}
+
+func (tc *TestContext) askWhetherTagCarriesAVersion(tag string) error {
+	tc.Config["tag_is_versioned"] = presets.VersionedTag(tag)
+	return nil
+}
+
+func (tc *TestContext) tagShouldCarryAVersion() error {
+	versioned, ok := tc.Config["tag_is_versioned"].(bool)
+	if !ok {
+		return fmt.Errorf("no tag was asked about")
+	}
+	if !versioned {
+		return fmt.Errorf("the tag was reported as carrying no version")
+	}
+	return nil
+}
+
+func (tc *TestContext) tagShouldCarryNoVersion() error {
+	versioned, ok := tc.Config["tag_is_versioned"].(bool)
+	if !ok {
+		return fmt.Errorf("no tag was asked about")
+	}
+	if versioned {
+		return fmt.Errorf("the tag was reported as carrying a version, so an update would be claimed for it")
+	}
 	return nil
 }
 

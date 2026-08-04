@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -56,7 +55,7 @@ func presetCheckUpdatesCommand() *cli.Command {
 				imageName, currentTag, _ := parseImageRef(preset.Image)
 
 				// Get latest tag
-				update, err := getLatestTag(imageName, currentTag)
+				update, err := getLatestTag(imageName, currentTag, time.Now())
 
 				result := updateResult{
 					Name:      name,
@@ -136,7 +135,15 @@ type tagUpdate struct {
 // getLatestTag fetches the latest tag for an image from its registry, together
 // with the date that version was published.
 //
-// currentTag is used to preserve variant suffixes (e.g., -alpine, -slim).
+// Every registry answers the same two things — the tag names, and a date per
+// tag where it publishes one — so every registry is read the same way: fetch
+// the listing, then let presets.NewerTag say which name qualifies. Docker Hub
+// and Quay.io used to pick their own way instead, matching a bare semver regex
+// against a listing ordered by push date and keeping the first hit. That took
+// the newest *push* rather than the newest version, and its idea of a variant
+// family was a hardcoded list of seven suffixes — so `buildpack-deps:26.10`,
+// an Ubuntu development branch, was offered as the successor to a Debian
+// `trixie-curl` whose suffix the list did not know (#328).
 //
 // The date is what rule 2 of the image supply-chain policy (#242) measures the
 // cooldown against, and it comes from the registry's own tag listing — the same
@@ -149,35 +156,35 @@ type tagUpdate struct {
 // date and can predate publication by an arbitrary amount. It is not used here
 // — a wrong date would silently shorten the cooldown, which is worse than
 // having none. registryDatesTags names the registries that do publish one.
-func getLatestTag(image, currentTag string) (tagUpdate, error) {
+func getLatestTag(image, currentTag string, now time.Time) (tagUpdate, error) {
 	// A reference pinned by digest alone carries no version to compare against.
 	if currentTag == "" {
 		return tagUpdate{}, fmt.Errorf("no tag to compare (reference is pinned by digest only)")
 	}
 
-	// Determine registry and repository
 	registry, repo := parseRegistry(image)
 
-	// Extract variant suffix from current tag (e.g., "1.24-alpine" -> "-alpine")
-	variantSuffix := extractVariantSuffix(currentTag)
-
+	var (
+		listing tagListing
+		err     error
+	)
 	switch registry {
 	case "docker.io":
-		tag, published, err := getDockerHubLatestTag(repo, variantSuffix)
-		return tagUpdate{Latest: tag, Published: published}, err
+		listing, err = getDockerHubTags(repo)
 	case "quay.io":
-		tag, published, err := getQuayLatestTag(repo, variantSuffix)
-		return tagUpdate{Latest: tag, Published: published}, err
+		listing, err = getQuayTags(repo)
 	case "gcr.io", "ghcr.io", "dhi.io":
-		return getV2LatestTag(image, currentTag)
+		listing, err = listTags(image)
 	default:
 		return tagUpdate{}, fmt.Errorf("unknown registry: %s", registry)
 	}
+	if err != nil {
+		return tagUpdate{}, err
+	}
+	return newestOf(currentTag, listing, now), nil
 }
 
-// getV2LatestTag finds the newest version on a registry that speaks the OCI
-// distribution API and nothing else: the tag listing gives names, and the
-// version has to be read out of them (#245).
+// newestOf reads a tag listing for the newest version that qualifies (#245).
 //
 // It returns currentTag when nothing newer is on offer — including for a tag
 // that carries no version at all, where an update would be a guess.
@@ -185,20 +192,15 @@ func getLatestTag(image, currentTag string) (tagUpdate, error) {
 // "Nothing newer" is not always good news, so the same listing answers the
 // second question while it is in hand, at no extra request: is the variant line
 // still published at all (#252)?
-func getV2LatestTag(image, currentTag string) (tagUpdate, error) {
-	listing, err := listTags(image)
-	if err != nil {
-		return tagUpdate{}, err
-	}
-
-	newest := presets.NewerTag(currentTag, listing.Tags)
+func newestOf(currentTag string, listing tagListing, now time.Time) tagUpdate {
+	newest := presets.NewerTag(currentTag, listing.Tags, now)
 	if newest == "" {
 		return tagUpdate{
 			Latest:      currentTag,
 			Superseding: presets.SupersedingVariant(currentTag, listing.Tags),
-		}, nil
+		}
 	}
-	return tagUpdate{Latest: newest, Published: listing.Published[newest]}, nil
+	return tagUpdate{Latest: newest, Published: listing.Published[newest]}
 }
 
 // registryDatesTags reports whether a registry says when a version became
@@ -226,19 +228,6 @@ func registryDatesTags(image string) bool {
 	}
 }
 
-// extractVariantSuffix extracts the variant suffix from a tag
-// e.g., "1.24-alpine" -> "-alpine", "v2.3.0" -> ""
-func extractVariantSuffix(tag string) string {
-	// Common variant patterns
-	variants := []string{"-alpine", "-slim", "-bullseye", "-bookworm", "-buster", "-jammy", "-focal"}
-	for _, v := range variants {
-		if strings.HasSuffix(tag, v) {
-			return v
-		}
-	}
-	return ""
-}
-
 // parseRegistry extracts registry and repository from image name
 func parseRegistry(image string) (registry, repo string) {
 	parts := strings.SplitN(image, "/", 2)
@@ -257,28 +246,15 @@ func parseRegistry(image string) (registry, repo string) {
 	return "docker.io", image
 }
 
-// getDockerHubLatestTag gets the latest tag from Docker Hub, with the date the
-// tag last received content.
+// getDockerHubTags lists a Docker Hub repository's tags, with the date each one
+// last received content.
 //
 // `last_updated` is when that tag was last pushed, which is exactly the moment
 // the version became publicly available. A tag republished with new content
 // resets it, and for the cooldown that is the right behaviour: new content,
 // new wait.
-//
-// variantSuffix is the variant to match (e.g., "-alpine", "" for pure semver)
-func getDockerHubLatestTag(repo, variantSuffix string) (string, time.Time, error) {
+func getDockerHubTags(repo string) (tagListing, error) {
 	url := fmt.Sprintf("https://hub.docker.com/v2/repositories/%s/tags?page_size=100&ordering=last_updated", repo)
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(url)
-	if err != nil {
-		return "", time.Time{}, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != 200 {
-		return "", time.Time{}, fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
 
 	var result struct {
 		Results []struct {
@@ -286,56 +262,27 @@ func getDockerHubLatestTag(repo, variantSuffix string) (string, time.Time, error
 			LastUpdated string `json:"last_updated"`
 		} `json:"results"`
 	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", time.Time{}, err
+	if err := getRegistryJSON(url, &result); err != nil {
+		return tagListing{}, err
 	}
 
-	// Build regex based on variant suffix
-	// For "-alpine": match "X.Y-alpine" or "X.Y.Z-alpine"
-	// For "": match pure "X.Y" or "X.Y.Z"
-	var semverRegex *regexp.Regexp
-	if variantSuffix != "" {
-		// Escape the suffix for regex and require it at the end
-		escapedSuffix := regexp.QuoteMeta(variantSuffix)
-		semverRegex = regexp.MustCompile(`^v?[0-9]+\.[0-9]+(\.[0-9]+)?` + escapedSuffix + `$`)
-	} else {
-		// Pure semver only
-		semverRegex = regexp.MustCompile(`^v?[0-9]+\.[0-9]+(\.[0-9]+)?$`)
-	}
-
+	listing := tagListing{Published: make(map[string]time.Time)}
 	for _, tag := range result.Results {
-		if tag.Name != "latest" && !strings.Contains(tag.Name, "sha") &&
-			!strings.Contains(tag.Name, "nightly") && semverRegex.MatchString(tag.Name) {
-			// An unparseable date yields the zero time, not an error: the tag
-			// is still a real candidate, it just cannot serve the cooldown.
-			published, _ := time.Parse(time.RFC3339, tag.LastUpdated)
-			return tag.Name, published, nil
+		listing.Tags = append(listing.Tags, tag.Name)
+		// An unparseable date yields the zero time, not an error: the tag is
+		// still a real candidate, it just cannot serve the cooldown.
+		if published, err := time.Parse(time.RFC3339, tag.LastUpdated); err == nil {
+			listing.Published[tag.Name] = published
 		}
 	}
-
-	// No matching semver tag found
-	return "", time.Time{}, fmt.Errorf("no semver tags found with suffix '%s'", variantSuffix)
+	return listing, nil
 }
 
-// getQuayLatestTag gets the latest tag from Quay.io, with the date it was
-// pushed (`start_ts`, seconds since the epoch — when the tag started pointing
-// at its current content).
-//
-// variantSuffix is the variant to match (e.g., "-alpine", "" for pure semver)
-func getQuayLatestTag(repo, variantSuffix string) (string, time.Time, error) {
+// getQuayTags lists a Quay.io repository's tags, with the date each was pushed
+// (`start_ts`, seconds since the epoch — when the tag started pointing at its
+// current content).
+func getQuayTags(repo string) (tagListing, error) {
 	url := fmt.Sprintf("https://quay.io/api/v1/repository/%s/tag/?limit=50", repo)
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(url)
-	if err != nil {
-		return "", time.Time{}, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != 200 {
-		return "", time.Time{}, fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
 
 	var result struct {
 		Tags []struct {
@@ -343,31 +290,36 @@ func getQuayLatestTag(repo, variantSuffix string) (string, time.Time, error) {
 			StartTS int64  `json:"start_ts"`
 		} `json:"tags"`
 	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", time.Time{}, err
+	if err := getRegistryJSON(url, &result); err != nil {
+		return tagListing{}, err
 	}
 
-	// Build regex based on variant suffix
-	var semverRegex *regexp.Regexp
-	if variantSuffix != "" {
-		escapedSuffix := regexp.QuoteMeta(variantSuffix)
-		semverRegex = regexp.MustCompile(`^v?[0-9]+\.[0-9]+(\.[0-9]+)?` + escapedSuffix + `$`)
-	} else {
-		semverRegex = regexp.MustCompile(`^v?[0-9]+\.[0-9]+(\.[0-9]+)?$`)
-	}
-
+	listing := tagListing{Published: make(map[string]time.Time)}
 	for _, tag := range result.Tags {
-		if tag.Name != "latest" && semverRegex.MatchString(tag.Name) {
-			var published time.Time
-			if tag.StartTS > 0 {
-				published = time.Unix(tag.StartTS, 0).UTC()
-			}
-			return tag.Name, published, nil
+		listing.Tags = append(listing.Tags, tag.Name)
+		if tag.StartTS > 0 {
+			listing.Published[tag.Name] = time.Unix(tag.StartTS, 0).UTC()
 		}
 	}
+	return listing, nil
+}
 
-	return "", time.Time{}, fmt.Errorf("no semver tags found with suffix '%s'", variantSuffix)
+// getRegistryJSON reads one registry API document into payload. Docker Hub and
+// Quay.io both answer plain JSON over an unauthenticated GET, which is the
+// whole of what they have in common with each other and nothing they share with
+// the v2 listing in registry_tags.go.
+func getRegistryJSON(url string, payload any) error {
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	return json.NewDecoder(resp.Body).Decode(payload)
 }
 
 // presetScanCommand scans all preset container images for security vulnerabilities
@@ -739,6 +691,15 @@ type scanTarget struct {
 	// still pulls, so it is neither missing nor a candidate — it is a line that
 	// will never receive another fix, which "up to date" hid.
 	FrozenVariant string `json:"frozen_variant,omitempty"`
+
+	// UnversionedTag reports a pinned tag carrying no version at all —
+	// `buildpack-deps:trixie-curl`, `koalaman/shellcheck:stable`. Nothing a
+	// registry lists can ever be newer than a name, so the promotion path,
+	// which compares versions end to end, has nothing to say about these
+	// images: their updates arrive as rebuilds of the same tag under a new
+	// digest, and nothing here detects that (#328). Reported so the silence
+	// does not read as "up to date".
+	UnversionedTag bool `json:"unversioned_tag,omitempty"`
 }
 
 // The two network calls scan-targets makes, as package variables so the
@@ -841,13 +802,23 @@ func buildScanTargets(imagePresets map[string][]string, affectingUs map[string][
 		// Check for update
 		imageName, currentTag, currentDigest := parseImageRef(currentImage)
 		imageRegistry, _ := parseRegistry(imageName)
-		update, err := latestTagFunc(imageName, currentTag)
+		update, err := latestTagFunc(imageName, currentTag, now)
 		latestTag, published := update.Latest, update.Published
 
 		switch {
 		case err != nil:
 			target.Error = err.Error()
 			// Still scan current image on error
+		case !presets.VersionedTag(currentTag):
+			// A tag that is a name rather than a version — `trixie-curl`,
+			// `stable`. No tag listing can answer "is there a newer one", so
+			// this image is outside the promotion path altogether, and saying
+			// nothing would file it with the images that are genuinely current
+			// (#328).
+			target.UnversionedTag = true
+			target.PolicyReason = fmt.Sprintf(
+				"%q carries no version, so no tag can be compared to it: this image is updated by rebuilds of the same tag, which the promotion path does not detect — review and repin by hand",
+				currentTag)
 		case update.Superseding != "":
 			// No successor inside the pinned variant family — and none will
 			// ever come, because the repository stopped publishing that family

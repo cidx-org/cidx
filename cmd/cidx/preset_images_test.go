@@ -23,7 +23,7 @@ func stubRegistry(t *testing.T, latestTag string, published time.Time, tagErr er
 		latestTagFunc, resolveDigestFunc = originalLatest, originalDigest
 	})
 
-	latestTagFunc = func(image, currentTag string) (tagUpdate, error) {
+	latestTagFunc = func(image, currentTag string, now time.Time) (tagUpdate, error) {
 		return tagUpdate{Latest: latestTag, Published: published}, tagErr
 	}
 	resolveDigestFunc = func(image, tag string) (string, error) {
@@ -38,7 +38,7 @@ func stubFrozenVariant(t *testing.T, currentTag, superseding string) {
 
 	original := latestTagFunc
 	t.Cleanup(func() { latestTagFunc = original })
-	latestTagFunc = func(image, tag string) (tagUpdate, error) {
+	latestTagFunc = func(image, tag string, now time.Time) (tagUpdate, error) {
 		return tagUpdate{Latest: currentTag, Superseding: superseding}, nil
 	}
 }
@@ -336,6 +336,102 @@ func TestBuildScanTargetsLeavesAHealthyLineAlone(t *testing.T) {
 	if target.FrozenVariant != "" || target.PolicyReason != "" {
 		t.Errorf("FrozenVariant = %q, PolicyReason = %q; want an up-to-date image to claim neither",
 			target.FrozenVariant, target.PolicyReason)
+	}
+}
+
+// TestBuildScanTargetsReportsATagThatCarriesNoVersion: the third state #328
+// names. `buildpack-deps:trixie-curl` and `koalaman/shellcheck:stable` are
+// names, not versions, so no tag a registry lists can be newer than them and
+// the promotion path — which compares versions end to end — will never have
+// anything to say. Their updates arrive as rebuilds of the same tag under a new
+// digest, which nothing here detects.
+//
+// Saying nothing would file them under "Current (no updates)" beside the images
+// that are genuinely current, which is the shape of rot #244 and #252 were both
+// about: an image nothing is watching, reported as fine.
+func TestBuildScanTargetsReportsATagThatCarriesNoVersion(t *testing.T) {
+	now := scanNow(t)
+	current := "buildpack-deps:trixie-curl@sha256:" + zeroDigest
+	stubRegistry(t, "trixie-curl", time.Time{}, nil)
+
+	target := onlyTarget(t, buildScanTargets(
+		map[string][]string{current: {"cargo-audit"}}, nil, now))
+
+	if !target.UnversionedTag {
+		t.Fatal("a pinned tag carrying no version must be reported, not filed as up to date")
+	}
+	if target.CandidateImage != "" || target.NewerVersion != "" || target.FrozenVariant != "" {
+		t.Error("a tag that is a name offers no candidate: nothing can be shown to be newer than it")
+	}
+	if target.IsUpdate || target.ScanImage != current {
+		t.Errorf("ScanImage = %q, IsUpdate = %v; want the current image and no promotion", target.ScanImage, target.IsUpdate)
+	}
+	if target.Missing {
+		t.Error("the image pulls: it is unversioned, not deleted")
+	}
+	if !strings.Contains(target.PolicyReason, "rebuild") {
+		t.Errorf("PolicyReason = %q, want it to name the rebuilds this path cannot see", target.PolicyReason)
+	}
+
+	// container-monitor.yml selects this state with jq, so the field name is
+	// part of the contract.
+	encoded, err := json.Marshal(target)
+	if err != nil {
+		t.Fatalf("failed to encode scan target: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"unversioned_tag":true`) {
+		t.Errorf("scan target JSON = %s, want an unversioned_tag field container-monitor.yml can select", encoded)
+	}
+}
+
+// TestNewestOfHoldsEveryRegistryToTheSameRule is the regression #328 is about.
+//
+// Docker Hub and Quay.io used to run their own selection: a bare semver regex
+// over a listing ordered by push date, first hit wins, with a hardcoded list of
+// seven known variant suffixes standing in for the variant family rule. Against
+// the listing below that picked `26.10` — an Ubuntu development branch — as the
+// successor to a Debian `trixie-curl`, because `-curl` was not on the list and
+// `trixie` is not a number.
+//
+// Every registry now reads its listing through the same presets.NewerTag, so
+// this test stands the real Docker Hub answer in front of that one path.
+func TestNewestOfHoldsEveryRegistryToTheSameRule(t *testing.T) {
+	now := scanNow(t)
+	buildpackDeps := tagListing{Tags: []string{
+		"latest", "stable", "stable-curl", "curl", "trixie", "trixie-curl",
+		"bookworm", "bookworm-curl", "sid", "sid-curl", "testing", "testing-curl",
+		"stonking", "stonking-curl", "26.10", "26.10-curl",
+		"resolute", "resolute-curl", "26.04", "26.04-curl",
+		"noble", "noble-curl", "24.04", "24.04-curl",
+	}}
+
+	// The reported case: the pinned tag is a Debian suite name, so nothing in
+	// the listing is comparable to it — least of all an Ubuntu release number.
+	if got := newestOf("trixie-curl", buildpackDeps, now); got.Latest != "trixie-curl" {
+		t.Errorf("newestOf(\"trixie-curl\") = %q, want the pinned tag back: a suite name has no successor", got.Latest)
+	}
+	if got := newestOf("trixie", buildpackDeps, now); got.Latest != "trixie" {
+		t.Errorf("newestOf(\"trixie\") = %q, want the pinned tag back", got.Latest)
+	}
+
+	// A listing that does resolve still carries the date the cooldown will be
+	// measured against — the Docker Hub path used to return it alongside the
+	// tag, and it has to survive going through the shared selection.
+	published, err := time.Parse(time.RFC3339, "2026-07-28T12:00:00Z")
+	if err != nil {
+		t.Fatalf("bad test date: %v", err)
+	}
+	prettier := tagListing{
+		Tags:      []string{"latest", "3.9.4", "3.9.5", "3.9.6", "3.9.6-alpine"},
+		Published: map[string]time.Time{"3.9.6": published},
+	}
+
+	got := newestOf("3.9.4", prettier, now)
+	if got.Latest != "3.9.6" {
+		t.Fatalf("newestOf(\"3.9.4\") = %q, want 3.9.6", got.Latest)
+	}
+	if !got.Published.Equal(published) {
+		t.Errorf("Published = %v, want %v: without it the cooldown cannot be measured", got.Published, published)
 	}
 }
 

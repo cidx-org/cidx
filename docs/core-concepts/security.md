@@ -238,6 +238,8 @@ So it left the family rather than the variant: `buildpack-deps:trixie-curl`, **1
 
 **What it gives up in exchange.** `buildpack-deps:trixie-curl` carries no version in its tag, so `cidx preset scan-targets` offers it no candidate — the same position `koalaman/shellcheck:stable` is already in. The digest keeps being scanned every week; what stops is automatic promotion, because a Debian suite is not a version to compare. Moving `trixie` on is a repin by hand, like the variant lines above.
 
+That was written as a consequence accepted in advance, and for six weeks it was not what the code did: both images were being offered a candidate, and `trixie-curl` was offered an Ubuntu development branch (#328). Both are now reported as [a tag that carries no version](#a-tag-that-carries-no-version), which is what this paragraph had assumed all along.
+
 ### How the rules are applied
 
 `cidx preset scan-targets` decides, per image, what `container-monitor.yml` scans and which candidates are old enough to consider; `cidx preset scan-verdicts` then decides which of them the scan results allow. The workflow only reads those verdicts — the policy lives in code, where it is testable, rather than in shell scattered across a YAML file.
@@ -264,12 +266,34 @@ The OCI distribution API itself carries no publication date. The nearest substit
 
 The listing is an unordered set of names, so the newest version is worked out from the names themselves. A version qualifies only if it has the **same shape** as the tag the catalogue pins: the same `v` prefix, the same variant suffix, the same number of components. `dhi.io/golang:1.23-alpine3.21-dev` is therefore never offered a plain `1.24` — a different base image — and an image pinned `0.68` is offered `0.71` rather than `0.71.2`. Versions compare as numbers: `1.24` is newer than `1.9`, which no lexical ordering would say.
 
+**That rule now governs every registry, and did not always.** Docker Hub and Quay.io had been reached first and kept their own selection: a bare semver regex over a listing ordered by push date, first match wins, with the variant family standing in as a hardcoded list of seven suffixes — `-alpine`, `-slim`, `-bullseye`, `-bookworm`, `-buster`, `-jammy`, `-focal`. Anything else was read as no variant at all. So `buildpack-deps:trixie-curl` — Debian 13, and the base [`cargo-audit` runs on](#when-no-variant-is-the-answer-cargo-audit) — was offered `buildpack-deps:26.10`, an **Ubuntu development branch**, past the cooldown and ready to promote (#328). Three things had to be wrong at once, and all three were: `-curl` was not on the list, `trixie` is not a number so the pin looked unversioned, and `buildpack-deps` publishes Debian codenames and Ubuntu release numbers in one namespace, where the newest number is not the newest version of anything in particular.
+
+The listing shape is per registry; the choice made from it is not. Both paths now return the same `(names, dates)` and hand it to the same comparison — which is what the rule above had always claimed, and what its tests had only ever exercised on one of the two routes.
+
 **A newer version is not always a candidate.** ghcr.io and dhi.io date nothing:
 
 - ghcr.io's dates live in the GitHub Packages API, which needs a `read:packages` token and answers 403 for a package owned by another organisation.
 - dhi.io has no repository on `hub.docker.com` to ask, and its registry response carries names only.
 
 Reporting versions found there as candidates would be worse than reporting nothing: the cooldown is fail-closed, so each one would be held in every weekly run from now until someone acted on it by hand — noise that never resolves. They are reported in a state of their own instead, `newer_version` with a reason saying the registry publishes no date, and the workflow summary lists them under **Newer version, not promotable automatically**. Pinning one is a deliberate act with a human behind it.
+
+### A release that has not happened yet
+
+A pre-release usually says so in its name — `-rc1`, `-beta`, `-nightly` — and the family rule above already refuses every one of them without knowing what any of those words mean: a candidate has to carry the pinned tag's suffix verbatim, so a marker the pin does not have cannot get through. A list of pre-release words would be unreachable code.
+
+The channel that gets through is the one carrying no marker at all. A calendar-versioned distribution names a release by the month it is **due** and publishes images for it throughout its development: on 2026-07-30, `buildpack-deps:26.10` was "Ubuntu Stonking Stingray (development branch)" and would not be a release until October. Nothing in the name says so. The tag is pushed weekly like any other, so the cooldown ages it exactly like a release — and to an image pinned `24.04-curl` it is a perfectly well-formed successor: same variant, same precision, larger number.
+
+The calendar is the one thing that answers, and it answers without a request: **a candidate whose version reads as a year and month later than the current month is not offered.** `26.10` is refused in August 2026, `26.04` is not, and `26.10` becomes offerable of its own accord in October — the rule reads a date rather than keeping a list of development branches, so nothing has to be edited when one ships.
+
+It applies only where the **pinned** tag is itself calendar-versioned, which is what proves the repository numbers its releases that way: two components, a two-digit month in 01–12. Without that guard a tool sitting at `26.1` would see its own `26.10` read as October and refused; with it, `v2.95`, `0.71` and `3.24` are compared as the plain versions they are. This is the narrower half of the pair — the wider half is that a Debian suite is not offered an Ubuntu number at all — and it is the half that survives a repin onto `buildpack-deps:26.04-curl`, where the family rule would have nothing left to say.
+
+### A tag that carries no version
+
+`buildpack-deps:trixie-curl` and `koalaman/shellcheck:stable` are names, not versions. No tag a registry lists can be shown to be newer than a name, so the whole promotion path — which compares versions end to end — has nothing to say about these two images, and never will. Their updates arrive as **rebuilds of the same tag** under a new digest, and nothing here sees that: the cooldown, the family rule and the candidate all read tag names.
+
+That is a real blind spot, and it is stated rather than papered over. `cidx preset scan-targets` reports `unversioned_tag` with the reason, and the workflow summary lists it under **Tag carries no version**, deliberately away from **Current (no updates)** — being unwatchable and being current are different facts, and this repository has twice been caught by the second hiding the first ([the deleted images](#a-pinned-image-that-vanished), [the frozen variant lines](#a-variant-line-that-froze)). Both images keep being scanned every week at the digest they are pinned to; what they never get is a candidate.
+
+It is not annotated as a warning. This is a standing property of the pin, not an event: it would fire on every run from now until the pin changes, and a weekly alarm that cannot resolve is one nobody reads. Detecting the rebuild itself — comparing the digest a tag resolves to against the digest the catalogue pins — is a different mechanism from anything the promotion path does today, and it is the open half of the rebuild-versus-new-version question raised when the cooldown was designed.
 
 ### A pinned image that vanished
 

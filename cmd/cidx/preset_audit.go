@@ -6,6 +6,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/cidx-org/cidx/v2/pkg/presets"
 	"github.com/urfave/cli/v2"
@@ -81,7 +82,7 @@ func presetAuditCommand() *cli.Command {
 				}
 
 				// Check for updates
-				update, err := getLatestTag(imageName, currentTag)
+				update, err := getLatestTag(imageName, currentTag, time.Now())
 				if err != nil {
 					result.UpdateErr = err.Error()
 				} else if update.Latest != currentTag && update.Latest != "" {
