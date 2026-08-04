@@ -139,6 +139,91 @@ func (c *Client) GetWorkflowRun(ctx context.Context, runID string) (*remote.Work
 	return c.convertWorkflow(ctx, run)
 }
 
+// ListRuns returns the most recent runs, newest first.
+//
+// With no workflow file it reads the repository-wide listing, which is the
+// answer to "what ran on this branch": a check that has just failed names a job,
+// not the workflow file that carries it, and having to guess the file before
+// being allowed to look is what sent this question to `gh` (issue #342).
+//
+// A workflow file the repository does not have is not an error -- the caller
+// gets an empty listing and says so, the same way the gh-backed version did.
+func (c *Client) ListRuns(ctx context.Context, workflowFile, branch string, limit int) ([]remote.Workflow, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+
+	opts := &github.ListWorkflowRunsOptions{
+		Branch:      branch,
+		ListOptions: github.ListOptions{PerPage: limit},
+	}
+
+	var (
+		runs *github.WorkflowRuns
+		resp *github.Response
+		err  error
+	)
+	if workflowFile == "" {
+		runs, resp, err = c.client.Actions.ListRepositoryWorkflowRuns(ctx, c.owner, c.repo, opts)
+	} else {
+		runs, resp, err = c.client.Actions.ListWorkflowRunsByFileName(ctx, c.owner, c.repo, remote.NormalizeWorkflowFile(workflowFile), opts)
+	}
+	if err != nil {
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to list workflow runs: %w", err)
+	}
+	if runs == nil {
+		return nil, nil
+	}
+
+	listed := make([]remote.Workflow, 0, len(runs.WorkflowRuns))
+	for _, run := range runs.WorkflowRuns {
+		listed = append(listed, summarizeRun(run))
+	}
+	return listed, nil
+}
+
+// summarizeRun describes a run without fetching its jobs, which is what makes a
+// listing one API call instead of one per row.
+func summarizeRun(run *github.WorkflowRun) remote.Workflow {
+	return remote.Workflow{
+		ID:         strconv.FormatInt(run.GetID(), 10),
+		Status:     run.GetStatus(),
+		Conclusion: run.GetConclusion(),
+		URL:        run.GetHTMLURL(),
+		Name:       run.GetName(),
+		Number:     run.GetRunNumber(),
+		Branch:     run.GetHeadBranch(),
+		HeadSHA:    run.GetHeadSHA(),
+		Title:      run.GetDisplayTitle(),
+		CreatedAt:  run.GetCreatedAt().Time,
+	}
+}
+
+// RerunWorkflow restarts a run, or only the jobs of it that failed.
+//
+// Both endpoints answer 201 with no body and start a *new attempt of the same
+// run*, so the run ID stays valid and the caller can watch it straight away --
+// which is the whole point of having this next to `workflow watch` (issue #342).
+func (c *Client) RerunWorkflow(ctx context.Context, runID string, failedOnly bool) error {
+	id, err := strconv.ParseInt(runID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid workflow run ID %q: %w", runID, err)
+	}
+
+	if failedOnly {
+		_, err = c.client.Actions.RerunFailedJobsByID(ctx, c.owner, c.repo, id)
+	} else {
+		_, err = c.client.Actions.RerunWorkflowByID(ctx, c.owner, c.repo, id)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to rerun run %s: %w", runID, err)
+	}
+	return nil
+}
+
 // WatchWorkflow streams updates for a running workflow
 func (c *Client) WatchWorkflow(ctx context.Context, workflowID string) (<-chan remote.WorkflowUpdate, error) {
 	updates := make(chan remote.WorkflowUpdate, 1)

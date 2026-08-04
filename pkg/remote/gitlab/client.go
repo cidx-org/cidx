@@ -3,6 +3,7 @@ package gitlab
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"sort"
@@ -201,6 +202,120 @@ func (c *Client) TriggerWorkflow(ctx context.Context, workflowFile, ref string, 
 		URL:        pipeline.WebURL,
 		Jobs:       []remote.Job{},
 	}, nil
+}
+
+// ListRuns returns the most recent pipelines, newest first.
+//
+// workflowFile selects nothing here for the same reason it selects nothing in
+// TriggerWorkflow -- GitLab runs one pipeline definition per project -- so it is
+// reported and ignored rather than silently dropped. Everything else carries
+// over: an empty branch means every ref, and the listing is one call.
+func (c *Client) ListRuns(ctx context.Context, workflowFile, branch string, limit int) ([]remote.Workflow, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if workflowFile != "" {
+		log.Infof("GitLab runs one pipeline definition per project: %q selects nothing, listing the project's pipelines", workflowFile)
+	}
+
+	opts := &gitlab.ListProjectPipelinesOptions{
+		OrderBy:     gitlab.Ptr("id"),
+		Sort:        gitlab.Ptr("desc"),
+		ListOptions: gitlab.ListOptions{PerPage: int64(limit)},
+	}
+	if branch != "" {
+		opts.Ref = gitlab.Ptr(branch)
+	}
+
+	pipelines, _, err := c.client.Pipelines.ListProjectPipelines(c.projectID, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list pipelines: %w", err)
+	}
+
+	listed := make([]remote.Workflow, 0, len(pipelines))
+	for _, p := range pipelines {
+		run := remote.Workflow{
+			ID:         fmt.Sprintf("%d", p.ID),
+			Status:     mapPipelineStatus(p.Status),
+			Conclusion: mapPipelineConclusion(p.Status),
+			URL:        p.WebURL,
+			Name:       p.Name,
+			Number:     int(p.IID),
+			Branch:     p.Ref,
+			HeadSHA:    p.SHA,
+			Title:      p.Source,
+		}
+		if p.CreatedAt != nil {
+			run.CreatedAt = *p.CreatedAt
+		}
+		listed = append(listed, run)
+	}
+	return listed, nil
+}
+
+// RerunWorkflow retries the failed jobs of a pipeline.
+//
+// GitLab's retry endpoint restarts the jobs that failed or were cancelled, which
+// is exactly the recovery `--failed` asks for. There is no counterpart for
+// restarting a pipeline that succeeded: the platform's answer to that is a new
+// pipeline on the same ref, which cidx already has a command for, so this says
+// so instead of pretending (issue #342).
+func (c *Client) RerunWorkflow(ctx context.Context, runID string, failedOnly bool) error {
+	if !failedOnly {
+		return fmt.Errorf("GitLab retries a pipeline's failed jobs, it cannot restart one that has none: use --failed, or start a new pipeline with `cidx repo workflow run --ref <ref>`")
+	}
+
+	if _, _, err := c.client.Pipelines.RetryPipelineBuild(c.projectID, mustAtoi64(runID)); err != nil {
+		return fmt.Errorf("failed to retry pipeline %s: %w", runID, err)
+	}
+	return nil
+}
+
+// ListRunArtifacts returns the jobs of a pipeline that produced an artifact.
+//
+// GitLab attaches artifacts to jobs, not to pipelines, so a job that uploaded
+// something is what an artifact is here -- and the identifier the download takes
+// is therefore the job's. The name is the job's name, which is what a GitLab
+// user sees next to the archive in the UI.
+func (c *Client) ListRunArtifacts(ctx context.Context, runID string) ([]remote.Artifact, error) {
+	jobs, _, err := c.client.Jobs.ListPipelineJobs(c.projectID, mustAtoi64(runID), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list the jobs of pipeline %s: %w", runID, err)
+	}
+
+	var artifacts []remote.Artifact
+	for _, job := range jobs {
+		if job.ArtifactsFile.Filename == "" {
+			continue
+		}
+
+		artifact := remote.Artifact{
+			ID:           job.ID,
+			Name:         job.Name,
+			SizeInBytes:  job.ArtifactsFile.Size,
+			WorkflowRun:  runID,
+			WorkflowName: job.Stage,
+		}
+		if job.CreatedAt != nil {
+			artifact.CreatedAt = *job.CreatedAt
+		}
+		if job.ArtifactsExpireAt != nil {
+			artifact.ExpiresAt = *job.ArtifactsExpireAt
+			artifact.Expired = job.ArtifactsExpireAt.Before(time.Now())
+		}
+		artifacts = append(artifacts, artifact)
+	}
+	return artifacts, nil
+}
+
+// DownloadArtifact opens the zip archive a job uploaded. artifactID is the job's
+// ID, which is what ListRunArtifacts reports.
+func (c *Client) DownloadArtifact(ctx context.Context, artifactID int64) (io.ReadCloser, error) {
+	archive, _, err := c.client.Jobs.GetJobArtifacts(c.projectID, artifactID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download the artifacts of job %d: %w", artifactID, err)
+	}
+	return io.NopCloser(archive), nil
 }
 
 // WatchWorkflow watches a pipeline and sends updates

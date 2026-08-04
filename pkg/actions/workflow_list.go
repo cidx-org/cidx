@@ -2,79 +2,64 @@ package actions
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os/exec"
-	"strings"
-	"time"
 
 	"github.com/cidx-org/cidx/v2/pkg/remote"
 	log "github.com/sirupsen/logrus"
 )
 
-// WorkflowListAction lists workflow runs from GitHub Actions
+// WorkflowListAction lists workflow runs.
+//
+// It lists a named workflow's runs, and -- with no name -- the runs of every
+// workflow on one branch. That second view is what you want when a check has
+// just failed and you do not yet know which workflow owns it: the failing check
+// names a job, and having to name the workflow file before being allowed to look
+// is what sent this question to `gh` (issue #342).
+//
+// The runs come from the provider rather than from `gh api`, so the listing
+// speaks the same client, the same repository resolution and the same identifier
+// as the `watch` and `rerun` commands beside it, and works on GitLab.
 type WorkflowListAction struct {
-	workflow string
+	provider remote.Provider
+	workflow string // workflow file or name; empty means every workflow
+	branch   string // branch to filter on; empty means every branch
 	limit    int
 	verbose  bool
 }
 
-// WorkflowRun represents a GitHub Actions workflow run
-type WorkflowRun struct {
-	ID           int64     `json:"id"`
-	Name         string    `json:"name"`
-	HeadBranch   string    `json:"head_branch"`
-	HeadSha      string    `json:"head_sha"`
-	Status       string    `json:"status"`
-	Conclusion   string    `json:"conclusion"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
-	HTMLURL      string    `json:"html_url"`
-	RunNumber    int       `json:"run_number"`
-	DisplayTitle string    `json:"display_title"`
-}
-
-// WorkflowRunsResponse represents the GitHub API response for workflow runs
-type WorkflowRunsResponse struct {
-	TotalCount   int           `json:"total_count"`
-	WorkflowRuns []WorkflowRun `json:"workflow_runs"`
-}
-
-// NewWorkflowList creates a new workflow list action
-func NewWorkflowList(workflow string, limit int, verbose bool) *WorkflowListAction {
+// NewWorkflowList creates a new workflow list action. Exactly one of workflow
+// and branch is expected to be set; setting both narrows to that workflow's runs
+// on that branch, which is a legitimate, if narrower, question.
+func NewWorkflowList(provider remote.Provider, workflow, branch string, limit int, verbose bool) *WorkflowListAction {
 	return &WorkflowListAction{
+		provider: provider,
 		workflow: workflow,
+		branch:   branch,
 		limit:    limit,
 		verbose:  verbose,
 	}
 }
 
-// Execute lists workflow runs from GitHub Actions
+// Execute lists the runs and displays them.
 func (a *WorkflowListAction) Execute(ctx context.Context) error {
-	// Check if gh CLI is available
-	if _, err := exec.LookPath("gh"); err != nil {
-		return fmt.Errorf("gh CLI not found. Install from https://cli.github.com")
-	}
-
-	// Get workflow runs
-	runs, err := a.getWorkflowRuns()
+	runs, err := a.provider.ListRuns(ctx, a.workflow, a.branch, a.limit)
 	if err != nil {
 		return fmt.Errorf("failed to get workflow runs: %w", err)
 	}
 
 	if len(runs) == 0 {
-		log.Infof("No runs found for workflow '%s'", a.workflow)
-		log.Info("")
-		log.Infof("Note: Check that .github/workflows/%s.yml exists and has been triggered.", a.workflow)
+		log.Infof("No runs found for %s", a.scope())
+		if a.workflow != "" {
+			log.Info("")
+			log.Infof("Note: check that .github/workflows/%s exists and has been triggered.", remote.NormalizeWorkflowFile(a.workflow))
+		}
 		return nil
 	}
 
-	// Apply limit
 	if a.limit > 0 && len(runs) > a.limit {
 		runs = runs[:a.limit]
 	}
 
-	// Display runs
 	if a.verbose {
 		a.displayVerbose(runs)
 	} else {
@@ -84,34 +69,19 @@ func (a *WorkflowListAction) Execute(ctx context.Context) error {
 	return nil
 }
 
-// getWorkflowRuns fetches workflow runs from GitHub
-func (a *WorkflowListAction) getWorkflowRuns() ([]WorkflowRun, error) {
-	// Use gh CLI to get workflow runs. The name-to-file transform is shared
-	// with `workflow run`, so both commands resolve a name the same way.
-	workflowFile := remote.NormalizeWorkflowFile(a.workflow)
-
-	args := []string{
-		"api",
-		fmt.Sprintf("repos/{owner}/{repo}/actions/workflows/%s/runs", workflowFile),
-		"--jq", ".",
+// scope names what was listed, so an empty result says which question it
+// answered rather than leaving the reader to guess which filter applied.
+func (a *WorkflowListAction) scope() string {
+	switch {
+	case a.workflow != "" && a.branch != "":
+		return fmt.Sprintf("workflow '%s' on branch '%s'", a.workflow, a.branch)
+	case a.workflow != "":
+		return fmt.Sprintf("workflow '%s'", a.workflow)
+	case a.branch != "":
+		return fmt.Sprintf("branch '%s'", a.branch)
+	default:
+		return "this repository"
 	}
-
-	cmd := exec.Command("gh", args...)
-	output, err := cmd.Output()
-	if err != nil {
-		// Check if workflow doesn't exist yet
-		if strings.Contains(string(output), "Not Found") {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("gh api failed: %w", err)
-	}
-
-	var response WorkflowRunsResponse
-	if err := json.Unmarshal(output, &response); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	return response.WorkflowRuns, nil
 }
 
 // displaySimple shows runs in a simple list format.
@@ -119,71 +89,83 @@ func (a *WorkflowListAction) getWorkflowRuns() ([]WorkflowRun, error) {
 // Both numbers are printed, labelled. `#640` is what GitHub shows in its UI, and
 // it was for a long time the only thing listed here — but the API addresses a run
 // by its ID, so `cidx repo workflow watch 640` sent the run number where an ID
-// was expected and got a flat 404. The two commands of one namespace have to
-// speak the same identifier, and the workaround (polling this list instead of
+// was expected and got a flat 404. The commands of one namespace have to speak
+// the same identifier, and the workaround (polling this list instead of
 // watching) defeats the point of having a watch at all (issue #291).
-func (a *WorkflowListAction) displaySimple(runs []WorkflowRun) {
-	log.Infof("🔄 Workflow '%s' runs (%d):", a.workflow, len(runs))
+//
+// The workflow name comes with them in the branch view: naming which workflow a
+// run belongs to is the whole reason that view exists (issue #342).
+func (a *WorkflowListAction) displaySimple(runs []remote.Workflow) {
+	log.Infof("🔄 Runs for %s (%d):", a.scope(), len(runs))
 	log.Info("")
 
 	for _, run := range runs {
-		status := a.formatStatus(run.Conclusion, run.Status)
-		date := run.CreatedAt.Format("2006-01-02 15:04")
-		shortSha := run.HeadSha
-		if len(shortSha) > 7 {
-			shortSha = shortSha[:7]
+		fmt.Printf("  %s #%-4d  %s  %s  id %s", formatRunStatus(run.Conclusion, run.Status),
+			run.Number, run.CreatedAt.Format("2006-01-02 15:04"), shortSHA(run.HeadSHA), run.ID)
+		if a.workflow == "" && run.Name != "" {
+			fmt.Printf("  %s", run.Name)
 		}
-
-		fmt.Printf("  %s #%-4d  %s  %s  id %d\n", status, run.RunNumber, date, shortSha, run.ID)
+		fmt.Println()
 	}
 
-	printWatchHint()
+	printRunHints()
 }
 
 // displayVerbose shows runs with additional information
-func (a *WorkflowListAction) displayVerbose(runs []WorkflowRun) {
-	log.Infof("🔄 Workflow '%s' runs (%d):", a.workflow, len(runs))
+func (a *WorkflowListAction) displayVerbose(runs []remote.Workflow) {
+	log.Infof("🔄 Runs for %s (%d):", a.scope(), len(runs))
 	log.Info("")
 
-	// Header
-	fmt.Printf("  %-8s %-6s %-12s %-16s %-10s %-12s %s\n", "STATUS", "RUN", "ID", "DATE", "COMMIT", "BRANCH", "TITLE")
-	fmt.Printf("  %-8s %-6s %-12s %-16s %-10s %-12s %s\n", "------", "---", "--", "----", "------", "------", "-----")
+	fmt.Printf("  %-8s %-6s %-12s %-16s %-10s %-12s %-16s %s\n", "STATUS", "RUN", "ID", "DATE", "COMMIT", "BRANCH", "WORKFLOW", "TITLE")
+	fmt.Printf("  %-8s %-6s %-12s %-16s %-10s %-12s %-16s %s\n", "------", "---", "--", "----", "------", "------", "--------", "-----")
 
 	for _, run := range runs {
-		status := a.formatStatus(run.Conclusion, run.Status)
-		date := run.CreatedAt.Format("2006-01-02 15:04")
-		shortSha := run.HeadSha
-		if len(shortSha) > 7 {
-			shortSha = shortSha[:7]
-		}
-
-		branch := run.HeadBranch
-		if len(branch) > 12 {
-			branch = branch[:9] + "..."
-		}
-
-		title := run.DisplayTitle
-		if len(title) > 35 {
-			title = title[:32] + "..."
-		}
-
-		fmt.Printf("  %-8s #%-5d %-12d %-16s %-10s %-12s %s\n", status, run.RunNumber, run.ID, date, shortSha, branch, title)
+		fmt.Printf("  %-8s #%-5d %-12s %-16s %-10s %-12s %-16s %s\n",
+			formatRunStatus(run.Conclusion, run.Status),
+			run.Number,
+			run.ID,
+			run.CreatedAt.Format("2006-01-02 15:04"),
+			shortSHA(run.HeadSHA),
+			clip(run.Branch, 12),
+			clip(run.Name, 16),
+			clip(run.Title, 35),
+		)
 	}
 
-	printWatchHint()
+	printRunHints()
 }
 
-// printWatchHint names the identifier the neighbouring command takes, and takes
+// printRunHints names the identifier the neighbouring commands take, and takes
 // it from the column right next to it. The hint used to send the reader to
 // `gh run view <run-number>` — the wrong tool for a repository that dogfoods its
 // own, and the wrong number for the command it named (issue #291).
-func printWatchHint() {
+func printRunHints() {
 	fmt.Println()
-	fmt.Println("  Follow one with: cidx repo workflow watch <id>")
+	fmt.Println("  Follow one with:   cidx repo workflow watch <id>")
+	fmt.Println("  Restart one with:  cidx repo workflow rerun --failed <id>")
+	fmt.Println("  Fetch its output:  cidx repo artifact download --run <id>")
 }
 
-// formatStatus returns a formatted status string with emoji
-func (a *WorkflowListAction) formatStatus(conclusion, status string) string {
+// shortSHA abbreviates a commit to the seven characters git prints.
+func shortSHA(sha string) string {
+	if len(sha) > 7 {
+		return sha[:7]
+	}
+	return sha
+}
+
+// clip keeps a column from overflowing. The run ID is deliberately never clipped
+// — an eleven-digit identifier cut short is a number the API does not know, the
+// failure #291 is about, restored by formatting.
+func clip(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max-3] + "..."
+}
+
+// formatRunStatus returns a formatted status string with emoji
+func formatRunStatus(conclusion, status string) string {
 	if status == "in_progress" || status == "queued" {
 		return "🔄 run"
 	}

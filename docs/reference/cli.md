@@ -259,6 +259,97 @@ Skipped branches:
 
 ---
 
+### `cidx repo artifact download`
+
+Download the artifacts a workflow run produced, into one flat directory.
+
+```bash
+cidx repo artifact download --run 30892230196                        # every artifact
+cidx repo artifact download --run 30892230196 'trivy-*' 'grype-*'    # by name pattern
+cidx repo artifact download --run 30892230196 -o /tmp/audit          # elsewhere
+cidx repo artifact download                                          # latest run on this branch
+```
+
+**Options:**
+
+- `--run`: run whose artifacts to download (default: the most recent run on the current branch)
+- `--output, -o`: destination directory (default: `scan-results`)
+
+**Arguments:** artifact name patterns. Globs are honoured; no pattern means every artifact of the run. A pattern that matches nothing is refused, naming the artifacts the run does have — a typo would otherwise leave an empty directory that reads as a scan which found nothing.
+
+**Why it exists**
+
+`cidx security vuln prune --results DIR` and `cidx security baseline --results DIR` read the scanner results the Security Audit and Container Monitor workflows upload. Until this command, putting them on disk meant `gh run download` — a cidx command depending on artifacts with no cidx way to obtain them (issue #285).
+
+`--output` defaults to `scan-results`, which is what `--results` defaults to, so the flow needs no path spelled twice:
+
+```bash
+cidx repo artifact download --run 30892230196
+cidx security vuln prune
+```
+
+**What it does that `gh run download` does not**
+
+- **The repository is this one.** It comes from the git remote of the working directory, and the command prints it. `gh run download <id>` resolves the repository from gh's own notion of where you are — a default, `GH_REPO`, the last thing it knew — and hands over another repository's artifacts without a word; that skewed a before/after measurement in #327.
+- **One flat directory.** `gh run download` unpacks a subdirectory per artifact. The readers join the results directory with a bare file name, so 42 `trivy-N/` subdirectories are 42 directories none of them looks in: on the same audit run, `vuln prune` reports 21 of 21 catalogue repositories covered from this command's output and **0 of 21** from `gh run download`'s (#333).
+- **A shared file name is not fatal.** Identical content is skipped; differing content keeps the first copy and names both artifacts. Aborting halfway through a 42-artifact download would leave a directory that reads as a complete scan and is not one.
+
+Archive entries are written under their base name, so an artifact naming `../../.ssh/authorized_keys` cannot write outside the destination.
+
+**GitLab:** artifacts belong to jobs rather than to pipelines, so `--run` takes a pipeline ID and each job that uploaded an archive is one artifact, named after the job.
+
+---
+
+### `cidx repo workflow rerun`
+
+Restart a run, or only the jobs of it that failed.
+
+```bash
+cidx repo workflow rerun --failed                 # latest run on the current branch
+cidx repo workflow rerun --failed 30819803199     # a specific run
+cidx repo workflow rerun 30819803199              # every job of it
+```
+
+**Options:**
+
+- `--failed`: restart only the jobs that failed (or were cancelled, or timed out)
+- `--run`: run to restart, by ID — the same thing as the positional argument
+
+**Why it exists**
+
+A job that dies pulling a pinned image (`read: connection reset by peer`) failed on the infrastructure, not on the change. Recovery meant `gh run rerun --failed`, because `cidx repo workflow run` only does `workflow_dispatch` and `ci.yml` declares none — the one step of the loop that still had to leave cidx, reached for exactly when something has just gone wrong (issue #342).
+
+The identifier is the `id` column of `cidx repo workflow list`, not the `#` run number beside it; a run that cannot be read says so. `--failed` on a run with no failed job is refused here rather than as GitHub's bare 403, and names the command that does work.
+
+The rerun is not watched. It starts a new attempt of the same run and the API reports the previous one as completed for a few seconds, so a watch chained onto it would report the failure it was asked to clear; the command to watch it is printed instead.
+
+**GitLab:** `--failed` retries the pipeline's failed jobs. Restarting a pipeline that has none has no counterpart on the platform — the answer there is a new pipeline, which is `cidx repo workflow run --ref <ref>` — so it is refused, saying so.
+
+---
+
+### `cidx repo workflow list`
+
+List recent runs, for one workflow or for a branch.
+
+```bash
+cidx repo workflow list                    # every workflow, current branch
+cidx repo workflow list ci                 # the ci workflow, every branch
+cidx repo workflow list --branch main      # every workflow, main
+cidx repo workflow list -n 5 -v security-audit
+```
+
+**Options:**
+
+- `--branch, -b`: branch to list runs for (default: the current branch, when no workflow is named)
+- `--limit, -n`: how many runs to show (default: 10)
+- `--verbose, -v`: one row per run with branch, workflow and title
+
+With no workflow name it lists the runs of every workflow on a branch, which is what you want when a check has just failed and you do not yet know which workflow owns it — the failing check names a job, not a workflow file (issue #342).
+
+The `id` column is the identifier `workflow watch`, `workflow rerun` and `artifact download` take. The `#` column is the number the web UI shows. They are different numbers and handing over the wrong one gets a flat 404 (issue #291).
+
+---
+
 ### `cidx check workflow`
 
 Validate that cidx.toml pipelines match GitHub Actions workflows.

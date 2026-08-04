@@ -1,8 +1,10 @@
 package actions
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -27,6 +29,17 @@ type fakeProvider struct {
 	triggered    *remote.Workflow
 	triggerErr   error
 	triggerCalls []triggerCall
+
+	listed     []remote.Workflow
+	listErr    error
+	listCalls  []listCall
+	rerunErr   error
+	rerunCalls []rerunCall
+
+	artifacts    map[string][]remote.Artifact
+	artifactsErr error
+	archives     map[int64][]byte
+	downloadErr  error
 }
 
 // triggerCall records what a TriggerWorkflow call was asked to do.
@@ -34,6 +47,19 @@ type triggerCall struct {
 	workflow string
 	ref      string
 	inputs   map[string]string
+}
+
+// listCall records the filters a ListRuns call was asked for.
+type listCall struct {
+	workflow string
+	branch   string
+	limit    int
+}
+
+// rerunCall records what a RerunWorkflow call was asked to restart.
+type rerunCall struct {
+	runID      string
+	failedOnly bool
 }
 
 func (f *fakeProvider) TriggerWorkflow(_ context.Context, workflowFile, ref string, inputs map[string]string) (*remote.Workflow, error) {
@@ -89,6 +115,42 @@ func (f *fakeProvider) WatchWorkflow(_ context.Context, _ string) (<-chan remote
 	}
 	close(ch)
 	return ch, nil
+}
+
+// ListRuns answers from `listed`, recording what it was asked for so a scenario
+// can assert on the filters rather than on the rows.
+func (f *fakeProvider) ListRuns(_ context.Context, workflowFile, branch string, limit int) ([]remote.Workflow, error) {
+	f.listCalls = append(f.listCalls, listCall{workflow: workflowFile, branch: branch, limit: limit})
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	return f.listed, nil
+}
+
+// RerunWorkflow records the request; rerunErr makes it fail.
+func (f *fakeProvider) RerunWorkflow(_ context.Context, runID string, failedOnly bool) error {
+	f.rerunCalls = append(f.rerunCalls, rerunCall{runID: runID, failedOnly: failedOnly})
+	return f.rerunErr
+}
+
+// ListRunArtifacts answers from `artifacts`, keyed by run.
+func (f *fakeProvider) ListRunArtifacts(_ context.Context, runID string) ([]remote.Artifact, error) {
+	if f.artifactsErr != nil {
+		return nil, f.artifactsErr
+	}
+	return f.artifacts[runID], nil
+}
+
+// DownloadArtifact hands back the archive bytes recorded for the artifact.
+func (f *fakeProvider) DownloadArtifact(_ context.Context, artifactID int64) (io.ReadCloser, error) {
+	if f.downloadErr != nil {
+		return nil, f.downloadErr
+	}
+	archive, ok := f.archives[artifactID]
+	if !ok {
+		return nil, errors.New("no such artifact")
+	}
+	return io.NopCloser(bytes.NewReader(archive)), nil
 }
 
 // Unused methods -- kept minimal to satisfy the remote.Provider interface.

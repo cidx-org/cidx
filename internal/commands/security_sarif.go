@@ -31,7 +31,7 @@ func securitySarifCommand() *cli.Command {
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "results",
-				Value: "scan-results",
+				Value: defaultResultsDir,
 				Usage: "Directory holding the scanner result files",
 			},
 			&cli.StringFlag{

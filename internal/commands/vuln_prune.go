@@ -48,7 +48,7 @@ func vulnPruneCommand() *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:  "results",
-				Value: "scan-results",
+				Value: defaultResultsDir,
 				Usage: "Directory holding the scanner result files (audit or monitor artifacts)",
 			},
 			&cli.BoolFlag{

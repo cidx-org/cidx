@@ -5,9 +5,11 @@ import (
 	"fmt"
 
 	"github.com/cidx-org/cidx/v2/pkg/actions"
+	"github.com/cidx-org/cidx/v2/pkg/branch"
 	"github.com/cidx-org/cidx/v2/pkg/remote"
 	"github.com/cidx-org/cidx/v2/pkg/remote/github"
 	"github.com/cidx-org/cidx/v2/pkg/vcs"
+	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 )
 
@@ -156,6 +158,43 @@ func tagListAction(c *cli.Context) error {
 func artifactListAction(c *cli.Context) error {
 	return withRepoAndProvider(func(_ *vcs.Repository, provider remote.Provider) error {
 		action := actions.NewArtifactList(provider, c.Bool("verbose"))
+		return action.Execute(context.Background())
+	})
+}
+
+// artifactDownloadAction resolves the run whose artifacts to fetch -- the one
+// --run names, or the latest on the current branch -- and delegates to
+// actions.ArtifactDownloadAction.
+//
+// The run is pinned before anything is downloaded. Artifacts only mean something
+// taken from one run: the readers of these files compare a whole catalogue at a
+// point in time, and mixing two runs answers a different question without saying
+// so (issue #285).
+func artifactDownloadAction(c *cli.Context) error {
+	return withRepoAndProvider(func(repo *vcs.Repository, provider remote.Provider) error {
+		// Said out loud, because the failure it guards against is a silent one:
+		// `gh run download <id>` resolves the repository from gh's own notion of
+		// where you are -- a default, an environment variable, the last thing it
+		// knew -- and hands over another repository's artifacts without a word
+		// (#327). cidx reads the git remote of this directory, and now names it.
+		if owner, name, err := repo.GetRemoteInfo(); err == nil {
+			log.Infof("📦 %s/%s, from the git remote of the working directory", owner, name)
+		}
+
+		runID := c.String("run")
+		if runID == "" {
+			current, err := branch.GetCurrentBranch()
+			if err != nil {
+				return fmt.Errorf("failed to get current branch: %w", err)
+			}
+			run, err := provider.GetLatestRunForBranch(context.Background(), current)
+			if err != nil {
+				return fmt.Errorf("no workflow run found for branch %q, so there are no artifacts to download: %w", current, err)
+			}
+			runID = run.ID
+		}
+
+		action := actions.NewArtifactDownload(provider, runID, c.Args().Slice(), c.String("output"))
 		return action.Execute(context.Background())
 	})
 }
