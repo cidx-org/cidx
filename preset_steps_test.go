@@ -39,6 +39,7 @@ func RegisterPresetSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.When(`^I resolve the preset "([^"]*)" without overrides$`, tc.resolvePresetWithoutOverrides)
 	ctx.Then(`^the resolved command should be "([^"]*)"$`, tc.resolvedCommandShouldBe)
 	ctx.Then(`^the resolved command should contain "([^"]*)"$`, tc.resolvedCommandShouldContain)
+	ctx.Then(`^the resolved command should not contain "([^"]*)"$`, tc.resolvedCommandShouldNotContain)
 
 	// Writable paths for a container that never runs as root (#188, #238)
 	ctx.Then(`^the resolved environment should set "([^"]*)" to "([^"]*)"$`, tc.resolvedEnvShouldBe)
@@ -573,6 +574,20 @@ func (tc *TestContext) resolvedCommandShouldContain(want string) error {
 	}
 	if !strings.Contains(got, want) {
 		return fmt.Errorf("resolved command %q does not contain %q", got, want)
+	}
+	return nil
+}
+
+// resolvedCommandShouldNotContain asserts a fragment is absent from the resolved
+// command — the shape #278's family of defects takes, where what is wrong with a
+// command is something extra in it rather than something missing.
+func (tc *TestContext) resolvedCommandShouldNotContain(unwanted string) error {
+	got, ok := tc.Config["resolved_command"].(string)
+	if !ok {
+		return fmt.Errorf("no preset resolved")
+	}
+	if strings.Contains(got, unwanted) {
+		return fmt.Errorf("resolved command %q contains %q", got, unwanted)
 	}
 	return nil
 }
