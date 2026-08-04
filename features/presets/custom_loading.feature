@@ -44,6 +44,23 @@ Feature: Custom Preset Loading
       Then it should be valid
       And the tool "custom-tool" should be available
 
+    Scenario: An option default is reported rather than silently ignored
+      Given a file ".cidx/presets.toml" with content:
+        """
+        [presets.my-scanner]
+        name = "my-scanner"
+        image = "alpine:latest"
+        command = "scan ."
+        phase = "security"
+
+        [presets.my-scanner.options.level]
+        type = "string"
+        default = "high"
+        command_flag = "--level"
+        """
+      When I load the custom presets
+      Then the key "presets.my-scanner.options.level.default" should be reported as unknown
+
     Scenario: Execution fields set on a custom preset are kept
       Given a file ".cidx/presets.toml" with content:
         """

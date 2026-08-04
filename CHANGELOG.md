@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Refactor
+
+- **presets**: drop the `default` key from the preset option schema — a **schema change**, visible in `preset info`, `preset show` and `preset export`, which stop printing a `Default:` line. The catalogue declared 45 option defaults and applied none of them: `MergeWith` only visits the keys a user's `[containers.X]` section actually sets, so a declared default never reached a container. Applying the 19 that would have changed something was the worse repair — `trivy` declared `--exit-code 0`, which never fails a scan, and `bandit` declared values for `-ll` and `-i`, which are counters and reject one, so at least one of fifteen presets would have shipped broken on the strength of documentation alone. Every preset in the catalogue resolves to the same image, command, workdir, volumes and environment as before, which is the point: the field was inert. A preset that genuinely needs a value puts it in its `command` or `env`, where every run exercises it; a residual `default` in a user or project `presets.toml` is now named as an unknown key (#203) instead of being accepted and ignored (#299)
+
 ### Feat
 
 - **cli**: warn on every `cidx action ...` invocation, naming the exact command that replaces it and the release it disappears in (v3.0.0); the tree keeps working until then (#235)
