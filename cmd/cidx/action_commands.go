@@ -8,12 +8,23 @@ func cpwCommand() *cli.Command {
 		Name:    "commit-push-watch",
 		Usage:   "Commit changes, push, and watch remote workflow",
 		Aliases: []string{"cpw"},
+		Description: `Runs the ` + "`code`" + ` phase before committing, so a formatting slip or a
+lint issue is caught here instead of costing a full CI cycle plus a second
+commit. Same contract as git's pre-commit hook, including --no-verify.
+
+The phase is skipped, with a message, when there is nothing to run (no code
+phase configured), nothing to run it in (no container runtime), or a pre-commit
+hook that already runs it on the commit.`,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:     "message",
 				Aliases:  []string{"m"},
 				Usage:    "Commit message",
 				Required: true,
+			},
+			&cli.BoolFlag{
+				Name:  "no-verify",
+				Usage: "Push without running the code phase first",
 			},
 		},
 		Action: commitPushWatchAction,

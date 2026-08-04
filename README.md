@@ -125,7 +125,8 @@ CIDX also ships developer workflow commands, dogfooded daily on this repo. These
 ```bash
 # PR lifecycle (cidx repo pr)
 cidx repo pr create "feat: description"   # Create branch + draft PR
-cidx repo cpw -m "commit message"         # Commit, push, watch CI
+cidx repo cpw -m "commit message"         # Run the code phase, commit, push, watch CI
+cidx repo cpw --no-verify -m "message"    # ... without the code phase
 cidx repo pr watch -q                     # Watch CI checks (quiet)
 cidx repo pr merge                        # Squash merge + cleanup
 cidx repo branch list --stale             # Find stale branches

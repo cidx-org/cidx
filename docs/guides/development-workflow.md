@@ -119,6 +119,32 @@ git push
 
 All commits automatically appear in the PR. CI checks run on each push.
 
+`cidx cpw -m "..."` does the same round trip and runs the `code` phase first,
+so a prettier reflow or a golangci-lint remark is caught before the push
+instead of costing a full CI cycle plus a second commit (issue #307). The phase
+takes about 20 seconds once the images are local; the first run pulls them and
+takes around three minutes.
+
+It is on by default, with the same escape hatch git gives its hooks:
+
+```bash
+cidx cpw -m "feat: implement core logic"              # runs the code phase, then pushes
+cidx cpw --no-verify -m "wip: checkpoint"             # pushes without checking
+```
+
+Three situations skip the phase, each with a message saying so, and none of
+them blocks the push:
+
+- `--no-verify` was given
+- a pre-commit hook is installed (`git config core.hooksPath .githooks`) — it
+  runs the same phase on the commit, and running it twice buys nothing
+- there is nothing to run, or nothing to run it in: no `[code]` phase in
+  `cidx.toml`, or no container runtime cidx can use. Run `cidx doctor` to see
+  which
+
+Only a real failure stops cpw, and it stops it _before_ the commit, so the tree
+is left exactly as it was.
+
 ### 3. Mark PR Ready for Review
 
 When your work is complete and CI passes:
