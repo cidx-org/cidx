@@ -1,3 +1,11 @@
+// The hostile-archive scenario only asserts anything under the strict setting,
+// and the toolchains disagree about the default: go1.26.0 accepts the archive
+// silently, the image the test phase runs in returns ErrInsecurePath. Pinning it
+// here means the scenario means the same thing on every machine -- and it means
+// the strict one, which is the reading that can fail.
+//
+//go:debug zipinsecurepath=0
+
 package main
 
 import (

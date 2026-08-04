@@ -126,8 +126,20 @@ func (a *ArtifactDownloadAction) extract(ctx context.Context, artifact remote.Ar
 		return 0, fmt.Errorf("failed to read the archive of %s: %w", artifact.Name, err)
 	}
 
+	// ErrInsecurePath is returned *with* a usable reader when an entry names a
+	// path outside the archive. It is a warning aimed at code that would join
+	// the entry name onto a destination directory, which is exactly what this
+	// does not do -- only the base name is kept, a dozen lines below -- so the
+	// archive is read and the sentinel is not an error here.
+	//
+	// Refusing it instead would make the download depend on the GODEBUG default
+	// of whichever toolchain built the binary, and those disagree: go1.26.0 here
+	// returns nil for the same archive that dhi.io/golang:1.26.5-alpine-dev, the
+	// image the test phase runs in, rejects. An artifact that downloads on one
+	// machine and fails on the next is a worse property than the one the
+	// sentinel is warning about, which flattening has already removed.
 	reader, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
-	if err != nil {
+	if err != nil && !errors.Is(err, zip.ErrInsecurePath) {
 		return 0, fmt.Errorf("failed to open the archive of %s: %w", artifact.Name, err)
 	}
 
