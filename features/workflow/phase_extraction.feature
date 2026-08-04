@@ -24,6 +24,7 @@ Feature: Phases a GitHub Actions workflow really runs
         | ./bin/cidx --verbose run test       |
         | cidx --config ci/pipeline.toml run test |
         | cidx run --dry-run test             |
+        | ./bin/cidx run --stream test        |
         | go run ./cmd/cidx run test          |
 
     Scenario: A job that runs two phases reports both

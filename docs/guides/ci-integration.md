@@ -82,3 +82,24 @@ pipeline {
     }
 }
 ```
+
+## Seeing what ran
+
+On a runner, `cidx run` turns quiet mode on by itself: container output is
+buffered and dropped when the container succeeds, and printed in full when it
+fails. A passing lint then costs one line instead of a page, and a failing one
+still shows everything.
+
+That default is wrong for exactly one kind of job: the one whose output _is_ the
+evidence. A test job that prints `go-test completed` and nothing else is green
+whether the suite ran every test or none of them. Add `--stream` to those:
+
+```yaml
+- name: Run tests
+  run: cidx run --stream test
+```
+
+`--verbose` also defeats the buffering, but it switches logging to Debug and
+prints the raw JSON of every image pull with it, so the choice used to be
+"show nothing" or "show everything, noise included" (issue #273). `--stream`
+asks for the container output and nothing else.

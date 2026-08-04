@@ -109,6 +109,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	RegisterDriftSteps(ctx, testCtx)
 	RegisterValidateSteps(ctx, testCtx)
 	RegisterFlagPlacementSteps(ctx, testCtx)
+	RegisterDryRunSteps(ctx, testCtx)
 	RegisterWorkflowPhaseSteps(ctx, testCtx)
 	RegisterPullPolicySteps(ctx, testCtx)
 	RegisterBranchSteps(ctx, testCtx)

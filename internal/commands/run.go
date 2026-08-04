@@ -11,6 +11,29 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+// ResolveQuiet reports whether container output is buffered and dropped on
+// success. CI runs quiet by default (issue #87), which is right for a lint that
+// passes and wrong for a test job: the Test job printed `PHASE: TEST` then
+// `go-test completed`, and a green run showing nothing cannot tell you whether
+// the suite ran every scenario it has or none of them.
+//
+// `--verbose` was the only way out, and it buys the output at the price of
+// logrus at Debug and the raw JSON of every image pull. `--stream` asks for the
+// output and nothing else, so it wins over `--quiet` — one of the two was typed
+// to see something, and the flag that was reached for last is the specific one.
+//
+// Exported because the scenarios describing it resolve against the real
+// decision rather than a copy of it (issue #317).
+func ResolveQuiet(quiet, stream, verbose, isCI bool) bool {
+	if stream {
+		return false
+	}
+	if quiet {
+		return true
+	}
+	return isCI && !verbose
+}
+
 func runCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "run",
@@ -52,6 +75,10 @@ Examples:
 				Aliases: []string{"q"},
 				Usage:   "Suppress output and only show logs on failure",
 			},
+			&cli.BoolFlag{
+				Name:  "stream",
+				Usage: "Stream container output live, at the normal log level (CI runs are quiet by default)",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			if c.NArg() != 1 {
@@ -62,12 +89,7 @@ Examples:
 			configPath := c.String("config")
 			dryRun := c.Bool("dry-run")
 			verbose := c.Bool("verbose")
-			quiet := c.Bool("quiet")
-
-			// Auto-quiet in CI unless --verbose is explicitly set
-			if !quiet && !verbose && environment.Detect().IsCI {
-				quiet = true
-			}
+			quiet := ResolveQuiet(c.Bool("quiet"), c.Bool("stream"), verbose, environment.Detect().IsCI)
 
 			backend := executor.ParseBackendType(c.String("backend"))
 			parallel := c.Bool("parallel")

@@ -1,10 +1,14 @@
 package actions
 
 import (
+	"context"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/cidx-org/cidx/v2/pkg/remote"
+	"github.com/cidx-org/cidx/v2/pkg/vcs"
 )
 
 func TestTitleToBranchName(t *testing.T) {
@@ -101,5 +105,85 @@ func TestPreMergeChecksSummary_WorkflowChecks(t *testing.T) {
 	}
 	if !strings.Contains(summary, "3 workflow check") {
 		t.Errorf("expected the workflow check count, got: %q", summary)
+	}
+}
+
+// refusingProvider fails the test on any call that would reach the remote API.
+// The two methods below are the only ones `pr create` can reach, so a dry run
+// that touches the network stops here with the reason instead of hanging on a
+// socket.
+type refusingProvider struct {
+	fakeProvider
+	t *testing.T
+}
+
+func (p *refusingProvider) GetPullRequestByBranch(context.Context, string) (int, string, error) {
+	p.t.Fatal("a dry run looked the branch's pull request up on the remote")
+	return 0, "", nil
+}
+
+func (p *refusingProvider) CreatePullRequest(context.Context, string, string, string, string, bool) (int, string, error) {
+	p.t.Fatal("a dry run created a pull request")
+	return 0, "", nil
+}
+
+// repoOnMainWithUnreachableRemote builds a real one-commit repository on main
+// whose origin is a path that does not exist. Nothing in it can reach a
+// network, and any git command that tries to talk to origin fails immediately —
+// which is exactly what makes it an offline probe rather than a slow one.
+func repoOnMainWithUnreachableRemote(t *testing.T) (string, *vcs.Repository) {
+	t.Helper()
+
+	dir := t.TempDir()
+	for _, args := range [][]string{
+		{"-c", "init.defaultBranch=main", "init", "-q", dir},
+		{"-C", dir, "config", "user.email", "test@example.test"},
+		{"-C", dir, "config", "user.name", "cidx test"},
+		{"-C", dir, "commit", "-q", "--allow-empty", "-m", "chore: root commit"},
+		{"-C", dir, "remote", "add", "origin", filepath.Join(dir, "there-is-no-remote-here.git")},
+	} {
+		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	repo, err := vcs.OpenRepository(dir)
+	if err != nil {
+		t.Fatalf("failed to open the test repository: %v", err)
+	}
+	return dir, repo
+}
+
+func headSHA(t *testing.T, dir string) string {
+	t.Helper()
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("failed to read HEAD: %v", err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// TestPRCreate_DryRunStaysOfflineAndLeavesTheRepositoryAlone is the whole
+// contract of issue #276.
+//
+// `cidx pr create --dry-run` pulled before it reached the dry-run branch, so
+// the preview needed the network and fast-forwarded the checked-out branch
+// while claiming to change nothing. The repository here has a remote that does
+// not exist: if anything reaches for it, the pull fails and this test fails
+// with it. The provider fails the test on the calls that would query the API.
+func TestPRCreate_DryRunStaysOfflineAndLeavesTheRepositoryAlone(t *testing.T) {
+	dir, repo := repoOnMainWithUnreachableRemote(t)
+	before := headSHA(t, dir)
+
+	action := NewPR(repo, &refusingProvider{t: t}, "feat: something", "", true, false)
+	if err := action.Execute(context.Background()); err != nil {
+		t.Fatalf("a dry run must not need the remote: %v", err)
+	}
+
+	if after := headSHA(t, dir); after != before {
+		t.Errorf("a dry run moved the checked-out commit: %s -> %s", before, after)
+	}
+	if branches, _ := exec.Command("git", "-C", dir, "branch", "--list", "feat/something").Output(); len(branches) > 0 {
+		t.Errorf("a dry run created the branch it was only asked to describe: %s", branches)
 	}
 }

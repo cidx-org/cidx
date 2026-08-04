@@ -107,13 +107,7 @@ func (a *PRAction) createPR(ctx context.Context) error {
 	}
 
 	// On main branch - create new branch workflow
-	// 4. Pull latest changes
-	log.Info("📥 Pulling latest changes from main...")
-	if err := a.repo.Pull(); err != nil {
-		return fmt.Errorf("failed to pull main: %w", err)
-	}
-
-	// 5. Generate branch name from title or issue
+	// 4. Generate branch name from title or issue
 	var branchName string
 	if a.issueNum != "" {
 		branchName = fmt.Sprintf("issue-%s", a.issueNum)
@@ -124,14 +118,27 @@ func (a *PRAction) createPR(ctx context.Context) error {
 		log.Infof("🌿 Creating branch: %s", branchName)
 	}
 
+	// A dry run stops here, before the pull. `git pull` fast-forwards the
+	// checked-out branch and needs the network, so running it to describe work
+	// that will not happen made the preview the one thing a preview must never
+	// be: a change to the repository, and one that could not be asked for
+	// offline (issue #276). The pull is reported instead, and #227 made the
+	// release commands resolve their remote lazily for the same reason.
 	if a.dryRun {
 		log.Info("🏁 Dry-run mode:")
+		log.Info("   Would pull latest changes from main")
 		log.Infof("   Would create branch: %s", branchName)
 		log.Infof("   Would create draft PR: %s", a.title)
 		if a.issueNum != "" {
 			log.Infof("   Would link to issue: #%s", a.issueNum)
 		}
 		return nil
+	}
+
+	// 5. Pull latest changes
+	log.Info("📥 Pulling latest changes from main...")
+	if err := a.repo.Pull(); err != nil {
+		return fmt.Errorf("failed to pull main: %w", err)
 	}
 
 	// 6. Create and checkout branch

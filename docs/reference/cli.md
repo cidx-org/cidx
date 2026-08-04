@@ -26,8 +26,29 @@ cidx run <name> [flags]
 
 - `--dry-run`: Print what would be executed without running it.
 - `--quiet, -q`: Suppress output and only show logs on failure.
+- `--stream`: Stream container output live, at the normal log level.
 - `--parallel, -p`: Run containers in parallel (local only).
 - `--concurrency, -j`: Max concurrent containers (default: 2).
+
+**Output on a CI runner.** `cidx run` turns `--quiet` on by itself when it
+detects CI: container output is buffered and dropped when the container
+succeeds, so a passing lint costs a line rather than a page. That is the wrong
+default for a job whose output _is_ the evidence — a green test job printing
+`go-test completed` cannot tell you whether the suite ran every test or none of
+them. `--stream` turns the buffering off and nothing else:
+
+| Invocation                | Container output | Log level |
+| ------------------------- | ---------------- | --------- |
+| `cidx run test` (local)   | streamed         | info      |
+| `cidx run test` (CI)      | buffered         | info      |
+| `cidx run --stream test`  | streamed         | info      |
+| `cidx --verbose run test` | streamed         | **debug** |
+| `cidx run --quiet test`   | buffered         | info      |
+
+`--verbose` also defeats the buffering, but it switches logrus to Debug and
+prints the raw JSON of every image pull with it — which is why this repository's
+own `ci.yml` runs `./bin/cidx run --stream test` (issue #273). `--stream` wins
+over `--quiet` when both are given.
 
 ### `cidx preset`
 
