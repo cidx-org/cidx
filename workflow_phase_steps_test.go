@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cidx-org/cidx/v2/internal/commands"
 	"github.com/cidx-org/cidx/v2/pkg/config"
 	"github.com/cidx-org/cidx/v2/pkg/remote"
 	"github.com/cidx-org/cidx/v2/pkg/validator"
@@ -138,7 +139,7 @@ func (tc *TestContext) extractWorkflowPhases() error {
 		return err
 	}
 
-	workflow, err := validator.ParseWorkflow(invocationCommandTree(), path)
+	workflow, err := validator.ParseWorkflow(commands.NewApp(), path)
 	if err != nil {
 		return err
 	}
@@ -158,7 +159,7 @@ func (tc *TestContext) comparePipelineWithWorkflow() error {
 		return err
 	}
 
-	result, err := validator.ValidateWorkflow(invocationCommandTree(), cfg, "ci", path)
+	result, err := validator.ValidateWorkflow(commands.NewApp(), cfg, "ci", path)
 	if err != nil {
 		return err
 	}
@@ -183,7 +184,7 @@ func (tc *TestContext) checkEveryWorkflow() error {
 		return err
 	}
 
-	results, err := validator.ValidateAllWorkflows(invocationCommandTree(), cfg, workflowDir)
+	results, err := validator.ValidateAllWorkflows(commands.NewApp(), cfg, workflowDir)
 	if err != nil {
 		return err
 	}

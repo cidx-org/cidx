@@ -1,0 +1,113 @@
+package commands
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/cidx-org/cidx/v2/pkg/generate"
+	"github.com/urfave/cli/v2"
+)
+
+var generateFlags = []cli.Flag{
+	&cli.StringFlag{
+		Name:    "output",
+		Aliases: []string{"o"},
+		Usage:   "Output file path (default: stdout)",
+	},
+	&cli.BoolFlag{
+		Name:  "force",
+		Usage: "Overwrite existing file without confirmation",
+	},
+}
+
+func generateCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "generate",
+		Usage: "Generate CI platform configuration from cidx.toml",
+		Subcommands: []*cli.Command{
+			{
+				Name:   "github",
+				Usage:  "Generate GitHub Actions workflow",
+				Flags:  generateFlags,
+				Action: generateGitHubAction,
+			},
+			{
+				Name:   "gitlab",
+				Usage:  "Generate GitLab CI configuration",
+				Flags:  generateFlags,
+				Action: generateGitLabAction,
+			},
+		},
+	}
+}
+
+func generateGitHubAction(c *cli.Context) error {
+	cfg, err := loadResolvedConfig(c)
+	if err != nil {
+		return err
+	}
+
+	// Auto-detect cidx-repo vs. external project. cidx repo dogfoods its own
+	// build (`go build`); every other project installs the published binary
+	// (`go install`, pinned to this binary's release version). See
+	// pkg/generate/github.go for the bootstrap variants.
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to resolve current directory: %w", err)
+	}
+	opts := generate.GitHubOptions{
+		SelfBuild:  generate.IsCidxRepo(cwd),
+		OutputPath: c.String("output"),
+	}
+	if !opts.SelfBuild && generate.BootstrapVersion() == "latest" {
+		fmt.Fprintln(os.Stderr, "Warning: this cidx is not a release build; the generated bootstrap uses @latest and CI may run different presets than this binary")
+	}
+
+	output, err := generate.GitHubWithOptions(cfg, opts)
+	if err != nil {
+		return err
+	}
+
+	return writeGeneratedOutput(c, output)
+}
+
+func generateGitLabAction(c *cli.Context) error {
+	cfg, err := loadResolvedConfig(c)
+	if err != nil {
+		return err
+	}
+
+	output, err := generate.GitLab(cfg, c.String("output"))
+	if err != nil {
+		return err
+	}
+
+	return writeGeneratedOutput(c, output)
+}
+
+func writeGeneratedOutput(c *cli.Context, output string) error {
+	outputPath := c.String("output")
+	if outputPath == "" {
+		fmt.Print(output)
+		return nil
+	}
+
+	if !c.Bool("force") {
+		if _, err := os.Stat(outputPath); err == nil {
+			return fmt.Errorf("file %s already exists (use --force to overwrite)", outputPath)
+		}
+	}
+
+	dir := filepath.Dir(outputPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory %s: %w", dir, err)
+	}
+
+	if err := os.WriteFile(outputPath, []byte(output), 0644); err != nil {
+		return fmt.Errorf("failed to write %s: %w", outputPath, err)
+	}
+
+	fmt.Fprintf(os.Stderr, "Generated %s\n", outputPath)
+	return nil
+}
