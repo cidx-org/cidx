@@ -204,3 +204,75 @@ func TestCheckDriftHonoursConfigFlag(t *testing.T) {
 		t.Fatalf("check drift: %v", err)
 	}
 }
+
+// TestCheckWorkflowSummaryStatesWhatWasChecked covers #318: one summary line
+// served both paths, so `cidx check workflow ci` — one pipeline compared —
+// signed off with "All workflows are in sync with pipelines" and read as a clean
+// bill for the whole repository. Both modes are pinned here, in sync and not,
+// because the defect was that they were indistinguishable.
+func TestCheckWorkflowSummaryStatesWhatWasChecked(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		pipeline         string
+		checked          int
+		inSync           bool
+		wants, wantsNone []string
+	}{
+		{
+			name: "one pipeline, in sync", pipeline: "ci", checked: 1, inSync: true,
+			wants: []string{"✅", "Pipeline 'ci'", "in sync"},
+			// The whole point: a targeted check may not speak for the sweep.
+			wantsNone: []string{"All workflows", "All 1"},
+		},
+		{
+			name: "one pipeline, out of sync", pipeline: "ci", checked: 1, inSync: false,
+			wants:     []string{"⚠️", "Pipeline 'ci'", "differences"},
+			wantsNone: []string{"Some workflows"},
+		},
+		{
+			name: "every pipeline, in sync", pipeline: "", checked: 3, inSync: true,
+			wants:     []string{"✅", "All 3 workflow(s)", "in sync"},
+			wantsNone: []string{"Pipeline '"},
+		},
+		{
+			name: "every pipeline, out of sync", pipeline: "", checked: 3, inSync: false,
+			wants:     []string{"⚠️", "3 checked workflow(s)", "differences"},
+			wantsNone: []string{"Pipeline '"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := checkWorkflowSummary(tc.pipeline, tc.checked, tc.inSync)
+			for _, want := range tc.wants {
+				if !strings.Contains(got, want) {
+					t.Errorf("summary %q does not mention %q", got, want)
+				}
+			}
+			for _, unwanted := range tc.wantsNone {
+				if strings.Contains(got, unwanted) {
+					t.Errorf("summary %q overstates its scope with %q", got, unwanted)
+				}
+			}
+		})
+	}
+}
+
+// TestCheckWorkflowNamesThePipelineItChecked drives the real command tree, so
+// the wording above is the wording a user reads. `cidx check workflow ci` on
+// this very repository is the invocation of #318.
+func TestCheckWorkflowNamesThePipelineItChecked(t *testing.T) {
+	out := captureStdout(t, func() {
+		if err := newApp().Run([]string{
+			"cidx", "--config", "../../cidx.toml",
+			"check", "workflow", "--workflow-dir", repoWorkflowDir, "ci",
+		}); err != nil {
+			t.Fatalf("check workflow ci: %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "Pipeline 'ci' is in sync with its workflow") {
+		t.Errorf("the summary does not name the pipeline it checked:\n%s", out)
+	}
+	if strings.Contains(out, "All workflows are in sync") {
+		t.Errorf("checking one pipeline still claims to have checked all of them:\n%s", out)
+	}
+}

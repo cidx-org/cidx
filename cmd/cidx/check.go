@@ -163,16 +163,38 @@ func checkWorkflowAction(c *cli.Context) error {
 
 	// Summary
 	fmt.Println()
+	summary := checkWorkflowSummary(pipelineName, len(results), allSuccess)
 	if allSuccess {
-		logrus.Info("✅ All workflows are in sync with pipelines")
-		fmt.Println("✅ All workflows are in sync with pipelines")
-	} else {
-		logrus.Warn("⚠️  Some workflows have differences with pipelines")
-		fmt.Println("⚠️  Some workflows have differences with pipelines")
-		return cli.Exit("", 1)
+		logrus.Info(summary)
+		fmt.Println(summary)
+		return nil
 	}
 
-	return nil
+	logrus.Warn(summary)
+	fmt.Println(summary)
+	return cli.Exit("", 1)
+}
+
+// checkWorkflowSummary states what was actually checked.
+//
+// One line used to serve both paths, so `cidx check workflow ci` — which
+// compares exactly one pipeline — signed off with "All workflows are in sync
+// with pipelines" and read as a clean bill for the repository. It cost a wrong
+// conclusion on a repository whose release.yml was out of sync at the time
+// (issue #318, the same family as #259). A summary may only claim the ground it
+// covered: the pipeline named on the command line, or the sweep and its size.
+func checkWorkflowSummary(pipelineName string, checked int, inSync bool) string {
+	if pipelineName != "" {
+		if inSync {
+			return fmt.Sprintf("✅ Pipeline '%s' is in sync with its workflow", pipelineName)
+		}
+		return fmt.Sprintf("⚠️  Pipeline '%s' has differences with its workflow", pipelineName)
+	}
+
+	if inSync {
+		return fmt.Sprintf("✅ All %d workflow(s) are in sync with pipelines", checked)
+	}
+	return fmt.Sprintf("⚠️  Some of the %d checked workflow(s) have differences with pipelines", checked)
 }
 
 func checkDriftAction(c *cli.Context) error {
