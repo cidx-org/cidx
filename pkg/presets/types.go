@@ -28,10 +28,19 @@ type Preset struct {
 	Timeout       string            `yaml:"timeout,omitempty" toml:"timeout,omitempty"`         // duration string (e.g., "5m", "45m"), default: 30m
 }
 
-// Option defines a configurable parameter for a preset
+// Option defines a configurable parameter for a preset.
+//
+// There is deliberately no `default` field (#299). MergeWith only visits the
+// keys present in the user's overrides, so a declared default never reached a
+// container: 45 of them shipped, none applied. Applying them instead was the
+// worse option — `trivy` declared `--exit-code 0`, which never fails a scan,
+// and `bandit` declared values for `-ll`/`-i`, which are counters and reject
+// one. A default nobody has ever run is a default nobody has ever validated.
+//
+// A preset that genuinely needs a value puts it in its `command` (or `env`),
+// where every run exercises it.
 type Option struct {
 	Type        string `yaml:"type" toml:"type"`                 // string, bool, int, array
-	Default     any    `yaml:"default" toml:"default"`           // Default value
 	Description string `yaml:"description" toml:"description"`   // Help text
 	EnvVar      string `yaml:"env_var" toml:"env_var"`           // Maps to environment variable
 	CommandFlag string `yaml:"command_flag" toml:"command_flag"` // Maps to command flag

@@ -45,13 +45,11 @@ TRIVY_CACHE_DIR = "/tmp/trivy-cache"
 
 [presets.trivy.options.severity]
 type = "string"
-default = "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
 description = "Severities to report (comma-separated)"
 command_flag = "--severity"
 
 [presets.trivy.options.exit_code]
 type = "int"
-default = 0
 description = "Exit code when vulnerabilities are found"
 command_flag = "--exit-code"
 
@@ -75,7 +73,6 @@ config_files = [".prettierrc", ".prettierrc.json", ".prettierrc.yml", "prettier.
 
 [presets.prettier.options.write]
 type = "bool"
-default = false
 description = "Write formatted files (instead of check)"
 command_flag = "--write"
 ```
@@ -334,11 +331,16 @@ presets:
 options:
   <option_name>:
     type: string # string|int|bool (required)
-    default: any # Default value (required)
     description: string # Help text (required)
     command_flag: string # Maps to CLI flag (optional)
     env_var: string # Maps to env var (optional)
 ```
+
+An option has no `default` key. It used to, and it was never applied — a
+declared default that never runs is a default nobody has ever validated, and
+documentation that says otherwise lies (#299). A value the preset genuinely
+needs goes in its `command` or `env`, where every run exercises it. A residual
+`default` in a preset file is reported as an unknown key.
 
 `command_flag` appends `<flag> <value>` to the preset's `command`. A
 `type = "bool"` option is a switch: enabled it appends the flag alone, disabled
@@ -355,7 +357,7 @@ Write the script so the flag-bearing tool invocation comes last.
 
 A boolean override is accepted as a TOML boolean (`strict = true`) or as the
 string form a quoted value or an expanded `${VAR}` produces (`strict = "true"`).
-Anything else is reported as a warning and ignored, so the preset default
+Anything else is reported as a warning and ignored, so the preset's own command
 stands rather than a typo reaching the container.
 
 ## Migration Guide

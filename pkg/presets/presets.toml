@@ -59,7 +59,6 @@ config_files = [
 
 [presets.prettier.options.write]
 type = "bool"
-default = false
 description = "Write formatted files (instead of check)"
 command_flag = "--write"
 
@@ -94,13 +93,11 @@ TRIVY_CACHE_DIR = "/tmp/trivy-cache"
 
 [presets.trivy.options.severity]
 type = "string"
-default = "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
 description = "Severities to report (comma-separated)"
 command_flag = "--severity"
 
 [presets.trivy.options.exit_code]
 type = "int"
-default = 0
 description = "Exit code when vulnerabilities are found"
 command_flag = "--exit-code"
 
@@ -208,7 +205,6 @@ SCENARIO = "default"
 
 [presets.molecule.options.scenario]
 type = "string"
-default = "default"
 description = "Molecule scenario to run"
 env_var = "SCENARIO"
 
@@ -226,13 +222,11 @@ config_files = [".yamllint", ".yamllint.yml", ".yamllint.yaml"]
 
 [presets.yamllint.options.strict]
 type = "bool"
-default = false
 description = "Return non-zero exit code on warnings"
 command_flag = "--strict"
 
 [presets.yamllint.options.format]
 type = "string"
-default = "auto"
 description = "Output format (auto, standard, colored, github, parsable)"
 command_flag = "--format"
 
@@ -251,7 +245,6 @@ PLAYBOOK = "playbook.yml"
 
 [presets.ansible-syntax.options.playbook]
 type = "string"
-default = "playbook.yml"
 description = "Playbook file to check"
 env_var = "PLAYBOOK"
 
@@ -273,13 +266,11 @@ TEST_TYPE = "sanity"
 
 [presets.ansible-test.options.test_type]
 type = "string"
-default = "sanity"
 description = "Test type (sanity, units, integration)"
 env_var = "TEST_TYPE"
 
 [presets.ansible-test.options.python]
 type = "string"
-default = ""
 description = "Python version (3.10, 3.11, 3.12)"
 command_flag = "--python"
 
@@ -299,7 +290,6 @@ OUTPUT_PATH = "./dist"
 
 [presets.ansible-galaxy-build.options.force]
 type = "bool"
-default = false
 description = "Force overwrite existing artifact"
 command_flag = "--force"
 
@@ -320,7 +310,6 @@ ANSIBLE_GALAXY_TOKEN = "${ANSIBLE_GALAXY_TOKEN}"
 
 [presets.ansible-galaxy-publish.options.server]
 type = "string"
-default = "https://galaxy.ansible.com"
 description = "Galaxy server URL (or Automation Hub)"
 command_flag = "--server"
 
@@ -357,19 +346,16 @@ GOTOOLCHAIN = "auto"
 
 [presets.gosec.options.severity]
 type = "string"
-default = "medium"
 description = "Minimum severity (low, medium, high)"
 command_flag = "-severity"
 
 [presets.gosec.options.confidence]
 type = "string"
-default = "medium"
 description = "Minimum confidence (low, medium, high)"
 command_flag = "-confidence"
 
 [presets.gosec.options.format]
 type = "string"
-default = "text"
 description = "Output format (text, json, csv, junit-xml, html, sarif, sonarqube)"
 command_flag = "-fmt"
 
@@ -445,7 +431,6 @@ GOLANGCI_LINT_CACHE = "/tmp/.cache"
 
 [presets.golangci-lint.options.fix]
 type = "bool"
-default = false
 description = "Automatically fix issues where possible"
 command_flag = "--fix"
 
@@ -461,7 +446,6 @@ volumes = ["${WORKSPACE}:/work"]
 
 [presets.shellcheck.options.severity]
 type = "string"
-default = "style"
 description = "Minimum severity (error, warning, info, style)"
 command_flag = "--severity"
 
@@ -499,13 +483,11 @@ GOTOOLCHAIN = "auto"
 
 [presets.go-test.options.coverage]
 type = "bool"
-default = false
 description = "Generate coverage report"
 command_flag = "-cover"
 
 [presets.go-test.options.race]
 type = "bool"
-default = false
 description = "Enable race detector"
 command_flag = "-race"
 
@@ -547,7 +529,6 @@ GOTOOLCHAIN = "auto"
 # godog.Options.Tags, or override `command` in cidx.toml.
 [presets.godog.options.format]
 type = "string"
-default = "pretty"
 description = "Output format (pretty, progress, junit, cucumber) via GODOG_FORMAT"
 env_var = "GODOG_FORMAT"
 
@@ -574,7 +555,6 @@ GOTOOLCHAIN = "auto"
 
 [presets.go-build.options.ldflags]
 type = "string"
-default = ""
 description = "Additional linker flags for go build"
 env_var = "LDFLAGS"
 
@@ -607,19 +587,16 @@ IMAGE_TAG = "latest"
 
 [presets.kaniko.options.destination]
 type = "string"
-default = ""
 description = "Full image destination (registry/image:tag)"
 command_flag = "--destination"
 
 [presets.kaniko.options.dockerfile]
 type = "string"
-default = "Dockerfile"
 description = "Path to Dockerfile"
 command_flag = "--dockerfile"
 
 [presets.kaniko.options.cache]
 type = "bool"
-default = true
 description = "Enable layer caching"
 command_flag = "--cache"
 
@@ -673,19 +650,16 @@ GH_TOKEN = "${GITHUB_TOKEN}"
 
 [presets.gh-release.options.draft]
 type = "bool"
-default = false
 description = "Create release as draft"
 command_flag = "--draft"
 
 [presets.gh-release.options.prerelease]
 type = "bool"
-default = false
 description = "Mark as prerelease"
 command_flag = "--prerelease"
 
 [presets.gh-release.options.notes_file]
 type = "string"
-default = ""
 description = "Path to release notes file (overrides auto-detection)"
 command_flag = "--notes-file"
 
@@ -712,13 +686,11 @@ GITHUB_TOKEN = "${GITHUB_TOKEN}"
 
 [presets.goreleaser.options.snapshot]
 type = "bool"
-default = false
 description = "Build snapshot (without publishing)"
 command_flag = "--snapshot"
 
 [presets.goreleaser.options.skip_publish]
 type = "bool"
-default = false
 description = "Skip publishing"
 command_flag = "--skip=publish"
 
@@ -764,13 +736,11 @@ config_files = ["ruff.toml", "pyproject.toml", ".ruff.toml"]
 
 [presets.ruff.options.fix]
 type = "bool"
-default = false
 description = "Automatically fix violations"
 command_flag = "--fix"
 
 [presets.ruff.options.format]
 type = "bool"
-default = false
 description = "Run formatter instead of linter"
 command_flag = "format"
 
@@ -787,7 +757,6 @@ config_files = ["pyproject.toml", ".black.toml"]
 
 [presets.black.options.diff]
 type = "bool"
-default = false
 description = "Show diff instead of reformatting"
 command_flag = "--diff"
 
@@ -809,7 +778,6 @@ MYPY_CACHE_DIR = "/tmp/.mypy_cache"
 
 [presets.mypy.options.strict]
 type = "bool"
-default = false
 description = "Enable strict mode"
 command_flag = "--strict"
 
@@ -830,13 +798,11 @@ HOME = "/tmp"
 
 [presets.bandit.options.severity]
 type = "string"
-default = "low"
 description = "Minimum severity (low, medium, high)"
 command_flag = "-ll"
 
 [presets.bandit.options.confidence]
 type = "string"
-default = "low"
 description = "Minimum confidence (low, medium, high)"
 command_flag = "-i"
 
@@ -856,13 +822,11 @@ HOME = "/tmp"
 
 [presets.pip-audit.options.strict]
 type = "bool"
-default = false
 description = "Fail on any vulnerability"
 command_flag = "--strict"
 
 [presets.pip-audit.options.fix]
 type = "bool"
-default = false
 description = "Attempt to fix vulnerabilities"
 command_flag = "--fix"
 
@@ -889,13 +853,11 @@ PYTEST_ADDOPTS = "-o cache_dir=/tmp/.pytest_cache"
 
 [presets.pytest.options.verbose]
 type = "bool"
-default = false
 description = "Verbose output"
 command_flag = "-v"
 
 [presets.pytest.options.coverage]
 type = "bool"
-default = false
 description = "Generate coverage report"
 command_flag = "--cov=."
 
@@ -933,7 +895,6 @@ TWINE_PASSWORD = "${PYPI_TOKEN}"
 
 [presets.twine.options.repository]
 type = "string"
-default = "pypi"
 description = "Repository (pypi, testpypi, or URL)"
 command_flag = "--repository"
 
@@ -975,7 +936,6 @@ config_files = ["clippy.toml", ".clippy.toml"]
 
 [presets.clippy.options.pedantic]
 type = "bool"
-default = false
 description = "Enable pedantic lints"
 command_flag = "-W clippy::pedantic"
 
@@ -1023,7 +983,6 @@ volumes = ["${WORKSPACE}:/work"]
 
 [presets.cargo-audit.options.deny]
 type = "bool"
-default = true
 description = "Exit with error on vulnerabilities"
 command_flag = "--deny warnings"
 
@@ -1042,13 +1001,11 @@ RUST_BACKTRACE = "1"
 
 [presets.cargo-test.options.release]
 type = "bool"
-default = false
 description = "Run tests in release mode"
 command_flag = "--release"
 
 [presets.cargo-test.options.all_features]
 type = "bool"
-default = false
 description = "Enable all features"
 command_flag = "--all-features"
 
@@ -1064,7 +1021,6 @@ volumes = ["${WORKSPACE}:/work"]
 
 [presets.cargo-build.options.target]
 type = "string"
-default = ""
 description = "Target triple (e.g., x86_64-unknown-linux-musl)"
 command_flag = "--target"
 
@@ -1084,7 +1040,6 @@ CARGO_REGISTRY_TOKEN = "${CARGO_REGISTRY_TOKEN}"
 
 [presets.cargo-publish.options.dry_run]
 type = "bool"
-default = false
 description = "Perform a dry run"
 command_flag = "--dry-run"
 

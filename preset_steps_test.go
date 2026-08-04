@@ -33,6 +33,7 @@ func RegisterPresetSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Then(`^it should be valid$`, tc.configShouldBeValid)
 	ctx.Then(`^the tool "([^"]*)" should be available$`, tc.toolShouldBeAvailable)
 	ctx.Then(`^the preset "([^"]*)" should have "([^"]*)" set to "([^"]*)"$`, tc.presetFieldShouldEqual)
+	ctx.Then(`^the key "([^"]*)" should be reported as unknown$`, tc.keyShouldBeReportedAsUnknown)
 
 	// Option flag placement (#200)
 	ctx.When(`^I resolve the preset "([^"]*)" with option "([^"]*)" set to "([^"]*)"$`, tc.resolvePresetWithOption)
@@ -594,7 +595,9 @@ func (tc *TestContext) resolvedCommandShouldNotContain(unwanted string) error {
 
 // loadCustomPresets decodes the preset file staged by `a file "..." with content:`
 // through the same types the loader uses, so a field the loader cannot decode is
-// a field this step cannot see (#203).
+// a field this step cannot see (#203). The undecoded keys are kept: they are
+// exactly what the loader warns about, and what a removed field — such as an
+// option `default` (#299) — now lands in.
 func (tc *TestContext) loadCustomPresets() error {
 	content, ok := tc.Config["test_file_content"].(string)
 	if !ok {
@@ -602,11 +605,34 @@ func (tc *TestContext) loadCustomPresets() error {
 	}
 
 	var file presets.PresetsFile
-	if err := toml.Unmarshal([]byte(content), &file); err != nil {
+	md, err := toml.Decode(content, &file)
+	if err != nil {
 		return fmt.Errorf("failed to parse staged preset file: %w", err)
 	}
+
+	unknown := make([]string, 0, len(md.Undecoded()))
+	for _, key := range md.Undecoded() {
+		unknown = append(unknown, key.String())
+	}
+
 	tc.Config["loaded_presets"] = file.Presets
+	tc.Config["unknown_preset_keys"] = unknown
 	return nil
+}
+
+// keyShouldBeReportedAsUnknown asserts a key reached the loader's warning path
+// instead of being accepted and doing nothing.
+func (tc *TestContext) keyShouldBeReportedAsUnknown(key string) error {
+	unknown, ok := tc.Config["unknown_preset_keys"].([]string)
+	if !ok {
+		return fmt.Errorf("no preset file was loaded")
+	}
+	for _, got := range unknown {
+		if got == key {
+			return nil
+		}
+	}
+	return fmt.Errorf("key %q was decoded silently; unknown keys reported: %v", key, unknown)
 }
 
 // presetFieldShouldEqual asserts a loaded preset carries the expected value for

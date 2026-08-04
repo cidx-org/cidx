@@ -158,7 +158,6 @@ func presetInfoCommand() *cli.Command {
 				for name, opt := range preset.Options {
 					fmt.Printf("  %s:\n", name)
 					fmt.Printf("    Type: %s\n", opt.Type)
-					fmt.Printf("    Default: %v\n", opt.Default)
 					if opt.Description != "" {
 						fmt.Printf("    Description: %s\n", opt.Description)
 					}

@@ -42,13 +42,14 @@ type PresetTOML struct {
 	Timeout       string                `toml:"timeout"`
 }
 
-// OptionTOML represents an option in TOML format
+// OptionTOML represents an option in TOML format.
+// No `default` key: see the Option doc comment (#299). A residual one in a
+// user preset file is reported by warnUndecodedKeys rather than ignored.
 type OptionTOML struct {
-	Type        string      `toml:"type"`
-	Default     interface{} `toml:"default"`
-	Description string      `toml:"description"`
-	CommandFlag string      `toml:"command_flag"`
-	EnvVar      string      `toml:"env_var"`
+	Type        string `toml:"type"`
+	Description string `toml:"description"`
+	CommandFlag string `toml:"command_flag"`
+	EnvVar      string `toml:"env_var"`
 }
 
 // loadPresets loads presets from file (dev) or embedded data (production)
@@ -180,7 +181,6 @@ func parsePresetsData(data []byte, source string) (map[string]Preset, error) {
 		for optName, tomlOpt := range tomlPreset.Options {
 			option := Option{
 				Type:        tomlOpt.Type,
-				Default:     tomlOpt.Default,
 				Description: tomlOpt.Description,
 				CommandFlag: tomlOpt.CommandFlag,
 				EnvVar:      tomlOpt.EnvVar,

@@ -31,6 +31,6 @@ Feature: Preset Option Flags
       When I resolve the preset "golangci-lint" with option "fix" set to "false"
       Then the resolved command should be "golangci-lint run --timeout 5m"
 
-    Scenario: A value that is not a boolean is refused and the default stands
+    Scenario: A value that is not a boolean is refused and the preset command stands
       When I resolve the preset "golangci-lint" with option "fix" set to "yes"
       Then the resolved command should be "golangci-lint run --timeout 5m"
