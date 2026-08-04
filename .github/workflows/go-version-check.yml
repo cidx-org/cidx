@@ -53,6 +53,14 @@ jobs:
         if: steps.check.outputs.update == 'true'
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
+          # `go mod edit` + `go mod tidy` touch these two files and nothing
+          # else, so these two files are what gets committed. Same rule as the
+          # container monitor (#323, #325): the action commits whatever is
+          # dirty unless told otherwise, and "whatever is dirty" is not a
+          # description anyone reviews.
+          add-paths: |
+            go.mod
+            go.sum
           commit-message: "chore(deps): update Go from ${{ steps.check.outputs.current_mm }} to ${{ steps.check.outputs.latest_mm }}"
           title: "chore(deps): update Go to ${{ steps.check.outputs.latest_mm }}"
           body: |

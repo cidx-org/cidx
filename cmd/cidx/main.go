@@ -84,15 +84,14 @@ func buildApp() *cli.App {
 				Name:   "cpw",
 				Usage:  "Alias for 'repo cpw'",
 				Hidden: true,
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:     "message",
-						Aliases:  []string{"m"},
-						Usage:    "Commit message",
-						Required: true,
-					},
-				},
-				Action: commitPushWatchAction,
+				// Taken from the real command, not restated. This alias used
+				// to carry its own copy of the flag list, and a copy drifts:
+				// `--no-verify` (#307) landed on `repo cpw` while `cidx cpw`
+				// — the spelling this repository actually uses all day —
+				// answered "flag provided but not defined".
+				Flags:       cpwCommand().Flags,
+				Description: cpwCommand().Description,
+				Action:      commitPushWatchAction,
 			},
 			{
 				Name:   "workflow",

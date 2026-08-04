@@ -13,7 +13,7 @@ import (
 
 func commitPushWatchAction(c *cli.Context) error {
 	return withRepoAndProvider(func(repo *vcs.Repository, provider remote.Provider) error {
-		action := actions.NewCommitPushWatch(repo, provider, c.String("message"))
+		action := actions.NewCommitPushWatch(repo, provider, c.String("message"), !c.Bool("no-verify"))
 		return action.Execute(context.Background())
 	})
 }

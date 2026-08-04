@@ -391,3 +391,68 @@ func TestHasChangesIncludingUntracked_IgnoresGitignored(t *testing.T) {
 		t.Error("gitignored files must not count as changes to commit")
 	}
 }
+
+// installHook writes a pre-commit hook into dir and points core.hooksPath at
+// it, the way this repository's .githooks are installed.
+func installHook(t *testing.T, repo, hooks string, mode os.FileMode) {
+	t.Helper()
+
+	if err := os.MkdirAll(filepath.Join(repo, hooks), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, hooks, "pre-commit"), []byte("#!/bin/sh\nexit 0\n"), mode); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command("git", "config", "core.hooksPath", hooks)
+	cmd.Dir = repo
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git config core.hooksPath failed: %v\n%s", err, out)
+	}
+}
+
+func TestHasActivePreCommitHook_NoneInstalled(t *testing.T) {
+	// A fresh repository has .git/hooks full of .sample files and nothing that
+	// runs. cpw must run the code phase itself here (#307).
+	dir := initTestRepo(t, "https://github.com/user/repo.git")
+
+	repo, err := OpenRepository(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repo.HasActivePreCommitHook() {
+		t.Error("a repository with no hook installed must not look like it has one")
+	}
+}
+
+func TestHasActivePreCommitHook_FollowsHooksPath(t *testing.T) {
+	// How this repository installs its own gate: git config core.hooksPath
+	// .githooks. cpw stands aside for it rather than running the same phase
+	// twice.
+	dir := initTestRepo(t, "https://github.com/user/repo.git")
+	installHook(t, dir, ".githooks", 0o755)
+
+	repo, err := OpenRepository(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !repo.HasActivePreCommitHook() {
+		t.Error("a hook installed through core.hooksPath must be seen")
+	}
+}
+
+func TestHasActivePreCommitHook_IgnoresANonExecutableHook(t *testing.T) {
+	// git ignores a hook it cannot execute. Reading it as active would make cpw
+	// skip the code phase in favour of a hook that never runs -- silently back
+	// to the behaviour #307 is about.
+	dir := initTestRepo(t, "https://github.com/user/repo.git")
+	installHook(t, dir, ".githooks", 0o644)
+
+	repo, err := OpenRepository(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repo.HasActivePreCommitHook() {
+		t.Error("a hook git will not execute must not count as a hook")
+	}
+}

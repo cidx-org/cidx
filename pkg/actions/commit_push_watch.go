@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -16,17 +17,23 @@ type CommitPushWatchAction struct {
 	provider remote.Provider
 	message  string
 
+	// verify runs the `code` phase before the commit (issue #307). On by
+	// default, cleared by --no-verify -- the contract `git commit` already
+	// has with its hooks.
+	verify bool
+
 	// ciStartTimeout bounds how long we wait for CI checks to appear after
 	// the push (issue #167). Overridable in tests.
 	ciStartTimeout time.Duration
 }
 
 // NewCommitPushWatch creates a new commit-push-watch action
-func NewCommitPushWatch(repo *vcs.Repository, provider remote.Provider, message string) *CommitPushWatchAction {
+func NewCommitPushWatch(repo *vcs.Repository, provider remote.Provider, message string, verify bool) *CommitPushWatchAction {
 	return &CommitPushWatchAction{
 		repo:           repo,
 		provider:       provider,
 		message:        message,
+		verify:         verify,
 		ciStartTimeout: defaultCIStartTimeout,
 	}
 }
@@ -55,21 +62,28 @@ func (a *CommitPushWatchAction) Execute(ctx context.Context) error {
 		return nil
 	}
 
-	// 2. Commit
+	// 2. Run the checks CI is about to run. Before the commit, which is where
+	// git puts its own pre-commit gate: a failure then leaves the tree exactly
+	// as it was, with nothing to amend or reset (issue #307).
+	if err := a.runVerification(ctx); err != nil {
+		return err
+	}
+
+	// 3. Commit
 	log.Info("📝 Creating commit...")
 	if err := a.repo.Commit(a.message); err != nil {
 		return fmt.Errorf("commit failed: %w", err)
 	}
 	log.Info("✓ Commit created")
 
-	// 3. Push
+	// 4. Push
 	log.Info("📤 Pushing to remote...")
 	if err := a.repo.Push(); err != nil {
 		return fmt.Errorf("push failed: %w", err)
 	}
 	log.Info("✓ Pushed to remote")
 
-	// 4. Watch CI for the commit we just pushed. The local HEAD SHA is the
+	// 5. Watch CI for the commit we just pushed. The local HEAD SHA is the
 	// source of truth: resolving the head from the provider API right after
 	// the push can return the previous commit (replication lag).
 	pushedSHA, err := a.repo.GetHeadSHA()
@@ -78,6 +92,71 @@ func (a *CommitPushWatchAction) Execute(ctx context.Context) error {
 	}
 
 	return a.watchCI(ctx, branch, pushedSHA)
+}
+
+// planVerification decides whether cpw runs the `code` phase itself, and says
+// why when it does not (issue #307).
+//
+// It is on by default: a formatting slip costs a full CI cycle plus a second
+// commit, and the phase costs ~20s locally once the images are pulled. That is
+// the same trade `git commit` makes with its hooks, so it gets the same escape
+// hatch -- --no-verify, spelled the way git spells it.
+//
+// A repository with its own pre-commit hook already has this gate, and
+// Commit() shells out to git precisely so the hook fires. Running the phase
+// here as well would run it twice on the same tree.
+func planVerification(verify, preCommitHook bool) (run bool, reason string) {
+	switch {
+	case !verify:
+		return false, "--no-verify was given"
+	case preCommitHook:
+		return false, "a pre-commit hook runs the checks on the commit"
+	default:
+		return true, ""
+	}
+}
+
+// verificationOutcome turns what the code phase returned into what cpw does
+// about it.
+//
+// Only a real failure stops the push. The two ways the check cannot run --
+// nothing configured to run, nothing to run it in -- are reported and stepped
+// over: cpw is how work reaches a remote, and a stopped Docker daemon is not a
+// reason to make that impossible. CI remains the authority either way.
+func verificationOutcome(err error) error {
+	switch {
+	case err == nil:
+		log.Info("✓ Code phase passed")
+		return nil
+
+	case errors.Is(err, errNoCodePhase):
+		log.Warn("⚠️  No code phase configured -- pushing without checking")
+		return nil
+
+	case errors.Is(err, errNoContainerRuntime):
+		log.Warn("⚠️  No container runtime available -- pushing without running the code phase")
+		log.Info("💡 See what is missing: cidx doctor")
+		return nil
+
+	default:
+		return fmt.Errorf("code phase failed -- fix it, or push anyway with cidx cpw --no-verify: %w", err)
+	}
+}
+
+// runVerification runs the checks CI is about to run, before anything is
+// committed.
+func (a *CommitPushWatchAction) runVerification(ctx context.Context) error {
+	// Probed only when it can change the answer: --no-verify must not need a
+	// repository, a hooks directory or a git binary to do nothing.
+	preCommitHook := a.verify && a.repo.HasActivePreCommitHook()
+
+	if run, reason := planVerification(a.verify, preCommitHook); !run {
+		log.Infof("⏭️  Code phase not run here: %s", reason)
+		return nil
+	}
+
+	log.Info("🔍 Running the code phase before pushing (skip with --no-verify)...")
+	return verificationOutcome(verifyBeforePush(ctx))
 }
 
 // watchCI finds the PR for branch, waits for CI checks to start on the

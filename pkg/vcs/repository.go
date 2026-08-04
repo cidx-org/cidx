@@ -2,7 +2,9 @@ package vcs
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -224,6 +226,44 @@ func (r *Repository) hasChanges(includeUntracked bool) (bool, error) {
 	}
 
 	return false, nil
+}
+
+// HasActivePreCommitHook reports whether `git commit` will run a pre-commit
+// hook. It asks git for the effective hooks directory, so it answers for
+// core.hooksPath (how this repository installs .githooks) as well as for the
+// default .git/hooks — which ships only .sample files and so never matches.
+//
+// Commit() shells out to the git binary precisely so hooks fire. cpw runs the
+// code phase before committing (issue #307), and a hook that runs the same
+// phase would run it twice: ~20 seconds paid for an answer already known.
+// Nothing is inferred about what the hook checks — if a repository installed
+// one, it is the repository's own gate and cpw stands aside for it.
+func (r *Repository) HasActivePreCommitHook() bool {
+	workDir, err := r.GetWorkDir()
+	if err != nil {
+		return false
+	}
+
+	cmd := exec.Command("git", "rev-parse", "--git-path", "hooks")
+	cmd.Dir = workDir
+	output, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+
+	hooks := strings.TrimSpace(string(output))
+	if !filepath.IsAbs(hooks) {
+		hooks = filepath.Join(workDir, hooks)
+	}
+
+	info, err := os.Stat(filepath.Join(hooks, "pre-commit"))
+	if err != nil {
+		return false
+	}
+
+	// git ignores a hook it cannot execute, so an unset executable bit means
+	// no hook — the same reading git itself makes.
+	return !info.IsDir() && info.Mode()&0o111 != 0
 }
 
 // GetWorkDir returns the working directory path of the repository

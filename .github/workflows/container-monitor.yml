@@ -437,6 +437,27 @@ jobs:
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          # What a promotion legitimately touches: the image bump itself, and
+          # whatever `cz bump --changelog` rewrites above (version_files in
+          # .cz.toml, plus the changelog). Everything else in this workspace is
+          # not part of the promotion.
+          #
+          # Naming them is the point. The action's default is "commit whatever
+          # is dirty", and this job is dirty by construction — it downloads
+          # every scan artifact into scan-results/ to reach its verdict. That
+          # default swept 43 files and 201,615 lines of scanner JSON into the
+          # promotion PR (#323), and because gitleaks scans *every* ref, the
+          # Security job of every branch in the repository then failed on
+          # findings that lived entirely in that one foreign commit. #324 put
+          # scan-results/ in .gitignore, which closes that hole; it does not
+          # close the next one, because the next artifact directory will not be
+          # in .gitignore on the day it is added. An allowlist is closed by
+          # default, so it stays closed.
+          add-paths: |
+            pkg/presets/presets.toml
+            CHANGELOG.md
+            VERSION
+            .cz.toml
           commit-message: "chore(deps): update container images to ${{ steps.bump.outputs.new_version }}"
           title: "chore(deps): update container images → ${{ steps.bump.outputs.new_version }}"
           body: |
