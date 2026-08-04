@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 // TestParseImageRef covers the reference forms the catalogue and user configs
 // can hold, now that every built-in image is pinned `image:tag@sha256:...`
@@ -146,7 +149,7 @@ func TestRefWithoutDigest(t *testing.T) {
 // version to compare, and reporting that is better than querying the registry
 // for an empty string.
 func TestGetLatestTagRejectsDigestOnlyReference(t *testing.T) {
-	if _, err := getLatestTag("tmknom/prettier", ""); err == nil {
+	if _, err := getLatestTag("tmknom/prettier", "", time.Now()); err == nil {
 		t.Fatal("getLatestTag with an empty tag should fail, got nil error")
 	}
 }

@@ -129,8 +129,21 @@ jobs:
             echo "$TARGETS_JSON" | jq -r '.[] | select(.frozen_variant != null) | "::warning::frozen variant line: \(.current_image) — \(.policy_reason)"'
           fi
 
+          # A pinned tag that is a name rather than a version. Nothing a
+          # registry lists can ever be newer than it, so this image is outside
+          # the promotion path: its updates arrive as rebuilds of the same tag
+          # under a new digest, which nothing here detects (#328). Listed rather
+          # than annotated — it is a standing property of the pin, not an event,
+          # and a weekly warning that never resolves is one nobody reads.
+          UNVERSIONED=$(echo "$TARGETS_JSON" | jq -r '.[] | select(.unversioned_tag == true) | "- \(.current_image) — \(.policy_reason)"')
+          if [ -n "$UNVERSIONED" ]; then
+            echo "### Tag carries no version" >> $GITHUB_STEP_SUMMARY
+            echo "$UNVERSIONED" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
           # Show current (nothing newer found)
-          CURRENT=$(echo "$TARGETS_JSON" | jq -r '.[] | select(.is_update == false and .candidate_image == null and .newer_version == null and .frozen_variant == null) | "- \(.scan_image)"')
+          CURRENT=$(echo "$TARGETS_JSON" | jq -r '.[] | select(.is_update == false and .candidate_image == null and .newer_version == null and .frozen_variant == null and .unversioned_tag == null) | "- \(.scan_image)"')
           if [ -n "$CURRENT" ]; then
             echo "### Current (no updates)" >> $GITHUB_STEP_SUMMARY
             echo "$CURRENT" >> $GITHUB_STEP_SUMMARY

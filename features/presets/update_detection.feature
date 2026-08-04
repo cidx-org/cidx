@@ -20,6 +20,43 @@ Feature: Catalogue Image Update Detection
       When I look for a version newer than "0.68"
       Then no newer version should be offered
 
+    Scenario: A distribution codename is offered no release number
+      Given the registry lists the tags "trixie, trixie-curl, bookworm-curl, 26.04, 26.04-curl, 24.04-curl"
+      When I look for a version newer than "trixie-curl"
+      Then no newer version should be offered
+
+  Rule: A release that has not happened yet is not an update
+
+    Scenario: A calendar-versioned image is not offered next month's development branch
+      Given today is "2026-07-30"
+      And the registry lists the tags "24.04-curl, 26.04-curl, 26.10-curl"
+      When I look for a version newer than "24.04-curl"
+      Then the newest version offered should be "26.04-curl"
+
+    Scenario: The same release is offered once its month arrives
+      Given today is "2026-10-10"
+      And the registry lists the tags "24.04-curl, 26.04-curl, 26.10-curl"
+      When I look for a version newer than "24.04-curl"
+      Then the newest version offered should be "26.10-curl"
+
+    Scenario: A version whose minor is no month is compared as a version
+      Given today is "2026-07-30"
+      And the registry lists the tags "v2.95, v2.96, v2.97"
+      When I look for a version newer than "v2.95"
+      Then the newest version offered should be "v2.97"
+
+  Rule: A tag that carries no version is reported, not called up to date
+
+    Scenario: A pinned suite name says so
+      Given the registry lists the tags "trixie, trixie-curl, 26.04-curl"
+      When I ask whether "trixie-curl" carries a version
+      Then the tag should carry no version
+
+    Scenario: A pinned version says so too
+      Given the registry lists the tags "1.97.0-slim, 1.97.1-slim"
+      When I ask whether "1.97.0-slim" carries a version
+      Then the tag should carry a version
+
   Rule: A version is offered at the precision the catalogue pinned
 
     Scenario: A two-component pin is offered a two-component version

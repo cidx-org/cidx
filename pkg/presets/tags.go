@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Picking the newest version out of a registry tag listing (issue #245).
@@ -38,13 +39,19 @@ var tagVersionPattern = regexp.MustCompile(`^(v?)([0-9]+(?:\.[0-9]+)*)(.*)$`)
 //     The number of components is a choice the catalogue made about how
 //     closely it tracks upstream, and an update is not the place to revisit it.
 //
+//   - Not a release that has not happened yet. A calendar-versioned repository
+//     publishes the development branch of its next release under the number
+//     that release will carry, months before it exists: `buildpack-deps:26.10`
+//     was Ubuntu's devel branch in July 2026 (#328). See calendarVersion.
+//
 // A currentTag carrying no version (`latest`) qualifies nothing: there is no
 // way to tell what would be newer, and claiming an update would be a guess.
-func NewerTag(currentTag string, available []string) string {
+func NewerTag(currentTag string, available []string, now time.Time) string {
 	prefix, current, suffix, ok := splitTagVersion(currentTag)
 	if !ok {
 		return ""
 	}
+	_, _, calendar := calendarVersion(currentTag)
 
 	newest, newestVersion := "", current
 	for _, tag := range available {
@@ -52,11 +59,86 @@ func NewerTag(currentTag string, available []string) string {
 		if !ok || tagPrefix != prefix || tagSuffix != suffix || len(version) != len(current) {
 			continue
 		}
+		if calendar && unreleasedCalendarVersion(tag, now) {
+			continue
+		}
 		if compareVersions(version, newestVersion) > 0 {
 			newest, newestVersion = tag, version
 		}
 	}
 	return newest
+}
+
+// VersionedTag reports whether a tag carries a version at all.
+//
+// `trixie-curl` and `stable` do not, so nothing a registry lists can ever be
+// newer than them and the whole promotion path — which compares versions — has
+// nothing to say about those images. Callers report that state rather than let
+// "no candidate" read as "up to date" (#328).
+func VersionedTag(tag string) bool {
+	_, _, _, ok := splitTagVersion(tag)
+	return ok
+}
+
+// calendarVersion reads a tag's version as the year and month it names, in the
+// `YY.MM` shape Ubuntu and the images built on it use: `26.04` is April 2026.
+//
+// ok is false unless the version is exactly two components whose second is
+// written on two digits and lands in 01–12. That shape is the whole of the
+// rule: it tells Ubuntu's `26.04` from a `26.4` that is a plain minor version,
+// and `1.24` — month 24 — from anything a calendar could produce.
+func calendarVersion(tag string) (year int, month time.Month, ok bool) {
+	match := tagVersionPattern.FindStringSubmatch(tag)
+	if match == nil {
+		return 0, 0, false
+	}
+
+	parts := strings.Split(match[2], ".")
+	if len(parts) != 2 || len(parts[1]) != 2 {
+		return 0, 0, false
+	}
+	yy, err := strconv.Atoi(parts[0])
+	if err != nil || len(parts[0]) != 2 {
+		return 0, 0, false
+	}
+	mm, err := strconv.Atoi(parts[1])
+	if err != nil || mm < 1 || mm > 12 {
+		return 0, 0, false
+	}
+	return 2000 + yy, time.Month(mm), true
+}
+
+// unreleasedCalendarVersion reports whether a tag names a calendar release
+// dated later than today — which is to say a development branch.
+//
+// A calendar-versioned distribution names a release by the month it is due and
+// publishes images for it throughout its development: on 2026-07-30, Ubuntu
+// `26.10` was "Stonking Stingray (development branch)" and would not exist as a
+// release until October. Nothing in the tag says so, no date on the tag says so
+// — it is pushed weekly like any other — and the name is all a tag listing
+// offers. The calendar is the one thing that answers, and it answers without a
+// request.
+//
+// Every pre-release channel that names itself — `-rc1`, `-beta`, `-nightly` —
+// is already refused by the variant family rule above: a candidate has to carry
+// the pinned tag's suffix verbatim, so a marker the pin does not have cannot
+// get through. This covers the case that carries no marker at all.
+//
+// It applies only where the pinned tag is itself calendar-versioned, which is
+// what proves the repository numbers its releases that way. Without that, a
+// tool sitting at `26.1` would see its own `26.10` read as October 2026.
+//
+// now is passed in rather than read off the clock, for the same reason
+// EvaluatePromotion takes it: a rule that turns on the date has to be testable
+// on a date that is not today.
+func unreleasedCalendarVersion(tag string, now time.Time) bool {
+	year, month, ok := calendarVersion(tag)
+	if !ok {
+		return false
+	}
+
+	now = now.UTC()
+	return year > now.Year() || (year == now.Year() && month > now.Month())
 }
 
 // SupersedingVariant returns the variant family that replaced the one
