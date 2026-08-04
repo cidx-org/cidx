@@ -83,6 +83,13 @@ type VulnerabilityFile struct {
 
 const defaultVulnFile = "known-vulnerabilities.toml"
 
+// defaultResultsDir is where every command that reads scanner results looks, and
+// where `cidx repo artifact download` writes. One constant, because the pairing
+// is the point: a download whose default differed from the readers' default
+// would leave the two halves of the flow needing a path spelled out twice
+// (issue #285).
+const defaultResultsDir = "scan-results"
+
 func vulnCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "vuln",
@@ -564,7 +571,7 @@ func vulnAddCommand() *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:  "results",
-				Value: "scan-results",
+				Value: defaultResultsDir,
 				Usage: "Directory holding the scanner result files, read to refuse an exception for a CVE that is fixed upstream",
 			},
 		},

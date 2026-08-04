@@ -49,7 +49,7 @@ func securityBaselineCommand() *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:  "results",
-				Value: "scan-results",
+				Value: defaultResultsDir,
 				Usage: "Directory holding the scanner result files, read to state what the images carry",
 			},
 			&cli.StringFlag{

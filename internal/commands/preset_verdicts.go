@@ -69,7 +69,7 @@ func presetScanVerdictsCommand() *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:  "results",
-				Value: "scan-results",
+				Value: defaultResultsDir,
 				Usage: "Directory holding the scanner result files",
 			},
 			&cli.StringFlag{

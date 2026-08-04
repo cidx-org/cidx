@@ -6,22 +6,24 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/cidx-org/cidx/v2/pkg/remote"
 )
 
 // listedRuns is one page of what the API returns, with the two identifiers
 // deliberately far apart: a run number that would look like a plausible ID is
 // exactly how #291 went unnoticed.
-func listedRuns() []WorkflowRun {
-	return []WorkflowRun{
+func listedRuns() []remote.Workflow {
+	return []remote.Workflow{
 		{
-			ID: 18234567890, RunNumber: 640,
-			HeadBranch: "main", HeadSha: "9b577f5abcdef", Status: "completed",
+			ID: "18234567890", Number: 640, Name: "CI",
+			Branch: "main", HeadSHA: "9b577f5abcdef", Status: "completed",
 			Conclusion: "success", CreatedAt: time.Date(2026, 7, 30, 9, 42, 0, 0, time.UTC),
-			DisplayTitle: "fix(cli): say what was checked",
+			Title: "fix(cli): say what was checked",
 		},
 		{
-			ID: 18234500000, RunNumber: 639,
-			HeadBranch: "main", HeadSha: "39ea54a123456", Status: "in_progress",
+			ID: "18234500000", Number: 639, Name: "Security Audit",
+			Branch: "main", HeadSHA: "39ea54a123456", Status: "in_progress",
 			CreatedAt: time.Date(2026, 7, 30, 9, 36, 0, 0, time.UTC),
 		},
 	}
@@ -33,23 +35,22 @@ func listedRuns() []WorkflowRun {
 // command — answered 404. Both are printed now, labelled, so the pair works
 // without translating anything in your head.
 func TestWorkflowListPrintsTheIdentifierWatchAccepts(t *testing.T) {
-	action := NewWorkflowList("ci", 10, false)
+	action := NewWorkflowList(nil, "ci", "", 10, false)
 
 	simple := captureStdout(t, func() { action.displaySimple(listedRuns()) })
 	verbose := captureStdout(t, func() {
-		NewWorkflowList("ci", 10, true).displayVerbose(listedRuns())
+		NewWorkflowList(nil, "ci", "", 10, true).displayVerbose(listedRuns())
 	})
 
 	for name, out := range map[string]string{"simple": simple, "verbose": verbose} {
 		for _, run := range listedRuns() {
-			id := strconv.FormatInt(run.ID, 10)
-			if !strings.Contains(out, id) {
-				t.Errorf("%s listing omits run ID %s, the only value watch accepts:\n%s", name, id, out)
+			if !strings.Contains(out, run.ID) {
+				t.Errorf("%s listing omits run ID %s, the only value watch accepts:\n%s", name, run.ID, out)
 			}
 			// The UI number stays: it is what the GitHub web page shows, and
 			// dropping it would only move the confusion.
-			if !strings.Contains(out, "#"+strconv.Itoa(run.RunNumber)) {
-				t.Errorf("%s listing dropped run number #%d:\n%s", name, run.RunNumber, out)
+			if !strings.Contains(out, "#"+strconv.Itoa(run.Number)) {
+				t.Errorf("%s listing dropped run number #%d:\n%s", name, run.Number, out)
 			}
 		}
 
@@ -68,10 +69,10 @@ func TestWorkflowListPrintsTheIdentifierWatchAccepts(t *testing.T) {
 // reader a number the API does not know — the failure #291 is about, restored by
 // formatting.
 func TestWorkflowListIDIsNotTruncated(t *testing.T) {
-	run := WorkflowRun{ID: 9223372036854775807, RunNumber: 1, CreatedAt: time.Now()}
+	run := remote.Workflow{ID: "9223372036854775807", Number: 1, CreatedAt: time.Now()}
 
 	out := captureStdout(t, func() {
-		NewWorkflowList("ci", 10, true).displayVerbose([]WorkflowRun{run})
+		NewWorkflowList(nil, "ci", "", 10, true).displayVerbose([]remote.Workflow{run})
 	})
 	if !strings.Contains(out, "9223372036854775807") {
 		t.Errorf("the run ID was clipped by its column:\n%s", out)

@@ -2,6 +2,7 @@ package remote
 
 import (
 	"context"
+	"io"
 	"time"
 )
 
@@ -29,6 +30,31 @@ type Provider interface {
 
 	// GetWorkflowRun returns a workflow run by its provider-specific ID.
 	GetWorkflowRun(ctx context.Context, runID string) (*Workflow, error)
+
+	// ListRuns returns recent runs, most recent first, capped at limit.
+	// workflowFile names a single workflow; empty means every workflow of the
+	// repository, which is the "what ran on this branch" view a failing check
+	// sends you looking for before you know which workflow owns it (issue
+	// #342). branch filters on the ref; empty means every ref.
+	//
+	// The returned runs carry no Jobs: a listing would otherwise cost one API
+	// call per row for a column nobody prints.
+	ListRuns(ctx context.Context, workflowFile, branch string, limit int) ([]Workflow, error)
+
+	// RerunWorkflow restarts a run. failedOnly restarts only the jobs that
+	// failed -- the recovery path when a job dies on an infrastructure flake
+	// rather than on the change (issue #342).
+	RerunWorkflow(ctx context.Context, runID string, failedOnly bool) error
+
+	// ListRunArtifacts returns the artifacts a single run produced. Scoping to
+	// one run is the point: the readers of these files compare images against
+	// each other, so mixing two runs' results silently answers a different
+	// question than the one asked (issue #285).
+	ListRunArtifacts(ctx context.Context, runID string) ([]Artifact, error)
+
+	// DownloadArtifact opens the zip archive of one artifact. The caller closes
+	// it.
+	DownloadArtifact(ctx context.Context, artifactID int64) (io.ReadCloser, error)
 
 	// WatchWorkflow streams updates for a running workflow
 	WatchWorkflow(ctx context.Context, workflowID string) (<-chan WorkflowUpdate, error)
@@ -75,13 +101,28 @@ type Provider interface {
 	WatchPullRequestChecks(ctx context.Context, prNumber int) (<-chan PRChecksUpdate, error)
 }
 
-// Workflow represents a CI/CD workflow run
+// Workflow represents a CI/CD workflow run.
+//
+// ID is the identifier every command of the namespace speaks -- watch, rerun,
+// artifact download -- and Number is the one the provider's web UI displays.
+// They are different numbers and printing only the second one is what made
+// `workflow watch` answer 404 on what `workflow list` had just shown (#291),
+// so both are carried and both are listed.
 type Workflow struct {
 	ID         string
 	Status     string // queued, in_progress, completed
 	Conclusion string // success, failure, cancelled, skipped
 	Jobs       []Job
 	URL        string
+
+	// Descriptive fields, filled by listings. A watch does not need them and
+	// leaves them zero.
+	Name      string // workflow name, e.g. "CI"
+	Number    int    // run number as the provider's UI shows it, e.g. 640
+	Branch    string // ref the run was triggered on
+	HeadSHA   string
+	Title     string // commit subject or display title
+	CreatedAt time.Time
 }
 
 // Job represents a job within a workflow
