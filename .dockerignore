@@ -8,6 +8,18 @@
 
 # Build artifacts
 bin/
+# ...except the one path the Dockerfile consumes. `bin/` is the local build
+# output directory (`go build -o bin/cidx`, the Makefile), and it stays ignored
+# so a developer's leftovers -- cross-compiled binaries, `go test -c` output,
+# whatever else accumulates there -- never reach the build context. But the
+# image is *built from* bin/cidx, so excluding the whole directory left
+# `COPY bin/cidx` matching nothing. kaniko does not fail on that: it stats the
+# context directory before applying .dockerignore, sees the file, then filters
+# it out while copying, and exits 0 having copied nothing. Every published
+# image was a bare docker CLI with a dead ENTRYPOINT (#281). Dropping `bin/`
+# outright would fix the COPY and re-open the hygiene hole; re-including the
+# single consumed path fixes it and keeps the hole shut.
+!bin/cidx
 *.exe
 *.dll
 *.so

@@ -24,6 +24,14 @@ jobs:
           LDFLAGS="-s -w -X main.Version=$VERSION"
           mkdir -p dist
 
+          # Statically linked, deliberately. A native `go build` on the runner
+          # leaves cgo on, so linux/amd64 came out dynamically linked against
+          # the runner's glibc -- which cannot exec on the Alpine/musl base the
+          # Docker image is built from, and which puts a glibc version floor on
+          # the binary users download. The cross-compiled targets already had
+          # cgo off implicitly; this makes it uniform (#281).
+          export CGO_ENABLED=0
+
           # Linux
           GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/cidx-linux-amd64 ./cmd/cidx
           GOOS=linux GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/cidx-linux-arm64 ./cmd/cidx
@@ -87,6 +95,21 @@ jobs:
           IMAGE_NAME: ghcr.io/${{ github.repository }}
           IMAGE_TAG: ${{ github.ref_name }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # The image build cannot be trusted to fail on its own. kaniko exits 0
+      # after a COPY that matched nothing, so for every release up to v2.4.0
+      # this job was green while publishing a bare docker CLI whose
+      # ENTRYPOINT ["cidx"] pointed at a file that was never there (#281). A
+      # glibc-linked binary on the musl base fails the same way, silently, at
+      # build time. Both are invisible until something runs the image, so this
+      # runs it: the one thing the image exists to do.
+      #
+      # It runs after the push -- kaniko pushes as it builds, and re-running
+      # the build locally just to test it first would double a slow job to
+      # close a window that is already closed downstream: this job failing
+      # blocks `release`, so no GitHub Release ever points at a broken image.
+      - name: Verify the published image runs
+        run: docker run --rm ghcr.io/${{ github.repository }}:${{ github.ref_name }} --version
 
   # Release: Create GitHub Release with all binaries
   release:
