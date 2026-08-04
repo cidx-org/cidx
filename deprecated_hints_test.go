@@ -8,15 +8,16 @@ import (
 	"testing"
 )
 
-// The `cidx action ...` tree is hidden and deprecated (see cmd/cidx/main.go),
-// so nothing the user can read may still point at it. Guards issue #174 against
-// regressions: new hints must name the current paths (`cidx release ...`,
-// `cidx repo ...`, or the top-level aliases `cidx pr ...` / `cidx cpw`).
+// The `cidx action ...` tree is hidden and deprecated (see
+// internal/commands/app.go), so nothing the user can read may still point at
+// it. Guards issue #174 against regressions: new hints must name the current
+// paths (`cidx release ...`, `cidx repo ...`, or the top-level aliases
+// `cidx pr ...` / `cidx cpw`).
 func TestNoDeprecatedActionHintsInGoSources(t *testing.T) {
 	// The deprecation warning is the one source that must name the deprecated
 	// form: it names it to steer the user off it, and its own tests check that
 	// every mention is followed by the replacement (issue #235).
-	exempt := filepath.Join("cmd", "cidx", "action_deprecated.go")
+	exempt := filepath.Join("internal", "commands", "action_deprecated.go")
 
 	err := filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {

@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cidx-org/cidx/v2/internal/commands"
 	"github.com/cidx-org/cidx/v2/pkg/validator"
 	"github.com/cucumber/godog"
-	"github.com/urfave/cli/v2"
 )
 
 // RegisterValidateSteps registers the steps for stale cidx invocations in CI
@@ -20,43 +20,6 @@ func RegisterValidateSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Then(`^the invocation should be reported as stale$`, tc.invocationShouldBeStale)
 	ctx.Then(`^no invocation should be reported$`, tc.noInvocationShouldBeReported)
 	ctx.Then(`^the report should mention "([^"]*)"$`, tc.reportShouldMention)
-}
-
-// invocationCommandTree mirrors the shape of the real cidx tree: namespaces
-// with no action of their own, leaf commands that take arguments, `vuln` living
-// under `security`, and the flags `run` accepts before its phase. The real tree
-// is covered where it is built, by TestValidate_RealWorkflowsResolve and
-// TestCheckWorkflow_RealCIWorkflowKeepsItsPhases in cmd/cidx.
-func invocationCommandTree() *cli.App {
-	noop := func(*cli.Context) error { return nil }
-	return &cli.App{
-		Name: "cidx",
-		Flags: []cli.Flag{
-			&cli.StringFlag{Name: "config", Aliases: []string{"c"}},
-			&cli.BoolFlag{Name: "verbose"},
-			&cli.BoolFlag{Name: "version", Aliases: []string{"v"}},
-		},
-		Commands: []*cli.Command{
-			{Name: "run", Action: noop, Flags: []cli.Flag{
-				&cli.BoolFlag{Name: "dry-run", Aliases: []string{"n"}},
-				&cli.IntFlag{Name: "concurrency", Aliases: []string{"j"}},
-			}},
-			{Name: "validate", Action: noop},
-			{Name: "check", Subcommands: []*cli.Command{
-				{Name: "drift", Action: noop},
-				{Name: "workflow", Action: noop},
-			}},
-			{Name: "security", Subcommands: []*cli.Command{
-				{Name: "vuln", Subcommands: []*cli.Command{
-					{Name: "list", Action: noop},
-					{Name: "ignore", Action: noop},
-				}},
-			}},
-			{Name: "preset", Subcommands: []*cli.Command{
-				{Name: "scan-targets", Action: noop},
-			}},
-		},
-	}
 }
 
 func (tc *TestContext) workflowStepRunning(script string) error {
@@ -75,7 +38,10 @@ func (tc *TestContext) validateWorkflowInvocations() error {
 		return fmt.Errorf("no workflow step was given")
 	}
 
-	app := invocationCommandTree()
+	// The tree cidx ships, not a copy of it. A copy had to be updated by hand
+	// at every reorganisation, and a copy that is not updated leaves these
+	// scenarios green about a CLI that no longer exists (issue #317).
+	app := commands.NewApp()
 	var report []string
 	for _, inv := range validator.ExtractInvocations(script) {
 		if reason := validator.Resolve(app, inv.Args); reason != "" {

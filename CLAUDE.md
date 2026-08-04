@@ -90,7 +90,7 @@ The combination of issue discussion + scenario specification + commit history gi
 - Releases are grouped (3-5 PRs per release) and manually triggered
 - Tags = Releases (1:1 mapping)
 - **Changelog**: Must be updated at every release. Commitizen generates it from conventional commits. Verify CHANGELOG.md is current before tagging.
-- **Scheduled for v3.0.0**: delete the hidden `cidx action ...` tree (issue #235). It is the only thing owed to the next major, and it is due: it has warned on every invocation, naming the exact command that replaces it, since #235. What goes: the `action` entry in `cmd/cidx/main.go`, `cmd/cidx/action_deprecated.go` and its test, the exemption in `deprecated_hints_test.go`, and the `cidx action` section of `docs/reference/cli.md`. Cutting a v3.0.0 without doing it re-opens a deprecation that has already had its window.
+- **Scheduled for v3.0.0**: delete the hidden `cidx action ...` tree (issue #235). It is the only thing owed to the next major, and it is due: it has warned on every invocation, naming the exact command that replaces it, since #235. What goes: the `action` entry in `internal/commands/app.go`, `internal/commands/action_deprecated.go` and its test, the exemption in `deprecated_hints_test.go`, and the `cidx action` section of `docs/reference/cli.md`. Cutting a v3.0.0 without doing it re-opens a deprecation that has already had its window.
 
 Use `cidx pr create`, `cidx pr merge`, `cidx release create` for the workflow.
 
@@ -130,8 +130,9 @@ If a command is missing, broken, or has bad UX -- **that becomes the next priori
 - Step definitions in `*_steps_test.go` at project root
 - Simulation engine (no real Docker needed to run specs)
 - `Strict: true` for unit scenarios, `Strict: false` only for `@docker-required` scenarios
-- `TestFeatures` (strict, 159 scenarios) and `TestFeaturesDocker` (best-effort, 19 scenarios, skipped when no container runtime answers)
-- The suites live in the **root package**, so `cidx.toml` overrides the `go-test` command to `go test -v ./...` — the catalogue default (`./pkg/... ./cmd/...`) would skip them and the CI test job would gate on nothing
+- `TestFeatures` (strict, 301 scenarios) and `TestFeaturesDocker` (best-effort, 19 scenarios, skipped when no container runtime answers)
+- The suites live in the **root package**, so `cidx.toml` overrides the `go-test` command to `go test -v ./...` — the catalogue default (`./pkg/... ./cmd/...`) would skip them, and since #317 it would also skip `internal/commands`, where every CLI test now lives. The CI test job would gate on nothing
+- Scenarios that describe the CLI import `internal/commands` and resolve against `commands.NewApp()` — the real tree, never a copy of it (#317)
 
 **Unit tests** -- Package-level correctness:
 
@@ -160,14 +161,26 @@ pkg/
   validator/     CI workflow validation
   vcs/           Version control operations
 
-cmd/cidx/        CLI entry point and command handlers (urfave/cli)
-  main.go        Command hierarchy: core top-level, secondary under namespaces
-  repo.go        cidx repo — PR, cpw, branch, workflow, artifact, cleanup
-  release_cmd.go cidx release — prepare, preview, create, commit, tag
-  security_cmd.go cidx security — vuln, registry
+internal/
+  commands/      CLI command tree and handlers (urfave/cli)
+    app.go       Command hierarchy: core top-level, secondary under namespaces
+    repo.go      cidx repo — PR, cpw, branch, workflow, artifact, cleanup
+    release_cmd.go cidx release — prepare, preview, create, commit, tag
+    security_cmd.go cidx security — vuln, registry
+  tui/           Shared terminal styles
+
+cmd/cidx/        main() and the `Version` ldflags symbol — nothing else
 features/        BDD scenarios (Gherkin)
 docs/            Project documentation
 ```
+
+`cmd/cidx` is deliberately a three-line `package main`. The tree used to live
+there, in a second `package main` that nothing could import, so the godog suite
+kept a hand-written copy of it — and the copy drifted (issue #317). Everything
+now lives in `internal/commands`, which the suite imports: scenarios resolve
+against `commands.NewApp()`, the very tree the binary runs. `Version` stays in
+`package main` because `-ldflags "-X main.Version=..."` is what the Makefile,
+`release.yml`, `nightly.yml` and the `go-build` preset all target.
 
 ### Data Flow
 

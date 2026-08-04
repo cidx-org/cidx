@@ -107,7 +107,9 @@ go test ./...
 
 ```text
 cidx/
-├── cmd/cidx/          # CLI commands
+├── cmd/cidx/          # main() and the ldflags version symbol, nothing else
+├── internal/
+│   └── commands/      # CLI command tree and handlers
 ├── pkg/
 │   ├── presets/       # Built-in container presets
 │   ├── config/        # Configuration parsing
