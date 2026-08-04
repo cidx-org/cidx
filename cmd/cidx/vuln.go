@@ -925,6 +925,30 @@ func vulnVerifyCommand() *cli.Command {
 	}
 }
 
+// acceptedExceptions reads the acceptances a report is rendered against, and
+// refuses to render one it could not read.
+//
+// The absence of the file is an error, not an empty list. Every report built on
+// it used to swallow the read and carry on with nothing accepted, so running
+// `cidx security sarif` from anywhere but the repository root produced a
+// successful SARIF with every expired-exception alert silently missing, and
+// `security baseline` / `security summary` / `preset audit` published a
+// catalogue that had accepted nothing (issue #304). Nothing in the output said
+// which of the two it was, and the numbers looked plausible either way — an
+// absent record and an empty one are not the same claim, and only one of them is
+// safe to publish. Fail-closed, as the policy is everywhere else.
+//
+// `vuln add` and `vuln ignore` keep tolerating the absence on purpose: the first
+// creates the file, and the second waives nothing without it, which errs towards
+// a scan reporting too much rather than too little.
+func acceptedExceptions(path string) ([]Vulnerability, error) {
+	vulns, err := loadVulnerabilities(path)
+	if err != nil {
+		return nil, fmt.Errorf("%w (run from the repository root, or pass the path explicitly)", err)
+	}
+	return vulns.Vulnerabilities, nil
+}
+
 func loadVulnerabilities(path string) (*VulnerabilityFile, error) {
 	var vulns VulnerabilityFile
 	if _, err := toml.DecodeFile(path, &vulns); err != nil {

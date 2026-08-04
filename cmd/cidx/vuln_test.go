@@ -113,6 +113,72 @@ func TestLoadMigratesTheOldImageKey(t *testing.T) {
 	}
 }
 
+// TestAcceptedExceptionsRefusesAnAbsentFile is the unit of #304: absence is not
+// emptiness. Read as "nothing accepted", a missing file made every report built
+// on it succeed while quietly claiming a catalogue that had accepted nothing.
+func TestAcceptedExceptionsRefusesAnAbsentFile(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "known-vulnerabilities.toml")
+
+	accepted, err := acceptedExceptions(missing)
+	if err == nil {
+		t.Fatalf("an absent file was read as %d accepted exception(s) instead of an error", len(accepted))
+	}
+	if !strings.Contains(err.Error(), missing) {
+		t.Errorf("the error does not name the file it could not read: %v", err)
+	}
+
+	// An empty file still means nothing accepted — that claim is on record and
+	// is a different thing from no record at all.
+	present := filepath.Join(t.TempDir(), "known-vulnerabilities.toml")
+	if err := os.WriteFile(present, []byte("# nothing accepted\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if accepted, err := acceptedExceptions(present); err != nil || len(accepted) != 0 {
+		t.Errorf("an empty file should read as 0 exceptions, got %d (err: %v)", len(accepted), err)
+	}
+}
+
+// TestReportsRefuseToRunWithoutTheExceptionsFile is #304 as it was met: run from
+// anywhere but the repository root, `cidx security sarif` wrote a successful
+// SARIF with zero expired-exception alerts and said nothing. Every report that
+// reads the file is covered, because the swallow was copied between them.
+//
+// No network: each command fails on the read, which happens before any registry
+// or scanner is contacted.
+func TestReportsRefuseToRunWithoutTheExceptionsFile(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{"security sarif", []string{"security", "sarif", "-o", "out.sarif"}},
+		{"security summary", []string{"security", "summary", "-o", "out.md"}},
+		{"security baseline", []string{"security", "baseline", "-o", "out.md"}},
+		{"preset audit", []string{"preset", "audit"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// A directory that is not the repository root: exactly the
+			// situation the command used to render a plausible report from.
+			dir := t.TempDir()
+			t.Chdir(dir)
+
+			err := newApp().Run(append([]string{"cidx"}, tc.args...))
+			if err == nil {
+				t.Fatalf("%s succeeded without an exceptions file", tc.name)
+			}
+			if !strings.Contains(err.Error(), defaultVulnFile) {
+				t.Errorf("the error does not name the missing file: %v", err)
+			}
+
+			// And nothing was published from evidence that was never read.
+			for _, written := range []string{"out.sarif", "out.md"} {
+				if _, statErr := os.Stat(filepath.Join(dir, written)); statErr == nil {
+					t.Errorf("%s wrote %s despite failing to read the acceptances", tc.name, written)
+				}
+			}
+		})
+	}
+}
+
 // TestSaveIsPurelySubtractive: removing an entry has to produce a diff that
 // reads as a removal. The TOML encoder re-indented every kept key, so a purge of
 // 101 entries showed up as 538 insertions and 1552 deletions (#289).

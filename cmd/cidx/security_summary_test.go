@@ -189,8 +189,17 @@ func TestSummaryRendersWithoutLinksOutsideARun(t *testing.T) {
 func TestSummaryIsWrittenWhereItIsAsked(t *testing.T) {
 	stubEOL(t, func(string) ([]presets.EOLCycle, error) { return alpineFeed(), nil })
 
-	out := filepath.Join(t.TempDir(), "status.md")
-	if err := newApp().Run([]string{"cidx", "security", "summary", "--results", t.TempDir(), "-o", out}); err != nil {
+	// The acceptances are named explicitly: since #304 the command refuses to
+	// render a page from a file it could not read, and the test does not run
+	// from the repository root.
+	dir := t.TempDir()
+	exceptions := filepath.Join(dir, defaultVulnFile)
+	if err := os.WriteFile(exceptions, []byte("# nothing accepted\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out := filepath.Join(dir, "status.md")
+	if err := newApp().Run([]string{"cidx", "security", "summary", "--file", exceptions, "--results", t.TempDir(), "-o", out}); err != nil {
 		t.Fatalf("cidx security summary: %v", err)
 	}
 

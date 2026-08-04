@@ -44,13 +44,16 @@ func presetAuditCommand() *cli.Command {
 			vulnFile := c.String("vuln-file")
 			jsonOutput := c.Bool("json")
 
-			// Load known vulnerabilities
-			knownVulns := make(map[string][]Vulnerability) // image -> vulns
+			// Load known vulnerabilities. Read before any registry is
+			// contacted, so a missing file costs nothing but the error.
+			accepted, err := acceptedExceptions(vulnFile)
+			if err != nil {
+				return err
+			}
 
-			if vulns, err := loadVulnerabilities(vulnFile); err == nil {
-				for _, v := range vulns.Vulnerabilities {
-					knownVulns[v.Repository] = append(knownVulns[v.Repository], v)
-				}
+			knownVulns := make(map[string][]Vulnerability) // image -> vulns
+			for _, v := range accepted {
+				knownVulns[v.Repository] = append(knownVulns[v.Repository], v)
 			}
 
 			if !jsonOutput {

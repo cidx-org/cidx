@@ -69,11 +69,9 @@ func securityBaselineCommand() *cli.Command {
 				return err
 			}
 
-			// An absent exception file is not an error: it means nothing is
-			// accepted, which is a perfectly good baseline to publish.
-			var accepted []Vulnerability
-			if vulns, err := loadVulnerabilities(c.String("file")); err == nil {
-				accepted = vulns.Vulnerabilities
+			accepted, err := acceptedExceptions(c.String("file"))
+			if err != nil {
+				return err
 			}
 
 			carried, accounted := carriedFindings(imagePresets, c.String("results"), accepted)

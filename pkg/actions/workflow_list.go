@@ -114,7 +114,14 @@ func (a *WorkflowListAction) getWorkflowRuns() ([]WorkflowRun, error) {
 	return response.WorkflowRuns, nil
 }
 
-// displaySimple shows runs in a simple list format
+// displaySimple shows runs in a simple list format.
+//
+// Both numbers are printed, labelled. `#640` is what GitHub shows in its UI, and
+// it was for a long time the only thing listed here — but the API addresses a run
+// by its ID, so `cidx repo workflow watch 640` sent the run number where an ID
+// was expected and got a flat 404. The two commands of one namespace have to
+// speak the same identifier, and the workaround (polling this list instead of
+// watching) defeats the point of having a watch at all (issue #291).
 func (a *WorkflowListAction) displaySimple(runs []WorkflowRun) {
 	log.Infof("🔄 Workflow '%s' runs (%d):", a.workflow, len(runs))
 	log.Info("")
@@ -127,8 +134,10 @@ func (a *WorkflowListAction) displaySimple(runs []WorkflowRun) {
 			shortSha = shortSha[:7]
 		}
 
-		fmt.Printf("  %s #%-4d  %s  %s\n", status, run.RunNumber, date, shortSha)
+		fmt.Printf("  %s #%-4d  %s  %s  id %d\n", status, run.RunNumber, date, shortSha, run.ID)
 	}
+
+	printWatchHint()
 }
 
 // displayVerbose shows runs with additional information
@@ -137,8 +146,8 @@ func (a *WorkflowListAction) displayVerbose(runs []WorkflowRun) {
 	log.Info("")
 
 	// Header
-	fmt.Printf("  %-8s %-6s %-16s %-10s %-12s %s\n", "STATUS", "RUN", "DATE", "COMMIT", "BRANCH", "TITLE")
-	fmt.Printf("  %-8s %-6s %-16s %-10s %-12s %s\n", "------", "---", "----", "------", "------", "-----")
+	fmt.Printf("  %-8s %-6s %-12s %-16s %-10s %-12s %s\n", "STATUS", "RUN", "ID", "DATE", "COMMIT", "BRANCH", "TITLE")
+	fmt.Printf("  %-8s %-6s %-12s %-16s %-10s %-12s %s\n", "------", "---", "--", "----", "------", "------", "-----")
 
 	for _, run := range runs {
 		status := a.formatStatus(run.Conclusion, run.Status)
@@ -158,11 +167,19 @@ func (a *WorkflowListAction) displayVerbose(runs []WorkflowRun) {
 			title = title[:32] + "..."
 		}
 
-		fmt.Printf("  %-8s #%-5d %-16s %-10s %-12s %s\n", status, run.RunNumber, date, shortSha, branch, title)
+		fmt.Printf("  %-8s #%-5d %-12d %-16s %-10s %-12s %s\n", status, run.RunNumber, run.ID, date, shortSha, branch, title)
 	}
 
-	log.Info("")
-	log.Info("  Use 'gh run view <run-number>' for details")
+	printWatchHint()
+}
+
+// printWatchHint names the identifier the neighbouring command takes, and takes
+// it from the column right next to it. The hint used to send the reader to
+// `gh run view <run-number>` — the wrong tool for a repository that dogfoods its
+// own, and the wrong number for the command it named (issue #291).
+func printWatchHint() {
+	fmt.Println()
+	fmt.Println("  Follow one with: cidx repo workflow watch <id>")
 }
 
 // formatStatus returns a formatted status string with emoji
