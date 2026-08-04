@@ -24,6 +24,37 @@ Feature: Quiet Mode Execution
       Then I should see completion messages for successful tools
       And I should only see logs for failed tools
 
+  Rule: Container output can be streamed without switching the logs to debug
+
+    # Issue #273. A run in CI is quiet by default (#87), which is right for a
+    # lint that passes and wrong for a test job: the Test job printed
+    # `PHASE: TEST` then `go-test completed`, and a green run showing nothing
+    # cannot say whether the suite executed every scenario or none of them.
+    # `--verbose` was the only way out, and it also switches logrus to Debug
+    # and prints the raw JSON of every image pull -- so the choice was "show
+    # nothing" or "show everything, noise included". `--stream` asks for the
+    # container output and nothing else.
+
+    # These scenarios call the decision cidx really makes, not a copy of it.
+
+    Scenario Outline: What each flag does to the output of a successful run
+      Given cidx runs <where>
+      When the run is invoked with "<flags>"
+      Then container output should be <output>
+
+      Examples: The default, and the two ways out of it
+        | where    | flags     | output   |
+        | locally  |           | streamed |
+        | in CI    |           | buffered |
+        | in CI    | --stream  | streamed |
+        | in CI    | --verbose | streamed |
+        | locally  | --quiet   | buffered |
+
+    Scenario: Asking to see the output wins over asking for silence
+      Given cidx runs in CI
+      When the run is invoked with "--quiet --stream"
+      Then container output should be streamed
+
   Rule: Quiet mode is configurable via CLI flag
 
     @docker-required

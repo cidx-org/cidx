@@ -127,12 +127,14 @@ jobs:
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
 
-      # --verbose defeats the CI auto-quiet, which buffers container output and
+      # --stream defeats the CI auto-quiet, which buffers container output and
       # prints it only on failure. A green test job whose log shows nothing
-      # cannot tell you whether 159 BDD scenarios ran or zero -- the scenario
-      # and step totals are the evidence that the suite is a real gate.
+      # cannot tell you whether the BDD scenarios ran or zero of them did --
+      # the scenario and step totals are the evidence that the suite is a real
+      # gate. It used to be --verbose, which bought the same output at the price
+      # of logrus at Debug and the raw JSON of every image pull (issue #273).
       - name: Run tests
-        run: ./bin/cidx --verbose run test
+        run: ./bin/cidx run --stream test
 
   # Build: Compile final binary (only on main branch)
   build:
