@@ -181,10 +181,11 @@ CIDX tests itself using CIDX:
 cidx run test
 ```
 
-The test phase runs the `go-test` preset, with `cidx.toml` overriding its command
-to `go test -v ./...`. The catalogue default (`./pkg/... ./cmd/...`) skips the
-root package, which is where these suites live -- without the override the
-scenarios would never run in CI.
+The test phase runs the `go-test` preset, whose command is `go test -v ./...`.
+It reaches the root package, which is where these suites live. It used to run
+`./pkg/... ./cmd/...` and reach neither them nor `internal/commands`, so
+`cidx.toml` repaired it with an override; #357 fixed the catalogue instead, on
+the grounds that a default every project has to repair is not a default.
 
 ## Writing New Scenarios
 
