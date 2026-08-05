@@ -3,7 +3,6 @@ package actions
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -91,7 +90,7 @@ func (a *TagDeleteAction) Execute(ctx context.Context) error {
 
 // tagExists checks if the tag exists locally
 func (a *TagDeleteAction) tagExists() bool {
-	cmd := exec.Command("git", "rev-parse", a.tagName)
+	cmd := vcs.Git("", "rev-parse", a.tagName)
 	workDir, _ := a.repo.GetWorkDir()
 	cmd.Dir = workDir
 
@@ -114,8 +113,7 @@ func (a *TagDeleteAction) isProtected() bool {
 // showTagInfo displays information about the tag
 func (a *TagDeleteAction) showTagInfo(workDir string) {
 	// Get tag type (annotated vs lightweight)
-	cmd := exec.Command("git", "cat-file", "-t", a.tagName)
-	cmd.Dir = workDir
+	cmd := vcs.Git(workDir, "cat-file", "-t", a.tagName)
 	output, err := cmd.Output()
 	if err == nil {
 		tagType := strings.TrimSpace(string(output))
@@ -123,8 +121,7 @@ func (a *TagDeleteAction) showTagInfo(workDir string) {
 			log.Info("   Type: annotated")
 
 			// Show annotation
-			cmd = exec.Command("git", "tag", "-n1", a.tagName)
-			cmd.Dir = workDir
+			cmd = vcs.Git(workDir, "tag", "-n1", a.tagName)
 			if msg, err := cmd.Output(); err == nil {
 				log.Infof("   Message: %s", strings.TrimPrefix(strings.TrimSpace(string(msg)), a.tagName+" "))
 			}
@@ -134,8 +131,7 @@ func (a *TagDeleteAction) showTagInfo(workDir string) {
 	}
 
 	// Show commit
-	cmd = exec.Command("git", "rev-list", "-1", a.tagName)
-	cmd.Dir = workDir
+	cmd = vcs.Git(workDir, "rev-list", "-1", a.tagName)
 	if hash, err := cmd.Output(); err == nil {
 		shortHash := strings.TrimSpace(string(hash))
 		if len(shortHash) > 8 {
@@ -145,8 +141,7 @@ func (a *TagDeleteAction) showTagInfo(workDir string) {
 	}
 
 	// Show date
-	cmd = exec.Command("git", "log", "-1", "--format=%ci", a.tagName)
-	cmd.Dir = workDir
+	cmd = vcs.Git(workDir, "log", "-1", "--format=%ci", a.tagName)
 	if date, err := cmd.Output(); err == nil {
 		log.Infof("   Date: %s", strings.TrimSpace(string(date)))
 	}
@@ -156,8 +151,7 @@ func (a *TagDeleteAction) showTagInfo(workDir string) {
 func (a *TagDeleteAction) deleteLocal() error {
 	workDir, _ := a.repo.GetWorkDir()
 
-	cmd := exec.Command("git", "tag", "-d", a.tagName)
-	cmd.Dir = workDir
+	cmd := vcs.Git(workDir, "tag", "-d", a.tagName)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -171,8 +165,7 @@ func (a *TagDeleteAction) deleteLocal() error {
 func (a *TagDeleteAction) deleteRemote() error {
 	workDir, _ := a.repo.GetWorkDir()
 
-	cmd := exec.Command("git", "push", "origin", ":refs/tags/"+a.tagName)
-	cmd.Dir = workDir
+	cmd := vcs.Git(workDir, "push", "origin", ":refs/tags/"+a.tagName)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {

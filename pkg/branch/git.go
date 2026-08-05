@@ -3,10 +3,11 @@ package branch
 import (
 	"bufio"
 	"fmt"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/cidx-org/cidx/v2/pkg/vcs"
 )
 
 // GitBranch represents raw git branch data
@@ -22,7 +23,7 @@ type GitBranch struct {
 
 // GetCurrentUser returns the current git user email
 func GetCurrentUser() (string, error) {
-	cmd := exec.Command("git", "config", "user.email")
+	cmd := vcs.Git("", "config", "user.email")
 	out, err := cmd.Output()
 	if err != nil {
 		return "", err
@@ -32,7 +33,7 @@ func GetCurrentUser() (string, error) {
 
 // GetCurrentBranch returns the current branch name
 func GetCurrentBranch() (string, error) {
-	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	cmd := vcs.Git("", "rev-parse", "--abbrev-ref", "HEAD")
 	out, err := cmd.Output()
 	if err != nil {
 		return "", err
@@ -43,7 +44,7 @@ func GetCurrentBranch() (string, error) {
 // GetDefaultBranch tries to determine the default branch (main or master)
 func GetDefaultBranch() string {
 	// Try to get from remote HEAD
-	cmd := exec.Command("git", "symbolic-ref", "refs/remotes/origin/HEAD")
+	cmd := vcs.Git("", "symbolic-ref", "refs/remotes/origin/HEAD")
 	out, err := cmd.Output()
 	if err == nil {
 		ref := strings.TrimSpace(string(out))
@@ -55,7 +56,7 @@ func GetDefaultBranch() string {
 	}
 
 	// Fallback: check if main exists, otherwise master
-	cmd = exec.Command("git", "rev-parse", "--verify", "refs/heads/main")
+	cmd = vcs.Git("", "rev-parse", "--verify", "refs/heads/main")
 	if err := cmd.Run(); err == nil {
 		return "main"
 	}
@@ -67,7 +68,7 @@ func GetDefaultBranch() string {
 func ListLocalBranches() ([]GitBranch, error) {
 	// Format: refname:short|objectname:short|committerdate:unix|authoremail|subject
 	format := "%(refname:short)|%(objectname:short)|%(committerdate:unix)|%(authoremail)|%(subject)"
-	cmd := exec.Command("git", "for-each-ref", "--format="+format, "refs/heads/")
+	cmd := vcs.Git("", "for-each-ref", "--format="+format, "refs/heads/")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list local branches: %w", err)
@@ -79,7 +80,7 @@ func ListLocalBranches() ([]GitBranch, error) {
 // ListRemoteBranches returns all remote branches with their info
 func ListRemoteBranches() ([]GitBranch, error) {
 	format := "%(refname:short)|%(objectname:short)|%(committerdate:unix)|%(authoremail)|%(subject)"
-	cmd := exec.Command("git", "for-each-ref", "--format="+format, "refs/remotes/origin/")
+	cmd := vcs.Git("", "for-each-ref", "--format="+format, "refs/remotes/origin/")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list remote branches: %w", err)
@@ -144,7 +145,7 @@ func parseBranchOutput(output string, isRemote bool) ([]GitBranch, error) {
 
 // IsBranchMerged checks if a branch has been merged into the target branch
 func IsBranchMerged(branch, target string) bool {
-	cmd := exec.Command("git", "branch", "--merged", target)
+	cmd := vcs.Git("", "branch", "--merged", target)
 	out, err := cmd.Output()
 	if err != nil {
 		return false
@@ -164,7 +165,7 @@ func IsBranchMerged(branch, target string) bool {
 
 // GetAheadBehind returns how many commits a branch is ahead/behind the target
 func GetAheadBehind(branch, target string) (ahead, behind int, err error) {
-	cmd := exec.Command("git", "rev-list", "--left-right", "--count", fmt.Sprintf("%s...%s", target, branch))
+	cmd := vcs.Git("", "rev-list", "--left-right", "--count", fmt.Sprintf("%s...%s", target, branch))
 	out, err := cmd.Output()
 	if err != nil {
 		return 0, 0, err
@@ -181,14 +182,14 @@ func GetAheadBehind(branch, target string) (ahead, behind int, err error) {
 
 // GetTrackingBranch returns the remote tracking branch for a local branch
 func GetTrackingBranch(branch string) string {
-	cmd := exec.Command("git", "config", "--get", fmt.Sprintf("branch.%s.remote", branch))
+	cmd := vcs.Git("", "config", "--get", fmt.Sprintf("branch.%s.remote", branch))
 	remoteOut, err := cmd.Output()
 	if err != nil {
 		return ""
 	}
 	remote := strings.TrimSpace(string(remoteOut))
 
-	cmd = exec.Command("git", "config", "--get", fmt.Sprintf("branch.%s.merge", branch))
+	cmd = vcs.Git("", "config", "--get", fmt.Sprintf("branch.%s.merge", branch))
 	mergeOut, err := cmd.Output()
 	if err != nil {
 		return ""
@@ -204,7 +205,7 @@ func GetTrackingBranch(branch string) string {
 
 // FetchPrune fetches and prunes remote branches
 func FetchPrune() error {
-	cmd := exec.Command("git", "fetch", "--prune")
+	cmd := vcs.Git("", "fetch", "--prune")
 	return cmd.Run()
 }
 
@@ -212,7 +213,7 @@ func FetchPrune() error {
 func GetRemoteBranchInfo(branchName string) (*GitBranch, error) {
 	ref := fmt.Sprintf("refs/remotes/origin/%s", branchName)
 	format := "%(refname:short)|%(objectname:short)|%(committerdate:unix)|%(authoremail)|%(subject)"
-	cmd := exec.Command("git", "for-each-ref", "--format="+format, ref)
+	cmd := vcs.Git("", "for-each-ref", "--format="+format, ref)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get remote branch info: %w", err)
@@ -246,7 +247,7 @@ func DeleteLocalBranch(name string, force bool) error {
 	if force {
 		flag = "-D"
 	}
-	cmd := exec.Command("git", "branch", flag, name)
+	cmd := vcs.Git("", "branch", flag, name)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to delete local branch %s: %s", name, string(output))
@@ -256,7 +257,7 @@ func DeleteLocalBranch(name string, force bool) error {
 
 // DeleteRemoteBranch deletes a remote branch
 func DeleteRemoteBranch(name string) error {
-	cmd := exec.Command("git", "push", "origin", "--delete", name)
+	cmd := vcs.Git("", "push", "origin", "--delete", name)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to delete remote branch %s: %s", name, string(output))

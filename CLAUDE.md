@@ -272,4 +272,5 @@ Every dependency must justify its presence. No utility libraries, no "just in ca
 - **Go types**: PascalCase (`Preset`, `ContainerConfig`)
 - **Errors**: Always wrap with context: `fmt.Errorf("context: %w", err)`
 - **Logging**: logrus. User errors vs system errors are distinct.
+- **Running git**: always `vcs.Git(dir, args...)`, never `exec.Command("git", ...)`. CIDX decides what a git failure _was_ by matching git's own sentences — a worktree already holds the branch, the remote ref was already gone, the branch has no upstream — because git has no exit code that says which. Those sentences are translated, so the helper pins `LC_ALL=C` and makes git's output an interface CIDX controls rather than a setting the user happens to have (#364). `TestEveryGitInvocationPinsTheLocale` fails on a raw git command.
 - **No dead code**: If it's not used, delete it. No `// TODO` for core functionality.

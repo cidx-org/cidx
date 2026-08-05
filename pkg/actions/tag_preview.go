@@ -3,7 +3,6 @@ package actions
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"strings"
 
 	"github.com/cidx-org/cidx/v2/pkg/config"
@@ -148,7 +147,7 @@ func (a *TagPreviewAction) Execute(ctx context.Context) error {
 
 // showRecentTags displays the last few tags
 func (a *TagPreviewAction) showRecentTags() {
-	cmd := exec.Command("git", "tag", "-l", "--sort=-version:refname")
+	cmd := vcs.Git("", "tag", "-l", "--sort=-version:refname")
 	workDir, _ := a.repo.GetWorkDir()
 	cmd.Dir = workDir
 
@@ -177,7 +176,7 @@ func (a *TagPreviewAction) showRecentTags() {
 
 // tagExists checks if a tag already exists
 func (a *TagPreviewAction) tagExists(tagName string) bool {
-	cmd := exec.Command("git", "rev-parse", tagName)
+	cmd := vcs.Git("", "rev-parse", tagName)
 	workDir, _ := a.repo.GetWorkDir()
 	cmd.Dir = workDir
 

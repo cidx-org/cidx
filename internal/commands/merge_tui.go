@@ -3,7 +3,6 @@ package commands
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/cidx-org/cidx/v2/pkg/config"
 	"github.com/cidx-org/cidx/v2/pkg/remote"
 	"github.com/cidx-org/cidx/v2/pkg/remote/github"
+	"github.com/cidx-org/cidx/v2/pkg/vcs"
 )
 
 // Merge TUI styles - aliased from shared tui package
@@ -619,7 +619,7 @@ func (m mergeModel) runPostMergeActions() tea.Cmd {
 			headBranch := m.prDetails.HeadBranch
 
 			// Delete remote branch using git
-			cmd := exec.Command("git", "push", "origin", "--delete", headBranch)
+			cmd := vcs.Git("", "push", "origin", "--delete", headBranch)
 			if err := cmd.Run(); err != nil {
 				statusMessages = append(statusMessages, fmt.Sprintf("⚠ Failed to delete remote branch: %v", err))
 			} else {
@@ -627,7 +627,7 @@ func (m mergeModel) runPostMergeActions() tea.Cmd {
 			}
 
 			// Delete local branch
-			cmd = exec.Command("git", "branch", "-D", headBranch)
+			cmd = vcs.Git("", "branch", "-D", headBranch)
 			if err := cmd.Run(); err != nil {
 				// Not critical, branch might not exist locally
 				statusMessages = append(statusMessages, fmt.Sprintf("⚠ Local branch not deleted: %s", headBranch))
@@ -639,7 +639,7 @@ func (m mergeModel) runPostMergeActions() tea.Cmd {
 		// Checkout main branch (if configured)
 		if m.prConfig.CheckoutAfterMerge {
 			mainBranch := "main" // Could be configurable from release config
-			cmd := exec.Command("git", "checkout", mainBranch)
+			cmd := vcs.Git("", "checkout", mainBranch)
 			if err := cmd.Run(); err != nil {
 				return postMergeMsg{
 					status: strings.Join(statusMessages, "\n"),
@@ -650,7 +650,7 @@ func (m mergeModel) runPostMergeActions() tea.Cmd {
 
 			// Sync with remote (if configured)
 			if m.prConfig.SyncAfterMerge {
-				cmd = exec.Command("git", "pull", "--ff-only")
+				cmd = vcs.Git("", "pull", "--ff-only")
 				if err := cmd.Run(); err != nil {
 					statusMessages = append(statusMessages, fmt.Sprintf("⚠ Failed to sync: %v", err))
 				} else {

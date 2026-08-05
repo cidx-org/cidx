@@ -3,11 +3,11 @@ package actions
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"sort"
 	"strings"
 
 	"github.com/cidx-org/cidx/v2/pkg/remote"
+	"github.com/cidx-org/cidx/v2/pkg/vcs"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -15,7 +15,7 @@ import (
 // package variable so tests replace it without a repository or a network call,
 // the same seam convention the CI-timeout and registry code use.
 var refExistsOnRemote = func(ref string) (bool, error) {
-	out, err := exec.Command("git", "ls-remote", "--heads", "--tags", "origin", ref).Output()
+	out, err := vcs.Git("", "ls-remote", "--heads", "--tags", "origin", ref).Output()
 	if err != nil {
 		return false, fmt.Errorf("git ls-remote failed: %w", err)
 	}

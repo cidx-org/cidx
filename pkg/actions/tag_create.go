@@ -3,7 +3,6 @@ package actions
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"strings"
 
 	"github.com/cidx-org/cidx/v2/pkg/config"
@@ -113,7 +112,7 @@ func (a *TagCreateAction) Execute(ctx context.Context) error {
 
 // tagExists checks if a tag already exists
 func (a *TagCreateAction) tagExists(tagName string) bool {
-	cmd := exec.Command("git", "rev-parse", tagName)
+	cmd := vcs.Git("", "rev-parse", tagName)
 	workDir, _ := a.repo.GetWorkDir()
 	cmd.Dir = workDir
 
@@ -140,8 +139,7 @@ func (a *TagCreateAction) createTag(tagName, message string) error {
 		args = append(args[:2], append([]string{"-s"}, args[2:]...)...)
 	}
 
-	cmd := exec.Command("git", args...)
-	cmd.Dir = workDir
+	cmd := vcs.Git(workDir, args...)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -155,8 +153,7 @@ func (a *TagCreateAction) createTag(tagName, message string) error {
 func (a *TagCreateAction) pushTag(tagName string) error {
 	workDir, _ := a.repo.GetWorkDir()
 
-	cmd := exec.Command("git", "push", "origin", tagName)
-	cmd.Dir = workDir
+	cmd := vcs.Git(workDir, "push", "origin", tagName)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {

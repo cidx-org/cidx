@@ -106,7 +106,7 @@ func (a *TagPrepareAction) Execute(ctx context.Context) error {
 
 // getLastTag returns the most recent tag
 func (a *TagPrepareAction) getLastTag() string {
-	cmd := exec.Command("git", "describe", "--tags", "--abbrev=0")
+	cmd := vcs.Git("", "describe", "--tags", "--abbrev=0")
 	workDir, _ := a.repo.GetWorkDir()
 	cmd.Dir = workDir
 
@@ -176,7 +176,7 @@ func (a *TagPrepareAction) generateTagMessage(version string) string {
 
 // getCommitSummary returns a brief summary of commits since tag
 func (a *TagPrepareAction) getCommitSummary(tag string) string {
-	cmd := exec.Command("git", "log", tag+"..HEAD", "--oneline", "--no-merges")
+	cmd := vcs.Git("", "log", tag+"..HEAD", "--oneline", "--no-merges")
 	workDir, _ := a.repo.GetWorkDir()
 	cmd.Dir = workDir
 

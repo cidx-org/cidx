@@ -3,7 +3,6 @@ package actions
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"regexp"
 	"strings"
 	"time"
@@ -175,8 +174,7 @@ func (a *PRAction) createPR(ctx context.Context) error {
 		return fmt.Errorf("failed to get work directory: %w", err)
 	}
 
-	createBranchCmd := exec.Command("git", "checkout", "-b", branchName)
-	createBranchCmd.Dir = workDir
+	createBranchCmd := vcs.Git(workDir, "checkout", "-b", branchName)
 	if output, err := createBranchCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to create branch: %w\n%s", err, output)
 	}
@@ -186,16 +184,14 @@ func (a *PRAction) createPR(ctx context.Context) error {
 	// 7. Create initial empty commit to allow PR creation
 	log.Info("📝 Creating initial commit...")
 	commitMsg := fmt.Sprintf("chore: initialize PR branch for %s", a.title)
-	commitCmd := exec.Command("git", "commit", "--allow-empty", "-m", commitMsg)
-	commitCmd.Dir = workDir
+	commitCmd := vcs.Git(workDir, "commit", "--allow-empty", "-m", commitMsg)
 	if output, err := commitCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to create initial commit: %w\n%s", err, output)
 	}
 
 	// 8. Push branch to remote with initial commit
 	log.Info("📤 Pushing branch to remote...")
-	pushCmd := exec.Command("git", "push", "-u", "origin", branchName)
-	pushCmd.Dir = workDir
+	pushCmd := vcs.Git(workDir, "push", "-u", "origin", branchName)
 	if output, err := pushCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to push branch: %w\n%s", err, output)
 	}
@@ -258,8 +254,7 @@ func (a *PRAction) createPRForExistingBranch(ctx context.Context, branchName str
 	if !hasCommits {
 		log.Info("📝 Creating initial commit...")
 		commitMsg := fmt.Sprintf("chore: initialize PR branch for %s", a.title)
-		commitCmd := exec.Command("git", "commit", "--allow-empty", "-m", commitMsg)
-		commitCmd.Dir = workDir
+		commitCmd := vcs.Git(workDir, "commit", "--allow-empty", "-m", commitMsg)
 		if output, err := commitCmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("failed to create initial commit: %w\n%s", err, output)
 		}
@@ -274,16 +269,14 @@ func (a *PRAction) createPRForExistingBranch(ctx context.Context, branchName str
 	if !isPushed {
 		// Push branch to remote
 		log.Info("📤 Pushing branch to remote...")
-		pushCmd := exec.Command("git", "push", "-u", "origin", branchName)
-		pushCmd.Dir = workDir
+		pushCmd := vcs.Git(workDir, "push", "-u", "origin", branchName)
 		if output, err := pushCmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("failed to push branch: %w\n%s", err, output)
 		}
 	} else {
 		// Push any new commits
 		log.Info("📤 Pushing commits to remote...")
-		pushCmd := exec.Command("git", "push")
-		pushCmd.Dir = workDir
+		pushCmd := vcs.Git(workDir, "push")
 		if output, err := pushCmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("failed to push: %w\n%s", err, output)
 		}
@@ -320,8 +313,7 @@ func (a *PRAction) createPRForExistingBranch(ctx context.Context, branchName str
 // branchHasCommitsAheadOfMain checks if the current branch has commits ahead of main
 func (a *PRAction) branchHasCommitsAheadOfMain(workDir string) (bool, error) {
 	// Get the number of commits ahead of main
-	cmd := exec.Command("git", "rev-list", "--count", "main..HEAD")
-	cmd.Dir = workDir
+	cmd := vcs.Git(workDir, "rev-list", "--count", "main..HEAD")
 	output, err := cmd.Output()
 	if err != nil {
 		return false, err
@@ -333,8 +325,7 @@ func (a *PRAction) branchHasCommitsAheadOfMain(workDir string) (bool, error) {
 
 // branchExistsOnRemote checks if a branch exists on the remote
 func (a *PRAction) branchExistsOnRemote(workDir, branchName string) (bool, error) {
-	cmd := exec.Command("git", "ls-remote", "--heads", "origin", branchName)
-	cmd.Dir = workDir
+	cmd := vcs.Git(workDir, "ls-remote", "--heads", "origin", branchName)
 	output, err := cmd.Output()
 	if err != nil {
 		return false, err
@@ -759,8 +750,7 @@ func (a *PRAction) postMergeCleanup(mergedBranch string) error {
 
 	// 1. Checkout main
 	log.Info("  → Switching to main branch...")
-	checkoutCmd := exec.Command("git", "checkout", "main")
-	checkoutCmd.Dir = workDir
+	checkoutCmd := vcs.Git(workDir, "checkout", "main")
 	if output, err := checkoutCmd.CombinedOutput(); err != nil {
 		// Keeping a baseline worktree on main is a normal setup, and git
 		// refuses to check the branch out twice. The merge already succeeded,
@@ -778,20 +768,17 @@ func (a *PRAction) postMergeCleanup(mergedBranch string) error {
 
 	// 2. Pull latest changes
 	log.Info("  → Pulling latest changes...")
-	pullCmd := exec.Command("git", "pull")
-	pullCmd.Dir = workDir
+	pullCmd := vcs.Git(workDir, "pull")
 	if output, err := pullCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to pull main: %w\n%s", err, output)
 	}
 
 	// 3. Delete local branch
 	log.Infof("  → Deleting local branch '%s'...", mergedBranch)
-	deleteLocalCmd := exec.Command("git", "branch", "-d", mergedBranch)
-	deleteLocalCmd.Dir = workDir
+	deleteLocalCmd := vcs.Git(workDir, "branch", "-d", mergedBranch)
 	if output, err := deleteLocalCmd.CombinedOutput(); err != nil {
 		// Use -D if -d fails (branch might not be fully merged from git's perspective)
-		deleteLocalCmd = exec.Command("git", "branch", "-D", mergedBranch)
-		deleteLocalCmd.Dir = workDir
+		deleteLocalCmd = vcs.Git(workDir, "branch", "-D", mergedBranch)
 		if output, err := deleteLocalCmd.CombinedOutput(); err != nil {
 			log.Warnf("  ⚠️  Could not delete local branch: %s", strings.TrimSpace(string(output)))
 		}
@@ -811,8 +798,7 @@ func (a *PRAction) postMergeCleanup(mergedBranch string) error {
 // already deleted on merge is not an error.
 func (a *PRAction) deleteRemoteBranch(workDir, mergedBranch string) {
 	log.Infof("  → Deleting remote branch '%s'...", mergedBranch)
-	deleteRemoteCmd := exec.Command("git", "push", "origin", "--delete", mergedBranch)
-	deleteRemoteCmd.Dir = workDir
+	deleteRemoteCmd := vcs.Git(workDir, "push", "origin", "--delete", mergedBranch)
 	if output, err := deleteRemoteCmd.CombinedOutput(); err != nil {
 		outputStr := strings.TrimSpace(string(output))
 		if !strings.Contains(outputStr, "remote ref does not exist") {

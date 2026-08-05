@@ -3,7 +3,6 @@ package actions
 import (
 	"context"
 	"fmt"
-	"os/exec"
 
 	"github.com/cidx-org/cidx/v2/pkg/vcs"
 	log "github.com/sirupsen/logrus"
@@ -57,23 +56,20 @@ func (a *ReleaseCommitAction) Execute(ctx context.Context) error {
 	}
 
 	// Stage the release notes file
-	addCmd := exec.Command("git", "add", notesFile)
-	addCmd.Dir = workDir
+	addCmd := vcs.Git(workDir, "add", notesFile)
 	if output, err := addCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to stage release notes: %w\n%s", err, output)
 	}
 
 	// Stage the version file
-	addVersionCmd := exec.Command("git", "add", ReleaseVersionFile)
-	addVersionCmd.Dir = workDir
+	addVersionCmd := vcs.Git(workDir, "add", ReleaseVersionFile)
 	if output, err := addVersionCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to stage version file: %w\n%s", err, output)
 	}
 
 	// Commit the release notes with version in message
 	commitMsg := fmt.Sprintf("chore: prepare release v%s", version)
-	commitCmd := exec.Command("git", "commit", "-m", commitMsg)
-	commitCmd.Dir = workDir
+	commitCmd := vcs.Git(workDir, "commit", "-m", commitMsg)
 	if output, err := commitCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to commit release notes: %w\n%s", err, output)
 	}
