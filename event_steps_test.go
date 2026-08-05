@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/cidx-org/cidx/v2/pkg/presets"
 	"github.com/cucumber/godog"
 )
 
@@ -42,7 +44,6 @@ func RegisterEventSteps(ctx *godog.ScenarioContext, testCtx *TestContext) {
 	ctx.Then(`^artifacts should be stored in "([^"]*)" directory$`, testCtx.artifactsShouldBeStored)
 	ctx.Then(`^artifacts should be ready for release$`, testCtx.artifactsShouldBeReadyForRelease)
 	ctx.Then(`^artifacts should be attached$`, testCtx.artifactsShouldBeAttached)
-	ctx.Then(`^deployment should be faster$`, testCtx.deploymentShouldBeFaster)
 	ctx.Then(`^the release should use the pre-built artifacts$`, testCtx.releaseShouldUsePrebuiltArtifacts)
 
 	// Release assertions
@@ -215,18 +216,37 @@ func (tc *TestContext) phaseShouldNotExecute(phase string) error {
 	return tc.shouldNotExecutePhase(phase)
 }
 
-// noFurtherPhasesExecute checks that pipeline stopped
+// noFurtherPhasesExecute asserts fail-fast: nothing ran after the phase that
+// failed.
 func (tc *TestContext) noFurtherPhasesExecute() error {
-	return nil
+	return tc.subsequentPhasesShouldNotExecute()
 }
 
-// shouldCompleteInTime checks pipeline timing
+// shouldCompleteInTime asserts the run really finished inside the budget the
+// scenario states, measured over the run rather than assumed.
 func (tc *TestContext) shouldCompleteInTime(minutes int) error {
+	if tc.RunDuration == 0 && len(tc.ExecutedPhases) == 0 {
+		return fmt.Errorf("nothing ran, so nothing completed")
+	}
+	if budget := time.Duration(minutes) * time.Minute; tc.RunDuration > budget {
+		return fmt.Errorf("the pipeline took %s, over the %s budget", tc.RunDuration, budget)
+	}
 	return nil
 }
 
-// shouldReceiveClearFeedback checks for clear feedback
+// shouldReceiveClearFeedback asserts the run said what happened to each phase
+// it ran, rather than finishing in silence.
 func (tc *TestContext) shouldReceiveClearFeedback() error {
+	if len(tc.ExecutedPhases) == 0 {
+		return fmt.Errorf("no phase ran, so there is no feedback to give")
+	}
+	for _, phase := range tc.ExecutedPhases {
+		passed := strings.Contains(tc.Output, fmt.Sprintf("✓ %s", phase))
+		failed := strings.Contains(tc.Output, fmt.Sprintf("✗ %s", phase))
+		if !passed && !failed {
+			return fmt.Errorf("the %q phase ran but its outcome is not reported:\n%s", phase, tc.Output)
+		}
+	}
 	return nil
 }
 
@@ -235,8 +255,16 @@ func (tc *TestContext) phaseShouldCreateArtifacts(phase string) error {
 	return tc.shouldExecutePhase(phase)
 }
 
-// artifactsShouldBeStored checks artifacts directory
+// artifactsShouldBeStored asks the preset that builds them where they land.
+// The directory is a property of the catalogue, not of the run.
 func (tc *TestContext) artifactsShouldBeStored(directory string) error {
+	preset, err := presets.Get("go-build")
+	if err != nil {
+		return err
+	}
+	if !strings.Contains(preset.Command, directory) {
+		return fmt.Errorf("the go-build preset writes nothing to %q:\n%s", directory, preset.Command)
+	}
 	return nil
 }
 
@@ -248,18 +276,42 @@ func (tc *TestContext) artifactsShouldBeReadyForRelease() error {
 	return nil
 }
 
-// artifactsShouldBeAttached checks artifacts are attached
+// artifactsShouldBeAttached asks the release preset whether it passes anything
+// to attach: gh-release runs `gh release create ${TAG} ${ARTIFACTS}`, and
+// ARTIFACTS has to name something.
 func (tc *TestContext) artifactsShouldBeAttached() error {
+	preset, err := presets.Get("gh-release")
+	if err != nil {
+		return err
+	}
+	if !strings.Contains(preset.Command, "${ARTIFACTS}") {
+		return fmt.Errorf("gh-release attaches nothing to the release:\n%s", preset.Command)
+	}
+	if preset.Env["ARTIFACTS"] == "" {
+		return fmt.Errorf("gh-release leaves ARTIFACTS empty, so nothing is attached")
+	}
 	return nil
 }
 
-// deploymentShouldBeFaster is a placeholder for performance assertion
-func (tc *TestContext) deploymentShouldBeFaster() error {
-	return nil
-}
-
-// releaseShouldUsePrebuiltArtifacts checks release uses pre-built artifacts
+// releaseShouldUsePrebuiltArtifacts asserts the release phase consumes what the
+// build phase produced, rather than building again: gh-release's ARTIFACTS
+// points inside the directory go-build writes to.
 func (tc *TestContext) releaseShouldUsePrebuiltArtifacts() error {
+	release, err := presets.Get("gh-release")
+	if err != nil {
+		return err
+	}
+	build, err := presets.Get("go-build")
+	if err != nil {
+		return err
+	}
+	artifacts := release.Env["ARTIFACTS"]
+	if artifacts == "" {
+		return fmt.Errorf("gh-release names no artifact to publish")
+	}
+	if !strings.Contains(build.Command, artifacts) {
+		return fmt.Errorf("gh-release publishes %q, which go-build does not produce:\n%s", artifacts, build.Command)
+	}
 	return nil
 }
 
@@ -271,10 +323,17 @@ func (tc *TestContext) shouldRecognizeReleaseTag() error {
 	return nil
 }
 
-// githubReleaseShouldNotBePublished checks release is not published
+// githubReleaseShouldNotBePublished asks environment.ValidatePreset what would
+// happen to gh-release here. Locally it is held as a dry-run, which is the
+// reason nothing reaches GitHub — "local never publishes" was the belief, not
+// a check.
 func (tc *TestContext) githubReleaseShouldNotBePublished() error {
-	if !tc.CI {
-		return nil // Local environment never publishes
+	preset, mode, err := tc.resolvePresetSafety("gh-release")
+	if err != nil {
+		return err
+	}
+	if !mode.IsDryRun {
+		return fmt.Errorf("preset %q would really run here (mode %s), and publish", preset.Name, mode.Mode)
 	}
 	return nil
 }
@@ -308,8 +367,17 @@ func (tc *TestContext) theReleaseShouldBePublic() error {
 	return fmt.Errorf("releases are only public in CI")
 }
 
-// releaseNotesShouldBeGenerated checks release notes were generated
+// releaseNotesShouldBeGenerated asks the preset that creates the release: its
+// command either uses the notes file `cidx release prepare` wrote, or falls
+// back to --generate-notes. Either way it must ask for notes.
 func (tc *TestContext) releaseNotesShouldBeGenerated() error {
+	preset, err := presets.Get("gh-release")
+	if err != nil {
+		return err
+	}
+	if !strings.Contains(preset.Command, "--generate-notes") && !strings.Contains(preset.Command, "--notes-file") {
+		return fmt.Errorf("gh-release creates a release with no notes:\n%s", preset.Command)
+	}
 	return nil
 }
 
@@ -346,9 +414,13 @@ func (tc *TestContext) shouldExecuteAllPhasesInOrder(table *godog.Table) error {
 	return nil
 }
 
-// shouldSeeScanResults checks for scan results in output
+// shouldSeeScanResults asserts the scan the scenario asked about reported
+// something, and named the phase it came from.
 func (tc *TestContext) shouldSeeScanResults(scanType string) error {
-	return nil
+	if !strings.Contains(strings.ToLower(tc.Output), "scan") {
+		return fmt.Errorf("no %s scan result in the output:\n%s", scanType, tc.Output)
+	}
+	return tc.shouldExecutePhase("security")
 }
 
 // mergeCodeWithVulnerabilities simulates merge with vulnerabilities

@@ -2,10 +2,13 @@ package main
 
 import (
 	"fmt"
+	"reflect"
 	"regexp"
 	"strings"
 
+	"github.com/cidx-org/cidx/v2/pkg/config"
 	"github.com/cidx-org/cidx/v2/pkg/executor"
+	"github.com/cidx-org/cidx/v2/pkg/presets"
 	"github.com/cucumber/godog"
 )
 
@@ -126,7 +129,15 @@ func (tc *TestContext) twoContainerNamesShouldBeIdentical() error {
 	return nil
 }
 
+// iHaveAValidCidxTomlConfiguration stages a cidx.toml in the scenario's project
+// directory and loads it through config.Load, so "valid" means the real loader
+// accepted it rather than the scenario saying so.
 func (tc *TestContext) iHaveAValidCidxTomlConfiguration() error {
+	cfg, err := tc.loadStagedConfig()
+	if err != nil {
+		return err
+	}
+	tc.Config["loaded_config"] = cfg
 	return nil
 }
 
@@ -231,8 +242,11 @@ func (tc *TestContext) theCommandShouldFail() error {
 }
 
 func (tc *TestContext) noContainerShouldActuallyRun() error {
-	if strings.Contains(tc.Output, "Would execute") {
-		return nil
+	if !strings.Contains(tc.Output, "Would execute") {
+		return fmt.Errorf("the run did not report itself as a dry-run:\n%s", tc.Output)
+	}
+	if len(tc.ExecutedPhases) > 0 {
+		return fmt.Errorf("a dry-run executed %v", tc.ExecutedPhases)
 	}
 	return nil
 }
@@ -278,31 +292,49 @@ func (tc *TestContext) theExecutorShouldHaveMethod(method string) error {
 	return nil
 }
 
+// iRunATool resolves a catalogue preset into the config.ContainerConfig every
+// backend receives — the struct pipeline.RunTool hands to Executor.Run — so the
+// next step can look at a real one instead of a list of field names.
 func (tc *TestContext) iRunATool() error {
+	preset, err := presets.Get("trivy")
+	if err != nil {
+		return err
+	}
+	tc.Config["container_config"] = &config.ContainerConfig{
+		Name:        preset.Name,
+		Phase:       preset.Phase,
+		Image:       preset.Image,
+		Command:     preset.Command,
+		Entrypoint:  preset.Entrypoint,
+		Workdir:     preset.Workdir,
+		Volumes:     preset.Volumes,
+		Env:         preset.Env,
+		ConfigFiles: preset.ConfigFiles,
+		PullPolicy:  preset.PullPolicy,
+		Timeout:     preset.Timeout,
+	}
 	return nil
 }
 
+// theContainerConfigShouldContain asks the config.ContainerConfig the run
+// produced, by reflection: the field has to exist on the type every backend
+// receives, and it has to carry something.
 func (tc *TestContext) theContainerConfigShouldContain(table *godog.Table) error {
-	expectedFields := make(map[string]bool)
+	containerConfig, ok := tc.Config["container_config"].(*config.ContainerConfig)
+	if !ok {
+		return fmt.Errorf("no tool was run, so there is no ContainerConfig to inspect")
+	}
+	value := reflect.ValueOf(*containerConfig)
+
 	for _, row := range table.Rows[1:] {
-		expectedFields[row.Cells[0].Value] = true
-	}
-
-	actualFields := map[string]bool{
-		"Name":    true,
-		"Phase":   true,
-		"Image":   true,
-		"Command": true,
-		"Workdir": true,
-		"Volumes": true,
-		"Env":     true,
-	}
-
-	for field := range expectedFields {
-		if !actualFields[field] {
-			return fmt.Errorf("ContainerConfig missing field: %s", field)
+		name := row.Cells[0].Value
+		field := value.FieldByName(name)
+		if !field.IsValid() {
+			return fmt.Errorf("config.ContainerConfig has no field %q", name)
+		}
+		if field.IsZero() {
+			return fmt.Errorf("config.ContainerConfig field %q came back empty for %q", name, containerConfig.Name)
 		}
 	}
-
 	return nil
 }

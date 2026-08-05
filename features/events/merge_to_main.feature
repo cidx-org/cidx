@@ -54,9 +54,14 @@ Feature: Merge to Main Branch
       Then I should see message "Main branch is production-ready"
       And artifacts should be ready for release
 
+    # "And deployment should be faster" used to close this scenario. Nothing
+    # could have made it false — cidx does not deploy, and no measurement was
+    # taken — so the step returned nil (#349). What is checkable is the claim
+    # underneath it: the release phase publishes what the build phase produced
+    # instead of rebuilding it.
+
     Scenario: Main branch can be released immediately
       Given I am on main branch
       And I run "cidx run main" successfully
       When I create a tag "v1.0.0"
       Then the release should use the pre-built artifacts
-      And deployment should be faster

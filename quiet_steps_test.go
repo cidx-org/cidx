@@ -17,7 +17,6 @@ func RegisterQuietSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 
 	// Quiet mode assertions
 	ctx.Then(`^the execution should be quiet$`, tc.executionShouldBeQuiet)
-	ctx.Then(`^I should see "([^"]*)" container exited with code (\d+)$`, tc.shouldSeeContainerExited)
 
 	// Streaming at the normal log level (issue #273)
 	ctx.Given(`^cidx runs (locally|in CI)$`, tc.cidxRunsWhere)
@@ -73,45 +72,97 @@ func (tc *TestContext) containerOutputShouldBe(expected string) error {
 	return nil
 }
 
-// haveToolWithExitCode sets up a tool with a specific exit code
+// haveToolWithExitCode stages a tool whose standard output the scenario does
+// not spell out. It still has some -- a container that prints nothing cannot
+// show whether quiet suppressed anything -- so it gets a line of its own.
 func (tc *TestContext) haveToolWithExitCode(tool string, exitCode int) error {
-	tc.Config["tool_"+tool+"_exit_code"] = exitCode
-	// Simulate running the tool
-	if exitCode == 0 {
-		tc.Output += "✓ " + tool + " completed\n"
-	} else {
-		tc.Output += "✗ " + tool + " failed\n"
-		tc.Output += "container exited with code " + string(rune('0'+exitCode)) + "\n"
-		tc.ExitCode = exitCode
-	}
-	return nil
+	return tc.stageTool(tool, tool+": standard output", exitCode)
 }
 
-// haveToolWithOutputAndExitCode sets up a tool with output and exit code
+// haveToolWithOutputAndExitCode stages a tool whose standard output the
+// scenario names, so the assertions can look for that exact text.
 func (tc *TestContext) haveToolWithOutputAndExitCode(tool, output string, exitCode int) error {
-	tc.Config["tool_"+tool+"_output"] = output
-	tc.Config["tool_"+tool+"_exit_code"] = exitCode
-	if exitCode != 0 {
-		tc.Output += output + "\n"
-		tc.Output += "container exited with code 1\n"
-		tc.ExitCode = exitCode
+	return tc.stageTool(tool, output, exitCode)
+}
+
+// haveMultipleToolsParallel stages the mixed run the parallel scenario is
+// about: tools that pass and one that does not, so "only the failed logs" has
+// something to be false about.
+func (tc *TestContext) haveMultipleToolsParallel() error {
+	if err := tc.stageTool("lint", "lint: standard output", 0); err != nil {
+		return err
+	}
+	if err := tc.stageTool("unit", "unit: standard output", 0); err != nil {
+		return err
+	}
+	return tc.stageTool("scan", "scan: standard output", 1)
+}
+
+func (tc *TestContext) stageTool(name, stdout string, exitCode int) error {
+	tc.Tools = append(tc.Tools, stagedTool{Name: name, Stdout: stdout, ExitCode: exitCode})
+	return nil
+}
+
+// runStagedTools plays the staged tools through the decision cidx really makes
+// about their output: commands.ResolveQuiet says whether a container's stdout
+// is buffered or streamed, and pkg/executor's Run flushes the buffer only when
+// the container exits non-zero. The two lines it emits are the executor's own
+// -- the ✓ it logs on success, and the "container exited with code N" its
+// error carries (pkg/executor/docker.go).
+//
+// What is stood in for is the container: a real one would need a daemon and an
+// image pull for a decision that needs neither.
+func (tc *TestContext) runStagedTools(parts []string) error {
+	var quiet, stream, verbose, parallel bool
+	for _, part := range parts {
+		switch part {
+		case "--quiet", "-q":
+			quiet = true
+		case "--stream":
+			stream = true
+		case "--verbose":
+			verbose = true
+		case "--parallel":
+			parallel = true
+		}
+	}
+
+	buffered := commands.ResolveQuiet(quiet, stream, verbose, tc.CI)
+	tc.Config["quiet"] = buffered
+
+	for _, tool := range tc.Tools {
+		if !buffered {
+			tc.Output += tool.Stdout + "\n"
+		}
+
+		if tool.ExitCode != 0 {
+			if buffered {
+				tc.Output += tool.Stdout + "\n"
+			}
+			tc.Output += fmt.Sprintf("container exited with code %d\n", tool.ExitCode)
+			tc.ExitCode = tool.ExitCode
+			tc.FailedPhases = append(tc.FailedPhases, tool.Name)
+			if !parallel {
+				return nil // fail-fast, like a sequential phase
+			}
+			continue
+		}
+
+		tc.Output += fmt.Sprintf("  ✓ %s completed\n", tool.Name)
+		tc.ExecutedPhases = append(tc.ExecutedPhases, tool.Name)
 	}
 	return nil
 }
 
-// haveMultipleToolsParallel sets up multiple parallel tools
-func (tc *TestContext) haveMultipleToolsParallel() error {
-	tc.Config["parallel_tools"] = true
-	return nil
-}
-
-// executionShouldBeQuiet checks execution was quiet
+// executionShouldBeQuiet asserts the run resolved to buffering, through
+// commands.ResolveQuiet rather than a restatement of its rules.
 func (tc *TestContext) executionShouldBeQuiet() error {
-	// Quiet mode is verified by the absence of verbose output
-	return nil
-}
-
-// shouldSeeContainerExited checks container exit message
-func (tc *TestContext) shouldSeeContainerExited(tool string, code int) error {
+	quiet, ok := tc.Config["quiet"].(bool)
+	if !ok {
+		return fmt.Errorf("no run was invoked")
+	}
+	if !quiet {
+		return fmt.Errorf("the run resolved to streamed output, expected it to be quiet")
+	}
 	return nil
 }

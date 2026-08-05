@@ -9,6 +9,12 @@ Feature: Local Safety Modes
 
   Rule: Docker operations are safe by default in local environment
 
+    # What no-push does locally, once the steps were pointed at
+    # environment.ValidatePreset instead of asserting nothing (#349): it strips
+    # --push from docker-buildx, injects DOCKER_PUSH=false, and holds the run as
+    # a dry-run. The dry-run is the guardrail — the modified command is never
+    # handed to a backend, so locally nothing is built either.
+
     Scenario: docker-buildx runs in no-push mode locally
       Given I am in local environment
       And the "docker-buildx" preset has local_behavior = "no-push"
@@ -16,7 +22,7 @@ Feature: Local Safety Modes
       Then I should see "Local safety: no-push - Local mode: build without push"
       And the command should NOT include "--push" flag
       And the environment variable "DOCKER_PUSH" should be "false"
-      And Docker image should be built successfully
+      And the run should be held as a dry-run
       But Docker image should NOT be pushed to registry
 
     Scenario: docker-buildx pushes in CI environment
@@ -28,12 +34,18 @@ Feature: Local Safety Modes
       And Docker image should be pushed to registry
       And I should see "Pushed to ghcr.io"
 
+    # kaniko keeps its --destination: environment.ApplyExecutionMode rewrites the
+    # command of docker-buildx and gh-release by name and of nothing else. That
+    # is not the leak it looks like — no-push holds the run as a dry-run, so the
+    # command is never executed. The old line claimed a flag was stripped that
+    # never was (#349).
+
     Scenario: kaniko builds without push locally
       Given I am in local environment
       And the "kaniko" preset has local_behavior = "no-push"
       When I run tool "kaniko"
-      Then the command should NOT include "--destination" flag
-      And Docker image should be built
+      Then the environment variable "DOCKER_PUSH" should be "false"
+      And the run should be held as a dry-run
       But image should NOT be pushed
 
   Rule: GitHub releases are draft by default in local environment
@@ -57,12 +69,17 @@ Feature: Local Safety Modes
       And GitHub release should be published
       And release should be public
 
-    Scenario: goreleaser creates snapshot locally
+    # Same correction as kaniko: goreleaser's command is `release --clean` and
+    # stays that way — no --snapshot is ever added. draft injects DRAFT=true and
+    # holds the run as a dry-run, which is what keeps a local `cidx run
+    # goreleaser` from reaching GitHub (#349).
+
+    Scenario: goreleaser creates no release locally
       Given I am in local environment
       And the "goreleaser" preset has local_behavior = "draft"
       When I run tool "goreleaser"
-      Then the command should include "--snapshot" flag
-      And release should be built
+      Then the environment variable "DRAFT" should be "true"
+      And the run should be held as a dry-run
       But release should NOT be published to GitHub
 
   Rule: Preset can require CI environment
