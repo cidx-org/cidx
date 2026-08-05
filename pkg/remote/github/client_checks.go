@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/cidx-org/cidx/v2/pkg/remote"
@@ -35,6 +36,108 @@ var nonPullRequestEvents = map[string]bool{
 	"repository_dispatch": true,
 }
 
+// getJobFunc reads one Actions job. It exists as a seam so the naming of the
+// failing step can be unit-tested without a real GitHub client.
+type getJobFunc func(ctx context.Context, jobID int64) (*github.WorkflowJob, error)
+
+// getWorkflowJob is the real implementation behind getJobFunc.
+func (c *Client) getWorkflowJob(ctx context.Context, jobID int64) (*github.WorkflowJob, error) {
+	job, _, err := c.client.Actions.GetWorkflowJobByID(ctx, c.owner, c.repo, jobID)
+	return job, err
+}
+
+// failedStepCache remembers, per head commit, the step a failed check run died
+// on -- including the fact that there is none to name.
+//
+// It is what makes the read affordable at all. `cidx pr watch` re-reads the
+// checks every few seconds, so without it a red run would re-request the job of
+// every failed check on every cycle, for as long as someone watches: the
+// rate-limit cost that had this deferred in #354. A completed job is a settled
+// fact, so one request per failed check is enough however long the watch lasts.
+//
+// Re-running a job does not overwrite the old answer, it mints a new check run
+// with a new ID -- verified on run 30898949737, whose second attempt renumbered
+// every job (Test 91958590860 -> 91959086260) and whose commit's check-run
+// listing returns only the new IDs. A cached entry therefore can never be
+// served for a different attempt of the same job.
+//
+// Entries are scoped to the head SHA and dropped whole when it moves, so a
+// watch spanning several pushes does not accumulate the checks of commits
+// nobody is looking at any more.
+type failedStepCache struct {
+	mu    sync.Mutex
+	sha   string
+	steps map[int64]string
+}
+
+// lookup returns the step recorded for a check run of sha, and whether the read
+// has already happened.
+func (c *failedStepCache) lookup(sha string, id int64) (string, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.sha != sha {
+		return "", false
+	}
+	step, ok := c.steps[id]
+	return step, ok
+}
+
+// store records step for a check run of sha, discarding the entries of any
+// other commit.
+func (c *failedStepCache) store(sha string, id int64, step string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.sha != sha || c.steps == nil {
+		c.sha = sha
+		c.steps = make(map[int64]string)
+	}
+	c.steps[id] = step
+}
+
+// failedStepOf names the step a failed check run died on.
+//
+// The check run itself does not carry one; the Actions job behind it does, in
+// its steps. No lookup is needed to reach that job: a GitHub Actions check run
+// and its job share an ID -- verified against run 30989450607, where check run
+// 92251901265 "Test" is job 92251901265, reporting `Run tests` as the step that
+// failed.
+//
+// Whatever the read cannot answer -- a 404, a rate limit, a job whose steps
+// name no failure -- is cached as "no step" like any other answer. Retrying
+// every three seconds is precisely what the cache exists to prevent, and a
+// completed job that named no failing step now will not name one before the
+// next push.
+func failedStepOf(ctx context.Context, sha string, id int64, cache *failedStepCache, get getJobFunc) string {
+	if step, cached := cache.lookup(sha, id); cached {
+		return step
+	}
+
+	var step string
+	if job, err := get(ctx, id); err == nil {
+		step = firstFailedStep(job)
+	}
+
+	cache.store(sha, id, step)
+	return step
+}
+
+// firstFailedStep returns the name of the first step of job whose conclusion is
+// neither success nor skipped -- where the job stopped going right. A step with
+// no conclusion at all never ran, so it is not where anything failed.
+func firstFailedStep(job *github.WorkflowJob) string {
+	for _, step := range job.Steps {
+		switch step.GetConclusion() {
+		case "", "success", "skipped":
+			continue
+		default:
+			return step.GetName()
+		}
+	}
+	return ""
+}
+
 // GetPullRequestChecks returns the status of all checks/workflows for a PR
 func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remote.PRChecks, error) {
 	// Get PR details to get the head SHA
@@ -62,7 +165,9 @@ func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remot
 		return nil, fmt.Errorf("failed to list check runs: %w", err)
 	}
 
-	addCheckRuns(checks, checkRuns.CheckRuns, dispatchedCheckSuites(ctx, headSHA, c.listRepositoryRuns))
+	addCheckRuns(checks, checkRuns.CheckRuns, dispatchedCheckSuites(ctx, headSHA, c.listRepositoryRuns), func(id int64) string {
+		return failedStepOf(ctx, headSHA, id, &c.failedSteps, c.getWorkflowJob)
+	})
 
 	// Get commit status checks (legacy status API)
 	statuses, _, err := c.client.Repositories.GetCombinedStatus(ctx, c.owner, c.repo, headSHA, &github.ListOptions{})
@@ -104,7 +209,12 @@ func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remot
 // addCheckRuns folds the check runs of the PR's head commit into checks,
 // leaving out those whose check suite belongs to a run the pull request did not
 // cause (issue #240).
-func addCheckRuns(checks *remote.PRChecks, runs []*github.CheckRun, dispatched map[int64]bool) {
+//
+// failedStep names the step behind a failure, and is asked only about the
+// checks that are counted as failures -- one request each, so a green check or
+// one still running costs nothing (issue #355). A nil failedStep leaves the
+// field empty.
+func addCheckRuns(checks *remote.PRChecks, runs []*github.CheckRun, dispatched map[int64]bool, failedStep func(id int64) string) {
 	for _, run := range runs {
 		if dispatched[run.GetCheckSuite().GetID()] {
 			continue
@@ -120,7 +230,15 @@ func addCheckRuns(checks *remote.PRChecks, runs []*github.CheckRun, dispatched m
 			CompletedAt: run.GetCompletedAt().Time,
 		}
 
-		// If failed, try to get the failed step name from annotations
+		// The error excerpt is whatever the app that posted the check chose to
+		// summarise it with. GitHub Actions posts none -- output.summary comes
+		// back null on every job check run of a red build -- so on Actions this
+		// stays empty and the failing step below is the whole answer. The job
+		// log is not read for it: the tail of a job log is the runner's own
+		// cleanup, the tail of the failing step is `Process completed with exit
+		// code 1`, and that is also all the annotations endpoint carries -- a
+		// ~400 KB download per failed check to repeat what the step's name
+		// already says (issue #355).
 		if run.GetConclusion() == "failure" && run.Output != nil {
 			if run.Output.Summary != nil && *run.Output.Summary != "" {
 				// Truncate summary to first 200 chars for error preview
@@ -130,6 +248,13 @@ func addCheckRuns(checks *remote.PRChecks, runs []*github.CheckRun, dispatched m
 				}
 				check.ErrorLog = summary
 			}
+		}
+
+		// Only a check run posted by a workflow of the repository has an
+		// Actions job behind it to read; another app's check run shares nothing
+		// but the ID space with one (issue #355).
+		if failedStep != nil && countsAsFailure(run) && isWorkflowCheck(run) {
+			check.FailedStep = failedStep(run.GetID())
 		}
 
 		checks.Checks = append(checks.Checks, check)
@@ -147,16 +272,32 @@ func addCheckRuns(checks *remote.PRChecks, runs []*github.CheckRun, dispatched m
 			checks.InProgress++
 			checks.Pending++
 		case "completed":
-			switch run.GetConclusion() {
-			case "success", "skipped", "neutral":
-				checks.Success++
-			default:
+			if countsAsFailure(run) {
 				checks.Failure++
+			} else {
+				checks.Success++
 			}
 		default:
 			checks.Pending++
 		}
 	}
+}
+
+// countsAsFailure reports whether run is one of the checks the Failure counter
+// counts: a completed run whose conclusion is not success, skipped or neutral.
+//
+// It is one function rather than a rule written twice so the checks that get a
+// step named are exactly the ones reported as failed -- a status block naming a
+// check the count calls passed would contradict itself (issue #347).
+func countsAsFailure(run *github.CheckRun) bool {
+	if run.GetStatus() != "completed" {
+		return false
+	}
+	switch run.GetConclusion() {
+	case "success", "skipped", "neutral":
+		return false
+	}
+	return true
 }
 
 // dispatchedCheckSuites returns the check suites on headSHA produced by a

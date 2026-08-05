@@ -14,6 +14,12 @@ Feature: Naming the check that failed
   # That `pr watch` and `pr status` do print them is covered by the unit tests
   # of internal/commands, which drive the watch loops through a package seam.
 
+  # Where the staged "failed step" comes from on a real run is issue #355: the
+  # GitHub client reads it from the Actions job behind the check run, once per
+  # failed check. That belongs to the provider, whose rules — which check suites
+  # count (#240), which app's checks mean CI has started (#257) — are specified
+  # by the unit tests of pkg/remote/github, not from here.
+
   Rule: The count is followed by the names behind it
 
     Background:

@@ -70,6 +70,43 @@ func checkRun(name string, suiteID int64, conclusion string) *github.CheckRun {
 	}
 }
 
+// withID pins a check run's ID, which is also the ID of the Actions job behind
+// it (issue #355).
+func withID(run *github.CheckRun, id int64) *github.CheckRun {
+	run.ID = github.Ptr(id)
+	return run
+}
+
+// job builds an Actions job whose steps concluded as given, in order.
+func job(conclusions ...[2]string) *github.WorkflowJob {
+	built := &github.WorkflowJob{}
+	for _, step := range conclusions {
+		built.Steps = append(built.Steps, &github.TaskStep{
+			Name:       github.Ptr(step[0]),
+			Conclusion: github.Ptr(step[1]),
+		})
+	}
+	return built
+}
+
+// jobReader returns a getJobFunc serving jobs by ID, counting the reads so a
+// test can tell a cache hit from a request.
+func jobReader(jobs map[int64]*github.WorkflowJob, err error, reads *int) getJobFunc {
+	return func(_ context.Context, id int64) (*github.WorkflowJob, error) {
+		if reads != nil {
+			*reads++
+		}
+		if err != nil {
+			return nil, err
+		}
+		found, ok := jobs[id]
+		if !ok {
+			return nil, errors.New("404 not found")
+		}
+		return found, nil
+	}
+}
+
 // listing returns a listRepoRunsFunc serving the given runs, recording the
 // options it was asked for.
 func listing(runs []*github.WorkflowRun, err error, seen *github.ListWorkflowRunsOptions) listRepoRunsFunc {
@@ -150,7 +187,7 @@ func TestAddCheckRuns_LeavesOutDispatchedSuites(t *testing.T) {
 		checkRun("Security", prSuite, "success"),
 		checkRun("Scan alpine", dispatchedSuite, "failure"),
 		checkRun("Scan golang", dispatchedSuite, "failure"),
-	}, map[int64]bool{dispatchedSuite: true})
+	}, map[int64]bool{dispatchedSuite: true}, nil)
 
 	if checks.TotalCount != 2 || checks.WorkflowChecks != 2 {
 		t.Errorf("expected only the PR's own 2 checks, got %+v", checks)
@@ -173,10 +210,150 @@ func TestAddCheckRuns_WithoutDispatchedSuitesCountsEverything(t *testing.T) {
 	addCheckRuns(checks, []*github.CheckRun{
 		checkRun("Bootstrap", 1, "success"),
 		checkRun("Test", 1, "failure"),
-	}, nil)
+	}, nil, nil)
 
 	if checks.TotalCount != 2 || checks.Success != 1 || checks.Failure != 1 {
 		t.Errorf("expected both checks to be counted, got %+v", checks)
+	}
+}
+
+// TestFailedStepOf_NamesTheStepTheJobDiedOn is the shape of the run behind
+// issue #355: check run 92251901265 "Test" is job 92251901265, whose sixth step
+// is the one that failed.
+func TestFailedStepOf_NamesTheStepTheJobDiedOn(t *testing.T) {
+	step := failedStepOf(context.Background(), "424c4a60af", 92251901265, &failedStepCache{},
+		jobReader(map[int64]*github.WorkflowJob{
+			92251901265: job(
+				[2]string{"Set up job", "success"},
+				[2]string{"Checkout code", "success"},
+				[2]string{"Run tests", "failure"},
+				[2]string{"Post Checkout code", "success"},
+				[2]string{"Complete job", "success"},
+			),
+		}, nil, nil))
+
+	if step != "Run tests" {
+		t.Errorf("expected the failing step to be named, got %q", step)
+	}
+}
+
+// TestFailedStepOf_SkipsStepsThatPassedOrNeverRan: a step with no conclusion
+// never ran, so it is not where the job failed -- taking it would name a
+// cleanup step on every cancelled job.
+func TestFailedStepOf_SkipsStepsThatPassedOrNeverRan(t *testing.T) {
+	step := failedStepOf(context.Background(), "sha", 7, &failedStepCache{},
+		jobReader(map[int64]*github.WorkflowJob{
+			7: job(
+				[2]string{"Set up job", "success"},
+				[2]string{"Lint", "skipped"},
+				[2]string{"Never started", ""},
+				[2]string{"Run tests", "cancelled"},
+			),
+		}, nil, nil))
+
+	if step != "Run tests" {
+		t.Errorf("expected the cancelled step to be named, got %q", step)
+	}
+}
+
+// TestFailedStepOf_ReadsTheJobOncePerCheck is the design decision of issue #355
+// under test: `cidx pr watch` polls every few seconds, and a red run must not
+// cost a job request per cycle. Two reads of the same check, one request.
+func TestFailedStepOf_ReadsTheJobOncePerCheck(t *testing.T) {
+	reads := 0
+	cache := &failedStepCache{}
+	get := jobReader(map[int64]*github.WorkflowJob{
+		42: job([2]string{"Run tests", "failure"}),
+	}, nil, &reads)
+
+	for cycle := 1; cycle <= 5; cycle++ {
+		if step := failedStepOf(context.Background(), "sha", 42, cache, get); step != "Run tests" {
+			t.Fatalf("cycle %d: expected the cached step, got %q", cycle, step)
+		}
+	}
+
+	if reads != 1 {
+		t.Errorf("expected 5 polls of a red check to read the job once, got %d requests", reads)
+	}
+}
+
+// TestFailedStepOf_CachesTheAbsenceOfAnAnswer: a job the read cannot answer for
+// is the case that would otherwise retry forever, which is the rate-limit
+// hazard the cache exists for.
+func TestFailedStepOf_CachesTheAbsenceOfAnAnswer(t *testing.T) {
+	reads := 0
+	cache := &failedStepCache{}
+	get := jobReader(nil, errors.New("403 API rate limit exceeded"), &reads)
+
+	for cycle := 1; cycle <= 3; cycle++ {
+		if step := failedStepOf(context.Background(), "sha", 42, cache, get); step != "" {
+			t.Fatalf("cycle %d: expected no step, got %q", cycle, step)
+		}
+	}
+
+	if reads != 1 {
+		t.Errorf("expected the failed read to be remembered, got %d requests", reads)
+	}
+}
+
+// TestFailedStepOf_DoesNotServeOneCommitsAnswerForAnother: the cache is keyed
+// by the run it belongs to, not by the check ID alone, so a watch that spans a
+// push starts again on the new head instead of describing the old one.
+func TestFailedStepOf_DoesNotServeOneCommitsAnswerForAnother(t *testing.T) {
+	reads := 0
+	cache := &failedStepCache{}
+	get := func(_ context.Context, _ int64) (*github.WorkflowJob, error) {
+		reads++
+		if reads == 1 {
+			return job([2]string{"Run tests", "failure"}), nil
+		}
+		return job([2]string{"Build", "failure"}), nil
+	}
+
+	if step := failedStepOf(context.Background(), "old", 42, cache, get); step != "Run tests" {
+		t.Fatalf("expected the first commit's step, got %q", step)
+	}
+	if step := failedStepOf(context.Background(), "new", 42, cache, get); step != "Build" {
+		t.Errorf("expected the new commit's job to be read, got %q", step)
+	}
+	if step, cached := cache.lookup("old", 42); cached {
+		t.Errorf("expected the previous commit's entries to be dropped, got %q", step)
+	}
+}
+
+// TestAddCheckRuns_AsksOnlyAboutTheChecksItCallsFailures: the request is worth
+// making only where there is a failure to explain, and only where an Actions
+// job exists to explain it.
+func TestAddCheckRuns_AsksOnlyAboutTheChecksItCallsFailures(t *testing.T) {
+	pending := checkRun("Build", 1, "")
+	pending.Status = github.Ptr("in_progress")
+
+	foreign := checkRun("dependabot", 1, "failure")
+	foreign.App = &github.App{Slug: github.Ptr("dependabot")}
+
+	var asked []int64
+	checks := &remote.PRChecks{}
+	addCheckRuns(checks, []*github.CheckRun{
+		withID(checkRun("Bootstrap", 1, "success"), 1),
+		withID(checkRun("Lint", 1, "neutral"), 2),
+		withID(checkRun("Docs", 1, "skipped"), 3),
+		withID(pending, 4),
+		withID(foreign, 5),
+		withID(checkRun("Test", 1, "failure"), 6),
+		withID(checkRun("E2E", 1, "cancelled"), 7),
+	}, nil, func(id int64) string {
+		asked = append(asked, id)
+		return "Run tests"
+	})
+
+	if len(asked) != 2 || asked[0] != 6 || asked[1] != 7 {
+		t.Errorf("expected only the two failing workflow checks to be asked about, got %v", asked)
+	}
+	for _, check := range checks.Checks {
+		wantStep := check.Name == "Test" || check.Name == "E2E"
+		if (check.FailedStep != "") != wantStep {
+			t.Errorf("check %q: unexpected failing step %q", check.Name, check.FailedStep)
+		}
 	}
 }
 

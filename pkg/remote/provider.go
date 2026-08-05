@@ -168,8 +168,19 @@ type CheckRun struct {
 	URL         string
 	StartedAt   time.Time
 	CompletedAt time.Time
-	FailedStep  string // Name of the failed step (if any)
-	ErrorLog    string // Last lines of error log (if failed)
+
+	// FailedStep names the step a failed check died on. GitHub fills it from
+	// the Actions job behind the check run, once per failed check (issue #355).
+	// GitLab leaves it empty: a job's `script:` is a flat command list the API
+	// reports no per-command result for, so there is no step to name.
+	FailedStep string
+
+	// ErrorLog is an error excerpt, when the provider hands one over. It is
+	// whatever the app that posted the check summarised it with -- GitHub
+	// Actions summarises nothing, so on Actions checks this is empty and
+	// FailedStep carries the answer. Neither provider downloads a job log for
+	// it; see the clients for what that was weighed against (issue #355).
+	ErrorLog string
 }
 
 // StatusCheck represents a commit status check

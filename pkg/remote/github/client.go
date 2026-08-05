@@ -14,6 +14,13 @@ type Client struct {
 	client *github.Client
 	owner  string
 	repo   string
+
+	// failedSteps caches the failing step of each failed check run, so a watch
+	// polling a red run reads each job once instead of once per cycle (issue
+	// #355). Zero value is ready to use; it is shared by every read of the
+	// checks made through this client, which is what makes the caching worth
+	// anything -- `cidx pr watch` reuses one client for the whole watch.
+	failedSteps failedStepCache
 }
 
 // NewClient creates a new GitHub client with token authentication
