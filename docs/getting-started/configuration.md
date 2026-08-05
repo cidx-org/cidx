@@ -82,6 +82,34 @@ severity = "HIGH,CRITICAL"
 exit_code = 1
 ```
 
+#### Setting a Severity Floor
+
+Security presets ship **no severity or confidence floor**: each reports whatever its tool reports by default. That is deliberate — a floor is a policy about a codebase, and it belongs to that codebase rather than to the catalogue. It is also the safer direction to be wrong in: a default that reports too much is noisy and visible, while one that reports too little is invisible, because the phase goes green and nothing says what was skipped (issue #341).
+
+Set one per project when a tool is too noisy for it:
+
+```toml
+[containers.gosec]
+severity = "medium"    # low | medium | high
+confidence = "medium"
+
+[containers.bandit]
+severity = "medium"    # all | low | medium | high
+confidence = "medium"
+
+[containers.trivy]
+severity = "HIGH,CRITICAL"
+```
+
+`cargo-audit` is not a floor but a switch: it already fails on vulnerabilities, and `deny` additionally fails on warnings — unmaintained, unsound or yanked crates. It stays off by default, because an unmaintained crate frequently has no patched version to move to, so failing on one turns the phase red for something the project cannot fix.
+
+```toml
+[containers.cargo-audit]
+deny = true
+```
+
+Tools with their own config file are honoured too, and are the better home for anything longer than a line: `bandit` reads `.bandit`, `bandit.yaml` or `pyproject.toml`, `gitleaks` reads `.gitleaks.toml`. Run `cidx preset info <name>` to see which options and config files a preset declares.
+
 `env` overrides are merged **per key**: entries in `[containers.<name>].env` replace the preset's value for the same key, and preset keys you don't mention are preserved. For example, given a preset with `env = { RUSTUP_HOME = "/tmp/rustup", CARGO_HOME = "/tmp/cargo" }`:
 
 ```toml
