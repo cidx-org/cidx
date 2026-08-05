@@ -24,7 +24,6 @@ type Manager struct {
 type Config struct {
 	StaleDays     int
 	NamingPattern string
-	AutoCleanup   bool
 	Protected     []string
 }
 
