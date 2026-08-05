@@ -10,7 +10,6 @@ import (
 	"github.com/cidx-org/cidx/v2/pkg/drift"
 	"github.com/cidx-org/cidx/v2/pkg/remote"
 	"github.com/cidx-org/cidx/v2/pkg/validator"
-	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 )
 
@@ -120,13 +119,11 @@ func checkWorkflowAction(c *cli.Context) error {
 
 		workflowFile := filepath.Join(workflowDir, workflowName)
 		if _, err := os.Stat(workflowFile); os.IsNotExist(err) {
-			logrus.Errorf("Workflow file not found: %s", workflowFile)
 			return fmt.Errorf("workflow file not found: %s", workflowFile)
 		}
 
 		result, err := validator.ValidateWorkflow(c.App, cfg, pipelineName, workflowFile)
 		if err != nil {
-			logrus.Errorf("Validation failed: %v", err)
 			return err
 		}
 		results = []*validator.ValidationResult{result}
@@ -134,12 +131,10 @@ func checkWorkflowAction(c *cli.Context) error {
 		// Validate all workflows
 		results, err = validator.ValidateAllWorkflows(c.App, cfg, workflowDir)
 		if err != nil {
-			logrus.Errorf("Validation failed: %v", err)
 			return err
 		}
 
 		if len(results) == 0 {
-			logrus.Warn("No workflows found to validate")
 			fmt.Println("⚠️  No GitHub Actions workflows found in", workflowDir)
 			return nil
 		}
@@ -161,17 +156,17 @@ func checkWorkflowAction(c *cli.Context) error {
 		}
 	}
 
-	// Summary
+	// Summary. One channel per audience: the verdict is what the user reads and
+	// what a script capturing stdout gets, so it is printed there and only
+	// there. It used to go out twice -- logrus to stderr, fmt to stdout, in two
+	// different formats -- which made the conclusion of the command ambiguous
+	// on screen and made the captured string differ from the displayed one
+	// (issue #345). The exit code carries the verdict for anyone not reading.
 	fmt.Println()
-	summary := checkWorkflowSummary(pipelineName, len(results), allSuccess)
+	fmt.Println(checkWorkflowSummary(pipelineName, len(results), allSuccess))
 	if allSuccess {
-		logrus.Info(summary)
-		fmt.Println(summary)
 		return nil
 	}
-
-	logrus.Warn(summary)
-	fmt.Println(summary)
 	return cli.Exit("", 1)
 }
 

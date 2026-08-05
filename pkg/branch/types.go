@@ -120,6 +120,20 @@ type PRChecksInfo struct {
 	Success int
 	Failure int
 	Status  string // "success", "failure", "pending"
+	// Failed names the checks behind the Failure count. Without it "4/5
+	// passed" is a number with no way to act on it: which check, and whether
+	// to fix, rerun or ignore, both lived in the web UI (issue #347).
+	Failed []FailedCheck
+}
+
+// FailedCheck is a check that did not pass, and what the provider says about
+// why. Step and Log are filled only when the provider reports them -- a commit
+// status has neither, and a check run carries them only if the app that posted
+// it did.
+type FailedCheck struct {
+	Name string
+	Step string // the step that failed, when the provider names one
+	Log  string // error excerpt, when the provider carries one
 }
 
 // PRReviewsInfo contains review status

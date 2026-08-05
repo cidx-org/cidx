@@ -286,6 +286,13 @@ func branchPRCommand() *cli.Command {
 	}
 }
 
+// readPRInfo reads the current state of a branch's PR. Package-level so the
+// watch loops -- which are otherwise pure printing -- can be driven without a
+// network, and what they print when a check fails can be asserted (issue #347).
+var readPRInfo = func(manager *branch.Manager, branchName string) (*branch.PRInfo, error) {
+	return manager.GetPRInfo(branchName)
+}
+
 // watchPRChecks watches PR checks until they complete
 func watchPRChecks(manager *branch.Manager, branchName string, initialInfo *branch.PRInfo, quiet bool) error {
 	if quiet {
@@ -373,7 +380,7 @@ func watchPRChecks(manager *branch.Manager, branchName string, initialInfo *bran
 	defer pollTicker.Stop()
 
 	for {
-		info, err := manager.GetPRInfo(branchName)
+		info, err := readPRInfo(manager, branchName)
 		if err != nil {
 			close(done)
 			return fmt.Errorf("failed to get PR info: %w", err)
@@ -413,6 +420,7 @@ func watchPRChecks(manager *branch.Manager, branchName string, initialInfo *bran
 				}
 			case "failure":
 				fmt.Printf("\033[31m✗ Some checks failed\033[0m\n")
+				fmt.Print(branch.FormatFailedChecks(info.Checks.Failed, "  "))
 			}
 			fmt.Println()
 			return nil
@@ -434,7 +442,7 @@ func watchPRChecksQuiet(manager *branch.Manager, branchName string, initialInfo 
 	lastStatus := ""
 
 	for {
-		info, err := manager.GetPRInfo(branchName)
+		info, err := readPRInfo(manager, branchName)
 		if err != nil {
 			return fmt.Errorf("failed to get PR info: %w", err)
 		}
@@ -459,6 +467,7 @@ func watchPRChecksQuiet(manager *branch.Manager, branchName string, initialInfo 
 					fmt.Println("All checks passed.")
 				} else {
 					fmt.Println("Some checks failed.")
+					fmt.Print(branch.FormatFailedChecks(info.Checks.Failed, "  "))
 				}
 				return nil
 			}

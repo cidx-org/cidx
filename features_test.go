@@ -115,6 +115,8 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	RegisterPullPolicySteps(ctx, testCtx)
 	RegisterBranchSteps(ctx, testCtx)
 	RegisterArtifactWorkflowSteps(ctx, testCtx)
+	RegisterPRChecksSteps(ctx, testCtx)
+	RegisterCheckVerdictSteps(ctx, testCtx)
 
 	// Hooks
 	ctx.Before(func(ctx context.Context, sc *godog.Scenario) (context.Context, error) {
