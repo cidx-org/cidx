@@ -600,47 +600,42 @@ func (tc *TestContext) presetDirectLocalBehavior(behavior string) error {
 	return nil
 }
 
-// tryRunThatPreset attempts to run the current preset
-func (tc *TestContext) tryRunThatPreset() error {
-	// Check require_ci
-	if tc.Config["require_ci"] == true && !tc.CI {
-		if tc.Config["no_local_behavior"] == true {
-			tc.Output += "Error: preset requires CI environment\n"
-			tc.ExitCode = 1
-			return nil
-		}
+// currentPreset builds the preset a scenario described inline -- one that names
+// no catalogue entry, only a local_behavior and possibly require_ci.
+func (tc *TestContext) currentPreset() presets.Preset {
+	behavior, _ := tc.Config["local_behavior"].(string)
+	if tc.Config["no_local_behavior"] == true {
+		behavior = ""
 	}
 
-	// Check disabled behavior
-	if behavior, ok := tc.Config["local_behavior"].(string); ok && behavior == "disabled" {
-		tc.Output += "Error: disabled in local environment\n"
+	return presets.Preset{
+		Name:          "_current",
+		LocalBehavior: behavior,
+		RequireCI:     tc.Config["require_ci"] == true,
+	}
+}
+
+// tryRunThatPreset attempts to run the current preset, and asks the code that
+// decides rather than a table restating it.
+//
+// The table used to live here: a switch naming every behaviour and the sentence
+// it prints. It was a copy of environment.ValidatePreset, and a copy drifts --
+// it still offered `no-push` after #353 removed it, so a scenario could assert
+// a mode that no longer existed and pass. Same lesson as #349, one layer up.
+func (tc *TestContext) tryRunThatPreset() error {
+	tc.LastCommand = "cidx run _current"
+
+	mode, err := environment.ValidatePreset(tc.currentPreset(),
+		&environment.Environment{IsCI: tc.CI, Provider: tc.Provider})
+	if err != nil {
+		tc.Output += fmt.Sprintf("Error: %v\n", err)
 		tc.ExitCode = 1
 		return nil
 	}
 
-	return tc.runThatPreset()
-}
-
-// runThatPreset runs the current preset
-func (tc *TestContext) runThatPreset() error {
-	tc.LastCommand = "cidx run _current"
-
 	if !tc.CI {
 		tc.Output += "Environment: Local (safe mode)\n"
-	}
-
-	// Apply local behavior
-	if behavior, ok := tc.Config["local_behavior"].(string); ok && !tc.CI {
-		switch behavior {
-		case "draft":
-			tc.Output += "Local safety: draft - Local mode: draft creation only\n"
-		case "no-push":
-			tc.Output += "Local safety: no-push - Local mode: build without push\n"
-		case "dry-run":
-			tc.Output += "Local safety: dry-run - Local mode: dry-run only\n"
-		case "production":
-			tc.Output += "Local safety: production - Local mode: production (use with caution!)\n"
-		}
+		tc.Output += fmt.Sprintf("Local safety: %s - %s\n", mode.Mode, mode.Reason)
 	}
 
 	tc.Output += "✓ _current completed successfully\n"
@@ -648,13 +643,16 @@ func (tc *TestContext) runThatPreset() error {
 	return nil
 }
 
+// runThatPreset runs the current preset, expecting it to be allowed here.
+func (tc *TestContext) runThatPreset() error {
+	return tc.tryRunThatPreset()
+}
+
 // shouldExecuteInMode checks the preset executed in the given mode
 func (tc *TestContext) shouldExecuteInMode(mode string) error {
 	switch mode {
 	case "draft":
 		mode = "draft creation only"
-	case "no-push":
-		mode = "build without push"
 	case "dry-run":
 		mode = "dry-run only"
 	case "production":

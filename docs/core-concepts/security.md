@@ -41,20 +41,24 @@ Creates drafts only (GitHub releases)
 - Safe for testing release process locally
 - **Example**: `gh-release`, `goreleaser`
 
-### `local_behavior = "no-push"` ✅ Recommended for Docker
-
-Build without push
-
-- Docker builds locally but doesn't push to registry
-- Validates Dockerfile and build process
-- **Example**: `docker-buildx`, `kaniko`
-
-### `local_behavior = "dry-run"`
+### `local_behavior = "dry-run"` ✅ Recommended for Docker
 
 Simulation only
 
-- Shows what would execute
+- Shows what would execute, including the flags CI will use
 - No actual execution
+- **Example**: `docker-buildx`, `kaniko`
+
+> **`no-push` was removed in v3.0.0** (issue #353). It set the same dry-run as
+> `dry-run` did, so it never built anything either — while this page promised it
+> "validates Dockerfile and build process", the one thing it could not do. What
+> it added on top was cosmetic: a `DOCKER_PUSH=false` on a container that never
+> starts, and a `--push` stripped from a command that is only printed. A config
+> still carrying it is refused by name, and the replacement is `dry-run`.
+>
+> The `docker` phase is therefore exercised for real only in CI. That is a known
+> gap, not a claim withdrawn quietly — it is what issue #338 describes for
+> `goreleaser` and `docker-buildx` alike.
 
 ### `local_behavior = "disabled"`
 
@@ -78,7 +82,7 @@ name = "docker-buildx"
 phase = "docker"
 # ...
 require_ci = false
-local_behavior = "no-push"   # Build without push in local
+local_behavior = "dry-run"   # Print what CI would run, build nothing
 ```
 
 ## Contextual Pipelines

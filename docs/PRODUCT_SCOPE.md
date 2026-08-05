@@ -55,7 +55,7 @@ Supporting concepts that are part of the core:
 - **Project detection** — language, framework, remote provider
 - **Presets + overrides** — convention over configuration, customizable when needed
 - **Local/CI parity** — same phases, same tools, different safety modes
-- **Safe local execution** — no-push, draft, dry-run defaults protect the developer
+- **Safe local execution** — draft and dry-run defaults protect the developer
 - **Dry-run everywhere** — see what will execute before it runs
 
 ---

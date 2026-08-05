@@ -66,13 +66,15 @@ Feature: Release Tag Deployment
       And the "docker" phase should push images to registry
       And I should see "Pushed image to ghcr.io"
 
-    Scenario: Docker builds without push in local environment
+    # This scenario used to claim a local run built the image and merely held
+    # back the push. It never did: the mode it named set IsDryRun, so the
+    # command was never handed to a backend. #353 removed the mode and this
+    # says what actually happens.
+    Scenario: Docker builds nothing in local environment
       Given I am in local environment
       When I run "cidx run release"
-      Then I should see "Local safety: no-push - Local mode: build without push"
-      And the "docker" phase should build images
-      But the "docker" phase should NOT push images
-      And I should see message "Image built successfully (not pushed)"
+      Then I should see "Local safety: dry-run - Local mode: dry-run only"
+      And the "docker" phase should NOT push images
 
   Rule: Release requires proper environment setup in CI
 

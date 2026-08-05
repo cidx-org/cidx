@@ -161,7 +161,7 @@ flowchart TB
     LOCAL_MODE --> CODE_LOCAL["🎨 Code: Full check"]
     LOCAL_MODE --> TEST_LOCAL["✅ Test: Full suite"]
     LOCAL_MODE --> BUILD_LOCAL["🔧 Build: Full build"]
-    LOCAL_MODE --> DOCKER_LOCAL["🐳 Docker: Build<br/>⚠️ NO PUSH"]
+    LOCAL_MODE --> DOCKER_LOCAL["🐳 Docker: Nothing built<br/>⚠️ DRY-RUN"]
     LOCAL_MODE --> RELEASE_LOCAL["📢 Release: Draft<br/>⚠️ NOT PUBLISHED"]
 
     CI_MODE --> SEC_CI["🛡️ Security: Full scan"]
@@ -171,7 +171,7 @@ flowchart TB
     CI_MODE --> DOCKER_CI["🐳 Docker: Build<br/>✅ PUSH TO REGISTRY"]
     CI_MODE --> RELEASE_CI["📢 Release: Publish<br/>✅ PUBLIC RELEASE"]
 
-    DOCKER_LOCAL -.->|Safe| DRAFT1["✓ Testable locally"]
+    DOCKER_LOCAL -.->|Safe| DRAFT1["✓ Command shown,<br/>only CI builds (#353)"]
     RELEASE_LOCAL -.->|Safe| DRAFT2["✓ Testable locally"]
     DOCKER_CI -.->|Production| PROD1["✓ Published to GHCR"]
     RELEASE_CI -.->|Production| PROD2["✓ Published to GitHub"]
@@ -196,19 +196,16 @@ flowchart LR
     PRESET --> LB
 
     LB --> DRAFT["draft<br/>GitHub releases<br/>as drafts"]
-    LB --> NOPUSH["no-push<br/>Docker build<br/>without push"]
-    LB --> DRYRUN["dry-run<br/>Simulation<br/>only"]
+    LB --> DRYRUN["dry-run<br/>Command printed,<br/>never run"]
     LB --> DISABLED["disabled<br/>Refuse<br/>execution"]
     LB --> PROD["production<br/>Full<br/>execution"]
 
     DRAFT -.-> DRAFT_EX["✓ gh-release<br/>✓ goreleaser"]
-    NOPUSH -.-> NOPUSH_EX["✓ docker-buildx<br/>✓ kaniko"]
-    DRYRUN -.-> DRYRUN_EX["✓ Any preset<br/>simulation mode"]
+    DRYRUN -.-> DRYRUN_EX["✓ docker-buildx<br/>✓ kaniko<br/>✓ any preset"]
     DISABLED -.-> DISABLED_EX["✓ Highly sensitive<br/>operations"]
     PROD -.-> PROD_EX["⚠️ Use with<br/>caution!"]
 
     style DRAFT fill:#2d4d2d,stroke:#00ff00,stroke-width:2px,color:#fff
-    style NOPUSH fill:#2d4d2d,stroke:#00ff00,stroke-width:2px,color:#fff
     style DRYRUN fill:#4d4d2d,stroke:#ffa500,stroke-width:2px,color:#fff
     style DISABLED fill:#4d2d2d,stroke:#ff0000,stroke-width:2px,color:#fff
     style PROD fill:#4d2d2d,stroke:#ff0000,stroke-width:3px,color:#fff

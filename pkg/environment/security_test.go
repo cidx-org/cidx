@@ -1,6 +1,7 @@
 package environment
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/cidx-org/cidx/v2/pkg/presets"
@@ -58,10 +59,14 @@ func TestValidatePreset_Local_Behaviors(t *testing.T) {
 	}{
 		{"production", "production", BehaviorProduction, false, false},
 		{"draft", "draft", BehaviorDraft, true, false},
-		{"no-push", "no-push", BehaviorNoPush, true, false},
 		{"dry-run", "dry-run", BehaviorDryRun, true, false},
 		{"disabled", "disabled", "", false, true},
 		{"unknown", "bogus", "", false, true},
+		// Removed in v3.0.0, and refused by name rather than as an unknown
+		// value: it behaved identically to dry-run, so "unknown
+		// local_behavior" would send the reader looking for a difference
+		// that never existed (issue #353).
+		{"the removed no-push", "no-push", "", false, true},
 		{"empty defaults to production", "", BehaviorProduction, false, false},
 	}
 
@@ -103,19 +108,6 @@ func TestValidatePreset_Draft_EnvChanges(t *testing.T) {
 	}
 }
 
-func TestValidatePreset_NoPush_EnvChanges(t *testing.T) {
-	preset := presets.Preset{Name: "docker-buildx", LocalBehavior: "no-push"}
-	env := &Environment{IsCI: false}
-
-	mode, err := ValidatePreset(preset, env)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if mode.EnvChanges["DOCKER_PUSH"] != "false" {
-		t.Errorf("expected DOCKER_PUSH=false in EnvChanges, got %q", mode.EnvChanges["DOCKER_PUSH"])
-	}
-}
-
 func TestApplyExecutionMode_Draft(t *testing.T) {
 	preset := presets.Preset{
 		Name:    "gh-release",
@@ -136,20 +128,38 @@ func TestApplyExecutionMode_Draft(t *testing.T) {
 	}
 }
 
-func TestApplyExecutionMode_NoPush(t *testing.T) {
+// TestValidatePreset_NoPushNamesItsReplacement: a config still carrying the
+// removed value must be told what to write instead, not merely that the value
+// is not recognised (issue #353).
+func TestValidatePreset_NoPushNamesItsReplacement(t *testing.T) {
+	preset := presets.Preset{Name: "docker-buildx", LocalBehavior: "no-push"}
+
+	_, err := ValidatePreset(preset, &Environment{IsCI: false, Provider: "local"})
+	if err == nil {
+		t.Fatal("expected the removed behaviour to be refused")
+	}
+	for _, want := range []string{"removed in cidx v3.0.0", "dry-run", "docker-buildx"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("refusal = %q, want it to mention %q", err, want)
+		}
+	}
+}
+
+// TestApplyExecutionMode_LeavesTheCommandAlone: nothing rewrites a docker
+// command any more. no-push stripped --push from docker-buildx, which doctored
+// a command that a dry-run never runs; a local dry-run now prints what CI will
+// really execute (issue #353).
+func TestApplyExecutionMode_LeavesTheCommandAlone(t *testing.T) {
 	preset := presets.Preset{
 		Name:    "docker-buildx",
 		Command: "docker buildx build --push .",
 	}
-	mode := &ExecutionMode{
-		Mode:       BehaviorNoPush,
-		EnvChanges: map[string]string{"DOCKER_PUSH": "false"},
-	}
+	mode := &ExecutionMode{Mode: BehaviorDryRun, IsDryRun: true}
 
 	result := ApplyExecutionMode(preset, mode)
 
-	if result.Command != "docker buildx build ." {
-		t.Errorf("expected --push removed, got %q", result.Command)
+	if result.Command != "docker buildx build --push ." {
+		t.Errorf("expected the command untouched, got %q", result.Command)
 	}
 }
 
@@ -167,28 +177,5 @@ func TestApplyExecutionMode_Production(t *testing.T) {
 
 	if result.Command != "gh release create" {
 		t.Errorf("expected unchanged command, got %q", result.Command)
-	}
-}
-
-func TestRemoveFlag(t *testing.T) {
-	tests := []struct {
-		name    string
-		command string
-		flag    string
-		want    string
-	}{
-		{"flag with trailing space", "build --push --tag foo", "--push", "build --tag foo"},
-		{"flag at end", "build --push", "--push", "build "},
-		{"no flag present", "build --tag foo", "--push", "build --tag foo"},
-		{"multiple occurrences", "--push build --push", "--push", "build "},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := removeFlag(tt.command, tt.flag)
-			if got != tt.want {
-				t.Errorf("removeFlag(%q, %q) = %q, want %q", tt.command, tt.flag, got, tt.want)
-			}
-		})
 	}
 }

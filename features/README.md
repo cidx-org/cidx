@@ -50,7 +50,7 @@ Specifies how CIDX behaves when a version tag is pushed:
 - **Phases**: All phases (security → code → test → build → release → docker)
 - **Purpose**: Complete deployment to production
 - **Duration**: ~15-30 minutes
-- **Safety**: Local = draft/no-push, CI = publish/push
+- **Safety**: Local = draft/dry-run, CI = publish/push
 
 **Key Scenarios**:
 
@@ -81,7 +81,7 @@ Specifies how dangerous operations are protected in local environment:
 
 **Docker Operations**:
 
-- `local_behavior = "no-push"` → Builds without pushing
+- `local_behavior = "dry-run"` → Prints what CI would run, builds nothing
 - CI environment → Builds and pushes normally
 
 **Release Operations**:
@@ -229,7 +229,7 @@ Feature: Feature Name
 
 **Security Steps** (for safety scenarios):
 
-- `Given the "docker-buildx" preset has local_behavior = "no-push"`
+- `Given the "docker-buildx" preset has local_behavior = "dry-run"`
 - `Then Docker image should NOT be pushed to registry`
 
 ## Philosophy
