@@ -387,8 +387,9 @@ func watchPRChecks(manager *branch.Manager, branchName string, initialInfo *bran
 		}
 		currentInfo = info
 
-		// Check if we're done
-		if info.Checks != nil && info.Checks.Pending == 0 {
+		// Check if we're done — which a run still going is not, whatever the
+		// checks it has posted so far say (issue #367).
+		if info.Checks != nil && info.Checks.Complete() {
 			close(done)
 			time.Sleep(150 * time.Millisecond) // Let spinner goroutine exit
 
@@ -461,7 +462,7 @@ func watchPRChecksQuiet(manager *branch.Manager, branchName string, initialInfo 
 				lastStatus = status
 			}
 
-			if info.Checks.Pending == 0 {
+			if info.Checks.Complete() {
 				fmt.Println()
 				if info.Checks.Status == "success" {
 					fmt.Println("All checks passed.")

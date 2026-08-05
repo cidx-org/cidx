@@ -550,16 +550,26 @@ func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remot
 		}
 	}
 
+	// A pipeline that has not reached a terminal state can still add jobs --
+	// GitLab creates the jobs of a later stage as the pipeline advances, so
+	// counting the jobs listed today answers only for today (issue #367). The
+	// pipeline was already fetched above, so its own status costs nothing.
+	runsInProgress := 0
+	if !terminalPipelineStatuses[mr.HeadPipeline.Status] {
+		runsInProgress = 1
+	}
+
 	// Determine overall status
 	overallStatus := "success"
 	if failure > 0 {
 		overallStatus = "failure"
-	} else if pending > 0 {
+	} else if pending > 0 || runsInProgress > 0 {
 		overallStatus = "pending"
 	}
 
 	return &remote.PRChecks{
-		TotalCount: len(checks),
+		RunsInProgress: runsInProgress,
+		TotalCount:     len(checks),
 		// Every check here is a job of the project's own pipeline, so they all
 		// count as workflow checks (issue #257).
 		WorkflowChecks: len(checks),
@@ -639,7 +649,9 @@ func (c *Client) WatchPullRequestChecks(ctx context.Context, prNumber int) (<-ch
 					updates <- remote.PRChecksUpdate{Checks: checks}
 				}
 
-				if checks.Pending == 0 {
+				// See #367: a pipeline that has not reached a terminal state can
+				// still add jobs, so the jobs listed today are not the whole run.
+				if checks.Complete() {
 					return
 				}
 			}
@@ -680,6 +692,24 @@ func mapPipelineConclusion(status string) string {
 }
 
 // mapJobStatus maps GitLab job status to check status
+// terminalPipelineStatuses are the pipeline states that will not advance on
+// their own. `success`, `failed`, `canceled` and `skipped` are finished.
+//
+// `manual` and `scheduled` are not finished, and are counted here anyway: a
+// pipeline blocked on a manual job waits for a person, and a scheduled one for
+// a clock. Treating either as still-running would make a watcher block until
+// its timeout on a pipeline that is behaving exactly as configured -- and the
+// point of #367 is to stop reporting one state as another, not to trade a false
+// green for a hang.
+var terminalPipelineStatuses = map[string]bool{
+	"success":   true,
+	"failed":    true,
+	"canceled":  true,
+	"skipped":   true,
+	"manual":    true,
+	"scheduled": true,
+}
+
 func mapJobStatus(status string) string {
 	switch status {
 	case "pending", "created", "waiting_for_resource", "preparing":

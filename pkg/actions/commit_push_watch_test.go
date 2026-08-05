@@ -297,3 +297,59 @@ func TestCPWWatchCI_StreamErrorIsPropagated(t *testing.T) {
 		t.Fatalf("expected stream error, got: %v", err)
 	}
 }
+
+// The gap issue #367 is about, in the numbers PR #366 actually produced:
+// Bootstrap green, nothing pending, and four jobs that do not exist yet because
+// a `needs:` has not made them eligible. Everything a check-counting watcher can
+// see says the run is over.
+func gapBetweenStages(sha string) *remote.PRChecks {
+	return &remote.PRChecks{
+		TotalCount: 1, WorkflowChecks: 1, Success: 1, Pending: 0,
+		RunsInProgress: 1, Status: "pending", HeadSHA: sha,
+	}
+}
+
+// TestCPWWatchCI_DoesNotConcludeInTheGapBetweenStages is the regression: cpw
+// entered its watch on `Pending > 0`, so landing in the gap skipped the watch
+// entirely and it announced a green CI having seen one job out of five.
+func TestCPWWatchCI_DoesNotConcludeInTheGapBetweenStages(t *testing.T) {
+	sha := "abc1234def"
+	provider := &cpwFakeProvider{
+		prNumber:   366,
+		waitSHA:    sha,
+		waitChecks: gapBetweenStages(sha),
+		checksUpdates: []remote.PRChecksUpdate{
+			{Checks: gapBetweenStages(sha)},
+			{Checks: &remote.PRChecks{
+				TotalCount: 5, WorkflowChecks: 5, Success: 5, Pending: 0,
+				RunsInProgress: 0, Status: "success", HeadSHA: sha,
+			}},
+		},
+	}
+
+	if err := newCPWAction(provider).watchCI(context.Background(), "feat/x", sha); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !provider.watchCalled {
+		t.Error("cpw concluded without watching: one green check and a run still going " +
+			"is the middle of a run, not the end of one (#367)")
+	}
+}
+
+// TestCPWWatchCI_AGapThatNeverFillsIsNotSuccess: if the stream ends while the
+// run is still going, the correct answer is the same one cpw already gives for
+// a stream that ends with checks pending — not silence and exit 0.
+func TestCPWWatchCI_AGapThatNeverFillsIsNotSuccess(t *testing.T) {
+	sha := "abc1234def"
+	provider := &cpwFakeProvider{
+		prNumber:      366,
+		waitSHA:       sha,
+		waitChecks:    gapBetweenStages(sha),
+		checksUpdates: []remote.PRChecksUpdate{{Checks: gapBetweenStages(sha)}},
+	}
+
+	err := newCPWAction(provider).watchCI(context.Background(), "feat/x", sha)
+	if err == nil || !strings.Contains(err.Error(), "stopped watching before checks completed") {
+		t.Fatalf("expected the incomplete watch to be reported, got: %v", err)
+	}
+}
