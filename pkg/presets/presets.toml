@@ -797,15 +797,28 @@ config_files = [".bandit", "bandit.yaml", "pyproject.toml"]
 [presets.bandit.env]
 HOME = "/tmp"
 
+# The long forms, not `-l`/`-i`. Those are counters -- `-l` is LOW, `-ll`
+# MEDIUM, `-lll` HIGH -- so a string option pointed at one produced
+# `bandit -r . -ll high`: the floor was MEDIUM whatever was asked for, and
+# `high` was left as a positional argument, which bandit reads as a path to
+# scan. Asking for a severity floor changed what was scanned (issue #341).
+# `--severity-level` and `--confidence-level` take the value instead, and
+# accept exactly all|low|medium|high.
+#
+# No default is declared, here or on gosec and cargo-audit: a floor is policy
+# about a codebase, and it belongs to that codebase. See #341 for the
+# measurement behind that -- on a 30k-line Go project, gosec's declared
+# medium/medium floor dropped none of its 64 findings, because a default that
+# reports less buys little and hides invisibly.
 [presets.bandit.options.severity]
 type = "string"
-description = "Minimum severity (low, medium, high)"
-command_flag = "-ll"
+description = "Minimum severity (all, low, medium, high)"
+command_flag = "--severity-level"
 
 [presets.bandit.options.confidence]
 type = "string"
-description = "Minimum confidence (low, medium, high)"
-command_flag = "-i"
+description = "Minimum confidence (all, low, medium, high)"
+command_flag = "--confidence-level"
 
 # pip-audit: Scan Python dependencies for known vulnerabilities
 # Official tool from PyPA
@@ -982,9 +995,16 @@ command = "sh -c 'curl -sSfL https://github.com/rustsec/rustsec/releases/downloa
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
 
+# `--deny warnings` is about warnings, not vulnerabilities: cargo-audit already
+# exits non-zero on a vulnerability without it. Its description said otherwise,
+# which is how someone enables an option to get what they already had. Left
+# opt-in on purpose -- an unmaintained crate is not a vulnerability and often
+# has no patched version to move to, so failing the phase on one would go red
+# for something the project cannot fix, and the only way out would be turning a
+# security option off (issue #341).
 [presets.cargo-audit.options.deny]
 type = "bool"
-description = "Exit with error on vulnerabilities"
+description = "Also fail on warnings: unmaintained, unsound or yanked crates"
 command_flag = "--deny warnings"
 
 # Cargo Test: Run Rust tests
