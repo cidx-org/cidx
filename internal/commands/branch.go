@@ -82,7 +82,6 @@ func branchListCommand() *cli.Command {
 					branchCfg.Protected = cfg.Branch.Protected
 				}
 				branchCfg.NamingPattern = cfg.Branch.NamingPattern
-				branchCfg.AutoCleanup = cfg.Branch.AutoCleanup
 			}
 
 			// Create manager

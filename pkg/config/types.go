@@ -25,9 +25,13 @@ type Config struct {
 
 // BranchConfig defines branch management settings
 type BranchConfig struct {
+	// `auto_cleanup` used to be declared here and read by nobody (issue
+	// #322). Removed in v3.0.0: a key that parses and does nothing is worse
+	// than an absent one, because someone will set it and believe it took
+	// effect. `cidx pr merge` deletes the merged branch unconditionally,
+	// which is what the key would have asked for anyway.
 	StaleDays     int      `toml:"stale_days"`     // Days before a branch is considered stale (default: 30)
 	NamingPattern string   `toml:"naming_pattern"` // Regex pattern for valid branch names
-	AutoCleanup   bool     `toml:"auto_cleanup"`   // Cleanup merged branches after PR merge
 	Protected     []string `toml:"protected"`      // Branches that should never be deleted
 }
 
