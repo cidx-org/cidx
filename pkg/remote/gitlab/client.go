@@ -518,6 +518,21 @@ func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remot
 		status := mapJobStatus(job.Status)
 		conclusion := mapJobConclusion(job.Status)
 
+		// FailedStep and ErrorLog are left empty here on purpose, not by
+		// omission (issue #355).
+		//
+		// FailedStep has no counterpart to fill it with. A GitLab job's
+		// `script:` is a flat list of shell commands, and the jobs API reports
+		// no per-command result -- there is no step to name. What the job does
+		// carry is `failure_reason`, a category (`script_failure`,
+		// `runner_system_failure`, `job_execution_timeout`); rendering it where
+		// GitHub renders a step name would print `failed step: script_failure`,
+		// which names nothing and reads as though it did.
+		//
+		// ErrorLog would mean downloading the job trace, one request and a full
+		// log per failed job. That is the same cost GitHub's job log was
+		// weighed at and rejected for on that side, for the same tail: the last
+		// lines of a trace are the runner's cleanup, not the error.
 		checks = append(checks, remote.CheckRun{
 			Name:       job.Name,
 			Status:     status,
