@@ -64,9 +64,14 @@ volumes = ["${WORKSPACE}:/work"]
 
 # The catalogue default for go-test is `go test -v ./pkg/... ./cmd/...`, which
 # leaves out the root package — exactly where this repo keeps its godog suite
-# (features_test.go + the *_steps_test.go definitions). Without this override
-# the BDD scenarios never run in CI, so nothing enforces the specs the project
-# is built around. `./...` covers every package, root included.
+# (features_test.go + the *_steps_test.go definitions) — and, since #317,
+# internal/commands, where every CLI test lives. Without this override neither
+# runs in CI, so nothing enforces the specs the project is built around and the
+# Test job stays green having run neither. `./...` covers every package.
+#
+# Do not narrow this line: TestTheTestPhaseRunsEveryPackageThatHasTests, in
+# pkg/config, fails when the resolved command stops covering a package that
+# holds tests (#344).
 #
 # GODOG_FORMAT=progress keeps the phase log readable: one character per step
 # plus the scenario/step totals, instead of ~2000 lines of pretty output.

@@ -12,7 +12,13 @@ Feature: A dry run changes nothing and needs nothing
 
   # The repository these scenarios build has a remote that does not exist, so a
   # command that reaches for it fails here rather than passing on a machine that
-  # happens to be online.
+  # happens to be online. Its origin is a filesystem path, which no provider can
+  # be built from either: that is the second half, issue #350. `pr create` was
+  # wired to resolve the remote URL and a token before the action ran, so the
+  # preview died on `unable to parse remote URL` having printed nothing — while
+  # these scenarios passed, because they called the action directly and the
+  # defect was in the wiring above it. They now type the command line at
+  # `commands.NewApp()`, the tree the binary runs, and the wiring is covered.
 
   Rule: The preview reports the pull instead of performing it
 
