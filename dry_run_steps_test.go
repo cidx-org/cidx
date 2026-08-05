@@ -2,26 +2,30 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
-	"github.com/cidx-org/cidx/v2/pkg/actions"
-	"github.com/cidx-org/cidx/v2/pkg/vcs"
+	"github.com/cidx-org/cidx/v2/internal/commands"
 	"github.com/cucumber/godog"
 	log "github.com/sirupsen/logrus"
 )
 
 // RegisterDryRunSteps registers the steps for previews that must not touch
-// anything (issue #276).
+// anything (issue #276) and must not need anything (issue #350).
 //
-// They run the real action -- actions.NewPR, the one `cidx pr create` builds --
-// against a real git repository whose origin is a path that does not exist. A
-// command that reaches for the remote fails the scenario instead of quietly
-// passing on a machine that happens to be online, and the provider is nil, so
-// an API call would not survive the attempt either.
+// They type the real command line at the real tree -- commands.NewApp(), the
+// one cmd/cidx runs (#317) -- from inside a git repository whose origin is a
+// path that does not exist. Nothing here can reach a network, and no provider
+// can be built from that remote either: a command that resolves one, or
+// reaches for the remote, fails the scenario instead of quietly passing on a
+// machine that happens to be online.
+//
+// Driving the command rather than the action is the point of the second issue:
+// the preview itself was already clean, and `pr create` failed on
+// `unable to parse remote URL` before reaching it -- in the wiring, where a
+// scenario calling actions.NewPR directly could not see it.
 func RegisterDryRunSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Given(`^a repository on main whose remote does not answer$`, tc.repositoryWithUnreachableRemote)
 
@@ -74,19 +78,14 @@ func (tc *TestContext) scenarioHead() (string, error) {
 // previewPullRequest runs `cidx pr create --dry-run` against the scenario's
 // repository, capturing what it reports.
 func (tc *TestContext) previewPullRequest(title string) error {
-	repo, err := vcs.OpenRepository(tc.GitRepo)
-	if err != nil {
-		return fmt.Errorf("failed to open the scenario repository: %w", err)
-	}
-
 	var reported bytes.Buffer
 	previous := log.StandardLogger().Out
 	log.SetOutput(&reported)
 	defer log.SetOutput(previous)
 
-	// A nil provider: reaching the remote API is not something this command may
-	// do under --dry-run, and a call would not get past the attempt.
-	err = actions.NewPR(repo, nil, title, "", true, false).Execute(context.Background())
+	err := tc.inScenarioDir(func() error {
+		return commands.NewApp().Run([]string{"cidx", "pr", "create", "--dry-run", title})
+	})
 
 	tc.Output = reported.String()
 	tc.ExitCode = 0

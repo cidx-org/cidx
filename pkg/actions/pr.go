@@ -18,31 +18,54 @@ const defaultCIStartTimeout = 60 * time.Second
 
 // PRAction manages pull request workflow
 type PRAction struct {
-	repo        *vcs.Repository
-	provider    remote.Provider
-	title       string
-	issueNum    string
-	dryRun      bool
-	readyMode   bool
-	mergeMode   bool
-	mergeMethod string
-	watchFlow   bool
-	skipChecks  bool
+	repo            *vcs.Repository
+	provider        remote.Provider
+	resolveProvider remote.ProviderFunc
+	title           string
+	issueNum        string
+	dryRun          bool
+	readyMode       bool
+	mergeMode       bool
+	mergeMethod     string
+	watchFlow       bool
+	skipChecks      bool
 }
 
-// NewPR creates a new PR action
-func NewPR(repo *vcs.Repository, provider remote.Provider, title, issueNum string, dryRun, readyMode bool) *PRAction {
+// NewPR creates a new PR action. The provider is passed as a resolver, not a
+// value: `pr create --dry-run` and `pr ready --dry-run` describe the work from
+// local state alone, and building a provider up front made them fail on an
+// unparseable remote URL -- or a missing token -- before printing a line
+// (issue #350). Same shape #227 gave the release commands.
+func NewPR(repo *vcs.Repository, resolveProvider remote.ProviderFunc, title, issueNum string, dryRun, readyMode bool) *PRAction {
 	return &PRAction{
-		repo:      repo,
-		provider:  provider,
-		title:     title,
-		issueNum:  issueNum,
-		dryRun:    dryRun,
-		readyMode: readyMode,
+		repo:            repo,
+		resolveProvider: resolveProvider,
+		title:           title,
+		issueNum:        issueNum,
+		dryRun:          dryRun,
+		readyMode:       readyMode,
 	}
 }
 
-// NewPRMerge creates a new PR merge action
+// remoteProvider resolves the remote provider on first use and caches it.
+func (a *PRAction) remoteProvider() (remote.Provider, error) {
+	if a.provider != nil {
+		return a.provider, nil
+	}
+	if a.resolveProvider == nil {
+		return nil, fmt.Errorf("no remote provider configured")
+	}
+	provider, err := a.resolveProvider()
+	if err != nil {
+		return nil, err
+	}
+	a.provider = provider
+	return a.provider, nil
+}
+
+// NewPRMerge creates a new PR merge action. It takes a provider outright:
+// every path through the merge, dry run included, resolves the pull request it
+// would merge, so there is nothing to defer.
 func NewPRMerge(repo *vcs.Repository, provider remote.Provider, mergeMethod string, watchFlow, skipChecks, dryRun bool) *PRAction {
 	return &PRAction{
 		repo:        repo,
@@ -90,11 +113,16 @@ func (a *PRAction) createPR(ctx context.Context) error {
 		return fmt.Errorf("failed to get current branch: %w", err)
 	}
 
-	// 3. If on a feature branch, check if it already has a PR
+	// 3. If on a feature branch, check if it already has a PR. A provider that
+	// cannot be built is not fatal here: the lookup only saves the user a
+	// wasted run, and the work below -- the preview especially -- needs no
+	// remote at all (issue #350). The real creation resolves it again, and
+	// fails there if it must.
 	if currentBranch != "main" {
-		// Check if this branch already has a PR
-		existingPR, existingURL, err := a.provider.GetPullRequestByBranch(ctx, currentBranch)
-		if err == nil && existingPR > 0 {
+		provider, err := a.remoteProvider()
+		if err != nil {
+			log.Debugf("cannot check for an existing PR on '%s': %v", currentBranch, err)
+		} else if existingPR, existingURL, err := provider.GetPullRequestByBranch(ctx, currentBranch); err == nil && existingPR > 0 {
 			// Branch already has a PR
 			log.Warnf("⚠️  Branch '%s' already has PR #%d", currentBranch, existingPR)
 			log.Infof("🔗 %s", existingURL)
@@ -175,7 +203,11 @@ func (a *PRAction) createPR(ctx context.Context) error {
 	// 9. Create draft PR using GitHub API
 	log.Info("📝 Creating draft pull request...")
 
-	prNumber, prURL, err := a.provider.CreatePullRequest(
+	provider, err := a.remoteProvider()
+	if err != nil {
+		return err
+	}
+	prNumber, prURL, err := provider.CreatePullRequest(
 		ctx,
 		a.title,
 		a.generatePRBody(),
@@ -260,7 +292,11 @@ func (a *PRAction) createPRForExistingBranch(ctx context.Context, branchName str
 	// Create draft PR using GitHub API
 	log.Info("📝 Creating draft pull request...")
 
-	prNumber, prURL, err := a.provider.CreatePullRequest(
+	provider, err := a.remoteProvider()
+	if err != nil {
+		return err
+	}
+	prNumber, prURL, err := provider.CreatePullRequest(
 		ctx,
 		a.title,
 		a.generatePRBody(),
@@ -329,14 +365,18 @@ func (a *PRAction) markReady(ctx context.Context) error {
 
 	// Find PR for this branch using GitHub API
 	log.Infof("🔍 Finding PR for branch '%s'...", currentBranch)
-	prNumber, prURL, err := a.provider.GetPullRequestByBranch(ctx, currentBranch)
+	provider, err := a.remoteProvider()
+	if err != nil {
+		return err
+	}
+	prNumber, prURL, err := provider.GetPullRequestByBranch(ctx, currentBranch)
 	if err != nil {
 		return fmt.Errorf("failed to find PR: %w", err)
 	}
 
 	// Mark PR as ready using GitHub API
 	log.Infof("📝 Marking PR #%d as ready...", prNumber)
-	if err := a.provider.MarkPullRequestReady(ctx, prNumber); err != nil {
+	if err := provider.MarkPullRequestReady(ctx, prNumber); err != nil {
 		return fmt.Errorf("failed to mark PR as ready: %w", err)
 	}
 

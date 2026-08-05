@@ -107,8 +107,10 @@ func getGitHubToken(host string) (string, error) {
 	return token, nil
 }
 
-// createProvider creates the appropriate remote provider based on config and remote URL
-func createProvider(repo *vcs.Repository) (remote.Provider, error) {
+// createProvider creates the appropriate remote provider based on config and
+// remote URL. Package-level so a test can watch whether a command built one at
+// all: a dry run that needs no remote must not resolve one (issue #350).
+var createProvider = func(repo *vcs.Repository) (remote.Provider, error) {
 	// Load provider config
 	providerCfg := loadProviderConfig()
 

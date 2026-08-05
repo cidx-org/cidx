@@ -33,15 +33,15 @@ func prCreateAction(c *cli.Context) error {
 		return fmt.Errorf("PR title is required: cidx pr create \"Your PR title\"")
 	}
 
-	return withRepoAndProvider(func(repo *vcs.Repository, provider remote.Provider) error {
-		action := actions.NewPR(repo, provider, title, c.String("issue"), c.Bool("dry-run"), false)
+	return withRepoAndLazyProvider(func(repo *vcs.Repository, resolveProvider remote.ProviderFunc) error {
+		action := actions.NewPR(repo, resolveProvider, title, c.String("issue"), c.Bool("dry-run"), false)
 		return action.Execute(context.Background())
 	})
 }
 
 func prReadyAction(c *cli.Context) error {
-	return withRepoAndProvider(func(repo *vcs.Repository, provider remote.Provider) error {
-		action := actions.NewPR(repo, provider, "", "", c.Bool("dry-run"), true)
+	return withRepoAndLazyProvider(func(repo *vcs.Repository, resolveProvider remote.ProviderFunc) error {
+		action := actions.NewPR(repo, resolveProvider, "", "", c.Bool("dry-run"), true)
 		return action.Execute(context.Background())
 	})
 }

@@ -170,12 +170,19 @@ func headSHA(t *testing.T, dir string) string {
 // the preview needed the network and fast-forwarded the checked-out branch
 // while claiming to change nothing. The repository here has a remote that does
 // not exist: if anything reaches for it, the pull fails and this test fails
-// with it. The provider fails the test on the calls that would query the API.
+// with it. The provider fails the test on the calls that would query the API,
+// and since #350 the resolver fails it earlier still: a preview must not so
+// much as build a provider.
 func TestPRCreate_DryRunStaysOfflineAndLeavesTheRepositoryAlone(t *testing.T) {
 	dir, repo := repoOnMainWithUnreachableRemote(t)
 	before := headSHA(t, dir)
 
-	action := NewPR(repo, &refusingProvider{t: t}, "feat: something", "", true, false)
+	resolve := func() (remote.Provider, error) {
+		t.Error("a dry run resolved a remote provider")
+		return &refusingProvider{t: t}, nil
+	}
+
+	action := NewPR(repo, resolve, "feat: something", "", true, false)
 	if err := action.Execute(context.Background()); err != nil {
 		t.Fatalf("a dry run must not need the remote: %v", err)
 	}
