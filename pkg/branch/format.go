@@ -488,6 +488,45 @@ func FormatCleanup(result *CleanupResult, dryRun bool) string {
 	return sb.String()
 }
 
+// FormatFailedChecks renders one line per check that did not pass, each
+// prefixed with indent: the check's name, the step that failed when the
+// provider names one, and the error excerpt on a line of its own when it
+// carries one.
+//
+// It is the single answer to "which check failed", shared by `cidx pr status`
+// and by the closing report of `cidx pr watch` -- the two commands that used to
+// stop at the count (issue #347). Deliberately plain: the quiet watch is meant
+// to be captured, and this is the part worth pasting into a message.
+func FormatFailedChecks(failed []FailedCheck, indent string) string {
+	var sb strings.Builder
+
+	for _, check := range failed {
+		fmt.Fprintf(&sb, "%s✗ %s", indent, check.Name)
+		if check.Step != "" {
+			fmt.Fprintf(&sb, " — failed step: %s", check.Step)
+		}
+		sb.WriteString("\n")
+
+		if excerpt := firstLine(check.Log); excerpt != "" {
+			fmt.Fprintf(&sb, "%s  %s\n", indent, excerpt)
+		}
+	}
+
+	return sb.String()
+}
+
+// firstLine returns the first non-empty line of s, trimmed. An error excerpt is
+// whatever the provider chose to put in a summary field -- possibly several
+// lines of markdown -- and the status block has room for one.
+func firstLine(s string) string {
+	for _, line := range strings.Split(s, "\n") {
+		if trimmed := strings.TrimSpace(line); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
 // FormatPRInfo formats PR information for terminal output
 func FormatPRInfo(info *PRInfo) string {
 	var sb strings.Builder
@@ -542,6 +581,9 @@ func FormatPRInfo(info *PRInfo) string {
 			fmt.Fprintf(&sb, " (%d failed)", info.Checks.Failure)
 		}
 		sb.WriteString("\n")
+
+		// The names behind the count, aligned under it (issue #347).
+		sb.WriteString(FormatFailedChecks(info.Checks.Failed, "              "))
 	}
 
 	// Reviews

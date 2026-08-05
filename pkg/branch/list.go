@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cidx-org/cidx/v2/pkg/remote"
 	"github.com/cidx-org/cidx/v2/pkg/remote/github"
 )
 
@@ -375,13 +376,7 @@ func (m *Manager) GetPRInfo(branchName string) (*PRInfo, error) {
 	// Get checks status
 	checks, err := m.ghClient.GetPullRequestChecks(ctx, prNumber)
 	if err == nil {
-		info.Checks = &PRChecksInfo{
-			Total:   checks.TotalCount,
-			Pending: checks.Pending,
-			Success: checks.Success,
-			Failure: checks.Failure,
-			Status:  checks.Status,
-		}
+		info.Checks = ChecksInfo(checks)
 	}
 
 	// Get reviews
@@ -401,4 +396,56 @@ func (m *Manager) GetPRInfo(branchName string) (*PRInfo, error) {
 	}
 
 	return info, nil
+}
+
+// ChecksInfo reduces a provider's checks to what the PR views display: the
+// counts, the overall status, and the names behind the failures. It is the one
+// place that mapping happens, so `cidx pr status` and `cidx pr watch` cannot
+// summarise the same pull request differently.
+func ChecksInfo(checks *remote.PRChecks) *PRChecksInfo {
+	return &PRChecksInfo{
+		Total:   checks.TotalCount,
+		Pending: checks.Pending,
+		Success: checks.Success,
+		Failure: checks.Failure,
+		Status:  checks.Status,
+		Failed:  failedChecks(checks),
+	}
+}
+
+// failedChecks names the checks the provider counted as failures, so the count
+// it also returns can say which one is the missing fifth of "4/5 passed"
+// (issue #347).
+//
+// The predicate mirrors the counting in pkg/remote exactly -- a completed run
+// whose conclusion is not success, skipped or neutral, and a commit status that
+// is neither pending nor success. Any other rule would name a set that does not
+// add up to the number printed next to it, which is worse than printing no
+// names at all.
+func failedChecks(checks *remote.PRChecks) []FailedCheck {
+	var failed []FailedCheck
+
+	for _, run := range checks.Checks {
+		if run.Status != "completed" {
+			continue
+		}
+		switch run.Conclusion {
+		case "success", "skipped", "neutral":
+			continue
+		}
+		failed = append(failed, FailedCheck{
+			Name: run.Name,
+			Step: run.FailedStep,
+			Log:  run.ErrorLog,
+		})
+	}
+
+	for _, status := range checks.StatusChecks {
+		if status.State == "pending" || status.State == "success" {
+			continue
+		}
+		failed = append(failed, FailedCheck{Name: status.Context})
+	}
+
+	return failed
 }
