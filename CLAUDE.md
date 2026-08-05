@@ -130,8 +130,8 @@ If a command is missing, broken, or has bad UX -- **that becomes the next priori
 - Step definitions in `*_steps_test.go` at project root
 - Simulation engine (no real Docker needed to run specs)
 - `Strict: true` for unit scenarios, `Strict: false` only for `@docker-required` scenarios
-- `TestFeatures` (strict, 328 scenarios) and `TestFeaturesDocker` (best-effort, 19 scenarios, skipped when no container runtime answers)
-- The suites live in the **root package**, so `cidx.toml` overrides the `go-test` command to `go test -v ./...` — the catalogue default (`./pkg/... ./cmd/...`) would skip them, and since #317 it would also skip `internal/commands`, where every CLI test now lives. The CI test job would gate on nothing. `TestTheTestPhaseRunsEveryPackageThatHasTests` (in `pkg/config`, so that it still runs under a narrowed command) fails when the resolved `go-test` command stops covering a package that holds tests (#344)
+- `TestFeatures` (strict, 342 scenarios) and `TestFeaturesDocker` (best-effort, 19 scenarios, skipped when no container runtime answers)
+- The suites live in the **root package**, which the `go-test` preset used to skip — along with `internal/commands`, where every CLI test has lived since #317. `cidx.toml` carried an override to put them back until #357 moved the fix into the catalogue: the preset says `go test -v ./...` now and this repository states no command at all. Two guards keep it that way — `TestNoTestPresetRunsOnlyPartOfTheProject` (in `pkg/presets`) fails on a catalogue test preset that names a subtree, and `TestTheTestPhaseRunsEveryPackageThatHasTests` (in `pkg/config`, so that it still runs under a narrowed command) fails when the resolved command stops covering a package that holds tests (#344)
 - Scenarios that describe the CLI import `internal/commands` and resolve against `commands.NewApp()` — the real tree, never a copy of it (#317)
 
 **Unit tests** -- Package-level correctness:

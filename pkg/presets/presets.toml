@@ -470,7 +470,7 @@ name = "go-test"
 phase = "test"
 image = "dhi.io/golang:1.26.5-alpine-dev@sha256:29fe0a7d2a5ab0c236fbde3a7f63801755585ed260b6f2f564e831c92bfa9f34"
 hardened = true
-command = "go test -v ./pkg/... ./cmd/..."
+command = "go test -v ./..."
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
 

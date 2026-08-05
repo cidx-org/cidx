@@ -16,13 +16,19 @@ const projectRoot = "../.."
 // TestTheTestPhaseRunsEveryPackageThatHasTests is the standing guard behind
 // issue #344.
 //
-// The catalogue's `go-test` preset runs `go test -v ./pkg/... ./cmd/...`, so
-// this repository overrides it to `./...`: the godog suites live in the root
-// package (#271) and, since #317, every CLI test lives in `internal/commands`.
-// The default reaches neither. Dropping or narrowing that single override would
-// silence the BDD suite and all of the CLI tests at once, and the Test job would
-// stay green having run neither — the invisible failure of a decorative check,
-// the same one as #272 and #324.
+// The godog suites live in the root package (#271) and, since #317, every CLI
+// test lives in `internal/commands`. The `go-test` preset ran
+// `go test -v ./pkg/... ./cmd/...` and reached neither, so this repository
+// repaired it with a one-line override; #357 widened the catalogue to `./...`
+// and the override is gone. Narrowing the resolved command — in the preset now,
+// or by putting an override back — would silence the BDD suite and all of the
+// CLI tests at once, and the Test job would stay green having run neither: the
+// invisible failure of a decorative check, the same one as #272 and #324.
+//
+// This guard resolves the command the way the runner does, preset plus
+// `[containers.NAME]` overrides, so it holds whichever of the two is narrowed.
+// `TestNoTestPresetRunsOnlyPartOfTheProject`, in `pkg/presets`, states the rule
+// for the catalogue itself and for every project that uses it.
 //
 // The guard lives here, under ./pkg/..., and not next to the project-level
 // guards in the root package, on purpose: the command it checks is what decides

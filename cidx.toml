@@ -62,22 +62,21 @@ command = "--write ."
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
 
-# The catalogue default for go-test is `go test -v ./pkg/... ./cmd/...`, which
-# leaves out the root package — exactly where this repo keeps its godog suite
-# (features_test.go + the *_steps_test.go definitions) — and, since #317,
-# internal/commands, where every CLI test lives. Without this override neither
-# runs in CI, so nothing enforces the specs the project is built around and the
-# Test job stays green having run neither. `./...` covers every package.
+# There is no `command` override here anymore, and that is the point of #357.
+# The catalogue used to run `go test -v ./pkg/... ./cmd/...`, which skipped the
+# root package — where this repo keeps its godog suite — and, since #317,
+# internal/commands, where every CLI test lives. This file carried a one-line
+# override to put them back, and twice the override was the only thing standing
+# between a green Test job and a suite that had never been compiled (#271,
+# #344). A default that every project has to repair is not a default, so the
+# catalogue says `./...` now and this repository states nothing.
 #
-# Do not narrow this line: TestTheTestPhaseRunsEveryPackageThatHasTests, in
-# pkg/config, fails when the resolved command stops covering a package that
-# holds tests (#344).
+# TestTheTestPhaseRunsEveryPackageThatHasTests (pkg/config) still resolves the
+# command the runner's way and fails on a package it does not reach — it now
+# guards the catalogue default itself rather than a local override.
 #
 # GODOG_FORMAT=progress keeps the phase log readable: one character per step
 # plus the scenario/step totals, instead of ~2000 lines of pretty output.
-[containers.go-test]
-command = "go test -v ./..."
-
 [containers.go-test.env]
 GODOG_FORMAT = "progress"
 
