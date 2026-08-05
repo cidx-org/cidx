@@ -100,7 +100,7 @@ Secondary capabilities live under namespaces:
 
 This does not reduce their accessibility. It clarifies what CIDX is about.
 
-The `cidx action ...` tree these namespaces replaced is still there, hidden. It warns on every invocation, names the command that replaces it, and is **removed in v3.0.0** — see [the CLI reference](reference/cli.md#cidx-action-deprecated--removed-in-v300) for the correspondence (issue #235).
+The `cidx action ...` tree these namespaces replaced is gone: hidden on 2026-04-09, warning on every invocation from then on, **removed in v3.0.0** — see [the CLI reference](reference/cli.md#cidx-action-removed-in-v300) for the correspondence (issue #235).
 
 ---
 

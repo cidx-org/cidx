@@ -102,34 +102,6 @@ func buildApp() *cli.App {
 				},
 				Subcommands: workflowCommand().Subcommands,
 			},
-
-			// Deprecated — removed in v3.0.0 (issue #235). Every invocation
-			// warns and names its exact replacement; see action_deprecated.go.
-			{
-				Name:   "action",
-				Usage:  "Deprecated: use 'repo', 'release', or 'security' instead — removed in cidx " + actionRemovedIn,
-				Hidden: true,
-				Before: warnDeprecatedAction,
-				Subcommands: []*cli.Command{
-					cpwCommand(),
-					prCommand(),
-					{
-						Name:        "tag",
-						Usage:       "Deprecated: use 'release tag' instead",
-						Subcommands: releaseTagCommand().Subcommands,
-					},
-					{
-						Name:        "release",
-						Usage:       "Deprecated: use 'release' instead",
-						Subcommands: releaseCommand().Subcommands,
-					},
-					{
-						Name:        "artifact",
-						Usage:       "Deprecated: use 'repo artifact' instead",
-						Subcommands: artifactCommand().Subcommands,
-					},
-				},
-			},
 			{
 				Name:        "demo",
 				Hidden:      true,
