@@ -49,6 +49,37 @@ func TestAliasesOfferTheSameFlagsAsTheCommandTheyAlias(t *testing.T) {
 	}
 }
 
+// resolveCommand walks a path of command names through the tree.
+func resolveCommand(commands []*cli.Command, path []string) *cli.Command {
+	for _, cmd := range commands {
+		if !cmd.HasName(path[0]) {
+			continue
+		}
+		if len(path) == 1 {
+			return cmd
+		}
+		return resolveCommand(cmd.Subcommands, path[1:])
+	}
+
+	return nil
+}
+
+// TestTheDeprecatedActionTreeIsGone.
+//
+// `cidx action ...` was hidden on 2026-04-09 (8103f20), warned on every
+// invocation from #235 on, and is removed in v3.0.0. The tree it wrapped is
+// reachable in full under `repo`, `release` and `security`, so bringing it back
+// would re-open a deprecation that has already had its window -- and it would
+// come back the way it left, hidden, where `--help` would not show it and only
+// this guard would notice.
+func TestTheDeprecatedActionTreeIsGone(t *testing.T) {
+	if cmd := resolveCommand(NewApp().Commands, []string{"action"}); cmd != nil {
+		t.Error("'cidx action' is back in the command tree. It was removed in v3.0.0 " +
+			"(issue #235); every subcommand it wrapped is reachable under 'repo', " +
+			"'release' or 'security'.")
+	}
+}
+
 // compareFlags checks one command against the one it aliases, then walks into
 // the subcommands both declare.
 func compareFlags(t *testing.T, path string, alias, target *cli.Command) {

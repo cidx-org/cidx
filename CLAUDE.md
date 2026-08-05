@@ -90,7 +90,7 @@ The combination of issue discussion + scenario specification + commit history gi
 - Releases are grouped (3-5 PRs per release) and manually triggered
 - Tags = Releases (1:1 mapping)
 - **Changelog**: Must be updated at every release. Commitizen generates it from conventional commits. Verify CHANGELOG.md is current before tagging.
-- **Scheduled for v3.0.0**: delete the hidden `cidx action ...` tree (issue #235). It is the only thing owed to the next major, and it is due: it has warned on every invocation, naming the exact command that replaces it, since #235. What goes: the `action` entry in `internal/commands/app.go`, `internal/commands/action_deprecated.go` and its test, the exemption in `deprecated_hints_test.go`, and the `cidx action` section of `docs/reference/cli.md`. Cutting a v3.0.0 without doing it re-opens a deprecation that has already had its window.
+- **Owed to v3.0.0**: nothing. The hidden `cidx action ...` tree — the one thing the next major owed — is deleted (issue #235), so the release that ships that deletion is the one that has to be cut as `v3.0.0`; a minor bump would ship a removed command under a compatible version number. `TestTheDeprecatedActionTreeIsGone` keeps it from coming back, and the correspondence table survives in `docs/reference/cli.md` for anyone with the old spelling in a script.
 
 Use `cidx pr create`, `cidx pr merge`, `cidx release create` for the workflow.
 

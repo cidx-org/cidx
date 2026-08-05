@@ -8,17 +8,14 @@ import (
 	"testing"
 )
 
-// The `cidx action ...` tree is hidden and deprecated (see
-// internal/commands/app.go), so nothing the user can read may still point at
-// it. Guards issue #174 against regressions: new hints must name the current
-// paths (`cidx release ...`, `cidx repo ...`, or the top-level aliases
-// `cidx pr ...` / `cidx cpw`).
+// The `cidx action ...` tree is gone -- hidden on 2026-04-09, deprecated with a
+// warning on every invocation from #235 on, removed in v3.0.0 -- so nothing the
+// user can read may still point at it. Guards issue #174 against regressions:
+// hints must name the current paths (`cidx release ...`, `cidx repo ...`, or
+// the top-level aliases `cidx pr ...` / `cidx cpw`). Until the removal, the
+// warning itself was exempt, because it named the deprecated form in order to
+// steer the user off it; with the tree gone there is nothing left to exempt.
 func TestNoDeprecatedActionHintsInGoSources(t *testing.T) {
-	// The deprecation warning is the one source that must name the deprecated
-	// form: it names it to steer the user off it, and its own tests check that
-	// every mention is followed by the replacement (issue #235).
-	exempt := filepath.Join("internal", "commands", "action_deprecated.go")
-
 	err := filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -32,9 +29,6 @@ func TestNoDeprecatedActionHintsInGoSources(t *testing.T) {
 		// Test files are exempt: this one, and the forbidden-string lists in
 		// pkg/actions, legitimately mention the deprecated form.
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		if filepath.Clean(path) == exempt {
 			return nil
 		}
 
