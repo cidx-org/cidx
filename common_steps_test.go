@@ -7,8 +7,11 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/cidx-org/cidx/v2/internal/commands"
 	"github.com/cidx-org/cidx/v2/pkg/config"
+	"github.com/cidx-org/cidx/v2/pkg/environment"
 	"github.com/cucumber/godog"
 )
 
@@ -327,10 +330,14 @@ func (tc *TestContext) unsetGitHubToken() error {
 	return os.Unsetenv("GITHUB_TOKEN")
 }
 
-// runCommand simulates CIDX command execution for BDD scenarios
+// runCommand simulates CIDX command execution for BDD scenarios, timing it so
+// the scenarios that state a budget have something to measure.
 func (tc *TestContext) runCommand(cmdStr string) error {
 	tc.LastCommand = cmdStr
-	return tc.simulateCIDXCommand(cmdStr)
+	started := time.Now()
+	err := tc.simulateCIDXCommand(cmdStr)
+	tc.RunDuration = time.Since(started)
+	return err
 }
 
 // tryRunCommand attempts to run a command (may fail)
@@ -367,6 +374,12 @@ func (tc *TestContext) simulateCIDXCommand(cmdStr string) error {
 		return tc.runGenerate(parts)
 	}
 
+	// A scenario that staged tools of its own is asking about their output,
+	// not about a pipeline (features/executor/quiet_mode.feature).
+	if len(tc.Tools) > 0 && len(parts) >= 2 && parts[0] == "cidx" && parts[1] == "run" {
+		return tc.runStagedTools(parts)
+	}
+
 	// Determine what pipeline/phase is being run
 	pipelineName := ""
 	if len(parts) >= 3 && parts[0] == "cidx" && parts[1] == "run" {
@@ -381,17 +394,21 @@ func (tc *TestContext) simulateCIDXCommand(cmdStr string) error {
 		}
 	}
 
-	// Check for --quiet flag
-	isQuiet := false
+	// Whether the run is quiet is not read off the flags: commands.ResolveQuiet
+	// owns that decision (CI is quiet by default, --stream and --verbose win
+	// over it), and the scenarios must see the decision, not a copy of it.
+	var isQuiet, isStream, isVerbose bool
 	for _, p := range parts {
-		if p == "--quiet" || p == "-q" {
+		switch p {
+		case "--quiet", "-q":
 			isQuiet = true
+		case "--stream":
+			isStream = true
+		case "--verbose":
+			isVerbose = true
 		}
 	}
-
-	if isQuiet {
-		tc.Config["quiet"] = true
-	}
+	tc.Config["quiet"] = commands.ResolveQuiet(isQuiet, isStream, isVerbose, tc.CI)
 
 	// Detect forced backend from flags
 	forcedBackend := ""
@@ -660,12 +677,15 @@ func (tc *TestContext) detectEnvironment() error {
 	return nil
 }
 
-// startCIDX starts CIDX
+// startCIDX starts CIDX, which detects the environment once and logs it. The
+// answer comes from environment.Detect, so the scenarios about startup are
+// about the detector the binary uses.
 func (tc *TestContext) startCIDX() error {
+	detected := environment.Detect().String()
 	tc.Config["started"] = true
+	tc.Config["detected_environment"] = detected
 	tc.Output += "CIDX started\n"
-	tc.Output += "Environment detected\n"
-	tc.Output += "Environment information logged\n"
+	tc.Output += fmt.Sprintf("Environment: %s\n", detected)
 	return nil
 }
 
@@ -849,35 +869,77 @@ func (tc *TestContext) shouldExecutePhasesInOrder(table *godog.Table) error {
 	return nil
 }
 
-// shouldNotSeeStdOutput checks that standard tool output is suppressed
+// shouldNotSeeStdOutput asserts the standard output of every tool that
+// succeeded stayed out of the terminal -- what quiet buys.
 func (tc *TestContext) shouldNotSeeStdOutput() error {
-	// In quiet mode, detailed output is suppressed
-	return nil
-}
-
-// shouldOnlySeeFailedLogs checks only failed tool logs are visible
-func (tc *TestContext) shouldOnlySeeFailedLogs() error {
-	return nil
-}
-
-// commandShouldIncludeFlag checks command includes a flag
-func (tc *TestContext) commandShouldIncludeFlag(flag string) error {
-	// Check output for flag presence indicators
-	if strings.Contains(tc.Output, flag) {
-		return nil
+	if len(tc.Tools) == 0 {
+		return fmt.Errorf("the scenario staged no tool, so there is no standard output to look for")
 	}
-	// In simulation, we trust the local safety engine added the right flags
+	for _, tool := range tc.Tools {
+		if tool.ExitCode == 0 && strings.Contains(tc.Output, tool.Stdout) {
+			return fmt.Errorf("the standard output of %q reached the terminal:\n%s", tool.Name, tc.Output)
+		}
+	}
 	return nil
 }
 
-// commandShouldNotIncludeFlag checks command does NOT include a flag
+// shouldOnlySeeFailedLogs asserts the buffer was flushed for the tools that
+// failed and dropped for the ones that passed.
+func (tc *TestContext) shouldOnlySeeFailedLogs() error {
+	if len(tc.Tools) == 0 {
+		return fmt.Errorf("the scenario staged no tool, so there are no logs to look for")
+	}
+	for _, tool := range tc.Tools {
+		seen := strings.Contains(tc.Output, tool.Stdout)
+		if tool.ExitCode == 0 && seen {
+			return fmt.Errorf("the logs of %q are visible although it passed:\n%s", tool.Name, tc.Output)
+		}
+		if tool.ExitCode != 0 && !seen {
+			return fmt.Errorf("the logs of %q are missing although it failed:\n%s", tool.Name, tc.Output)
+		}
+	}
+	return nil
+}
+
+// commandShouldIncludeFlag asserts the command the named preset would run
+// carries the flag, after environment.ApplyExecutionMode has had its say.
+func (tc *TestContext) commandShouldIncludeFlag(flag string) error {
+	preset, _, err := tc.resolvedSafetyPreset()
+	if err != nil {
+		return err
+	}
+	if !strings.Contains(preset.Command, flag) {
+		return fmt.Errorf("the command resolved for %q does not carry %s:\n%s", preset.Name, flag, preset.Command)
+	}
+	return nil
+}
+
+// commandShouldNotIncludeFlag asserts the flag was stripped from -- or never
+// added to -- the command the named preset would run.
 func (tc *TestContext) commandShouldNotIncludeFlag(flag string) error {
-	// In local environment, dangerous flags should be stripped
+	preset, _, err := tc.resolvedSafetyPreset()
+	if err != nil {
+		return err
+	}
+	if strings.Contains(preset.Command, flag) {
+		return fmt.Errorf("the command resolved for %q still carries %s:\n%s", preset.Name, flag, preset.Command)
+	}
 	return nil
 }
 
-// envVarShouldBe checks an environment variable has expected value
+// envVarShouldBe asserts the environment the named preset would run with
+// carries the value the execution mode injects.
 func (tc *TestContext) envVarShouldBe(key, expected string) error {
-	// In simulation, env vars are set by local safety engine
+	preset, _, err := tc.resolvedSafetyPreset()
+	if err != nil {
+		return err
+	}
+	got, set := preset.Env[key]
+	if !set {
+		return fmt.Errorf("preset %q would run without %s set", preset.Name, key)
+	}
+	if got != expected {
+		return fmt.Errorf("preset %q would run with %s=%q, expected %q", preset.Name, key, got, expected)
+	}
 	return nil
 }

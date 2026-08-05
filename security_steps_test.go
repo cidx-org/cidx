@@ -3,9 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os/exec"
 	"strings"
 	"time"
 
+	"github.com/cidx-org/cidx/v2/internal/commands"
+	"github.com/cidx-org/cidx/v2/pkg/environment"
 	"github.com/cidx-org/cidx/v2/pkg/presets"
 	"github.com/cucumber/godog"
 )
@@ -22,8 +25,8 @@ func RegisterSecuritySteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Step(`^GitHub release should be published$`, tc.githubReleaseShouldBePublished)
 	ctx.Step(`^release should NOT be published$`, tc.releaseShouldNotBePublished)
 	ctx.Step(`^release should be public$`, tc.releaseShouldBePublic)
-	ctx.Step(`^release should be built$`, tc.releaseShouldBeBuilt)
 	ctx.Step(`^release should NOT be published to GitHub$`, tc.releaseShouldNotBePublishedToGitHub)
+	ctx.Step(`^the run should be held as a dry-run$`, tc.runShouldBeHeldAsDryRun)
 	ctx.Step(`^the "([^"]*)" phase should build images$`, tc.phaseShouldBuildImages)
 	ctx.Step(`^the "([^"]*)" phase should NOT push images$`, tc.phaseShouldNotPushImages)
 	ctx.Step(`^image should NOT be pushed$`, tc.imageShouldNotBePushed)
@@ -42,7 +45,6 @@ func RegisterSecuritySteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Step(`^CIDX should detect CI provider as "([^"]*)"$`, tc.shouldDetectCIProvider)
 	ctx.Step(`^CIDX should detect IsPR as (true|false)$`, tc.shouldDetectIsPR)
 	ctx.Step(`^CIDX should detect IsTag as (true|false)$`, tc.shouldDetectIsTag)
-	ctx.Step(`^CIDX should detect BranchName as "([^"]*)"$`, tc.shouldDetectBranchName)
 	ctx.Step(`^CIDX should detect TagName as "([^"]*)"$`, tc.shouldDetectTagName)
 
 	// Environment detection - feature-specific
@@ -416,21 +418,81 @@ func (tc *TestContext) exceptionVerdictShouldNameNoFix() error {
 	return nil
 }
 
-// presetHasLocalBehavior sets local_behavior for a preset
-func (tc *TestContext) presetHasLocalBehavior(preset, behavior string) error {
+// presetHasLocalBehavior names the preset a local-safety scenario is about, and
+// checks the catalogue really declares the behavior the scenario states. A
+// preset that quietly loses its local_behavior would otherwise leave the whole
+// Rule green.
+func (tc *TestContext) presetHasLocalBehavior(name, behavior string) error {
+	preset, err := presets.Get(name)
+	if err != nil {
+		return err
+	}
+	if preset.LocalBehavior != behavior {
+		return fmt.Errorf("the catalogue declares local_behavior %q for %q, the scenario says %q",
+			preset.LocalBehavior, name, behavior)
+	}
+
+	tc.Config["safety_preset"] = name
 	if tc.Config["presets"] == nil {
 		tc.Config["presets"] = make(map[string]any)
 	}
-	presets := tc.Config["presets"].(map[string]any)
-	presets[preset] = map[string]string{
-		"local_behavior": behavior,
+	staged := tc.Config["presets"].(map[string]any)
+	staged[name] = map[string]string{"local_behavior": behavior}
+	return nil
+}
+
+// resolvedSafetyPreset resolves the preset a local-safety scenario named
+// through the code that governs it: presets.Get for the catalogue definition,
+// environment.ValidatePreset for the mode this environment allows, and
+// environment.ApplyExecutionMode for what that mode does to the command and to
+// the environment the container would run with.
+func (tc *TestContext) resolvedSafetyPreset() (presets.Preset, *environment.ExecutionMode, error) {
+	name, _ := tc.Config["safety_preset"].(string)
+	if name == "" {
+		return presets.Preset{}, nil, fmt.Errorf("the scenario named no preset")
+	}
+	return tc.resolvePresetSafety(name)
+}
+
+func (tc *TestContext) resolvePresetSafety(name string) (presets.Preset, *environment.ExecutionMode, error) {
+	preset, err := presets.Get(name)
+	if err != nil {
+		return presets.Preset{}, nil, err
+	}
+	mode, err := environment.ValidatePreset(preset, &environment.Environment{IsCI: tc.CI, Provider: tc.Provider})
+	if err != nil {
+		return presets.Preset{}, nil, fmt.Errorf("preset %q refused this environment: %w", name, err)
+	}
+	return environment.ApplyExecutionMode(preset, mode), mode, nil
+}
+
+// dockerImageShouldBeBuilt asserts the resolved preset would really run a
+// build here -- not be held back by a local-safety dry-run.
+func (tc *TestContext) dockerImageShouldBeBuilt() error {
+	preset, mode, err := tc.resolvedSafetyPreset()
+	if err != nil {
+		return err
+	}
+	if mode.IsDryRun {
+		return fmt.Errorf("preset %q is held as a dry-run here (%s), so nothing is built", preset.Name, mode.Reason)
+	}
+	if !strings.Contains(preset.Command, "build") {
+		return fmt.Errorf("the command resolved for %q builds nothing:\n%s", preset.Name, preset.Command)
 	}
 	return nil
 }
 
-// dockerImageShouldBeBuilt verifies Docker image was built
-func (tc *TestContext) dockerImageShouldBeBuilt() error {
-	// In simulation, image is built if phase executed
+// runShouldBeHeldAsDryRun asserts local safety stops the run before the
+// container starts -- which is what no-push and draft really do, rather than
+// running a modified command (issue #349).
+func (tc *TestContext) runShouldBeHeldAsDryRun() error {
+	preset, mode, err := tc.resolvedSafetyPreset()
+	if err != nil {
+		return err
+	}
+	if !mode.IsDryRun {
+		return fmt.Errorf("preset %q would run for real here (mode %s)", preset.Name, mode.Mode)
+	}
 	return nil
 }
 
@@ -480,11 +542,6 @@ func (tc *TestContext) releaseShouldBePublic() error {
 		return nil
 	}
 	return fmt.Errorf("expected public release")
-}
-
-// releaseShouldBeBuilt verifies release was built
-func (tc *TestContext) releaseShouldBeBuilt() error {
-	return nil
 }
 
 // releaseShouldNotBePublishedToGitHub verifies release was not published to GitHub
@@ -639,11 +696,6 @@ func (tc *TestContext) shouldDetectIsTag(isTag string) error {
 	return nil
 }
 
-// shouldDetectBranchName verifies branch name detection
-func (tc *TestContext) shouldDetectBranchName(branch string) error {
-	return nil
-}
-
 // shouldDetectTagName verifies tag name detection
 func (tc *TestContext) shouldDetectTagName(tag string) error {
 	if tc.EventType != "tag" {
@@ -703,9 +755,12 @@ func (tc *TestContext) envIsTagShouldBe(value string) error {
 	return tc.shouldDetectIsTag(value)
 }
 
-// envBranchNameShouldNotBeEmpty checks branch name is set
+// envBranchNameShouldNotBeEmpty asks the real detector, which reads the branch
+// off the provider's own variable (GITHUB_REF_NAME, CI_COMMIT_REF_NAME, ...).
 func (tc *TestContext) envBranchNameShouldNotBeEmpty() error {
-	// In simulation, branch is always available in CI context
+	if branch := environment.Detect().BranchName; branch == "" {
+		return fmt.Errorf("environment.Detect() reports no branch name")
+	}
 	return nil
 }
 
@@ -743,23 +798,50 @@ func (tc *TestContext) envShouldBeDetectedImmediately() error {
 	return nil
 }
 
-// envInfoShouldBeLogged checks environment info was logged
+// envInfoShouldBeLogged asserts what startup logged names the environment the
+// real detector reports, not some other environment.
 func (tc *TestContext) envInfoShouldBeLogged() error {
+	detected, ok := tc.Config["detected_environment"].(string)
+	if !ok {
+		return fmt.Errorf("CIDX was not started")
+	}
+	if !strings.Contains(tc.Output, detected) {
+		return fmt.Errorf("startup logged nothing about the %q environment:\n%s", detected, tc.Output)
+	}
 	return nil
 }
 
-// envShouldNotBeRedetected checks environment is not re-detected
+// envShouldNotBeRedetected asserts detection is a decision and not a guess:
+// asking environment.Detect() again, mid-run, must give the same answer as the
+// one taken at startup.
 func (tc *TestContext) envShouldNotBeRedetected() error {
+	atStartup, ok := tc.Config["detected_environment"].(string)
+	if !ok {
+		return fmt.Errorf("CIDX was not started")
+	}
+	if again := environment.Detect().String(); again != atStartup {
+		return fmt.Errorf("environment.Detect() answered %q at startup and %q during execution", atStartup, again)
+	}
 	return nil
 }
 
-// gitInfoShouldBeAvailable checks Git info is available in local env
+// gitInfoShouldBeAvailable asks Git itself, in the directory the scenario made
+// a repository of.
 func (tc *TestContext) gitInfoShouldBeAvailable() error {
-	return nil
+	return tc.inScenarioDir(func() error {
+		if out, err := exec.Command("git", "rev-parse", "--git-dir").CombinedOutput(); err != nil {
+			return fmt.Errorf("git has nothing to say here: %w: %s", err, out)
+		}
+		return nil
+	})
 }
 
-// canStillRunCIDX checks CIDX commands work in local environment
+// canStillRunCIDX runs a command against the real command tree -- the one the
+// binary runs (#317) -- rather than asserting that it would work.
 func (tc *TestContext) canStillRunCIDX() error {
+	if err := commands.NewApp().Run([]string{"cidx", "preset", "list"}); err != nil {
+		return fmt.Errorf("cidx refuses to run locally: %w", err)
+	}
 	return nil
 }
 

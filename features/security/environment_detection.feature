@@ -28,9 +28,14 @@ Feature: Environment Detection
 
   Rule: CIDX detects Git event context
 
+    # GITHUB_REF_NAME is stated because the detector reads the branch from it
+    # and from nothing else. Without it the branch is empty — which the old
+    # step, asserting nothing, was happy to call "not empty" (#349).
+
     Scenario: Detect pull request in GitHub Actions
       Given I am in GitHub Actions
       And the environment variable "GITHUB_EVENT_NAME" is "pull_request"
+      And the environment variable "GITHUB_REF_NAME" is "feature/new-feature"
       When CIDX detects the environment
       Then environment.IsPR should be true
       And environment.IsTag should be false

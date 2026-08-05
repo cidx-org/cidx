@@ -57,28 +57,47 @@ Feature: Pipeline Execution
 
   Rule: Named pipelines provide clear intent
 
+    # A pipeline used to have to "indicate its purpose" as well. It cannot:
+    # config.Pipeline is a list of phases and an optional workflow name, and the
+    # `description` key cidx.toml writes is dropped by the decoder without a
+    # word. The step behind that line asserted nothing, which is why the claim
+    # survived (#349). What a pipeline states is its phases.
+
     Scenario Outline: Different pipelines for different purposes
       Given I run pipeline "<pipeline>"
       Then it should execute phases: <phases>
-      And the description should indicate "<purpose>"
 
       Examples:
-        | pipeline | phases                                        | purpose           |
-        | pr       | security, code, test                          | PR validation     |
-        | main     | security, code, test, build                   | Main branch build |
-        | release  | security, code, test, build, release, docker  | Full release      |
-        | quick    | code                                          | Quick check       |
+        | pipeline | phases                                        |
+        | pr       | security, code, test                          |
+        | main     | security, code, test, build                   |
+        | release  | security, code, test, build, release, docker  |
+        | quick    | code                                          |
 
-  Rule: Pipelines can be listed and inspected
+  Rule: A dry run is how a pipeline is inspected before it runs
 
-    Scenario: List all available pipelines
-      When I run "cidx list pipelines"
-      Then I should see all configured pipelines
-      And each pipeline should show its phases
-      And each pipeline should show its description
+    # `cidx list pipelines` and `cidx info release` were never commands — the
+    # steps behind them returned nil, so nobody found out (#349). The command
+    # that answers both questions is `cidx run <pipeline> --dry-run`: it
+    # resolves the pipeline from cidx.toml and names every phase, in order,
+    # without starting a container.
+
+    Scenario: A dry run names the phases a pipeline includes
+      Given I have a pr pipeline configured:
+        """
+        [pipelines.pr]
+        phases = ["security", "code", "test"]
+        """
+      When I run "cidx run pr --dry-run"
+      Then I should see which phases it includes
+      And I should see the execution order
 
     Scenario: Show pipeline details
-      When I run "cidx info release"
+      Given I have a release pipeline configured:
+        """
+        [pipelines.release]
+        phases = ["security", "code", "test", "build", "release", "docker"]
+        """
+      When I run "cidx run release --dry-run"
       Then I should see the release pipeline configuration
-      And I should see which phases it includes
       And I should see the execution order

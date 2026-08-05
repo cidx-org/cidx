@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -669,40 +670,102 @@ func (tc *TestContext) presetFieldShouldEqual(presetName, field, want string) er
 	return nil
 }
 
-// haveNoCustomConfigFiles sets up environment with no custom configs
+// presetLayer is one preset file a scenario put on the stack: the path it
+// stands at, and the presets it declares, parsed by the loader's own types.
+type presetLayer struct {
+	Path    string
+	Presets map[string]presets.PresetTOML
+}
+
+// resolvedTool is a tool after the stack has been walked: what it resolves to,
+// and which layer said so.
+type resolvedTool struct {
+	Image   string
+	Command string
+	Source  string
+}
+
+const catalogueSource = "the built-in catalogue"
+
+// haveNoCustomConfigFiles empties the stack, so only the catalogue answers.
 func (tc *TestContext) haveNoCustomConfigFiles() error {
-	tc.Config["no_custom_configs"] = true
+	tc.Config["preset_layers"] = []presetLayer{}
 	return nil
 }
 
-// haveUserConfigFile sets up a user-level config file
 func (tc *TestContext) haveUserConfigFile(path string) error {
-	tc.Config["user_config_path"] = path
-	return nil
+	return tc.pushPresetLayer(path)
 }
 
-// haveProjectConfigFile sets up a project-level config file
 func (tc *TestContext) haveProjectConfigFile(path string) error {
-	tc.Config["project_config_path"] = path
+	return tc.pushPresetLayer(path)
+}
+
+// pushPresetLayer adds an empty layer at the given path. loadPresets stacks
+// them in this order — the catalogue, then ~/.config/cidx, then .cidx — so the
+// order the scenario states them in is the order they win in.
+func (tc *TestContext) pushPresetLayer(path string) error {
+	layers, _ := tc.Config["preset_layers"].([]presetLayer)
+	tc.Config["preset_layers"] = append(layers, presetLayer{Path: path})
 	return nil
 }
 
-// userConfigCustomImage marks user config has custom image
+// declareInTopLayer parses a preset declaration through presets.PresetsFile —
+// the type the loader decodes into — and puts it in the layer last pushed.
+func (tc *TestContext) declareInTopLayer(document string) error {
+	layers, _ := tc.Config["preset_layers"].([]presetLayer)
+	if len(layers) == 0 {
+		return fmt.Errorf("the scenario declared a preset before naming a file to hold it")
+	}
+
+	var file presets.PresetsFile
+	if _, err := toml.Decode(document, &file); err != nil {
+		return fmt.Errorf("failed to parse the staged preset file: %w", err)
+	}
+
+	top := &layers[len(layers)-1]
+	if top.Presets == nil {
+		top.Presets = map[string]presets.PresetTOML{}
+	}
+	for name, preset := range file.Presets {
+		top.Presets[name] = preset
+	}
+	tc.Config["preset_layers"] = layers
+	return nil
+}
+
+// userConfigCustomImage declares an image for an existing preset, the override
+// a user file is normally written for.
 func (tc *TestContext) userConfigCustomImage(preset string) error {
-	tc.Config["user_custom_image_for"] = preset
-	return nil
+	return tc.declareInTopLayer(fmt.Sprintf(`
+[presets.%s]
+name = %q
+phase = "security"
+image = "registry.example.com/%s:pinned"
+command = "scan ."
+`, preset, preset, preset))
 }
 
-// projectConfigCustomCommand marks project config has custom command
+// projectConfigCustomCommand declares a command for an existing preset.
 func (tc *TestContext) projectConfigCustomCommand(preset string) error {
-	tc.Config["project_custom_command_for"] = preset
-	return nil
+	return tc.declareInTopLayer(fmt.Sprintf(`
+[presets.%s]
+name = %q
+phase = "security"
+image = "aquasec/trivy:latest"
+command = "fs . --scanners vuln --exit-code 1"
+`, preset, preset))
 }
 
-// projectConfigNewTool marks project config defines a new tool
+// projectConfigNewTool declares a preset the catalogue has never heard of.
 func (tc *TestContext) projectConfigNewTool(tool string) error {
-	tc.Config["project_new_tool"] = tool
-	return nil
+	return tc.declareInTopLayer(fmt.Sprintf(`
+[presets.%s]
+name = %q
+phase = "code"
+image = "alpine:latest"
+command = "lint ."
+`, tool, tool))
 }
 
 // fileWithContent sets up a file with given content
@@ -712,47 +775,199 @@ func (tc *TestContext) fileWithContent(path string, doc *godog.DocString) error 
 	return nil
 }
 
-// shouldUseBuiltinPreset checks built-in preset is used
-func (tc *TestContext) shouldUseBuiltinPreset(preset string) error {
-	// When no custom configs, built-in presets are used by default
-	return nil
+// resolveTool answers what a tool resolves to the way loadPresets does: the
+// catalogue presets.toml ships, then each staged file on top, a later file
+// replacing an earlier definition of the same name. The catalogue side is the
+// real one (presets.Catalogue reads the file), the layers are parsed by the
+// loader's own types; replace-by-name is the whole of mergePresets.
+func (tc *TestContext) resolveTool(name string) (resolvedTool, error) {
+	catalogue, err := presets.Catalogue()
+	if err != nil {
+		return resolvedTool{}, fmt.Errorf("failed to read the preset catalogue: %w", err)
+	}
+
+	resolved := resolvedTool{}
+	found := false
+	if preset, ok := catalogue[name]; ok {
+		resolved = resolvedTool{Image: preset.Image, Command: preset.Command, Source: catalogueSource}
+		found = true
+	}
+
+	layers, _ := tc.Config["preset_layers"].([]presetLayer)
+	for _, layer := range layers {
+		preset, ok := layer.Presets[name]
+		if !ok {
+			continue
+		}
+		resolved = resolvedTool{Image: preset.Image, Command: preset.Command, Source: layer.Path}
+		found = true
+	}
+
+	if !found {
+		return resolvedTool{}, fmt.Errorf("nothing declares a preset called %q", name)
+	}
+	return resolved, nil
 }
 
-// shouldUseCustomImage checks custom image is used
-func (tc *TestContext) shouldUseCustomImage() error {
-	return nil
+// toolUnderTest is the tool the scenario's `cidx run <tool>` named.
+func (tc *TestContext) toolUnderTest() (string, error) {
+	fields := strings.Fields(tc.LastCommand)
+	if len(fields) < 3 || fields[0] != "cidx" || fields[1] != "run" {
+		return "", fmt.Errorf("no tool was run (last command: %q)", tc.LastCommand)
+	}
+	return fields[2], nil
 }
 
-// shouldUseCustomCommand checks custom command is used
-func (tc *TestContext) shouldUseCustomCommand() error {
-	return nil
-}
+// shouldUseBuiltinPreset asserts nothing shadowed the catalogue entry, and that
+// what resolved is byte for byte what presets.toml ships.
+func (tc *TestContext) shouldUseBuiltinPreset(name string) error {
+	resolved, err := tc.resolveTool(name)
+	if err != nil {
+		return err
+	}
+	if resolved.Source != catalogueSource {
+		return fmt.Errorf("preset %q comes from %s, not from the catalogue", name, resolved.Source)
+	}
 
-// shouldExecuteContainer checks container was executed
-func (tc *TestContext) shouldExecuteContainer(container string) error {
-	return nil
-}
-
-// containerShouldUseConfig checks container uses config from path
-func (tc *TestContext) containerShouldUseConfig(path string) error {
-	return nil
-}
-
-// validateConfiguration runs config validation
-func (tc *TestContext) validateConfiguration() error {
-	tc.ExitCode = 0
-	return nil
-}
-
-// configShouldBeValid checks config is valid
-func (tc *TestContext) configShouldBeValid() error {
-	if tc.ExitCode != 0 {
-		return nil
+	catalogue, err := presets.Catalogue()
+	if err != nil {
+		return err
+	}
+	builtin := catalogue[name]
+	if resolved.Image != builtin.Image || resolved.Command != builtin.Command {
+		return fmt.Errorf("preset %q resolved to %q / %q, the catalogue ships %q / %q",
+			name, resolved.Image, resolved.Command, builtin.Image, builtin.Command)
 	}
 	return nil
 }
 
-// toolShouldBeAvailable checks tool is available
+// shouldUseCustomImage asserts the user file won the image, and that it really
+// changed something.
+func (tc *TestContext) shouldUseCustomImage() error {
+	return tc.customLayerShouldWin(func(resolved resolvedTool, builtin presets.Preset) error {
+		if resolved.Image == builtin.Image {
+			return fmt.Errorf("the image is still the catalogue's: %s", resolved.Image)
+		}
+		return nil
+	})
+}
+
+// shouldUseCustomCommand asserts the project file won the command.
+func (tc *TestContext) shouldUseCustomCommand() error {
+	return tc.customLayerShouldWin(func(resolved resolvedTool, builtin presets.Preset) error {
+		if resolved.Command == builtin.Command {
+			return fmt.Errorf("the command is still the catalogue's: %s", resolved.Command)
+		}
+		return nil
+	})
+}
+
+func (tc *TestContext) customLayerShouldWin(differs func(resolvedTool, presets.Preset) error) error {
+	name, err := tc.toolUnderTest()
+	if err != nil {
+		return err
+	}
+	resolved, err := tc.resolveTool(name)
+	if err != nil {
+		return err
+	}
+	if resolved.Source == catalogueSource {
+		return fmt.Errorf("preset %q still resolves to the catalogue entry", name)
+	}
+	catalogue, err := presets.Catalogue()
+	if err != nil {
+		return err
+	}
+	return differs(resolved, catalogue[name])
+}
+
+// shouldExecuteContainer asserts the container the scenario ran is the one that
+// resolved, and that it resolved to something runnable.
+func (tc *TestContext) shouldExecuteContainer(container string) error {
+	name, err := tc.toolUnderTest()
+	if err != nil {
+		return err
+	}
+	if name != container {
+		return fmt.Errorf("the run was of %q, not %q", name, container)
+	}
+	resolved, err := tc.resolveTool(container)
+	if err != nil {
+		return err
+	}
+	if resolved.Image == "" || resolved.Command == "" {
+		return fmt.Errorf("preset %q resolves to image %q and command %q — nothing would run",
+			container, resolved.Image, resolved.Command)
+	}
+	return nil
+}
+
+// containerShouldUseConfig asserts the definition that won came from the file
+// the scenario names.
+func (tc *TestContext) containerShouldUseConfig(path string) error {
+	name, err := tc.toolUnderTest()
+	if err != nil {
+		return err
+	}
+	resolved, err := tc.resolveTool(name)
+	if err != nil {
+		return err
+	}
+	if resolved.Source != path {
+		return fmt.Errorf("preset %q comes from %s, not from %s", name, resolved.Source, path)
+	}
+	return nil
+}
+
+// validateConfiguration runs the staged file through the loader's parse path
+// and records what it made of it, without failing the step: whether the file is
+// acceptable is what the next step asserts.
+func (tc *TestContext) validateConfiguration() error {
+	delete(tc.Config, "validation_error")
+	if err := tc.loadCustomPresets(); err != nil {
+		tc.Config["validation_error"] = err.Error()
+		tc.ExitCode = 1
+		return nil
+	}
+	tc.ExitCode = 0
+	return nil
+}
+
+// configShouldBeValid asserts the loader both parsed the file and claimed every
+// key in it — a key it drops is a field the user silently does not get (#203).
+func (tc *TestContext) configShouldBeValid() error {
+	if problem, failed := tc.Config["validation_error"].(string); failed {
+		return fmt.Errorf("the loader refused the file: %s", problem)
+	}
+	unknown, ok := tc.Config["unknown_preset_keys"].([]string)
+	if !ok {
+		return fmt.Errorf("no configuration was validated")
+	}
+	if len(unknown) > 0 {
+		return fmt.Errorf("the loader would drop unknown key(s): %v", unknown)
+	}
+	return nil
+}
+
+// toolShouldBeAvailable asserts the file really defines the tool, with enough
+// of a definition to run.
 func (tc *TestContext) toolShouldBeAvailable(tool string) error {
+	loaded, ok := tc.Config["loaded_presets"].(map[string]presets.PresetTOML)
+	if !ok {
+		return fmt.Errorf("no preset file was loaded")
+	}
+	preset, ok := loaded[tool]
+	if !ok {
+		declared := make([]string, 0, len(loaded))
+		for name := range loaded {
+			declared = append(declared, name)
+		}
+		sort.Strings(declared)
+		return fmt.Errorf("the file defines no preset %q (it defines %v)", tool, declared)
+	}
+	if preset.Image == "" || preset.Command == "" {
+		return fmt.Errorf("preset %q declares image %q and command %q — nothing would run",
+			tool, preset.Image, preset.Command)
+	}
 	return nil
 }

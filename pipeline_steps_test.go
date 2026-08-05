@@ -26,19 +26,14 @@ func RegisterPipelineSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Step(`^phases should execute in this exact order:$`, tc.phasesShouldExecuteInExactOrder)
 	ctx.Step(`^phases should execute in order:$`, tc.phasesShouldExecuteInOrderTable)
 	ctx.Step(`^the pipeline should stop$`, tc.pipelineShouldStop)
-	ctx.Step(`^remaining phases should NOT execute$`, tc.remainingPhasesShouldNotExecute)
 	ctx.Step(`^the pipeline should execute completely$`, tc.pipelineShouldExecuteCompletely)
 	ctx.Step(`^all phases should pass$`, tc.allPhasesShouldPass)
 	ctx.Step(`^each phase should complete before the next starts$`, tc.eachPhaseShouldCompleteBeforeNext)
 	ctx.Step(`^subsequent phases should NOT execute$`, tc.subsequentPhasesShouldNotExecute)
 	ctx.Step(`^all three phases should execute$`, tc.allThreePhasesShouldExecute)
 	ctx.Step(`^it should execute phases: (.+)$`, tc.shouldExecutePhasesList)
-	ctx.Step(`^the description should indicate "([^"]*)"$`, tc.descriptionShouldIndicate)
 
-	// Pipeline listing/inspection
-	ctx.Then(`^I should see all configured pipelines$`, tc.shouldSeeAllPipelines)
-	ctx.Then(`^each pipeline should show its phases$`, tc.eachPipelineShouldShowPhases)
-	ctx.Then(`^each pipeline should show its description$`, tc.eachPipelineShouldShowDescription)
+	// Pipeline inspection
 	ctx.Then(`^I should see the release pipeline configuration$`, tc.shouldSeeReleasePipelineConfig)
 	ctx.Then(`^I should see which phases it includes$`, tc.shouldSeeWhichPhases)
 	ctx.Then(`^I should see the execution order$`, tc.shouldSeeExecutionOrder)
@@ -215,11 +210,6 @@ func (tc *TestContext) pipelineShouldStop() error {
 	return nil
 }
 
-// remainingPhasesShouldNotExecute verifies remaining phases did not execute after failure
-func (tc *TestContext) remainingPhasesShouldNotExecute() error {
-	return nil
-}
-
 // pipelineShouldExecuteCompletely verifies all phases executed
 func (tc *TestContext) pipelineShouldExecuteCompletely() error {
 	if tc.ExitCode != 0 {
@@ -242,16 +232,43 @@ func (tc *TestContext) allPhasesShouldPass() error {
 	return nil
 }
 
-// eachPhaseShouldCompleteBeforeNext checks sequential execution
+// eachPhaseShouldCompleteBeforeNext asserts the run is sequential: every phase
+// the pipeline declares was executed, once, in the declared order — which is
+// what "completes before the next starts" means for a runner that appends a
+// phase only after it returns.
 func (tc *TestContext) eachPhaseShouldCompleteBeforeNext() error {
-	// In simulation, phases always execute sequentially
+	declared, ok := tc.Config["phases"].([]string)
+	if !ok || len(declared) == 0 {
+		return fmt.Errorf("the scenario declared no phases to order")
+	}
+	if len(tc.ExecutedPhases) != len(declared) {
+		return fmt.Errorf("declared phases %v, executed %v", declared, tc.ExecutedPhases)
+	}
+	for i, phase := range declared {
+		if tc.ExecutedPhases[i] != phase {
+			return fmt.Errorf("phase %d is %q, expected %q (executed: %v)", i+1, tc.ExecutedPhases[i], phase, tc.ExecutedPhases)
+		}
+	}
 	return nil
 }
 
-// subsequentPhasesShouldNotExecute checks no phases after failure
+// subsequentPhasesShouldNotExecute asserts fail-fast: the failed phase is the
+// last one that ran.
 func (tc *TestContext) subsequentPhasesShouldNotExecute() error {
-	// Verified by fail-fast behavior in simulation
-	return nil
+	if len(tc.FailedPhases) == 0 {
+		return fmt.Errorf("no phase failed, so nothing was supposed to stop")
+	}
+	failed := tc.FailedPhases[0]
+	for i, phase := range tc.ExecutedPhases {
+		if phase != failed {
+			continue
+		}
+		if rest := tc.ExecutedPhases[i+1:]; len(rest) > 0 {
+			return fmt.Errorf("%v executed after %q failed", rest, failed)
+		}
+		return nil
+	}
+	return fmt.Errorf("phase %q failed but was never executed (executed: %v)", failed, tc.ExecutedPhases)
 }
 
 // allThreePhasesShouldExecute checks three phases executed
@@ -270,43 +287,69 @@ func (tc *TestContext) shouldExecutePhasesList(phaseList string) error {
 	return nil
 }
 
-// descriptionShouldIndicate checks pipeline has a description
-func (tc *TestContext) descriptionShouldIndicate(purpose string) error {
-	// Pipeline descriptions are metadata, verified by configuration
-	return nil
+// declaredPhases is the phase list the scenario wrote into its pipeline.
+func (tc *TestContext) declaredPhases() ([]string, error) {
+	phases, ok := tc.Config["phases"].([]string)
+	if !ok || len(phases) == 0 {
+		return nil, fmt.Errorf("the scenario declared no phases")
+	}
+	return phases, nil
 }
 
-// shouldSeeAllPipelines checks all pipelines are listed
-func (tc *TestContext) shouldSeeAllPipelines() error {
-	return nil
-}
-
-// eachPipelineShouldShowPhases checks each pipeline shows phases
-func (tc *TestContext) eachPipelineShouldShowPhases() error {
-	return nil
-}
-
-// eachPipelineShouldShowDescription checks each pipeline shows description
-func (tc *TestContext) eachPipelineShouldShowDescription() error {
-	return nil
-}
-
-// shouldSeeReleasePipelineConfig checks release pipeline info
+// shouldSeeReleasePipelineConfig asserts the dry-run reported the release
+// pipeline the scenario configured, and not some other one.
 func (tc *TestContext) shouldSeeReleasePipelineConfig() error {
-	return nil
+	if tc.Pipeline != "release" {
+		return fmt.Errorf("the run was of pipeline %q, not release", tc.Pipeline)
+	}
+	return tc.shouldSeeWhichPhases()
 }
 
-// shouldSeeWhichPhases checks phase list is visible
+// shouldSeeWhichPhases asserts every phase the pipeline declares was named by
+// the dry-run.
 func (tc *TestContext) shouldSeeWhichPhases() error {
+	phases, err := tc.declaredPhases()
+	if err != nil {
+		return err
+	}
+	for _, phase := range phases {
+		if !strings.Contains(tc.Output, phase+" phase") {
+			return fmt.Errorf("the dry-run does not name the %q phase:\n%s", phase, tc.Output)
+		}
+	}
 	return nil
 }
 
-// shouldSeeExecutionOrder checks execution order is visible
+// shouldSeeExecutionOrder asserts the phases were named in the order the
+// pipeline declares them, which is the order they would run in.
 func (tc *TestContext) shouldSeeExecutionOrder() error {
+	phases, err := tc.declaredPhases()
+	if err != nil {
+		return err
+	}
+	cursor := 0
+	for _, phase := range phases {
+		at := strings.Index(tc.Output[cursor:], phase+" phase")
+		if at < 0 {
+			return fmt.Errorf("the %q phase is missing or out of order in:\n%s", phase, tc.Output)
+		}
+		cursor += at + len(phase)
+	}
 	return nil
 }
 
-// shouldSeeCompletionMessages checks for completion messages
+// shouldSeeCompletionMessages asserts every tool that passed reported it.
 func (tc *TestContext) shouldSeeCompletionMessages() error {
+	if len(tc.Tools) == 0 {
+		return fmt.Errorf("the scenario staged no tool")
+	}
+	for _, tool := range tc.Tools {
+		if tool.ExitCode != 0 {
+			continue
+		}
+		if line := fmt.Sprintf("✓ %s completed", tool.Name); !strings.Contains(tc.Output, line) {
+			return fmt.Errorf("no completion message for %q:\n%s", tool.Name, tc.Output)
+		}
+	}
 	return nil
 }

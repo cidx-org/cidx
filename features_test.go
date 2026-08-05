@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/cucumber/godog"
 	"github.com/cucumber/godog/colors"
@@ -166,6 +167,18 @@ type TestContext struct {
 	// Executor test state
 	Backend  string
 	Executor any
+
+	// Tools a quiet-mode scenario staged, and how long the last run took.
+	Tools       []stagedTool
+	RunDuration time.Duration
+}
+
+// stagedTool is a tool a scenario declares: what it writes to stdout and how it
+// exits. Nothing else about a tool decides what reaches the terminal.
+type stagedTool struct {
+	Name     string
+	Stdout   string
+	ExitCode int
 }
 
 // NewTestContext creates a new test context
@@ -211,6 +224,8 @@ func (tc *TestContext) Reset() {
 	tc.GitHubToken = os.Getenv("GITHUB_TOKEN")
 	tc.Backend = ""
 	tc.Executor = nil
+	tc.Tools = nil
+	tc.RunDuration = 0
 }
 
 // Cleanup performs cleanup after scenario
@@ -234,6 +249,7 @@ func (tc *TestContext) Cleanup() {
 	_ = os.Unsetenv("CI")
 	_ = os.Unsetenv("GITHUB_EVENT_NAME")
 	_ = os.Unsetenv("GITHUB_REF")
+	_ = os.Unsetenv("GITHUB_REF_NAME")
 	_ = os.Unsetenv("CI_MERGE_REQUEST_ID")
 }
 
