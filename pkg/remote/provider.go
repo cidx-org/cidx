@@ -152,11 +152,30 @@ type PRChecks struct {
 	Failure        int
 	Queued         int
 	InProgress     int
+	// RunsInProgress counts the workflow runs on this commit that have not
+	// finished. It is the only field that knows about a job which does not
+	// exist yet: a provider creates a check when its job becomes eligible, so
+	// on a workflow with `needs:` the checks of a later stage are absent, not
+	// pending, while an earlier one runs. Counting checks cannot see them --
+	// the list is authoritative about what exists, never about what is still
+	// coming -- and `Pending == 0` therefore meant "done" and "not started
+	// yet" at once (issue #367).
+	RunsInProgress int
 	Status         string // pending, success, failure
 	HeadSHA        string // The commit SHA these checks are for
 	UpdatedAt      time.Time
 	Checks         []CheckRun
 	StatusChecks   []StatusCheck
+}
+
+// Complete reports whether there is nothing left to wait for: every check that
+// exists has finished, and no run is still able to create another one.
+//
+// This is the test a watcher stops on and a merge gate passes on. `Pending == 0`
+// alone is what let `cpw` announce a green CI having watched one job out of
+// five, and `pr merge` merge on it (issue #367).
+func (c *PRChecks) Complete() bool {
+	return c.Pending == 0 && c.RunsInProgress == 0
 }
 
 // CheckRun represents a GitHub Actions check run

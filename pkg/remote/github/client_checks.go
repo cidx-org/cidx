@@ -165,7 +165,10 @@ func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remot
 		return nil, fmt.Errorf("failed to list check runs: %w", err)
 	}
 
-	addCheckRuns(checks, checkRuns.CheckRuns, dispatchedCheckSuites(ctx, headSHA, c.listRepositoryRuns), func(id int64) string {
+	dispatched, inProgress := runsOnHead(ctx, headSHA, c.listRepositoryRuns)
+	checks.RunsInProgress = inProgress
+
+	addCheckRuns(checks, checkRuns.CheckRuns, dispatched, func(id int64) string {
 		return failedStepOf(ctx, headSHA, id, &c.failedSteps, c.getWorkflowJob)
 	})
 
@@ -194,10 +197,12 @@ func (c *Client) GetPullRequestChecks(ctx context.Context, prNumber int) (*remot
 		}
 	}
 
-	// Determine overall status
+	// Determine overall status. A run still going is pending even when every
+	// check it has posted so far is green: the jobs it has not created yet are
+	// the ones that would say otherwise (issue #367).
 	if checks.Failure > 0 {
 		checks.Status = "failure"
-	} else if checks.Pending > 0 {
+	} else if !checks.Complete() {
 		checks.Status = "pending"
 	} else {
 		checks.Status = "success"
@@ -300,30 +305,48 @@ func countsAsFailure(run *github.CheckRun) bool {
 	return true
 }
 
-// dispatchedCheckSuites returns the check suites on headSHA produced by a
-// workflow run the pull request did not cause.
+// runsOnHead reads the repository's workflow runs for headSHA once and answers
+// the two questions the PR's checks need of them.
 //
-// A check run names its check suite but never the event behind it, so the
-// mapping comes from the repository's run listing filtered on the SHA -- the
-// only read that carries the event, and one extra request per read of the PR's
-// checks. A failure there yields no suites, which keeps the pre-#240 behaviour
-// of counting everything rather than failing the whole read.
-func dispatchedCheckSuites(ctx context.Context, headSHA string, list listRepoRunsFunc) map[int64]bool {
+// dispatched are the check suites produced by a run the pull request did not
+// cause: a check run names its check suite but never the event behind it, so
+// the mapping comes from this listing -- the only read that carries the event
+// (issue #240).
+//
+// inProgress counts the runs the pull request *did* cause that have not
+// finished. That is the count no amount of reading check runs can produce, and
+// the reason this listing is now read for two things: a run stays in progress
+// until its last job ends, including the jobs a `needs:` has not made eligible
+// yet and which therefore have no check to be pending (issue #367).
+//
+// A failure yields no suites and no count, which keeps the pre-#240 behaviour
+// of counting everything rather than failing the whole read. The cost is
+// unchanged: one request per read of the PR's checks, as before.
+func runsOnHead(ctx context.Context, headSHA string, list listRepoRunsFunc) (dispatched map[int64]bool, inProgress int) {
 	runs, _, err := list(ctx, &github.ListWorkflowRunsOptions{
 		HeadSHA:     headSHA,
 		ListOptions: github.ListOptions{PerPage: 100},
 	})
 	if err != nil || runs == nil {
-		return nil
+		return nil, 0
 	}
 
 	suites := make(map[int64]bool)
 	for _, run := range runs.WorkflowRuns {
-		if id := run.GetCheckSuiteID(); id != 0 && nonPullRequestEvents[run.GetEvent()] {
-			suites[id] = true
+		if nonPullRequestEvents[run.GetEvent()] {
+			if id := run.GetCheckSuiteID(); id != 0 {
+				suites[id] = true
+			}
+			// Not this pull request's run, so whether it has finished says
+			// nothing about whether the PR's checks are all in.
+			continue
+		}
+		if run.GetStatus() != "completed" {
+			inProgress++
 		}
 	}
-	return suites
+
+	return suites, inProgress
 }
 
 // isWorkflowCheck reports whether a check run was posted by a workflow of the
@@ -433,15 +456,20 @@ func (c *Client) WatchPullRequestChecks(ctx context.Context, prNumber int) (<-ch
 					return
 				}
 
-				// Send update only if status changed
-				currentStatus := fmt.Sprintf("%s:%d:%d:%d", checks.Status, checks.Pending, checks.Success, checks.Failure)
+				// Send update only if status changed. RunsInProgress is part of
+				// the fingerprint: the last thing that happens on a green run is
+				// the run itself completing, with no check changing (issue #367).
+				currentStatus := fmt.Sprintf("%s:%d:%d:%d:%d", checks.Status, checks.Pending, checks.Success, checks.Failure, checks.RunsInProgress)
 				if currentStatus != lastStatus {
 					updates <- remote.PRChecksUpdate{Checks: checks}
 					lastStatus = currentStatus
 				}
 
-				// Stop when all checks complete
-				if checks.Pending == 0 {
+				// Stop when there is nothing left to wait for. Closing on
+				// `Pending == 0` ended the stream in the gap between two stages,
+				// so a consumer could not have waited longer even knowing better
+				// (issue #367).
+				if checks.Complete() {
 					return
 				}
 			}

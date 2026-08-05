@@ -53,10 +53,22 @@ func TestIsWorkflowCheck(t *testing.T) {
 	}
 }
 
-// run builds a workflow run as the repository-wide listing returns it: an
-// event and the check suite its check runs carry.
+// run builds a finished workflow run as the repository-wide listing returns
+// it: an event and the check suite its check runs carry. Finished is the
+// default because the tests that predate #367 are about which suites the PR
+// caused, not about which runs are still going.
 func run(event string, checkSuiteID int64) *github.WorkflowRun {
-	return &github.WorkflowRun{Event: github.Ptr(event), CheckSuiteID: github.Ptr(checkSuiteID)}
+	return runWithStatus(event, checkSuiteID, "completed")
+}
+
+// runWithStatus builds a workflow run in a given state: queued, in_progress or
+// completed (issue #367).
+func runWithStatus(event string, checkSuiteID int64, status string) *github.WorkflowRun {
+	return &github.WorkflowRun{
+		Event:        github.Ptr(event),
+		CheckSuiteID: github.Ptr(checkSuiteID),
+		Status:       github.Ptr(status),
+	}
 }
 
 // checkRun builds a completed check run of the given suite.
@@ -121,12 +133,12 @@ func listing(runs []*github.WorkflowRun, err error, seen *github.ListWorkflowRun
 	}
 }
 
-// TestDispatchedCheckSuites_SinglesOutRunsThePRDidNotCause covers issue #240
+// TestRunsOnHead_SinglesOutRunsThePRDidNotCause covers issue #240
 // with the shape of PR #262: one pull_request run of 5 checks alongside a
 // hand-dispatched Container Monitor of 43.
-func TestDispatchedCheckSuites_SinglesOutRunsThePRDidNotCause(t *testing.T) {
+func TestRunsOnHead_SinglesOutRunsThePRDidNotCause(t *testing.T) {
 	var asked github.ListWorkflowRunsOptions
-	dispatched := dispatchedCheckSuites(context.Background(), "abc1234def", listing([]*github.WorkflowRun{
+	dispatched, _ := runsOnHead(context.Background(), "abc1234def", listing([]*github.WorkflowRun{
 		run("workflow_dispatch", 82337504968),
 		run("pull_request", 82337037898),
 	}, nil, &asked))
@@ -142,11 +154,11 @@ func TestDispatchedCheckSuites_SinglesOutRunsThePRDidNotCause(t *testing.T) {
 	}
 }
 
-// TestDispatchedCheckSuites_KeepsPushAndScheduledAlike: `push` stays because a
+// TestRunsOnHead_KeepsPushAndScheduledAlike: `push` stays because a
 // repository whose CI triggers on push alone still gates its PRs with those
 // checks; `schedule` goes because the clock is not the pull request.
-func TestDispatchedCheckSuites_KeepsPushAndScheduledAlike(t *testing.T) {
-	dispatched := dispatchedCheckSuites(context.Background(), "abc1234def", listing([]*github.WorkflowRun{
+func TestRunsOnHead_KeepsPushAndScheduledAlike(t *testing.T) {
+	dispatched, _ := runsOnHead(context.Background(), "abc1234def", listing([]*github.WorkflowRun{
 		run("push", 1),
 		run("schedule", 2),
 		run("repository_dispatch", 3),
@@ -165,11 +177,11 @@ func TestDispatchedCheckSuites_KeepsPushAndScheduledAlike(t *testing.T) {
 	}
 }
 
-// TestDispatchedCheckSuites_FailureCountsEverything: the run listing is an
+// TestRunsOnHead_FailureCountsEverything: the run listing is an
 // extra request that must never break the read of the checks. When it fails,
 // nothing is filtered and the pre-#240 behaviour stands.
-func TestDispatchedCheckSuites_FailureCountsEverything(t *testing.T) {
-	dispatched := dispatchedCheckSuites(context.Background(), "abc1234def", listing(nil, errors.New("502 bad gateway"), nil))
+func TestRunsOnHead_FailureCountsEverything(t *testing.T) {
+	dispatched, _ := runsOnHead(context.Background(), "abc1234def", listing(nil, errors.New("502 bad gateway"), nil))
 	if len(dispatched) != 0 {
 		t.Errorf("expected no suite to be filtered when the listing fails, got %v", dispatched)
 	}

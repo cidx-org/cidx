@@ -119,7 +119,10 @@ type PRChecksInfo struct {
 	Pending int
 	Success int
 	Failure int
-	Status  string // "success", "failure", "pending"
+	// RunsInProgress carries remote.PRChecks.RunsInProgress through, so the
+	// branch views stop on the same condition the watchers do (issue #367).
+	RunsInProgress int
+	Status         string // "success", "failure", "pending"
 	// Failed names the checks behind the Failure count. Without it "4/5
 	// passed" is a number with no way to act on it: which check, and whether
 	// to fix, rerun or ignore, both lived in the web UI (issue #347).

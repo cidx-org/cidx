@@ -514,7 +514,7 @@ func (m mergeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.mainPipelineCheck = msg.checks
 		// Check if all checks are complete
-		if msg.checks != nil && msg.checks.Pending == 0 && msg.checks.Queued == 0 && msg.checks.InProgress == 0 {
+		if msg.checks != nil && msg.checks.Complete() && msg.checks.Queued == 0 && msg.checks.InProgress == 0 {
 			m.pipelineComplete = true
 			if m.prConfig.ConfirmQuitAfterMerge {
 				m.showQuitConfirmation = true

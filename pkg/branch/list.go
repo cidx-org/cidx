@@ -404,13 +404,21 @@ func (m *Manager) GetPRInfo(branchName string) (*PRInfo, error) {
 // summarise the same pull request differently.
 func ChecksInfo(checks *remote.PRChecks) *PRChecksInfo {
 	return &PRChecksInfo{
-		Total:   checks.TotalCount,
-		Pending: checks.Pending,
-		Success: checks.Success,
-		Failure: checks.Failure,
-		Status:  checks.Status,
-		Failed:  failedChecks(checks),
+		Total:          checks.TotalCount,
+		Pending:        checks.Pending,
+		Success:        checks.Success,
+		Failure:        checks.Failure,
+		RunsInProgress: checks.RunsInProgress,
+		Status:         checks.Status,
+		Failed:         failedChecks(checks),
 	}
+}
+
+// Complete reports whether there is nothing left to wait for. It is
+// remote.PRChecks.Complete, restated for the reduced view: every check that
+// exists has finished, and no run can still create another one (issue #367).
+func (c *PRChecksInfo) Complete() bool {
+	return c.Pending == 0 && c.RunsInProgress == 0
 }
 
 // failedChecks names the checks the provider counted as failures, so the count

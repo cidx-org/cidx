@@ -205,8 +205,10 @@ func (a *CommitPushWatchAction) watchCI(ctx context.Context, branch, pushedSHA s
 
 	displayChecksStatus(checks)
 
-	// If checks are still running, stream updates until they complete
-	if checks.Pending > 0 {
+	// If anything is still running, stream updates until it is not. Entering
+	// on `Pending > 0` skipped the watch entirely when the first read landed
+	// between two stages -- the exact shape of issue #367.
+	if !checks.Complete() {
 		updates, err := a.provider.WatchPullRequestChecks(ctx, prNumber)
 		if err != nil {
 			return fmt.Errorf("failed to watch PR checks: %w", err)
@@ -226,12 +228,16 @@ func (a *CommitPushWatchAction) watchCI(ctx context.Context, branch, pushedSHA s
 			displayChecksStatus(update.Checks)
 
 			checks = update.Checks
-			if checks.Pending == 0 {
+			// Not `Pending == 0`: with a `needs:` between jobs that is also
+			// true in the gap where the earlier job is green and the later
+			// ones have no check yet, which is how this announced a green CI
+			// on one job out of five (issue #367).
+			if checks.Complete() {
 				break
 			}
 		}
 
-		if checks.Pending > 0 {
+		if !checks.Complete() {
 			return fmt.Errorf("stopped watching before checks completed")
 		}
 	}

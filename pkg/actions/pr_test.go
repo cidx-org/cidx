@@ -194,3 +194,58 @@ func TestPRCreate_DryRunStaysOfflineAndLeavesTheRepositoryAlone(t *testing.T) {
 		t.Errorf("a dry run created the branch it was only asked to describe: %s", branches)
 	}
 }
+
+// TestMergeBlockedBy is the gate that stands between `cidx pr merge` and a
+// pull request whose CI is not done. It used to refuse only on "failure",
+// so a run still going — indistinguishable from a finished one by check
+// counts alone — merged (issue #367).
+func TestMergeBlockedBy(t *testing.T) {
+	tests := []struct {
+		name    string
+		checks  remote.PRChecks
+		blocked string // substring the refusal must carry; empty means allowed
+	}{
+		{
+			name:    "a red check",
+			checks:  remote.PRChecks{TotalCount: 5, Success: 4, Failure: 1, Status: "failure"},
+			blocked: "1/5 checks failed",
+		},
+		{
+			name: "the gap between two stages: everything that exists is green, four jobs do not exist",
+			checks: remote.PRChecks{
+				TotalCount: 1, WorkflowChecks: 1, Success: 1, RunsInProgress: 1, Status: "pending",
+			},
+			blocked: "CI has not finished",
+		},
+		{
+			name:    "checks still running",
+			checks:  remote.PRChecks{TotalCount: 5, Success: 2, Pending: 3, Status: "pending"},
+			blocked: "CI has not finished",
+		},
+		{
+			name: "genuinely finished and green",
+			checks: remote.PRChecks{
+				TotalCount: 5, WorkflowChecks: 5, Success: 5, RunsInProgress: 0, Status: "success",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := mergeBlockedBy(&tt.checks)
+
+			if tt.blocked == "" {
+				if err != nil {
+					t.Fatalf("expected the merge to be allowed, got: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("expected the merge to be refused, it was allowed")
+			}
+			if !strings.Contains(err.Error(), tt.blocked) {
+				t.Errorf("refusal = %q, want it to mention %q", err, tt.blocked)
+			}
+		})
+	}
+}

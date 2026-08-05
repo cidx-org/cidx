@@ -377,6 +377,28 @@ func (a *PRAction) markReady(ctx context.Context) error {
 	return nil
 }
 
+// mergeBlockedBy reports why the pull request must not be merged yet, or nil
+// when nothing stands in the way. It is the last verdict before the merge call,
+// so it states both refusals in one place.
+//
+// The second one is issue #367. The gate used to refuse only on "failure",
+// which let a merge through on "pending": every path into it — a watch that
+// ended on a closed stream, a provider read that came back mid-run — arrives
+// with checks that look green because the jobs that would say otherwise have
+// not been created yet. Reaching here incomplete means the wait above did not
+// finish its job, and merging on it is the #367 failure with an extra step.
+func mergeBlockedBy(checks *remote.PRChecks) error {
+	if checks.Status == "failure" {
+		return fmt.Errorf("PR checks failed: %d/%d checks failed", checks.Failure, checks.TotalCount)
+	}
+	if !checks.Complete() {
+		return fmt.Errorf("CI has not finished on this commit: %d check(s) pending, %d workflow run(s) still going",
+			checks.Pending, checks.RunsInProgress)
+	}
+
+	return nil
+}
+
 // preMergeChecksSummary reports what actually passed. "All checks passed"
 // claimed a validation the repository's CI never performed when the only
 // checks on the commit came from another app -- GitHub's own dependabot config
@@ -455,8 +477,10 @@ func (a *PRAction) mergePR(ctx context.Context) error {
 
 					displayChecksStatus(update.Checks)
 
-					// All checks complete
-					if update.Checks.Pending == 0 {
+					// Nothing left to wait for, which is not the same as every
+					// check being green: a run still going can create the
+					// check that fails (issue #367).
+					if update.Checks.Complete() {
 						break
 					}
 				}
@@ -474,10 +498,10 @@ func (a *PRAction) mergePR(ctx context.Context) error {
 			}
 
 			// Check if merge is safe
-			if checks.Status == "failure" {
-				log.Error("❌ Cannot merge: some checks have failed")
+			if err := mergeBlockedBy(checks); err != nil {
+				log.Errorf("❌ Cannot merge: %v", err)
 				log.Info("💡 Use --skip-checks to bypass (not recommended)")
-				return fmt.Errorf("PR checks failed: %d/%d checks failed", checks.Failure, checks.TotalCount)
+				return err
 			}
 
 			log.Info(preMergeChecksSummary(checks))
@@ -611,6 +635,15 @@ func displayChecksStatus(checks *remote.PRChecks) {
 
 	log.Infof("%s PR Checks: %d total | ✅ %d success | ⏳ %d pending | ❌ %d failed",
 		statusIcon, checks.TotalCount, checks.Success, checks.Pending, checks.Failure)
+
+	// The counts above are about the checks that exist. When a run is still
+	// going they are not the whole story, and "0 pending" reads exactly like
+	// "finished" -- which is how a one-job-out-of-five verdict looked green
+	// (issue #367).
+	if checks.RunsInProgress > 0 && checks.Pending == 0 {
+		log.Infof("   ⏳ %d workflow run(s) still going — the jobs they gate have no check yet",
+			checks.RunsInProgress)
+	}
 
 	// Show individual check details
 	if len(checks.Checks) > 0 {
