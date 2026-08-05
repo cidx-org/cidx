@@ -303,7 +303,7 @@ Local environment:
   cidx run docker
   → Builds image ✓
   → Does NOT push ✗
-  → Message: "Local safety: no-push"
+  → Message: "Local safety: dry-run"
 
 CI environment:
   cidx run docker

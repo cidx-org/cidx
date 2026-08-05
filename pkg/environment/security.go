@@ -2,16 +2,20 @@ package environment
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/cidx-org/cidx/v2/pkg/presets"
 )
+
+// removedBehaviorNoPush is not a mode, it is a value CIDX still recognises in
+// order to refuse it by name. A config carrying it was written against a mode
+// that behaved identically to dry-run, so failing with "unknown local_behavior"
+// would leave the reader hunting for a difference that never existed (#353).
+const removedBehaviorNoPush = "no-push"
 
 // LocalBehavior defines how a preset behaves in local environment
 const (
 	BehaviorProduction = "production" // Full execution (dangerous in local)
 	BehaviorDraft      = "draft"      // Create drafts only (GitHub releases)
-	BehaviorNoPush     = "no-push"    // Build without push (Docker)
 	BehaviorDryRun     = "dry-run"    // Dry run only
 	BehaviorDisabled   = "disabled"   // Completely disabled in local
 )
@@ -19,7 +23,7 @@ const (
 // ExecutionMode determines how a preset should be executed
 type ExecutionMode struct {
 	Allowed    bool              // Can this preset run in current environment?
-	Mode       string            // Execution mode (production, draft, no-push, dry-run)
+	Mode       string            // Execution mode (production, draft, dry-run)
 	Reason     string            // Why this mode was chosen
 	IsDryRun   bool              // Force dry-run mode
 	EnvChanges map[string]string // Environment variable overrides
@@ -73,12 +77,14 @@ func ValidatePreset(preset presets.Preset, env *Environment) (*ExecutionMode, er
 		// For GitHub releases, force draft mode
 		mode.EnvChanges["DRAFT"] = "true"
 
-	case BehaviorNoPush:
-		mode.Mode = BehaviorNoPush
-		mode.IsDryRun = true // Force dry-run in local mode
-		mode.Reason = "Local mode: build without push"
-		// For Docker, remove push flags
-		mode.EnvChanges["DOCKER_PUSH"] = "false"
+	case removedBehaviorNoPush:
+		// Removed in v3.0.0 (issue #353). It set IsDryRun exactly as dry-run
+		// did, so nothing was ever built under it; what it added on top -- a
+		// DOCKER_PUSH=false on a container that never starts, a --push stripped
+		// from a command that is only printed -- was two ways of doctoring a
+		// run that does not happen. The documentation promised it "validates
+		// Dockerfile and build process", which is the one thing it could not do.
+		return nil, fmt.Errorf("preset '%s' declares local_behavior 'no-push', which was removed in cidx v3.0.0 -- use 'dry-run', which is what it did", preset.Name)
 
 	case BehaviorProduction:
 		mode.Mode = BehaviorProduction
@@ -110,23 +116,7 @@ func ApplyExecutionMode(preset presets.Preset, mode *ExecutionMode) presets.Pres
 		if preset.Name == "gh-release" {
 			modified.Command = modified.Command + " --draft"
 		}
-
-	case BehaviorNoPush:
-		// Remove --push flag for Docker
-		if preset.Name == "docker-buildx" {
-			// Remove --push from command
-			modified.Command = removeFlag(modified.Command, "--push")
-		}
 	}
 
 	return modified
-}
-
-// removeFlag removes a flag from a command string
-func removeFlag(command, flag string) string {
-	result := command
-	for _, variant := range []string{flag + " ", flag} {
-		result = strings.ReplaceAll(result, variant, "")
-	}
-	return result
 }

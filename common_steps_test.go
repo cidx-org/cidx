@@ -12,6 +12,7 @@ import (
 	"github.com/cidx-org/cidx/v2/internal/commands"
 	"github.com/cidx-org/cidx/v2/pkg/config"
 	"github.com/cidx-org/cidx/v2/pkg/environment"
+	"github.com/cidx-org/cidx/v2/pkg/presets"
 	"github.com/cucumber/godog"
 )
 
@@ -576,42 +577,64 @@ func (tc *TestContext) simulateCIDXCommand(cmdStr string) error {
 	return nil
 }
 
-// applyLocalSafety applies local safety behaviors for a phase
+// phaseDefaultPreset names the catalogue preset a phase falls back to when the
+// scenario staged none. They are the ones cidx.toml itself lists for those
+// phases, so the simulated run reports what this repository would really do.
+var phaseDefaultPreset = map[string]string{
+	"docker":  "kaniko",
+	"release": "gh-release",
+}
+
+// applyLocalSafety reports what local safety does to a phase, by asking the
+// code that decides it.
+//
+// This used to be a switch naming each behaviour and the sentence it prints --
+// a copy of environment.ValidatePreset, and one that had already drifted: it
+// answered `no-push` for the docker phase and added "Image built successfully
+// (not pushed)", a line describing a build that never happened, which is the
+// claim #353 removed the mode for. Asking the real validator cannot drift, and
+// a removed behaviour now surfaces here as the error it is.
 func (tc *TestContext) applyLocalSafety(phase string) {
-	presets, ok := tc.Config["presets"].(map[string]interface{})
+	staged, ok := tc.Config["presets"].(map[string]interface{})
 	if !ok {
-		// Apply default behaviors
-		switch phase {
-		case "docker":
-			tc.Output += "Local safety: no-push - Local mode: build without push\n"
-			tc.Output += "Image built successfully (not pushed)\n"
-		case "release":
-			tc.Output += "Local safety: draft - Local mode: draft creation only\n"
-			tc.Output += "Created draft release\n"
+		if name := phaseDefaultPreset[phase]; name != "" {
+			tc.reportLocalSafety(name)
 		}
 		return
 	}
 
-	// Check specific preset behaviors
-	for _, presetData := range presets {
-		if pm, ok := presetData.(map[string]string); ok {
-			behavior := pm["local_behavior"]
-			switch behavior {
-			case "no-push":
-				tc.Output += "Local safety: no-push - Local mode: build without push\n"
-				tc.Output += "Image built successfully (not pushed)\n"
-			case "draft":
-				tc.Output += "Local safety: draft - Local mode: draft creation only\n"
-				tc.Output += "Created draft release\n"
-			case "dry-run":
-				tc.Output += "Local safety: dry-run - Local mode: dry-run only\n"
-			case "disabled":
-				tc.Output += "Error: disabled in local environment\n"
-				tc.ExitCode = 1
-			case "production":
-				tc.Output += "Local safety: production - Local mode: production (use with caution!)\n"
-			}
+	for _, presetData := range staged {
+		pm, ok := presetData.(map[string]string)
+		if !ok {
+			continue
 		}
+		tc.reportLocalSafetyOf(presets.Preset{Name: "_staged", LocalBehavior: pm["local_behavior"]})
+	}
+}
+
+// reportLocalSafety resolves a catalogue preset and reports the mode it gets
+// in this environment.
+func (tc *TestContext) reportLocalSafety(name string) {
+	preset, err := presets.Get(name)
+	if err != nil {
+		tc.Output += fmt.Sprintf("Error: %v\n", err)
+		tc.ExitCode = 1
+		return
+	}
+	tc.reportLocalSafetyOf(preset)
+}
+
+func (tc *TestContext) reportLocalSafetyOf(preset presets.Preset) {
+	mode, err := environment.ValidatePreset(preset, &environment.Environment{IsCI: tc.CI, Provider: tc.Provider})
+	if err != nil {
+		tc.Output += fmt.Sprintf("Error: %v\n", err)
+		tc.ExitCode = 1
+		return
+	}
+
+	tc.Output += fmt.Sprintf("Local safety: %s - %s\n", mode.Mode, mode.Reason)
+	if mode.Mode == environment.BehaviorDraft {
+		tc.Output += "Created draft release\n"
 	}
 }
 

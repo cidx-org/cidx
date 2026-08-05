@@ -9,43 +9,41 @@ Feature: Local Safety Modes
 
   Rule: Docker operations are safe by default in local environment
 
-    # What no-push does locally, once the steps were pointed at
-    # environment.ValidatePreset instead of asserting nothing (#349): it strips
-    # --push from docker-buildx, injects DOCKER_PUSH=false, and holds the run as
-    # a dry-run. The dry-run is the guardrail — the modified command is never
-    # handed to a backend, so locally nothing is built either.
+    # The guardrail is the dry-run, and it always was. `no-push` set the same
+    # IsDryRun as `dry-run`, so nothing was built under either; what it added on
+    # top — stripping --push, injecting DOCKER_PUSH=false — doctored a command
+    # that is only ever printed. #353 removed the mode and kept the guarantee.
+    # The command now shows what CI will run, --push included, which is the
+    # honest answer to "what would this do".
 
-    Scenario: docker-buildx runs in no-push mode locally
+    Scenario: docker-buildx builds nothing locally
       Given I am in local environment
-      And the "docker-buildx" preset has local_behavior = "no-push"
+      And the "docker-buildx" preset has local_behavior = "dry-run"
       When I run "cidx run docker"
-      Then I should see "Local safety: no-push - Local mode: build without push"
-      And the command should NOT include "--push" flag
-      And the environment variable "DOCKER_PUSH" should be "false"
+      Then I should see "Local safety: dry-run - Local mode: dry-run only"
       And the run should be held as a dry-run
       But Docker image should NOT be pushed to registry
 
     Scenario: docker-buildx pushes in CI environment
       Given I am in CI environment (GitHub Actions)
-      And the "docker-buildx" preset has local_behavior = "no-push"
+      And the "docker-buildx" preset has local_behavior = "dry-run"
       When I run "cidx run docker"
       Then the command should include "--push" flag
       And Docker image should be built
       And Docker image should be pushed to registry
       And I should see "Pushed to ghcr.io"
 
-    # kaniko keeps its --destination: environment.ApplyExecutionMode rewrites the
-    # command of docker-buildx and gh-release by name and of nothing else. That
-    # is not the leak it looks like — no-push holds the run as a dry-run, so the
-    # command is never executed. The old line claimed a flag was stripped that
-    # never was (#349).
+    # kaniko keeps its --destination, as it always did: ApplyExecutionMode
+    # rewrites the command of gh-release by name and of nothing else. That is
+    # not the leak it looks like — the run is held as a dry-run, so the command
+    # is never executed. The old line claimed a flag was stripped that never was
+    # (#349), and the mode that claimed to strip one is gone (#353).
 
-    Scenario: kaniko builds without push locally
+    Scenario: kaniko builds nothing locally
       Given I am in local environment
-      And the "kaniko" preset has local_behavior = "no-push"
+      And the "kaniko" preset has local_behavior = "dry-run"
       When I run tool "kaniko"
-      Then the environment variable "DOCKER_PUSH" should be "false"
-      And the run should be held as a dry-run
+      Then the run should be held as a dry-run
       But image should NOT be pushed
 
   Rule: GitHub releases are draft by default in local environment
@@ -90,7 +88,7 @@ Feature: Local Safety Modes
       And the preset has NO local_behavior defined
       When I try to run that preset
       Then it should fail immediately
-      And I should see error "preset requires CI environment"
+      And I should see error "requires CI environment"
 
     Scenario: Preset with require_ci and local_behavior works locally
       Given I am in local environment
@@ -112,9 +110,18 @@ Feature: Local Safety Modes
       Examples:
         | behavior   | message                         |
         | draft      | draft creation only             |
-        | no-push    | build without push              |
         | dry-run    | dry-run only                    |
         | production | production (use with caution!)  |
+
+    # #353: it was accepted, it meant dry-run, and it promised a local build it
+    # never performed. Refused by name rather than as an unknown value, so the
+    # reader is not left hunting for a difference that never existed.
+    Scenario: The removed no-push behaviour is refused by name
+      Given I am in local environment
+      And a preset has local_behavior = "no-push"
+      When I try to run that preset
+      Then it should fail immediately
+      And I should see error "removed in cidx v3.0.0"
 
     Scenario: Disabled preset refuses local execution
       Given I am in local environment

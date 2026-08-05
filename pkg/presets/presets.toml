@@ -578,7 +578,7 @@ volumes = [
     "${HOME}/.docker:/kaniko/.docker:ro",
 ]
 require_ci = false
-local_behavior = "no-push"
+local_behavior = "dry-run"
 privileged = true
 
 [presets.kaniko.env]
@@ -605,9 +605,10 @@ command_flag = "--cache"
 # command: docker sh` — and clearing the entrypoint would not have helped, since
 # this DHI variant ships no shell at all (`exec: "sh": executable file not
 # found`, the same wall the Python pack hit in #293). Nobody saw it because
-# local runs stop at the no-push dry-run and no pipeline here lists the preset
-# (#278's sweep). `--push` stays in the string: local safety strips that exact
-# token before the command is built.
+# local runs stop at the dry-run and no pipeline here lists the preset (#278's
+# sweep). `--push` stays in the string and is printed as such: local safety used
+# to strip it, which doctored a command that was never going to run anyway, so
+# a dry-run now shows the command CI will actually execute (#353).
 [presets.docker-buildx]
 name = "docker-buildx"
 phase = "docker"
@@ -620,7 +621,7 @@ volumes = [
     "/var/run/docker.sock:/var/run/docker.sock",
 ]
 require_ci = false
-local_behavior = "no-push"
+local_behavior = "dry-run"
 
 [presets.docker-buildx.env]
 HOME = "/tmp"
