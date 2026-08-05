@@ -8,6 +8,7 @@ import (
 
 	"github.com/cidx-org/cidx/v2/pkg/config"
 	"github.com/cidx-org/cidx/v2/pkg/executor"
+	"github.com/cidx-org/cidx/v2/pkg/vcs"
 )
 
 // Package variables so tests can stub environment probes.
@@ -153,7 +154,7 @@ func checkContainerRuntime() Check {
 func checkGitRepo() Check {
 	check := Check{Name: "Git repository"}
 
-	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	cmd := vcs.Git("", "rev-parse", "--show-toplevel")
 	output, err := cmd.Output()
 	if err != nil {
 		check.Status = StatusFail
@@ -163,7 +164,7 @@ func checkGitRepo() Check {
 	}
 
 	// Try to get remote info for display
-	remoteCmd := exec.Command("git", "remote", "get-url", "origin")
+	remoteCmd := vcs.Git("", "remote", "get-url", "origin")
 	if remoteOutput, err := remoteCmd.Output(); err == nil {
 		check.Detail = fmt.Sprintf("detected (%s)", strings.TrimSpace(string(remoteOutput)))
 	} else {

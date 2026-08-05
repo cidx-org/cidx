@@ -3,7 +3,6 @@ package actions
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -30,8 +29,7 @@ var (
 // runGit runs a git command in workDir. Package-level so tests can record the
 // plumbing the release orchestration issues without a real repository.
 var runGit = func(workDir string, args ...string) ([]byte, error) {
-	cmd := exec.Command("git", args...)
-	cmd.Dir = workDir
+	cmd := vcs.Git(workDir, args...)
 	return cmd.CombinedOutput()
 }
 

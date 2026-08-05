@@ -200,7 +200,7 @@ func (a *ReleasePrepareAction) Execute(ctx context.Context) error {
 
 // getLastTag returns the most recent semver tag
 func (a *ReleasePrepareAction) getLastTag() (string, error) {
-	cmd := exec.Command("git", "describe", "--tags", "--abbrev=0")
+	cmd := vcs.Git("", "describe", "--tags", "--abbrev=0")
 	workDir, _ := a.repo.GetWorkDir()
 	cmd.Dir = workDir
 
@@ -219,7 +219,7 @@ func (a *ReleasePrepareAction) getCommitsSince(tag string) ([]CommitInfo, error)
 		args = []string{"log", tag + "..HEAD", CommitLogFormat}
 	}
 
-	cmd := exec.Command("git", args...)
+	cmd := vcs.Git("", args...)
 	workDir, _ := a.repo.GetWorkDir()
 	cmd.Dir = workDir
 
@@ -238,8 +238,7 @@ func (a *ReleasePrepareAction) getMergedPRsSince(ctx context.Context, tag string
 	// Get tag date
 	var since time.Time
 	if tag != "" {
-		cmd := exec.Command("git", "log", "-1", "--format=%ci", tag)
-		cmd.Dir = workDir
+		cmd := vcs.Git(workDir, "log", "-1", "--format=%ci", tag)
 
 		output, err := cmd.Output()
 		if err == nil {

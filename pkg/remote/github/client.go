@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/cidx-org/cidx/v2/pkg/vcs"
 	"github.com/google/go-github/v76/github"
 )
 
@@ -90,7 +91,7 @@ func getEnvToken() string {
 
 // getRepoFromRemote extracts owner/repo from git remote URL
 func getRepoFromRemote() (owner, repo string, err error) {
-	cmd := exec.Command("git", "remote", "get-url", "origin")
+	cmd := vcs.Git("", "remote", "get-url", "origin")
 	out, err := cmd.Output()
 	if err != nil {
 		return "", "", fmt.Errorf("failed to get remote URL: %w", err)

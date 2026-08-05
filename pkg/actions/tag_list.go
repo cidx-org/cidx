@@ -3,7 +3,6 @@ package actions
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -47,8 +46,7 @@ func (a *TagListAction) Execute(ctx context.Context) error {
 		args = append(args, a.pattern)
 	}
 
-	cmd := exec.Command("git", args...)
-	cmd.Dir = workDir
+	cmd := vcs.Git(workDir, args...)
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -119,8 +117,7 @@ func (a *TagListAction) displayVerbose(workDir string, tags []string) {
 
 // getTagType returns whether a tag is annotated or lightweight
 func (a *TagListAction) getTagType(workDir, tag string) string {
-	cmd := exec.Command("git", "cat-file", "-t", tag)
-	cmd.Dir = workDir
+	cmd := vcs.Git(workDir, "cat-file", "-t", tag)
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -136,8 +133,7 @@ func (a *TagListAction) getTagType(workDir, tag string) string {
 
 // getTagDate returns the date of the tag
 func (a *TagListAction) getTagDate(workDir, tag string) string {
-	cmd := exec.Command("git", "log", "-1", "--format=%ci", tag)
-	cmd.Dir = workDir
+	cmd := vcs.Git(workDir, "log", "-1", "--format=%ci", tag)
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -154,8 +150,7 @@ func (a *TagListAction) getTagDate(workDir, tag string) string {
 
 // getTagCommit returns the short commit hash for the tag
 func (a *TagListAction) getTagCommit(workDir, tag string) string {
-	cmd := exec.Command("git", "rev-list", "-1", "--abbrev-commit", tag)
-	cmd.Dir = workDir
+	cmd := vcs.Git(workDir, "rev-list", "-1", "--abbrev-commit", tag)
 
 	output, err := cmd.Output()
 	if err != nil {

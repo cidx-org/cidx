@@ -3,7 +3,6 @@ package vcs
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -37,15 +36,13 @@ func (r *Repository) Commit(message string) error {
 	workDir := w.Filesystem.Root()
 
 	// Add all changes using git binary
-	addCmd := exec.Command("git", "add", ".")
-	addCmd.Dir = workDir
+	addCmd := Git(workDir, "add", ".")
 	if output, err := addCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to add changes: %w\n%s", err, output)
 	}
 
 	// Commit using git binary (ensures pre-commit hooks run)
-	commitCmd := exec.Command("git", "commit", "-m", message)
-	commitCmd.Dir = workDir
+	commitCmd := Git(workDir, "commit", "-m", message)
 	if output, err := commitCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to commit: %w\n%s", err, output)
 	}
@@ -64,8 +61,7 @@ func (r *Repository) Push() error {
 	workDir := w.Filesystem.Root()
 
 	// Try regular push first
-	pushCmd := exec.Command("git", "push")
-	pushCmd.Dir = workDir
+	pushCmd := Git(workDir, "push")
 	output, err := pushCmd.CombinedOutput()
 	if err == nil {
 		return nil
@@ -79,8 +75,7 @@ func (r *Repository) Push() error {
 			return fmt.Errorf("failed to push: %w\n%s", err, output)
 		}
 
-		upstreamCmd := exec.Command("git", "push", "--set-upstream", "origin", branch)
-		upstreamCmd.Dir = workDir
+		upstreamCmd := Git(workDir, "push", "--set-upstream", "origin", branch)
 		if upOutput, upErr := upstreamCmd.CombinedOutput(); upErr != nil {
 			return fmt.Errorf("failed to push with upstream: %w\n%s", upErr, upOutput)
 		}
@@ -100,8 +95,7 @@ func (r *Repository) Pull() error {
 	workDir := w.Filesystem.Root()
 
 	// Pull using git binary
-	pullCmd := exec.Command("git", "pull")
-	pullCmd.Dir = workDir
+	pullCmd := Git(workDir, "pull")
 	if output, err := pullCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to pull: %w\n%s", err, output)
 	}
@@ -119,8 +113,7 @@ func (r *Repository) Checkout(branch string) error {
 	workDir := w.Filesystem.Root()
 
 	// Checkout using git binary
-	checkoutCmd := exec.Command("git", "checkout", branch)
-	checkoutCmd.Dir = workDir
+	checkoutCmd := Git(workDir, "checkout", branch)
 	if output, err := checkoutCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to checkout branch '%s': %w\n%s", branch, err, output)
 	}
@@ -244,8 +237,7 @@ func (r *Repository) HasActivePreCommitHook() bool {
 		return false
 	}
 
-	cmd := exec.Command("git", "rev-parse", "--git-path", "hooks")
-	cmd.Dir = workDir
+	cmd := Git(workDir, "rev-parse", "--git-path", "hooks")
 	output, err := cmd.Output()
 	if err != nil {
 		return false

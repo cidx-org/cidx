@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/cidx-org/cidx/v2/pkg/vcs"
 )
 
 func TestWorktreeHolding(t *testing.T) {
@@ -51,6 +53,14 @@ func TestWorktreeHolding(t *testing.T) {
 
 // TestWorktreeHoldingMatchesRealGit pins the detector to what the git on this
 // machine actually prints, rather than to a message quoted from an issue.
+//
+// Which is how issue #364 was found: on a French machine git says "est déjà
+// utilisé par l'arbre-de-travail dans", the detector saw an ordinary checkout
+// failure, and postMergeCleanup turned the normal baseline-worktree setup #266
+// describes back into the error #266 was opened to stop reporting. The fixture
+// below is built with the developer's own locale on purpose -- pinning it here
+// too would make the test pass on exactly the machines the bug lives on -- and
+// only the checkout under test goes through vcs.Git, the way CIDX runs it.
 func TestWorktreeHoldingMatchesRealGit(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
@@ -83,9 +93,9 @@ func TestWorktreeHoldingMatchesRealGit(t *testing.T) {
 	// A baseline worktree on main, exactly the setup issue #266 describes.
 	git(repo, "worktree", "add", baseline, "main")
 
-	// Now do what postMergeCleanup does first.
-	checkout := exec.Command("git", "checkout", "main")
-	checkout.Dir = repo
+	// Now do what postMergeCleanup does first, the way it does it.
+	checkout := vcs.Git(repo, "checkout", "main")
+	checkout.Env = append(checkout.Env, "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
 	output, err := checkout.CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected git to refuse the checkout, it printed: %s", output)

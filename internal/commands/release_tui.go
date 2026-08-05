@@ -159,8 +159,7 @@ func (m releaseModel) loadData() tea.Cmd {
 }
 
 func (m releaseModel) getLastTag() string {
-	cmd := exec.Command("git", "describe", "--tags", "--abbrev=0")
-	cmd.Dir = m.workDir
+	cmd := vcs.Git(m.workDir, "describe", "--tags", "--abbrev=0")
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -195,8 +194,7 @@ func (m releaseModel) generateTagMessage(version, lastTag string) string {
 }
 
 func (m releaseModel) getCommitSummary(tag string) string {
-	cmd := exec.Command("git", "log", tag+"..HEAD", "--oneline", "--no-merges")
-	cmd.Dir = m.workDir
+	cmd := vcs.Git(m.workDir, "log", tag+"..HEAD", "--oneline", "--no-merges")
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -224,8 +222,7 @@ func (m releaseModel) getCommitsSince(tag string) []actions.CommitInfo {
 		args = []string{"log", tag + "..HEAD", actions.CommitLogFormat}
 	}
 
-	cmd := exec.Command("git", args...)
-	cmd.Dir = m.workDir
+	cmd := vcs.Git(m.workDir, args...)
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -438,8 +435,7 @@ func (m releaseModel) createTag() tea.Cmd {
 		tag := m.tagConfig.FormatTag(version)
 
 		// Create annotated tag
-		cmd := exec.Command("git", "tag", "-a", tag, "-m", message)
-		cmd.Dir = m.workDir
+		cmd := vcs.Git(m.workDir, "tag", "-a", tag, "-m", message)
 
 		if output, err := cmd.CombinedOutput(); err != nil {
 			return releaseErrorMsg{err: fmt.Errorf("failed to create tag: %w\n%s", err, output)}
@@ -447,8 +443,7 @@ func (m releaseModel) createTag() tea.Cmd {
 
 		// Push tag if configured
 		if m.tagConfig.AutoPush {
-			cmd = exec.Command("git", "push", "origin", tag)
-			cmd.Dir = m.workDir
+			cmd = vcs.Git(m.workDir, "push", "origin", tag)
 
 			if output, err := cmd.CombinedOutput(); err != nil {
 				return releaseErrorMsg{err: fmt.Errorf("failed to push tag: %w\n%s", err, output)}
@@ -468,15 +463,13 @@ func (m releaseModel) createRelease() tea.Cmd {
 		tag := fmt.Sprintf("v%s", version)
 
 		// First, create and push tag
-		cmd := exec.Command("git", "tag", "-a", tag, "-m", fmt.Sprintf("Release %s", tag))
-		cmd.Dir = m.workDir
+		cmd := vcs.Git(m.workDir, "tag", "-a", tag, "-m", fmt.Sprintf("Release %s", tag))
 
 		if output, err := cmd.CombinedOutput(); err != nil {
 			return releaseErrorMsg{err: fmt.Errorf("failed to create tag: %w\n%s", err, output)}
 		}
 
-		cmd = exec.Command("git", "push", "origin", tag)
-		cmd.Dir = m.workDir
+		cmd = vcs.Git(m.workDir, "push", "origin", tag)
 
 		if output, err := cmd.CombinedOutput(); err != nil {
 			return releaseErrorMsg{err: fmt.Errorf("failed to push tag: %w\n%s", err, output)}
