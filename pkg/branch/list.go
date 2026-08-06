@@ -209,6 +209,17 @@ func (m *Manager) determineStatus(info *Info, gb GitBranch) Status {
 	return StatusActive
 }
 
+// IsProtected reports whether a branch is one the project protects.
+//
+// It answers two questions with one list, on purpose. A protected branch is one
+// nobody deletes, and it is also one nobody opens a pull request *from* -- so
+// `cidx pr status` reads it to know that having no PR there is the normal state
+// rather than a fault (issue #362). A second list naming the same branches for
+// the second reason would be a list to keep in sync.
+func (m *Manager) IsProtected(name string) bool {
+	return m.isProtected(name)
+}
+
 // isProtected checks if a branch is protected
 func (m *Manager) isProtected(name string) bool {
 	for _, p := range m.protected {

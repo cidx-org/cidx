@@ -2,9 +2,19 @@ package remote
 
 import (
 	"context"
+	"errors"
 	"io"
 	"time"
 )
+
+// ErrNoPullRequest reports that a branch has no open pull request -- the
+// absence itself, not a failure to find out.
+//
+// The two used to be one string, so every caller that wanted to tolerate "there
+// is none" would have tolerated "the token expired" and "the network is down"
+// with it, and reported a healthy repository for a broken one (issue #362).
+// Providers wrap this; callers ask with errors.Is.
+var ErrNoPullRequest = errors.New("no open pull request for this branch")
 
 // ProviderFunc resolves a Provider on demand. Creating one reads the git
 // remote, so a command whose local-only steps -- commit analysis, version
