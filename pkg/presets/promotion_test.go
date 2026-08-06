@@ -151,7 +151,7 @@ func TestPromotionCooldownIsTheDocumentedWindow(t *testing.T) {
 
 // TestEvaluateScanPromotesACleanCandidate: nothing found, nothing to weigh.
 func TestEvaluateScanPromotesACleanCandidate(t *testing.T) {
-	got := EvaluateScan(nil, nil)
+	got := EvaluateScan(nil, nil, nil)
 
 	if !got.Promote {
 		t.Fatalf("a candidate with no finding should be promoted, got: %s", got.Reason)
@@ -169,7 +169,7 @@ func TestEvaluateScanPromotesACleanCandidate(t *testing.T) {
 // carries, so it is not a regression and must not block an otherwise legitimate
 // update (#247).
 func TestEvaluateScanPromotesAnInheritedFinding(t *testing.T) {
-	got := EvaluateScan([]string{"CVE-2026-0001"}, []string{"CVE-2026-0001"})
+	got := EvaluateScan([]string{"CVE-2026-0001"}, []string{"CVE-2026-0001"}, nil)
 
 	if !got.Promote {
 		t.Fatalf("a finding the running image already has must not block, got: %s", got.Reason)
@@ -177,14 +177,14 @@ func TestEvaluateScanPromotesAnInheritedFinding(t *testing.T) {
 	if len(got.Introduces) != 0 {
 		t.Errorf("Introduces = %v, want none: the finding was inherited, not introduced", got.Introduces)
 	}
-	if !strings.Contains(got.Reason, "already accepted") {
-		t.Errorf("Reason = %q, want it to say the findings were already accepted", got.Reason)
+	if !strings.Contains(got.Reason, "already carried or accepted") {
+		t.Errorf("Reason = %q, want it to say the findings were already carried or accepted", got.Reason)
 	}
 }
 
 // TestEvaluateScanHoldsANewFinding: the case the gate exists for.
 func TestEvaluateScanHoldsANewFinding(t *testing.T) {
-	got := EvaluateScan([]string{"CVE-2026-0001", "CVE-2026-0002"}, []string{"CVE-2026-0001"})
+	got := EvaluateScan([]string{"CVE-2026-0001", "CVE-2026-0002"}, []string{"CVE-2026-0001"}, nil)
 
 	if got.Promote {
 		t.Fatalf("a candidate introducing a new finding must be held, got: %s", got.Reason)
@@ -204,22 +204,51 @@ func TestEvaluateScanHoldsANewFinding(t *testing.T) {
 // running image but on record — reviewed and accepted ahead of the promotion —
 // is not what the gate is for.
 func TestEvaluateScanPromotesAnAcceptedNewFinding(t *testing.T) {
-	got := EvaluateScan([]string{"CVE-2026-0009"}, []string{"CVE-2026-0009"})
+	got := EvaluateScan([]string{"CVE-2026-0009"}, []string{"CVE-2026-0009"}, nil)
 
 	if !got.Promote {
 		t.Fatalf("an accepted finding must not hold a promotion, got: %s", got.Reason)
 	}
 }
 
+// TestEvaluateScanPromotesWhatTheRunningImageCarries is issue #379 in
+// miniature: the finding is on the candidate and on the running image's
+// same-day scan, and on file nowhere — the database learned it after the file
+// was last argued. The promotion does not change it, so it must not hold it.
+// This exact shape held rust:1.97.1-slim for 80 CVEs, all 80 of which the
+// running rust:1.97.0-slim reported the same day.
+func TestEvaluateScanPromotesWhatTheRunningImageCarries(t *testing.T) {
+	got := EvaluateScan([]string{"CVE-2026-0400"}, nil, []string{"CVE-2026-0400"})
+
+	if !got.Promote {
+		t.Fatalf("a finding the running image also carries must not hold, got: %s", got.Reason)
+	}
+	if len(got.Introduces) != 0 {
+		t.Errorf("Introduces = %v, want none — the promotion changes nothing about it", got.Introduces)
+	}
+}
+
+// TestEvaluateScanHoldsWithoutTheRunningImagesScan is the fail-closed half of
+// #379: no same-day evidence of what the running image carries means only the
+// file vouches, and the finding is held — the stricter baseline, never the
+// permissive one.
+func TestEvaluateScanHoldsWithoutTheRunningImagesScan(t *testing.T) {
+	got := EvaluateScan([]string{"CVE-2026-0400"}, nil, nil)
+
+	if got.Promote {
+		t.Fatalf("with no scan of the running image, an unfiled finding must hold, got: %s", got.Reason)
+	}
+}
+
 // TestEvaluateScanCountsTheSameCVEOnce: Trivy and Grype both report it, and a
 // duplicate must neither be listed twice nor inflate the count.
 func TestEvaluateScanCountsTheSameCVEOnce(t *testing.T) {
-	held := EvaluateScan([]string{"CVE-2026-0002", "cve-2026-0002"}, nil)
+	held := EvaluateScan([]string{"CVE-2026-0002", "cve-2026-0002"}, nil, nil)
 	if len(held.Introduces) != 1 {
 		t.Errorf("Introduces = %v, want the CVE listed once", held.Introduces)
 	}
 
-	passed := EvaluateScan([]string{"CVE-2026-0001", "CVE-2026-0001"}, []string{"cve-2026-0001"})
+	passed := EvaluateScan([]string{"CVE-2026-0001", "CVE-2026-0001"}, []string{"cve-2026-0001"}, nil)
 	if !passed.Promote {
 		t.Fatalf("a case-different match on record must still count as accepted, got: %s", passed.Reason)
 	}
@@ -232,7 +261,7 @@ func TestEvaluateScanCountsTheSameCVEOnce(t *testing.T) {
 // PR body and a workflow summary, where a set iterated at random would produce
 // a different text on every run.
 func TestEvaluateScanReportsFindingsInAStableOrder(t *testing.T) {
-	got := EvaluateScan([]string{"CVE-2026-0009", "CVE-2026-0002", "CVE-2026-0005"}, nil)
+	got := EvaluateScan([]string{"CVE-2026-0009", "CVE-2026-0002", "CVE-2026-0005"}, nil, nil)
 
 	want := []string{"CVE-2026-0002", "CVE-2026-0005", "CVE-2026-0009"}
 	for i, id := range want {
