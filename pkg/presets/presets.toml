@@ -931,7 +931,7 @@ command_flag = "--repository"
 [presets.rustfmt]
 name = "rustfmt"
 phase = "code"
-image = "rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51"
+image = "rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd"
 command = "sh -c 'rustup component add rustfmt && cargo fmt -- --check'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -942,7 +942,7 @@ config_files = ["rustfmt.toml", ".rustfmt.toml"]
 [presets.clippy]
 name = "clippy"
 phase = "code"
-image = "rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51"
+image = "rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd"
 command = "sh -c 'rustup component add clippy && cargo clippy -- -D warnings'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -1012,7 +1012,7 @@ command_flag = "--deny warnings"
 [presets.cargo-test]
 name = "cargo-test"
 phase = "test"
-image = "rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51"
+image = "rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd"
 command = "cargo test"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -1035,7 +1035,7 @@ command_flag = "--all-features"
 [presets.cargo-build]
 name = "cargo-build"
 phase = "build"
-image = "rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51"
+image = "rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd"
 command = "cargo build --release"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
@@ -1050,7 +1050,7 @@ command_flag = "--target"
 [presets.cargo-publish]
 name = "cargo-publish"
 phase = "release"
-image = "rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51"
+image = "rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd"
 command = "cargo publish"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
