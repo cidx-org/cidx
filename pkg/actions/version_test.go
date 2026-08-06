@@ -204,9 +204,20 @@ func TestParseCommit(t *testing.T) {
 			want:    CommitInfo{Type: "fix", Subject: "unrelated", Breaking: true},
 		},
 		{
-			name:    "squash merge keeps its PR number",
+			// The number goes to PR and comes out of the subject: the notes
+			// print it themselves, and with the marker left in they named
+			// every PR twice (issue #376).
+			name:    "squash merge yields its PR number and loses the marker",
 			subject: "feat(release): share the parser (#226)",
-			want:    CommitInfo{Type: "feat", Scope: "release", Subject: "share the parser (#226)", PR: 226},
+			want:    CommitInfo{Type: "feat", Scope: "release", Subject: "share the parser", PR: 226},
+		},
+		{
+			// GitHub appends the squash marker after whatever the title says,
+			// so the PR is the last match — the first one here is an issue the
+			// title cites, and it stays in the text (issue #376).
+			name:    "a number cited in the title is not the PR",
+			subject: "fix: stop the (#233) regression (#368)",
+			want:    CommitInfo{Type: "fix", Subject: "stop the (#233) regression", PR: 368},
 		},
 		{
 			name:    "non-conventional subject",
