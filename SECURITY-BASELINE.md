@@ -28,18 +28,26 @@ reports the ones no catalogue image carries any more.
 
 ## What the images carry
 
-The catalogue carries **484** HIGH/CRITICAL findings, counted per image — the
+The catalogue carries **454** HIGH/CRITICAL findings, counted per image — the
 same CVE on five images is five repins. They split into four populations:
 
 | Population | Count | What it means |
 | ---------- | ----- | ------------- |
 | Go stdlib in a CLI binary | 40 | Exempt by class: it goes away when the publisher recompiles, and `net/http` is unreachable in a tool that opens no listener. |
-| Kernel headers | 71 | Exempt by class: the kernel is the host's, not the container's. The scanner flags the headers package for its version string. |
+| Kernel headers | 41 | Exempt by class: the kernel is the host's, not the container's. The scanner flags the headers package for its version string. |
 | Fixed upstream | 220 | A fix exists. This is the images' age, not a decision — an exception must never be written for one. |
 | **Needing triage** | **153** | No fix at any version, and not exempt. The only population an exception is the right instrument for. |
 
 None of them is in CISA KEV. The highest EPSS score seen is 0.10. Both are reported
 for a human to read; neither gates anything.
+
+These results cannot say what their ignore file took out of them, so the number
+above counts only what the scanners still showed: the accepted findings listed
+below were removed from their own images' reports by the ignore file the audit
+generates from them, and cannot be counted back. Read it as a floor. Trivy keeps
+that record under `--show-suppressed` and the audit states how many entries it
+wrote alongside its results — generate from its artifacts for the whole number
+(#311, #327).
 
 ## Images
 
@@ -77,7 +85,7 @@ the daily security audit reports it.
 | `koalaman/shellcheck:stable@sha256:bb596a0d169b85ddd81d8b6d3a2ff6d5baf5fca10b97f575ebc647c3dff62b3d` | shellcheck | none | 0 | none |
 | `maniator/gh:v2.95@sha256:c7e862eeb468003aba87847a03e214a21638cd898130d6e5894f019aec091913` | gh-release | alpine 3.24.1 | 5 | none |
 | `pyfound/black:26.5.1@sha256:bcdafe3e6a60fd181fde19859f7ee4c498557f03bb30af3fa880f502a66e5b5f` | black | debian 13.4 | 50 | none |
-| `rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51` | cargo-build, cargo-publish, cargo-test, clippy, rustfmt | debian 13.6 | 93 | 12 |
+| `rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd` | cargo-build, cargo-publish, cargo-test, clippy, rustfmt | debian 13.6 | 63 | 12 |
 | `zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f` | gitleaks | alpine 3.22.3 | 55 | none |
 
 ## Accepted findings
@@ -90,15 +98,15 @@ the daily security audit reports it.
 | `ghcr.io/ansible/community-ansible-dev-tools:v26.7.1@sha256:4d4db3e75c48ce64763d26adbca58ff3f8b93a8ddae785373ac973b4f20a7d92` | CVE-2025-52881 | HIGH | awaiting-upstream | 2026-09-06 | runc container escape in the embedded container tooling; fixed in runc 1.2.8/1.3.3 -- retire on the first upstream image shipping it (v26.7.1, the current latest, does not). Re-argued 2026-08-06 against audit run 31085058431 |
 | `ghcr.io/ansible/community-ansible-dev-tools:v26.7.1@sha256:4d4db3e75c48ce64763d26adbca58ff3f8b93a8ddae785373ac973b4f20a7d92` | GHSA-cgrx-mc8f-2prm | HIGH | awaiting-upstream | 2026-09-06 | runc container escape in the embedded container tooling; fixed in runc 1.2.8/1.3.3 -- retire on the first upstream image shipping it (v26.7.1, the current latest, does not). Re-argued 2026-08-06 against audit run 31085058431 |
 | `ghcr.io/ansible/community-ansible-dev-tools:v26.7.1@sha256:4d4db3e75c48ce64763d26adbca58ff3f8b93a8ddae785373ac973b4f20a7d92` | GHSA-pwhc-rpq9-4c8w | HIGH | awaiting-upstream | 2026-09-06 | containerd flaw in the embedded container tooling; fixed in containerd 1.7.29 -- retire on the first upstream image shipping it (v26.7.1, the current latest, does not). Re-argued 2026-08-06 against audit run 31085058431 |
-| `rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51` | CVE-2013-7445 | HIGH | mitigated | 2026-11-06 | Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431 |
-| `rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51` | CVE-2019-19449 | HIGH | mitigated | 2026-11-06 | Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431 |
-| `rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51` | CVE-2019-19814 | HIGH | mitigated | 2026-11-06 | Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431 |
-| `rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51` | CVE-2021-3847 | HIGH | mitigated | 2026-11-06 | Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431 |
-| `rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51` | CVE-2021-3864 | HIGH | mitigated | 2026-11-06 | Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431 |
-| `rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51` | CVE-2024-21803 | HIGH | mitigated | 2026-11-06 | Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431 |
-| `rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51` | CVE-2024-58015 | HIGH | mitigated | 2026-11-06 | Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431 |
-| `rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51` | CVE-2025-22104 | HIGH | mitigated | 2026-11-06 | Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431 |
-| `rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51` | CVE-2025-38137 | HIGH | mitigated | 2026-11-06 | Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431 |
-| `rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51` | CVE-2025-38187 | HIGH | mitigated | 2026-11-06 | Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431 |
-| `rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51` | CVE-2025-38421 | HIGH | mitigated | 2026-11-06 | Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431 |
-| `rust:1.97.0-slim@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51` | CVE-2025-38636 | HIGH | mitigated | 2026-11-06 | Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431 |
+| `rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd` | CVE-2013-7445 | HIGH | mitigated | 2026-11-06 | Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431 |
+| `rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd` | CVE-2019-19449 | HIGH | mitigated | 2026-11-06 | Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431 |
+| `rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd` | CVE-2019-19814 | HIGH | mitigated | 2026-11-06 | Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431 |
+| `rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd` | CVE-2021-3847 | HIGH | mitigated | 2026-11-06 | Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431 |
+| `rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd` | CVE-2021-3864 | HIGH | mitigated | 2026-11-06 | Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431 |
+| `rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd` | CVE-2024-21803 | HIGH | mitigated | 2026-11-06 | Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431 |
+| `rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd` | CVE-2024-58015 | HIGH | mitigated | 2026-11-06 | Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431 |
+| `rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd` | CVE-2025-22104 | HIGH | mitigated | 2026-11-06 | Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431 |
+| `rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd` | CVE-2025-38137 | HIGH | mitigated | 2026-11-06 | Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431 |
+| `rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd` | CVE-2025-38187 | HIGH | mitigated | 2026-11-06 | Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431 |
+| `rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd` | CVE-2025-38421 | HIGH | mitigated | 2026-11-06 | Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431 |
+| `rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd` | CVE-2025-38636 | HIGH | mitigated | 2026-11-06 | Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431 |
