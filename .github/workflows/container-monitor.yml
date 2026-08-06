@@ -54,8 +54,13 @@ jobs:
           # Get deduplicated scan targets with update detection
           TARGETS_JSON=$(./bin/cidx preset scan-targets)
 
-          # Extract just the scan_image array for matrix
-          SCAN_IMAGES=$(echo "$TARGETS_JSON" | jq -c '[.[].scan_image]')
+          # The matrix scans every target's scan_image — and, for a target
+          # with a candidate, the current image as well. The scan gate weighs
+          # the candidate against what the running image carries the same day
+          # (#379), so both sides need same-run results: without the current
+          # side the gate falls back, fail-closed, to the acceptances file
+          # alone, which is the very baseline that froze every promotion.
+          SCAN_IMAGES=$(echo "$TARGETS_JSON" | jq -c '[.[] | .scan_image, (select(.is_update == true) | .current_image)] | unique')
           COUNT=$(echo "$SCAN_IMAGES" | jq 'length')
           HAS_UPDATES=$(echo "$TARGETS_JSON" | jq 'any(.is_update == true)')
 

@@ -150,7 +150,18 @@ func buildPromotionVerdicts(targets []scanTarget, resultsDir string, accepted ma
 			continue
 		}
 
-		decision := presets.EvaluateScan(presets.FindingIDs(found), acceptedFor(accepted, target))
+		// The running image's own same-day results are the second record of
+		// "what we already run" (#379): the file answers for what has been
+		// judged, this answers for what is actually carried, and only a
+		// finding on neither is the candidate's own. Fail-closed on purpose:
+		// unreadable results narrow the baseline to the file alone — the
+		// stricter verdict — rather than widening it on an assumption.
+		carriedNow, _, err := scanFindings(resultsDir, target.CurrentImage)
+		if err != nil {
+			carriedNow = nil
+		}
+
+		decision := presets.EvaluateScan(presets.FindingIDs(found), acceptedFor(accepted, target), presets.FindingIDs(carriedNow))
 		verdict.Promote = decision.Promote
 		verdict.Reason = fmt.Sprintf("%s (scanned by %s)", decision.Reason, strings.Join(scanners, " and "))
 		verdict.Introduces = decision.Introduces

@@ -54,6 +54,8 @@ func RegisterPresetSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	// Promotion cooldown and its CVE exception (#242)
 	ctx.Given(`^the running image has no known vulnerabilities$`, tc.runningImageIsClean)
 	ctx.Given(`^the running image is affected by "([^"]*)"$`, tc.runningImageIsAffectedBy)
+	ctx.Given(`^the running image's scan reports "([^"]*)"$`, tc.runningImageScanReports)
+	ctx.Given(`^the running image's scan is unreadable$`, tc.runningImageScanIsUnreadable)
 	ctx.Given(`^a candidate version published (\d+) days ago$`, tc.candidatePublishedDaysAgo)
 	ctx.Given(`^a candidate version with no publication date$`, tc.candidateWithoutPublicationDate)
 	ctx.When(`^the promotion policy is applied$`, tc.applyPromotionPolicy)
@@ -234,6 +236,23 @@ func (tc *TestContext) runningImageIsAffectedBy(cve string) error {
 	return nil
 }
 
+// runningImageScanReports records a finding of the running image as the
+// monitor's own scanners report it — the record that exists whether or not a
+// human has filed anything, and the one the gate was missing (#379).
+func (tc *TestContext) runningImageScanReports(cve string) error {
+	carried, _ := tc.Config["carried_findings"].([]string)
+	tc.Config["carried_findings"] = append(carried, cve)
+	return nil
+}
+
+// runningImageScanIsUnreadable is the fail-closed input: no same-day evidence
+// of what the running image carries, so only the file vouches (#379).
+func (tc *TestContext) runningImageScanIsUnreadable() error {
+	tc.Config["carried_findings"] = []string(nil)
+	tc.Config["carried_unreadable"] = true
+	return nil
+}
+
 func (tc *TestContext) candidatePublishedDaysAgo(days int) error {
 	tc.Config["candidate_published"] = promotionClock.AddDate(0, 0, -days)
 	return nil
@@ -363,9 +382,11 @@ func (tc *TestContext) findingAcceptedForCandidate(id string) error {
 	return nil
 }
 
-// applyScanGate weighs what the scanners found against everything on record —
-// the running image's vulnerabilities and the candidate's own exceptions, both
-// read from known-vulnerabilities.toml in production.
+// applyScanGate weighs what the scanners found against the two records of what
+// we already run (#379): the acceptances — the running image's filed
+// vulnerabilities and the candidate's own exceptions, both from
+// known-vulnerabilities.toml in production — and the running image's same-day
+// scan, which exists whether or not anyone filed anything.
 func (tc *TestContext) applyScanGate() error {
 	found, ok := tc.Config["scan_findings"].([]string)
 	if !ok && tc.Config["scan_findings"] == nil {
@@ -379,7 +400,12 @@ func (tc *TestContext) applyScanGate() error {
 	accepted = append(accepted, affecting...)
 	accepted = append(accepted, candidate...)
 
-	tc.Config["scan_decision"] = presets.EvaluateScan(found, accepted)
+	carried, _ := tc.Config["carried_findings"].([]string)
+	if tc.Config["carried_unreadable"] == true {
+		carried = nil
+	}
+
+	tc.Config["scan_decision"] = presets.EvaluateScan(found, accepted, carried)
 	return nil
 }
 

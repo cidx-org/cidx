@@ -585,3 +585,47 @@ func TestReadScanTargetsRoundTripsTheWorkflowHandover(t *testing.T) {
 		t.Errorf("readScanTargets = %+v, want the promotable candidate back", got)
 	}
 }
+
+// TestPromotionVerdictClearsWhatTheRunningImageCarries is the production
+// wiring of issue #379: the finding is on the candidate and on the running
+// image's same-run results, and in the acceptances file nowhere. The database
+// learned it after the file was last argued; the promotion changes nothing
+// about it and must not be held by it. This exact shape held rust:1.97.1-slim
+// for 80 CVEs, all 80 reported the same day against the running 1.97.0.
+func TestPromotionVerdictClearsWhatTheRunningImageCarries(t *testing.T) {
+	dir := t.TempDir()
+	writeTrivyResult(t, dir, candidateRef, map[string]string{"CVE-2026-0400": "HIGH"})
+	writeGrypeResult(t, dir, candidateRef, map[string]string{"CVE-2026-0400": "High"})
+	writeTrivyResult(t, dir, runningRef, map[string]string{"CVE-2026-0400": "HIGH"})
+	writeGrypeResult(t, dir, runningRef, map[string]string{"CVE-2026-0400": "High"})
+
+	verdict := onlyVerdict(t, buildPromotionVerdicts([]scanTarget{promotableTarget()}, dir, nil))
+
+	if !verdict.Promote {
+		t.Fatalf("a finding the running image also carries must not hold the promotion, got: %s", verdict.Reason)
+	}
+	if len(verdict.Introduces) != 0 {
+		t.Errorf("Introduces = %v, want none — the promotion does not change these findings", verdict.Introduces)
+	}
+}
+
+// TestPromotionVerdictFailsClosedWithoutTheRunningImagesResults: no results
+// for the running image in the directory — the matrix did not scan it, or the
+// files are unreadable. The baseline narrows to the acceptances alone and the
+// unfiled finding holds the candidate: the stricter verdict, never the
+// permissive one (#379).
+func TestPromotionVerdictFailsClosedWithoutTheRunningImagesResults(t *testing.T) {
+	dir := t.TempDir()
+	writeTrivyResult(t, dir, candidateRef, map[string]string{"CVE-2026-0400": "HIGH"})
+	writeGrypeResult(t, dir, candidateRef, map[string]string{"CVE-2026-0400": "High"})
+	// Nothing written for runningRef, on purpose.
+
+	verdict := onlyVerdict(t, buildPromotionVerdicts([]scanTarget{promotableTarget()}, dir, nil))
+
+	if verdict.Promote {
+		t.Fatalf("without the running image's results, an unfiled finding must hold, got: %s", verdict.Reason)
+	}
+	if len(verdict.Introduces) != 1 || verdict.Introduces[0] != "CVE-2026-0400" {
+		t.Errorf("Introduces = %v, want the unvouched finding named", verdict.Introduces)
+	}
+}

@@ -129,9 +129,19 @@ type ScanDecision struct {
 // its promotion.
 //
 // found are the HIGH/CRITICAL vulnerabilities the monitor's scanners reported
-// against the candidate. accepted are the ones already on record for the image
-// the catalogue runs today and for the candidate's own reference
-// (known-vulnerabilities.toml, the file the security audit maintains).
+// against the candidate. accepted are the ones a human has argued
+// (known-vulnerabilities.toml, the file the security audit maintains). carried
+// are the ones the same run's scanners reported against the image the
+// catalogue runs today.
+//
+// accepted and carried are two records of "what we already run", and the gate
+// needs both (issue #379). It used to consult the file alone, assuming a green
+// audit kept the file identical to reality; with the audit red, every CVE the
+// database had learned since the file was written read as "introduced" — the
+// rust:1.97.1-slim candidate was held for 80 CVEs, 80 of which the running
+// image reported the same day, and no candidate promoted for months. The file
+// answers for what has been judged; the same-day scan answers for what is
+// actually carried; only a finding on neither is the candidate's own.
 //
 // The verdict is differential on purpose. Several catalogue images are
 // knowingly vulnerable — that is exactly what known-vulnerabilities.toml
@@ -147,9 +157,12 @@ type ScanDecision struct {
 //
 // Comparison is case-insensitive: Trivy spells severities and identifiers in
 // upper case, Grype does not, and the same CVE reported by both must count once.
-func EvaluateScan(found, accepted []string) ScanDecision {
-	onRecord := make(map[string]bool, len(accepted))
+func EvaluateScan(found, accepted, carried []string) ScanDecision {
+	onRecord := make(map[string]bool, len(accepted)+len(carried))
 	for _, id := range accepted {
+		onRecord[strings.ToUpper(id)] = true
+	}
+	for _, id := range carried {
 		onRecord[strings.ToUpper(id)] = true
 	}
 
@@ -172,7 +185,7 @@ func EvaluateScan(found, accepted []string) ScanDecision {
 	}
 
 	return ScanDecision{
-		Reason: fmt.Sprintf("held: introduces %s, %s not accepted for the image we run today",
+		Reason: fmt.Sprintf("held: introduces %s, %s neither carried nor accepted by the image we run today",
 			strings.Join(introduces, ", "), isAre(len(introduces))),
 		Introduces: introduces,
 	}
@@ -189,7 +202,7 @@ func scanPassReason(found int) string {
 	if found == 0 {
 		return "no HIGH/CRITICAL finding reported"
 	}
-	return fmt.Sprintf("%d HIGH/CRITICAL finding(s), all already accepted for the image we run today", found)
+	return fmt.Sprintf("%d HIGH/CRITICAL finding(s), all already carried or accepted by the image we run today", found)
 }
 
 func isAre(n int) string {
