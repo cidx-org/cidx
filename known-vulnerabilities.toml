@@ -27,76 +27,76 @@
   repository = "ghcr.io/ansible/community-ansible-dev-tools"
   first_seen = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
   severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "containerd vulnerability in embedded kubectl"
-  references = []
+  status = "awaiting-upstream"
+  added = "2026-08-06"
+  expires = "2026-09-06"
+  notes = "containerd flaw in the embedded container tooling; fixed in containerd 1.7.29 -- retire on the first upstream image shipping it (v26.7.1, the current latest, does not). Re-argued 2026-08-06 against audit run 31085058431"
+  references = ["https://github.com/containerd/containerd/releases/tag/v1.7.29"]
 
 [[vulnerabilities]]
   cve = "CVE-2025-31133"
   repository = "ghcr.io/ansible/community-ansible-dev-tools"
   first_seen = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
   severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "runc container escape in embedded kubectl"
-  references = []
+  status = "awaiting-upstream"
+  added = "2026-08-06"
+  expires = "2026-09-06"
+  notes = "runc container escape in the embedded container tooling; fixed in runc 1.2.8/1.3.3 -- retire on the first upstream image shipping it (v26.7.1, the current latest, does not). Re-argued 2026-08-06 against audit run 31085058431"
+  references = ["https://github.com/opencontainers/runc/releases/tag/v1.2.8"]
 
 [[vulnerabilities]]
   cve = "CVE-2025-52565"
   repository = "ghcr.io/ansible/community-ansible-dev-tools"
   first_seen = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
   severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "runc container escape in embedded kubectl"
-  references = []
+  status = "awaiting-upstream"
+  added = "2026-08-06"
+  expires = "2026-09-06"
+  notes = "runc container escape in the embedded container tooling; fixed in runc 1.2.8/1.3.3 -- retire on the first upstream image shipping it (v26.7.1, the current latest, does not). Re-argued 2026-08-06 against audit run 31085058431"
+  references = ["https://github.com/opencontainers/runc/releases/tag/v1.2.8"]
 
 [[vulnerabilities]]
   cve = "CVE-2025-52881"
   repository = "ghcr.io/ansible/community-ansible-dev-tools"
   first_seen = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
   severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "runc/selinux container escape in embedded kubectl"
-  references = []
+  status = "awaiting-upstream"
+  added = "2026-08-06"
+  expires = "2026-09-06"
+  notes = "runc container escape in the embedded container tooling; fixed in runc 1.2.8/1.3.3 -- retire on the first upstream image shipping it (v26.7.1, the current latest, does not). Re-argued 2026-08-06 against audit run 31085058431"
+  references = ["https://github.com/opencontainers/runc/releases/tag/v1.2.8"]
 
 [[vulnerabilities]]
   cve = "GHSA-cgrx-mc8f-2prm"
   repository = "ghcr.io/ansible/community-ansible-dev-tools"
   first_seen = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
   severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "runc/selinux container escape (GHSA) in kubectl"
-  references = []
+  status = "awaiting-upstream"
+  added = "2026-08-06"
+  expires = "2026-09-06"
+  notes = "runc container escape in the embedded container tooling; fixed in runc 1.2.8/1.3.3 -- retire on the first upstream image shipping it (v26.7.1, the current latest, does not). Re-argued 2026-08-06 against audit run 31085058431"
+  references = ["https://github.com/opencontainers/runc/releases/tag/v1.2.8"]
 
 [[vulnerabilities]]
   cve = "GHSA-pwhc-rpq9-4c8w"
   repository = "ghcr.io/ansible/community-ansible-dev-tools"
   first_seen = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
   severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "containerd issue (GHSA) in kubectl"
-  references = []
+  status = "awaiting-upstream"
+  added = "2026-08-06"
+  expires = "2026-09-06"
+  notes = "containerd flaw in the embedded container tooling; fixed in containerd 1.7.29 -- retire on the first upstream image shipping it (v26.7.1, the current latest, does not). Re-argued 2026-08-06 against audit run 31085058431"
+  references = ["https://github.com/containerd/containerd/releases/tag/v1.7.29"]
 
 [[vulnerabilities]]
   cve = "CVE-2013-7445"
   repository = "rust"
   first_seen = "golangci/golangci-lint:v2.6.2"
   severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
+  status = "mitigated"
+  added = "2026-08-06"
+  expires = "2026-11-06"
+  notes = "Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431"
   references = []
 
 [[vulnerabilities]]
@@ -104,10 +104,10 @@
   repository = "rust"
   first_seen = "golangci/golangci-lint:v2.6.2"
   severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
+  status = "mitigated"
+  added = "2026-08-06"
+  expires = "2026-11-06"
+  notes = "Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431"
   references = []
 
 [[vulnerabilities]]
@@ -115,10 +115,10 @@
   repository = "rust"
   first_seen = "golangci/golangci-lint:v2.6.2"
   severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
+  status = "mitigated"
+  added = "2026-08-06"
+  expires = "2026-11-06"
+  notes = "Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431"
   references = []
 
 [[vulnerabilities]]
@@ -126,10 +126,10 @@
   repository = "rust"
   first_seen = "golangci/golangci-lint:v2.6.2"
   severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
+  status = "mitigated"
+  added = "2026-08-06"
+  expires = "2026-11-06"
+  notes = "Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431"
   references = []
 
 [[vulnerabilities]]
@@ -137,10 +137,10 @@
   repository = "rust"
   first_seen = "golangci/golangci-lint:v2.6.2"
   severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
+  status = "mitigated"
+  added = "2026-08-06"
+  expires = "2026-11-06"
+  notes = "Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431"
   references = []
 
 [[vulnerabilities]]
@@ -148,10 +148,10 @@
   repository = "rust"
   first_seen = "golangci/golangci-lint:v2.6.2"
   severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
+  status = "mitigated"
+  added = "2026-08-06"
+  expires = "2026-11-06"
+  notes = "Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431"
   references = []
 
 [[vulnerabilities]]
@@ -159,10 +159,10 @@
   repository = "rust"
   first_seen = "golangci/golangci-lint:v2.6.2"
   severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
+  status = "mitigated"
+  added = "2026-08-06"
+  expires = "2026-11-06"
+  notes = "Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431"
   references = []
 
 [[vulnerabilities]]
@@ -170,10 +170,10 @@
   repository = "rust"
   first_seen = "golangci/golangci-lint:v2.6.2"
   severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
+  status = "mitigated"
+  added = "2026-08-06"
+  expires = "2026-11-06"
+  notes = "Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431"
   references = []
 
 [[vulnerabilities]]
@@ -181,10 +181,10 @@
   repository = "rust"
   first_seen = "golangci/golangci-lint:v2.6.2"
   severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
+  status = "mitigated"
+  added = "2026-08-06"
+  expires = "2026-11-06"
+  notes = "Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431"
   references = []
 
 [[vulnerabilities]]
@@ -192,10 +192,10 @@
   repository = "rust"
   first_seen = "golangci/golangci-lint:v2.6.2"
   severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
+  status = "mitigated"
+  added = "2026-08-06"
+  expires = "2026-11-06"
+  notes = "Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431"
   references = []
 
 [[vulnerabilities]]
@@ -203,10 +203,10 @@
   repository = "rust"
   first_seen = "golangci/golangci-lint:v2.6.2"
   severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
+  status = "mitigated"
+  added = "2026-08-06"
+  expires = "2026-11-06"
+  notes = "Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431"
   references = []
 
 [[vulnerabilities]]
@@ -214,8 +214,8 @@
   repository = "rust"
   first_seen = "golangci/golangci-lint:v2.6.2"
   severity = "HIGH"
-  status = "third-party"
-  added = "2025-12-02"
-  expires = "2026-03-02"
-  notes = "Vulnerability in upstream third-party image"
+  status = "mitigated"
+  added = "2026-08-06"
+  expires = "2026-11-06"
+  notes = "Kernel CVE flagged on linux-libc-dev, the kernel headers of the Debian base. A container executes the host's kernel, never the image's headers, and Debian ships no fix in stable. Re-argued 2026-08-06 against audit run 31085058431"
   references = []
