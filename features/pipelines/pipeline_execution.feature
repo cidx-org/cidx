@@ -57,11 +57,13 @@ Feature: Pipeline Execution
 
   Rule: Named pipelines provide clear intent
 
-    # A pipeline used to have to "indicate its purpose" as well. It cannot:
-    # config.Pipeline is a list of phases and an optional workflow name, and the
-    # `description` key cidx.toml writes is dropped by the decoder without a
-    # word. The step behind that line asserted nothing, which is why the claim
-    # survived (#349). What a pipeline states is its phases.
+    # A pipeline used to have to "indicate its purpose" as well, and could not:
+    # the `description` key cidx.toml writes was dropped by the decoder without
+    # a word, and the step behind that line asserted nothing, which is why the
+    # claim survived (#349). #352 gave config.Pipeline the field and the runner
+    # prints it, so the description is now a fact rather than an intention —
+    # covered by TestLoad_PipelineDescription, since what a scenario can see
+    # here is still the phases.
 
     Scenario Outline: Different pipelines for different purposes
       Given I run pipeline "<pipeline>"

@@ -155,7 +155,11 @@ type phaseResult struct {
 }
 
 func (r *Runner) RunPipeline(ctx context.Context, name string, pipeline config.Pipeline) error {
-	r.logger.Infof("Running pipeline: %s", name)
+	if pipeline.Description != "" {
+		r.logger.Infof("Running pipeline: %s — %s", name, pipeline.Description)
+	} else {
+		r.logger.Infof("Running pipeline: %s", name)
+	}
 	pipelineStart := time.Now()
 
 	var results []phaseResult

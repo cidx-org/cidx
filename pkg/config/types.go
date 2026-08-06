@@ -219,6 +219,12 @@ const NoWorkflow = "none"
 type Pipeline struct {
 	Phases []string `toml:"phases"`
 
+	// Description is a one-line statement of what the pipeline is for, shown
+	// when it runs. It was written in five places in this repository's own
+	// cidx.toml and read nowhere: the field did not exist, so the decoder
+	// dropped every one of them without a word (issue #352).
+	Description string `toml:"description"`
+
 	// Workflow names the CI workflow file that implements this pipeline.
 	// Unset follows the convention <pipeline>.yml; NoWorkflow states that none
 	// does. See WorkflowFile.

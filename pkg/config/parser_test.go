@@ -217,3 +217,41 @@ func TestExpandEnvVars(t *testing.T) {
 		})
 	}
 }
+
+// TestLoad_PipelineDescription covers issue #352: `description` was written on
+// all five pipelines of this repository's own cidx.toml and dropped by the
+// decoder without a word, because config.Pipeline had no field for it.
+//
+// The BDD suite carried the consequence for a while: a scenario claimed a
+// pipeline "indicates its purpose", the step behind it asserted nothing, and
+// the claim survived (#349). A key nobody reads and a step that checks nothing
+// fail the same way — silently.
+func TestLoad_PipelineDescription(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "cidx.toml")
+	configContent := `
+[security]
+containers = ["trivy"]
+
+[pipelines.ci]
+phases = ["security"]
+description = "Full CI pipeline for all commits"
+
+[pipelines.quick]
+phases = ["security"]
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if got := cfg.Pipelines["ci"].Description; got != "Full CI pipeline for all commits" {
+		t.Errorf("description = %q, want the one the file states", got)
+	}
+	if got := cfg.Pipelines["quick"].Description; got != "" {
+		t.Errorf("a pipeline that states no description should have none, got %q", got)
+	}
+}
