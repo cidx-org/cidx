@@ -427,7 +427,7 @@ func (c *Client) GetPullRequestByBranch(ctx context.Context, branch string) (num
 	}
 
 	if len(mrs) == 0 {
-		return 0, "", fmt.Errorf("no open merge request found for branch '%s'", branch)
+		return 0, "", fmt.Errorf("branch '%s': %w", branch, remote.ErrNoPullRequest)
 	}
 
 	return int(mrs[0].IID), mrs[0].WebURL, nil

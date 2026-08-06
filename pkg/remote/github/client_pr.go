@@ -58,7 +58,7 @@ func (c *Client) GetPullRequestByBranch(ctx context.Context, branch string) (int
 	}
 
 	if len(prs) == 0 {
-		return 0, "", fmt.Errorf("no open pull request found for branch %s", branch)
+		return 0, "", fmt.Errorf("branch %s: %w", branch, remote.ErrNoPullRequest)
 	}
 
 	return prs[0].GetNumber(), prs[0].GetHTMLURL(), nil
