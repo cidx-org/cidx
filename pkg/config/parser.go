@@ -49,7 +49,8 @@ func Load(path string) (*Config, error) {
 		ReleaseWorkflow: DefaultReleaseConfig(),
 		PR:              DefaultPRConfig(),
 	}
-	if err := toml.Unmarshal(data, &typed); err != nil {
+	md, err := toml.Decode(string(data), &typed)
+	if err != nil {
 		return nil, fmt.Errorf("failed to parse TOML config: %w", err)
 	}
 
@@ -57,6 +58,12 @@ func Load(path string) (*Config, error) {
 	var raw map[string]any
 	if err := toml.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("failed to parse TOML config: %w", err)
+	}
+
+	// Neither pass alone can tell a key nothing reads from a section whose name
+	// the user chooses, so the two answer together (issue #371).
+	if keys := unknownKeys(md, raw); len(keys) > 0 {
+		return nil, errUnknownKeys(path, keys)
 	}
 
 	cfg := &Config{
