@@ -61,7 +61,9 @@ const CommitLogFormat = "--pretty=format:%H|%s|%b<<<END>>>"
 // counted as breaking.
 var conventionalRe = regexp.MustCompile(`^(\w+)(?:\(([^)]+)\))?(!)?:\s*(.+)$`)
 
-// prRe extracts the PR number a squash merge leaves in the subject: "(#123)".
+// prRe matches a "(#123)" marker. The one a squash merge appends is the last
+// of the subject, not the first: a title is free to cite an issue or another
+// PR in its text, and GitHub adds its number after it (issue #376).
 var prRe = regexp.MustCompile(`\(#(\d+)\)`)
 
 // ParseCommit is the single conventional-commit parser of the release flow:
@@ -81,8 +83,14 @@ func ParseCommit(subject, body string) CommitInfo {
 		commit.Breaking = commit.Breaking || m[3] == "!"
 	}
 
-	if m := prRe.FindStringSubmatch(subject); m != nil {
-		_, _ = fmt.Sscanf(m[1], "%d", &commit.PR)
+	if ms := prRe.FindAllStringSubmatch(subject, -1); ms != nil {
+		_, _ = fmt.Sscanf(ms[len(ms)-1][1], "%d", &commit.PR)
+		// The marker is the squash's only when it is the tail, and then it is
+		// taken out of the subject: the notes print the number themselves, so
+		// leaving it in named every PR twice — "(#375) (#375)" on all 39 lines
+		// of the v3.0.0 dry-run (issue #376). A number cited mid-sentence is
+		// part of the text and stays.
+		commit.Subject = strings.TrimSpace(strings.TrimSuffix(commit.Subject, fmt.Sprintf("(#%d)", commit.PR)))
 	}
 
 	return commit
