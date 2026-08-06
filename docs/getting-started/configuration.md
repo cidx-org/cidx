@@ -25,6 +25,23 @@ This is a floor, not a pin: `1.2.3` and anything newer runs, an older cidx refus
 
 The `cidx.toml` file's main purpose is to define **Pipelines**. These are sequences of execution phases that map to specific CI/CD events. CIDX reads this file, automatically detects the context (e.g., a Pull Request), and runs the pipeline that matches the event by convention.
 
+### 0. Every Key Must Be One CIDX Reads
+
+`cidx.toml` is strict: a key CIDX does not read is an error, and every command that loads the file refuses it — not just `cidx validate`.
+
+```text
+$ cidx run ci
+Error: cidx.toml declares 2 key(s) that cidx does not read:
+  branch.stale_dayz
+  containers.trivy.severty
+```
+
+The alternative was worse. `stale_dayz = 15` used to leave `stale_days` at its default of 30 and say nothing at all, so a typo was indistinguishable from the setting working, and `cidx validate` called the file valid (issue #371). A key CIDX ignores is a setting that is not in effect; refusing it is the only answer that cannot be misread.
+
+It fails rather than warns because a warning about a config that does not mean what it says is a warning people scroll past — and the run that follows is exactly the unattended behaviour the check exists to prevent.
+
+`cidx preset info <name>` lists the options a container accepts, which is where a misspelled override is usually resolved.
+
 ### 1. Defining Pipelines
 
 A pipeline is a sequence of phases, defined in a `[pipelines.<pipeline_name>]` section. The name of the pipeline should correspond to a CI/CD event (e.g., `pr`, `main`, `release`).
