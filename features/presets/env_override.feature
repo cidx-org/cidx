@@ -38,7 +38,17 @@ Feature: A Preset Env Value Is A Default
     # no command, so widening the parameterisation does not reach them: what the
     # override applies to is the placeholder a command spells out.
 
-    Scenario: A developer's own HOME does not follow them into the container
-      Given the environment sets "HOME" to "/home/dev"
-      When I resolve the preset "bandit" without overrides
+    # Not hypothetical. Applying the override to every declared key was tried
+    # first and CI answered within the minute: golangci-lint declares
+    # HOME = "/tmp", the runner's HOME = "/home/runner" replaced it, and the
+    # linter died on "failed to initialize build cache ... permission denied".
+    Scenario Outline: A runner's own HOME does not follow it into the container
+      Given the environment sets "HOME" to "/home/runner"
+      When I resolve the preset "<preset>" without overrides
       Then the resolved environment should set "HOME" to "/tmp"
+
+      Examples: Presets that declare a writable HOME and never name it in a command
+        | preset         |
+        | golangci-lint  |
+        | go-test        |
+        | gosec          |

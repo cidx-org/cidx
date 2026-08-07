@@ -568,9 +568,23 @@ func (tc *TestContext) environmentDoesNotSet(key string) error {
 	return os.Unsetenv(key)
 }
 
+// rememberEnv records what a variable held before a scenario touched it, so
+// the suite's cleanup restores it rather than unsetting it: HOME is one of
+// these, and dropping it altogether breaks every scenario that follows.
 func (tc *TestContext) rememberEnv(key string) {
-	touched, _ := tc.Config["touched_env"].([]string)
-	tc.Config["touched_env"] = append(touched, key)
+	touched, _ := tc.Config["touched_env"].(map[string]*string)
+	if touched == nil {
+		touched = make(map[string]*string)
+		tc.Config["touched_env"] = touched
+	}
+	if _, already := touched[key]; already {
+		return
+	}
+	if before, set := os.LookupEnv(key); set {
+		touched[key] = &before
+	} else {
+		touched[key] = nil
+	}
 }
 
 func (tc *TestContext) resolvePreset(presetName string, overrides map[string]any) error {
@@ -583,7 +597,10 @@ func (tc *TestContext) resolvePreset(presetName string, overrides map[string]any
 	// command the container would really be given (#384).
 	tc.Config["resolved_command"] = presets.ExpandCommand(merged.Command, merged.Env)
 	tc.Config["resolved_image"] = merged.Image
-	tc.Config["resolved_env"] = merged.Env
+	// Resolved the way the container receives it. Asserting on the declared
+	// map instead is how the guard below passed while the runner's HOME was
+	// in fact replacing the preset's (#384).
+	tc.Config["resolved_env"] = presets.ResolveContainerEnv(merged.Command, merged.Env)
 	return nil
 }
 

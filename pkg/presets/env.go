@@ -32,6 +32,33 @@ func ResolveEnvValue(key, declared string) string {
 	return os.ExpandEnv(declared)
 }
 
+// ResolveContainerEnv returns the environment a container is handed.
+//
+// The override reaches exactly the keys the command spells out as a
+// placeholder, and no others. That is the line between a parameter and an
+// invariant: IMAGE_TAG appears in kaniko's destination and is meant to be set
+// per run, while HOME, GOPATH, GOCACHE and the cache directories are declared
+// so the container works as the invoking uid (#188) and are referenced by no
+// command.
+//
+// Letting the environment reach those too is not a theoretical risk. It was
+// tried, and CI answered within the minute: golangci-lint declares
+// HOME = "/tmp", the runner's own HOME = "/home/runner" replaced it, and the
+// linter died on `failed to initialize build cache at
+// /home/runner/.cache/go-build: mkdir /home/runner: permission denied`.
+func ResolveContainerEnv(command string, env map[string]string) map[string]string {
+	resolved := make(map[string]string, len(env))
+	for key, declared := range env {
+		if strings.Contains(command, "${"+key+"}") {
+			resolved[key] = ResolveEnvValue(key, declared)
+			continue
+		}
+		resolved[key] = os.ExpandEnv(declared)
+	}
+
+	return resolved
+}
+
 // ExpandCommand substitutes the ${KEY} placeholders a preset's command spells
 // out, taking each value from ResolveEnvValue.
 //

@@ -242,10 +242,15 @@ func (tc *TestContext) Cleanup() {
 		tc.cleanupGitHubArtifacts()
 	}
 
-	// Variables a scenario exported through "the environment sets ..." (#384)
-	if touched, ok := tc.Config["touched_env"].([]string); ok {
-		for _, key := range touched {
-			_ = os.Unsetenv(key)
+	// Variables a scenario touched through "the environment sets ..." go back
+	// to what they held, which for HOME is not "unset" (#384).
+	if touched, ok := tc.Config["touched_env"].(map[string]*string); ok {
+		for key, before := range touched {
+			if before == nil {
+				_ = os.Unsetenv(key)
+				continue
+			}
+			_ = os.Setenv(key, *before)
 		}
 	}
 

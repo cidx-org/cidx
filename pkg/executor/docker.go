@@ -521,12 +521,10 @@ func (e *DockerExecutor) createContainer(ctx context.Context, containerConfig *c
 
 	// Convert env map to slice and expand environment variables
 	env := make([]string, 0, len(containerConfig.Env))
-	for k, v := range containerConfig.Env {
-		// Same rule as the command's placeholders: the declaration is a
-		// default and an exported value wins, so the container sees what the
-		// command was built with rather than a second, contradicting answer
-		// (issue #384).
-		env = append(env, fmt.Sprintf("%s=%s", k, presets.ResolveEnvValue(k, v)))
+	// Only the keys the command parameterises take an exported value; the
+	// invariants keep theirs, or the runner's HOME follows them in (#384).
+	for k, v := range presets.ResolveContainerEnv(containerConfig.Command, containerConfig.Env) {
+		env = append(env, fmt.Sprintf("%s=%s", k, v))
 	}
 
 	// Parse command
