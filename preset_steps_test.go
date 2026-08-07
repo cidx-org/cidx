@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -39,6 +40,10 @@ func RegisterPresetSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	// Option flag placement (#200)
 	ctx.When(`^I resolve the preset "([^"]*)" with option "([^"]*)" set to "([^"]*)"$`, tc.resolvePresetWithOption)
 	ctx.When(`^I resolve the preset "([^"]*)" without overrides$`, tc.resolvePresetWithoutOverrides)
+
+	// A preset env value is a default the environment overrides (#384)
+	ctx.Given(`^the environment sets "([^"]*)" to "([^"]*)"$`, tc.environmentSets)
+	ctx.Given(`^the environment does not set "([^"]*)"$`, tc.environmentDoesNotSet)
 	ctx.Then(`^the resolved command should be "([^"]*)"$`, tc.resolvedCommandShouldBe)
 	ctx.Then(`^the resolved command should contain "([^"]*)"$`, tc.resolvedCommandShouldContain)
 	ctx.Then(`^the resolved command should not contain "([^"]*)"$`, tc.resolvedCommandShouldNotContain)
@@ -551,13 +556,32 @@ func (tc *TestContext) resolvePresetWithoutOverrides(presetName string) error {
 	return tc.resolvePreset(presetName, map[string]any{})
 }
 
+// environmentSets exports a variable for the scenario, remembering it so the
+// suite's cleanup puts the environment back (#384).
+func (tc *TestContext) environmentSets(key, value string) error {
+	tc.rememberEnv(key)
+	return os.Setenv(key, value)
+}
+
+func (tc *TestContext) environmentDoesNotSet(key string) error {
+	tc.rememberEnv(key)
+	return os.Unsetenv(key)
+}
+
+func (tc *TestContext) rememberEnv(key string) {
+	touched, _ := tc.Config["touched_env"].([]string)
+	tc.Config["touched_env"] = append(touched, key)
+}
+
 func (tc *TestContext) resolvePreset(presetName string, overrides map[string]any) error {
 	preset, err := presets.Get(presetName)
 	if err != nil {
 		return fmt.Errorf("failed to resolve preset %q: %w", presetName, err)
 	}
 	merged := preset.MergeWith(overrides)
-	tc.Config["resolved_command"] = merged.Command
+	// Resolved the way the executor resolves it, so a scenario sees the
+	// command the container would really be given (#384).
+	tc.Config["resolved_command"] = presets.ExpandCommand(merged.Command, merged.Env)
 	tc.Config["resolved_image"] = merged.Image
 	tc.Config["resolved_env"] = merged.Env
 	return nil

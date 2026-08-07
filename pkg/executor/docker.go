@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cidx-org/cidx/v2/pkg/config"
+	"github.com/cidx-org/cidx/v2/pkg/presets"
 	"github.com/cidx-org/cidx/v2/pkg/registry"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -187,7 +188,7 @@ func (e *DockerExecutor) Run(ctx context.Context, containerConfig *config.Contai
 
 	// Expand environment variables in volumes and command
 	volumes := expandVolumes(containerConfig.Volumes)
-	command := expandCommand(containerConfig.Command, containerConfig.Env)
+	command := presets.ExpandCommand(containerConfig.Command, containerConfig.Env)
 
 	if e.dryRun {
 		e.printDryRun(containerConfig, volumes, command)
@@ -521,9 +522,11 @@ func (e *DockerExecutor) createContainer(ctx context.Context, containerConfig *c
 	// Convert env map to slice and expand environment variables
 	env := make([]string, 0, len(containerConfig.Env))
 	for k, v := range containerConfig.Env {
-		// Expand ${VAR} in values
-		expandedValue := os.ExpandEnv(v)
-		env = append(env, fmt.Sprintf("%s=%s", k, expandedValue))
+		// Same rule as the command's placeholders: the declaration is a
+		// default and an exported value wins, so the container sees what the
+		// command was built with rather than a second, contradicting answer
+		// (issue #384).
+		env = append(env, fmt.Sprintf("%s=%s", k, presets.ResolveEnvValue(k, v)))
 	}
 
 	// Parse command
@@ -707,25 +710,6 @@ func expandVolumes(volumes []string) []string {
 		expanded[i] = os.ExpandEnv(vol)
 	}
 	return expanded
-}
-
-// expandCommand expands environment variables in command
-func expandCommand(command string, env map[string]string) string {
-	expanded := command
-	for k, v := range env {
-		// Resolve env references in values first (e.g., TAG="${GIT_TAG}" → TAG="v1.4.0")
-		resolvedValue := os.ExpandEnv(v)
-		placeholder := fmt.Sprintf("${%s}", k)
-		expanded = strings.ReplaceAll(expanded, placeholder, resolvedValue)
-	}
-
-	// For shell commands (sh -c ...), don't expand remaining env vars
-	// because they should be expanded inside the container shell
-	if strings.HasPrefix(strings.TrimSpace(command), "sh -c") {
-		return expanded
-	}
-
-	return os.ExpandEnv(expanded)
 }
 
 // decideRecreate returns a non-empty human-readable reason when an existing

@@ -242,6 +242,13 @@ func (tc *TestContext) Cleanup() {
 		tc.cleanupGitHubArtifacts()
 	}
 
+	// Variables a scenario exported through "the environment sets ..." (#384)
+	if touched, ok := tc.Config["touched_env"].([]string); ok {
+		for _, key := range touched {
+			_ = os.Unsetenv(key)
+		}
+	}
+
 	// Reset environment variables
 	_ = os.Unsetenv("GITHUB_ACTIONS")
 	_ = os.Unsetenv("GITLAB_CI")
