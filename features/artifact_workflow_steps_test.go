@@ -174,6 +174,10 @@ func (s *stubProvider) WatchPullRequestChecks(context.Context, int) (<-chan remo
 	panic("not reached by these scenarios")
 }
 
+func (s *stubProvider) GetPullRequestTitle(_ context.Context, _ int) (string, error) {
+	return "", nil
+}
+
 var _ remote.Provider = (*stubProvider)(nil)
 
 // provider returns the scenario's provider, creating it on first use.

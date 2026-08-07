@@ -117,6 +117,15 @@ func (c *Client) GetPullRequest(ctx context.Context, prNumber int) (*github.Pull
 	return pr, nil
 }
 
+// GetPullRequestTitle returns the title of a pull request.
+func (c *Client) GetPullRequestTitle(ctx context.Context, prNumber int) (string, error) {
+	pr, err := c.GetPullRequest(ctx, prNumber)
+	if err != nil {
+		return "", err
+	}
+	return pr.GetTitle(), nil
+}
+
 // GetPullRequestReviews returns reviews for a pull request
 func (c *Client) GetPullRequestReviews(ctx context.Context, prNumber int) ([]*github.PullRequestReview, error) {
 	reviews, _, err := c.client.PullRequests.ListReviews(ctx, c.owner, c.repo, prNumber, &github.ListOptions{})

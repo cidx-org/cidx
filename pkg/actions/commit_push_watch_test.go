@@ -27,6 +27,8 @@ type cpwFakeProvider struct {
 	waitTimeout     time.Duration // records the timeout cpw asked for
 	waitExpectedSHA string        // records the expected SHA cpw pinned
 
+	prTitle string
+
 	checksUpdates []remote.PRChecksUpdate
 	checksErr     error
 	watchCalled   bool
@@ -37,6 +39,13 @@ func (f *cpwFakeProvider) GetPullRequestByBranch(_ context.Context, _ string) (i
 		return 0, "", f.prErr
 	}
 	return f.prNumber, "https://example.test/pr", nil
+}
+
+func (f *cpwFakeProvider) GetPullRequestTitle(_ context.Context, _ int) (string, error) {
+	if f.prTitle == "" {
+		return "", errors.New("no title staged")
+	}
+	return f.prTitle, nil
 }
 
 func (f *cpwFakeProvider) WaitForChecksToStart(_ context.Context, _ int, expectedSHA string, timeout time.Duration) (string, *remote.PRChecks, error) {
@@ -351,5 +360,139 @@ func TestCPWWatchCI_AGapThatNeverFillsIsNotSuccess(t *testing.T) {
 	err := newCPWAction(provider).watchCI(context.Background(), "feat/x", sha)
 	if err == nil || !strings.Contains(err.Error(), "stopped watching before checks completed") {
 		t.Fatalf("expected the incomplete watch to be reported, got: %v", err)
+	}
+}
+
+// TestTypesDiffer covers issue #361: the commit says one kind of change, the
+// pull request title says another, and the title is what reaches the
+// changelog — through the squash subject, from a line nobody re-reads.
+func TestTypesDiffer(t *testing.T) {
+	tests := []struct {
+		name    string
+		message string
+		title   string
+		want    bool
+	}{
+		{
+			// The case that produced the issue: work started as a feat, turned
+			// out to be a fix, and the release would have filed it as Features.
+			name:    "a fix committed under a feat title",
+			message: "fix(pr): name the step a failing check died on",
+			title:   "feat(pr): name the step a failing check died on",
+			want:    true,
+		},
+		{
+			name:    "the same type on both sides",
+			message: "fix(pr): name the step",
+			title:   "fix(pr): name the step a failing check died on",
+			want:    false,
+		},
+		{
+			// Only the type decides the changelog section, so a scope that
+			// moved is not a disagreement worth interrupting for.
+			name:    "a different scope is not a different type",
+			message: "fix(cli): name the step",
+			title:   "fix(pr): name the step",
+			want:    false,
+		},
+		{
+			name:    "a breaking marker on one side only",
+			message: "feat(cli)!: remove the deprecated tree",
+			title:   "feat(cli): remove the deprecated tree",
+			want:    false,
+		},
+		{
+			// A title that is not conventional makes no claim to contradict.
+			name:    "a title that says nothing about its type",
+			message: "fix(pr): name the step",
+			title:   "Name the failing step",
+			want:    false,
+		},
+		{
+			name:    "a commit message that says nothing about its type",
+			message: "wip",
+			title:   "fix(pr): name the step",
+			want:    false,
+		},
+		{
+			// The body carries the BREAKING CHANGE footer and much else; only
+			// the first line is the header.
+			name:    "the type is read from the first line only",
+			message: "fix(pr): name the step\n\nfeat: this word in the body is not the type\n",
+			title:   "fix(pr): name the step",
+			want:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			commitType, titleType, differ := typesDiffer(tt.message, tt.title)
+
+			if differ != tt.want {
+				t.Fatalf("differ = %v, want %v (commit %q, title %q)", differ, tt.want, commitType, titleType)
+			}
+			if !differ {
+				return
+			}
+			if commitType == "" || titleType == "" || commitType == titleType {
+				t.Errorf("a disagreement must name both sides, got %q and %q", commitType, titleType)
+			}
+		})
+	}
+}
+
+// TestCPWWatchCI_WarnsWhenTheTitleFilesItElsewhere: the warning reaches the
+// user, naming both readings and the command that fixes it (#361).
+func TestCPWWatchCI_WarnsWhenTheTitleFilesItElsewhere(t *testing.T) {
+	sha := "abc1234def"
+	provider := &cpwFakeProvider{
+		prNumber: 361,
+		prTitle:  "feat(pr): name the step a failing check died on",
+		waitSHA:  sha,
+		waitChecks: &remote.PRChecks{
+			TotalCount: 2, WorkflowChecks: 2, Success: 2, Status: "success", HeadSHA: sha,
+		},
+	}
+
+	action := newCPWAction(provider)
+	action.message = "fix(pr): name the step a failing check died on"
+
+	out := captureLogs(t)
+
+	if err := action.watchCI(context.Background(), "fix/naming", sha); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, want := range []string{"'fix'", "'feat'", "cidx pr edit --title"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("the warning does not mention %s:\n%s", want, out.String())
+		}
+	}
+}
+
+// TestCPWWatchCI_SaysNothingWhenTheTypesAgree: a warning that fires on the
+// ordinary case is a warning people learn to scroll past.
+func TestCPWWatchCI_SaysNothingWhenTheTypesAgree(t *testing.T) {
+	sha := "abc1234def"
+	provider := &cpwFakeProvider{
+		prNumber: 361,
+		prTitle:  "fix(pr): name the step a failing check died on",
+		waitSHA:  sha,
+		waitChecks: &remote.PRChecks{
+			TotalCount: 2, WorkflowChecks: 2, Success: 2, Status: "success", HeadSHA: sha,
+		},
+	}
+
+	action := newCPWAction(provider)
+	action.message = "fix(pr): name the step"
+
+	out := captureLogs(t)
+
+	if err := action.watchCI(context.Background(), "fix/naming", sha); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if strings.Contains(out.String(), "pull request is titled") {
+		t.Errorf("warned about types that agree:\n%s", out.String())
 	}
 }
