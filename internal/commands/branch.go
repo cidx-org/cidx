@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"runtime"
@@ -293,6 +294,25 @@ var readPRInfo = func(manager *branch.Manager, branchName string) (*branch.PRInf
 }
 
 // watchPRChecks watches PR checks until they complete
+// ciStartTimeout bounds how long a watch waits for a workflow check to appear
+// before reporting that none did. Package-level so a test need not wait on a
+// clock.
+var ciStartTimeout = 60 * time.Second
+
+// checksPollInterval is how often a watch re-reads the PR. Package-level for
+// the same reason as ciStartTimeout: a test should not spend it.
+var checksPollInterval = 10 * time.Second
+
+// errNoCIStarted is what a watch answers when nothing ever showed up to watch.
+//
+// It is an error rather than a quiet exit 0 on purpose: `cidx pr watch` is
+// asked to observe checks through to their end, and a chain like
+// `cidx pr watch && cidx pr merge` must not read "there was nothing to see" as
+// "everything passed" — which is exactly what a promotion PR opened with the
+// workflow token produced, since GitHub starts no workflows for it (#382).
+var errNoCIStarted = errors.New("no workflow check appeared on this commit -- " +
+	"CI may not have started yet, or nothing triggers on this branch: watch again once it has")
+
 func watchPRChecks(manager *branch.Manager, branchName string, initialInfo *branch.PRInfo, quiet bool) error {
 	if quiet {
 		return watchPRChecksQuiet(manager, branchName, initialInfo)
@@ -378,6 +398,8 @@ func watchPRChecks(manager *branch.Manager, branchName string, initialInfo *bran
 	pollTicker := time.NewTicker(3 * time.Second)
 	defer pollTicker.Stop()
 
+	deadline := time.Now().Add(ciStartTimeout)
+
 	for {
 		info, err := readPRInfo(manager, branchName)
 		if err != nil {
@@ -386,9 +408,16 @@ func watchPRChecks(manager *branch.Manager, branchName string, initialInfo *bran
 		}
 		currentInfo = info
 
+		if info.Checks != nil && !info.Checks.Started() && time.Now().After(deadline) {
+			close(done)
+			time.Sleep(150 * time.Millisecond)
+			return errNoCIStarted
+		}
+
 		// Check if we're done — which a run still going is not, whatever the
-		// checks it has posted so far say (issue #367).
-		if info.Checks != nil && info.Checks.Complete() {
+		// checks it has posted so far say (#367), and which an empty list is
+		// not either, whatever Complete() says of it (#382).
+		if info.Checks != nil && info.Checks.Started() && info.Checks.Complete() {
 			close(done)
 			time.Sleep(150 * time.Millisecond) // Let spinner goroutine exit
 
@@ -436,9 +465,10 @@ func watchPRChecksQuiet(manager *branch.Manager, branchName string, initialInfo 
 	fmt.Printf("#%d %s\n", initialInfo.Number, initialInfo.Title)
 	fmt.Printf("Watching %s...\n", branchName)
 
-	pollTicker := time.NewTicker(10 * time.Second)
+	pollTicker := time.NewTicker(checksPollInterval)
 	defer pollTicker.Stop()
 
+	deadline := time.Now().Add(ciStartTimeout)
 	lastStatus := ""
 
 	for {
@@ -461,7 +491,7 @@ func watchPRChecksQuiet(manager *branch.Manager, branchName string, initialInfo 
 				lastStatus = status
 			}
 
-			if info.Checks.Complete() {
+			if info.Checks.Started() && info.Checks.Complete() {
 				fmt.Println()
 				if info.Checks.Status == "success" {
 					fmt.Println("All checks passed.")
@@ -470,6 +500,10 @@ func watchPRChecksQuiet(manager *branch.Manager, branchName string, initialInfo 
 					fmt.Print(branch.FormatFailedChecks(info.Checks.Failed, "  "))
 				}
 				return nil
+			}
+
+			if !info.Checks.Started() && time.Now().After(deadline) {
+				return errNoCIStarted
 			}
 		}
 
