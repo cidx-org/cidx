@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cidx-org/cidx/v2/pkg/config"
-	"github.com/cidx-org/cidx/v2/pkg/presets"
-	"github.com/cidx-org/cidx/v2/pkg/registry"
+	"github.com/cidx-org/cidx/v3/pkg/config"
+	"github.com/cidx-org/cidx/v3/pkg/presets"
+	"github.com/cidx-org/cidx/v3/pkg/registry"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"

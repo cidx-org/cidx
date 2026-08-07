@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cidx-org/cidx/v2/pkg/remote"
+	"github.com/cidx-org/cidx/v3/pkg/remote"
 )
 
 // fakeProvider is a minimal remote.Provider implementation for unit-testing the

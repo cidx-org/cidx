@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cidx-org/cidx/v2/pkg/branch"
-	"github.com/cidx-org/cidx/v2/pkg/remote"
+	"github.com/cidx-org/cidx/v3/pkg/branch"
+	"github.com/cidx-org/cidx/v3/pkg/remote"
 )
 
 // TestPRAbsenceIsNormal covers issue #362.

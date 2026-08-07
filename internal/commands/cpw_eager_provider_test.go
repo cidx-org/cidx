@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cidx-org/cidx/v2/pkg/remote"
-	"github.com/cidx-org/cidx/v2/pkg/vcs"
+	"github.com/cidx-org/cidx/v3/pkg/remote"
+	"github.com/cidx-org/cidx/v3/pkg/vcs"
 )
 
 // TestCPWRefusesBeforeTouchingTheRepository is the standing guard behind the

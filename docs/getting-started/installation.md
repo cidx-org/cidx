@@ -5,7 +5,7 @@
 If you have Go installed:
 
 ```bash
-go install github.com/cidx-org/cidx/v2/cmd/cidx@latest
+go install github.com/cidx-org/cidx/v3/cmd/cidx@latest
 ```
 
 ## From Source

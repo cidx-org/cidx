@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cidx-org/cidx/v2/pkg/presets"
+	"github.com/cidx-org/cidx/v3/pkg/presets"
 )
 
 // stubRegistry replaces the two network calls scan-targets makes for the

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cidx-org/cidx/v2/pkg/branch"
+	"github.com/cidx-org/cidx/v3/pkg/branch"
 )
 
 // redPullRequest is the state a watch closes on when CI has just gone red:

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cidx-org/cidx/v2/pkg/presets"
+	"github.com/cidx-org/cidx/v3/pkg/presets"
 )
 
 // No test in this file reaches endoflife.date. The cycle lists come either from

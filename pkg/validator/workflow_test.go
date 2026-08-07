@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cidx-org/cidx/v2/pkg/config"
+	"github.com/cidx-org/cidx/v3/pkg/config"
 )
 
 // phasesFromStep parses a one-job workflow whose only step runs script, and

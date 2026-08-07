@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cidx-org/cidx/v2/pkg/remote"
+	"github.com/cidx-org/cidx/v3/pkg/remote"
 )
 
 // stubRefExists replaces the remote-ref probe for the duration of a test, so

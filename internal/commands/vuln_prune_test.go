@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cidx-org/cidx/v2/pkg/presets"
+	"github.com/cidx-org/cidx/v3/pkg/presets"
 )
 
 // pruneCatalogue is a two-image catalogue pinned by digest, as presets.toml

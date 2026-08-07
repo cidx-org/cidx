@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cidx-org/cidx/v2/pkg/config"
+	"github.com/cidx-org/cidx/v3/pkg/config"
 	"github.com/urfave/cli/v2"
 	"gopkg.in/yaml.v3"
 )

@@ -3,8 +3,8 @@ package config
 import (
 	"fmt"
 
-	"github.com/cidx-org/cidx/v2/pkg/presets"
-	"github.com/cidx-org/cidx/v2/pkg/semver"
+	"github.com/cidx-org/cidx/v3/pkg/presets"
+	"github.com/cidx-org/cidx/v3/pkg/semver"
 )
 
 // ValidationResult contains validation results
@@ -76,7 +76,7 @@ func CheckVersion(cfg *Config, currentVersion string) error {
 	}
 
 	if semver.Compare(currentVersion, cfg.RequiredVersion) < 0 {
-		return fmt.Errorf("cidx %s is too old: this config requires %s or newer\n   Update with: go install github.com/cidx-org/cidx/v2/cmd/cidx@latest", currentVersion, cfg.RequiredVersion)
+		return fmt.Errorf("cidx %s is too old: this config requires %s or newer\n   Update with: go install github.com/cidx-org/cidx/v3/cmd/cidx@latest", currentVersion, cfg.RequiredVersion)
 	}
 
 	return nil

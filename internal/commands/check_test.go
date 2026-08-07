@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cidx-org/cidx/v2/pkg/config"
-	"github.com/cidx-org/cidx/v2/pkg/validator"
+	"github.com/cidx-org/cidx/v3/pkg/config"
+	"github.com/cidx-org/cidx/v3/pkg/validator"
 	"github.com/urfave/cli/v2"
 )
 

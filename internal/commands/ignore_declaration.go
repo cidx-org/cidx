@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/cidx-org/cidx/v2/pkg/presets"
+	"github.com/cidx-org/cidx/v3/pkg/presets"
 )
 
 // What the audit states about the ignore file it built (#327).

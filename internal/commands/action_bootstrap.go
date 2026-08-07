@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/cidx-org/cidx/v2/pkg/config"
-	"github.com/cidx-org/cidx/v2/pkg/remote"
-	"github.com/cidx-org/cidx/v2/pkg/remote/github"
-	"github.com/cidx-org/cidx/v2/pkg/remote/gitlab"
-	"github.com/cidx-org/cidx/v2/pkg/vcs"
+	"github.com/cidx-org/cidx/v3/pkg/config"
+	"github.com/cidx-org/cidx/v3/pkg/remote"
+	"github.com/cidx-org/cidx/v3/pkg/remote/github"
+	"github.com/cidx-org/cidx/v3/pkg/remote/gitlab"
+	"github.com/cidx-org/cidx/v3/pkg/vcs"
 	"github.com/cli/go-gh/v2/pkg/auth"
 )
 

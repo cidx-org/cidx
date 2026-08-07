@@ -3,7 +3,7 @@ package commands
 import (
 	"fmt"
 
-	"github.com/cidx-org/cidx/v2/pkg/registry"
+	"github.com/cidx-org/cidx/v3/pkg/registry"
 	"github.com/urfave/cli/v2"
 )
 

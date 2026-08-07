@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/cidx-org/cidx/v2/pkg/doctor"
+	"github.com/cidx-org/cidx/v3/pkg/doctor"
 	"github.com/cucumber/godog"
 )
 

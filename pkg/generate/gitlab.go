@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cidx-org/cidx/v2/pkg/config"
+	"github.com/cidx-org/cidx/v3/pkg/config"
 )
 
 // DefaultGitLabPath is where `cidx generate gitlab` writes when no -o is given,

@@ -19,7 +19,7 @@ var buildInfoReleaseRe = regexp.MustCompile(`^v\d+\.\d+\.\d+$`)
 // resolveVersion returns the version cidx reports at runtime.
 //
 // Release binaries carry it in ldflags (`-X main.Version=2.1.2`). `go install
-// github.com/cidx-org/cidx/v2/cmd/cidx@v2.1.2` applies no ldflags, so such a
+// github.com/cidx-org/cidx/v3/cmd/cidx@v2.1.2` applies no ldflags, so such a
 // binary reported "dev" and generated workflows fell back to `@latest` instead
 // of pinning the running release (issue #205). The module version recorded in
 // the binary is the real one, so use it — normalized to the ldflags convention

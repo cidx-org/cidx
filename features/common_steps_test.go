@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cidx-org/cidx/v2/internal/commands"
-	"github.com/cidx-org/cidx/v2/pkg/config"
-	"github.com/cidx-org/cidx/v2/pkg/environment"
-	"github.com/cidx-org/cidx/v2/pkg/presets"
+	"github.com/cidx-org/cidx/v3/internal/commands"
+	"github.com/cidx-org/cidx/v3/pkg/config"
+	"github.com/cidx-org/cidx/v3/pkg/environment"
+	"github.com/cidx-org/cidx/v3/pkg/presets"
 	"github.com/cucumber/godog"
 )
 

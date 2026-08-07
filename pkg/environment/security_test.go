@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cidx-org/cidx/v2/pkg/presets"
+	"github.com/cidx-org/cidx/v3/pkg/presets"
 )
 
 func TestValidatePreset_CI(t *testing.T) {

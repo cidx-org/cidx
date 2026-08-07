@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cidx-org/cidx/v2/pkg/validator"
+	"github.com/cidx-org/cidx/v3/pkg/validator"
 )
 
 // repoWorkflowDir is this repository's own workflow directory, seen from the

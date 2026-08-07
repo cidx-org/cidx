@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cidx-org/cidx/v2/pkg/drift"
-	"github.com/cidx-org/cidx/v2/pkg/remote"
+	"github.com/cidx-org/cidx/v3/pkg/drift"
+	"github.com/cidx-org/cidx/v3/pkg/remote"
 	"github.com/cucumber/godog"
 )
 

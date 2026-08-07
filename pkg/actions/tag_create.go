@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cidx-org/cidx/v2/pkg/config"
-	"github.com/cidx-org/cidx/v2/pkg/vcs"
+	"github.com/cidx-org/cidx/v3/pkg/config"
+	"github.com/cidx-org/cidx/v3/pkg/vcs"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -50,6 +50,12 @@ func (a *TagCreateAction) Execute(ctx context.Context) error {
 	version, err := LoadPreparedTagVersion(workDir)
 	if err != nil {
 		return fmt.Errorf("failed to load prepared version: %w", err)
+	}
+
+	// Before the tag exists, because a pushed tag is what consumers resolve
+	// against and a major mismatch cannot be corrected in place (#395).
+	if err := CheckModuleMajor(workDir, version); err != nil {
+		return err
 	}
 
 	tagName := a.tagConfig.FormatTag(version)

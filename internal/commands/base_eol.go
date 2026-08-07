@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cidx-org/cidx/v2/pkg/presets"
+	"github.com/cidx-org/cidx/v3/pkg/presets"
 )
 
 // Reading the base of every catalogue image out of the scans that already ran,

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cidx-org/cidx/v2/pkg/remote"
+	"github.com/cidx-org/cidx/v3/pkg/remote"
 )
 
 // listedRuns is one page of what the API returns, with the two identifiers

@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cidx-org/cidx/v2/internal/commands"
-	"github.com/cidx-org/cidx/v2/pkg/config"
-	"github.com/cidx-org/cidx/v2/pkg/remote"
-	"github.com/cidx-org/cidx/v2/pkg/validator"
+	"github.com/cidx-org/cidx/v3/internal/commands"
+	"github.com/cidx-org/cidx/v3/pkg/config"
+	"github.com/cidx-org/cidx/v3/pkg/remote"
+	"github.com/cidx-org/cidx/v3/pkg/validator"
 	"github.com/cucumber/godog"
 )
 

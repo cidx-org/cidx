@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cidx-org/cidx/v2/internal/commands"
+	"github.com/cidx-org/cidx/v3/internal/commands"
 	"github.com/cucumber/godog"
 )
 

@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/cidx-org/cidx/v2/internal/commands"
+	"github.com/cidx-org/cidx/v3/internal/commands"
 )
 
 // Version is set via ldflags during build (`-X main.Version=2.1.2`). It stays

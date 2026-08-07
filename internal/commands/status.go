@@ -11,8 +11,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/cidx-org/cidx/v2/internal/tui"
-	"github.com/cidx-org/cidx/v2/pkg/environment"
+	"github.com/cidx-org/cidx/v3/internal/tui"
+	"github.com/cidx-org/cidx/v3/pkg/environment"
 	"github.com/urfave/cli/v2"
 )
 

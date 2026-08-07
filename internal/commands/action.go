@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cidx-org/cidx/v2/pkg/actions"
-	"github.com/cidx-org/cidx/v2/pkg/branch"
-	"github.com/cidx-org/cidx/v2/pkg/remote"
-	"github.com/cidx-org/cidx/v2/pkg/remote/github"
-	"github.com/cidx-org/cidx/v2/pkg/vcs"
+	"github.com/cidx-org/cidx/v3/pkg/actions"
+	"github.com/cidx-org/cidx/v3/pkg/branch"
+	"github.com/cidx-org/cidx/v3/pkg/remote"
+	"github.com/cidx-org/cidx/v3/pkg/remote/github"
+	"github.com/cidx-org/cidx/v3/pkg/vcs"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 )

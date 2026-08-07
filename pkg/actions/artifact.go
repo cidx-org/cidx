@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cidx-org/cidx/v2/pkg/remote"
-	"github.com/cidx-org/cidx/v2/pkg/remote/github"
+	"github.com/cidx-org/cidx/v3/pkg/remote"
+	"github.com/cidx-org/cidx/v3/pkg/remote/github"
 	log "github.com/sirupsen/logrus"
 )
 
