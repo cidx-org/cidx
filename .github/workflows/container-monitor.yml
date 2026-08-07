@@ -405,15 +405,28 @@ jobs:
             git diff pkg/presets/presets.toml
           fi
 
-      # go test ./pkg/... includes TestCatalogueImagesArePinnedByDigest, the
-      # standing guard for rule 1 of the image supply-chain policy: if a
-      # promotion ever wrote a bare tag back into presets.toml, this fails and
-      # no PR is opened.
+      # SECURITY-BASELINE.md states findings per pinned image, so a promotion
+      # invalidates it by definition. The evidence is already here — the same
+      # scan-results/ the verdict above was reached from — and regenerating it
+      # by hand after the fact is what #382 recorded. Before the test step, so
+      # TestSecurityBaselineIsCurrent judges the regenerated file.
+      - name: Regenerate the security baseline
+        if: steps.promote.outputs.has_changes == 'true'
+        run: |
+          go build -o bin/cidx ./cmd/cidx
+          ./bin/cidx security baseline --results scan-results
+
+      # `./...`, not `./pkg/... ./cmd/...`. The narrow form is the one #357
+      # removed from the catalogue for skipping the root package and internal/,
+      # and this step had a copy of it — so it ran
+      # TestCatalogueImagesArePinnedByDigest (rule 1's guard, in pkg/presets)
+      # but not TestSecurityBaselineIsCurrent (in internal/commands), and
+      # opened a PR the repository's own CI then refused (#382).
       - name: Test build
         if: steps.promote.outputs.has_changes == 'true'
         run: |
           go build -o bin/cidx ./cmd/cidx
-          go test ./pkg/... ./cmd/...
+          go test ./...
           ./bin/cidx preset list > /dev/null
           echo "Build and tests passed" >> $GITHUB_STEP_SUMMARY
 
@@ -460,6 +473,7 @@ jobs:
           # default, so it stays closed.
           add-paths: |
             pkg/presets/presets.toml
+            SECURITY-BASELINE.md
             CHANGELOG.md
             VERSION
             .cz.toml

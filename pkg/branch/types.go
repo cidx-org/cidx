@@ -122,6 +122,11 @@ type PRChecksInfo struct {
 	// RunsInProgress carries remote.PRChecks.RunsInProgress through, so the
 	// branch views stop on the same condition the watchers do (issue #367).
 	RunsInProgress int
+	// WorkflowChecks counts the checks a workflow of the repository posted, as
+	// opposed to another app's (#257). Zero means CI has not started, which is
+	// not the same as finished — and a watch that cannot tell them apart calls
+	// an empty list a green run (issue #382).
+	WorkflowChecks int
 	Status         string // "success", "failure", "pending"
 	// Failed names the checks behind the Failure count. Without it "4/5
 	// passed" is a number with no way to act on it: which check, and whether

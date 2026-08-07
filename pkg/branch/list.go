@@ -419,6 +419,7 @@ func ChecksInfo(checks *remote.PRChecks) *PRChecksInfo {
 		Success:        checks.Success,
 		Failure:        checks.Failure,
 		RunsInProgress: checks.RunsInProgress,
+		WorkflowChecks: checks.WorkflowChecks,
 		Status:         checks.Status,
 		Failed:         failedChecks(checks),
 	}
@@ -429,6 +430,20 @@ func ChecksInfo(checks *remote.PRChecks) *PRChecksInfo {
 // exists has finished, and no run can still create another one (issue #367).
 func (c *PRChecksInfo) Complete() bool {
 	return c.Pending == 0 && c.RunsInProgress == 0
+}
+
+// Started reports whether a workflow of the repository has posted a check.
+//
+// Until it has, Complete() is true of an empty list and says nothing: `cidx pr
+// watch` printed "0/0 checks passed — All checks passed" seconds after a push,
+// and exited 0 (issue #382). `cpw` never had the problem because it waits for
+// this through the provider's WaitForChecksToStart first.
+//
+// A check posted by another app does not count, for the reason #257 gave:
+// GitHub attaches its dependabot config check to any PR touching
+// .github/dependabot.yml, long before a workflow is queued.
+func (c *PRChecksInfo) Started() bool {
+	return c.WorkflowChecks > 0
 }
 
 // failedChecks names the checks the provider counted as failures, so the count
