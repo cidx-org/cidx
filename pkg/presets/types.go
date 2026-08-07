@@ -9,23 +9,40 @@ import (
 
 // Preset defines a complete tool configuration with sensible defaults
 type Preset struct {
-	Name          string            `yaml:"name" toml:"name"`
-	Phase         string            `yaml:"phase" toml:"phase"`
-	Image         string            `yaml:"image" toml:"image"`
-	Description   string            `yaml:"description,omitempty" toml:"description,omitempty"` // Usage notes and constraints, shown by `preset info`
-	Hardened      bool              `yaml:"hardened,omitempty" toml:"hardened,omitempty"`       // Uses Docker Hardened Image (dhi.io)
-	Command       string            `yaml:"command" toml:"command"`
-	Entrypoint    []string          `yaml:"entrypoint" toml:"entrypoint"`
-	Workdir       string            `yaml:"workdir" toml:"workdir"`
-	Volumes       []string          `yaml:"volumes" toml:"volumes"`
-	Env           map[string]string `yaml:"env" toml:"env"`
-	ConfigFiles   []string          `yaml:"config_files" toml:"config_files"`
-	Options       map[string]Option `yaml:"options" toml:"options"`
-	RequireCI     bool              `yaml:"require_ci" toml:"require_ci"`                       // Requires CI environment
-	LocalBehavior string            `yaml:"local_behavior" toml:"local_behavior"`               // draft, no-push, dry-run, disabled
-	Privileged    bool              `yaml:"privileged,omitempty" toml:"privileged,omitempty"`   // Requires root privileges (skip user mapping)
-	PullPolicy    string            `yaml:"pull_policy,omitempty" toml:"pull_policy,omitempty"` // always, if-not-present, never (default: env-based)
-	Timeout       string            `yaml:"timeout,omitempty" toml:"timeout,omitempty"`         // duration string (e.g., "5m", "45m"), default: 30m
+	Name        string   `yaml:"name" toml:"name"`
+	Phase       string   `yaml:"phase" toml:"phase"`
+	Image       string   `yaml:"image" toml:"image"`
+	Description string   `yaml:"description,omitempty" toml:"description,omitempty"` // Usage notes and constraints, shown by `preset info`
+	Hardened    bool     `yaml:"hardened,omitempty" toml:"hardened,omitempty"`       // Uses Docker Hardened Image (dhi.io)
+	Command     string   `yaml:"command" toml:"command"`
+	Entrypoint  []string `yaml:"entrypoint" toml:"entrypoint"`
+	// ImageEntrypoint records the ENTRYPOINT the pinned image itself declares —
+	// not an override, a fact about the image. An empty slice means the image
+	// declares none; absent means nobody has recorded it yet.
+	//
+	// It exists so the rule of #338 can be checked offline. A command that
+	// repeats its image's entrypoint hands the tool its own name as an
+	// argument, and three presets shipped that way for as long as they existed
+	// — goreleaser, docker-buildx and commitlint (#278, #336) — because
+	// local_behavior short-circuits before the command reaches a container, so
+	// the presets most protected from doing damage were the least likely to be
+	// found broken.
+	//
+	// Derived data in a catalogue that avoids it, and justified the same way the
+	// pinned digest is: an entrypoint is a property *of that digest*, so it can
+	// only change when the digest does — through a promotion, the one gesture
+	// that already rewrites the image line.
+	ImageEntrypoint []string          `yaml:"image_entrypoint,omitempty" toml:"image_entrypoint,omitempty"`
+	Workdir         string            `yaml:"workdir" toml:"workdir"`
+	Volumes         []string          `yaml:"volumes" toml:"volumes"`
+	Env             map[string]string `yaml:"env" toml:"env"`
+	ConfigFiles     []string          `yaml:"config_files" toml:"config_files"`
+	Options         map[string]Option `yaml:"options" toml:"options"`
+	RequireCI       bool              `yaml:"require_ci" toml:"require_ci"`                       // Requires CI environment
+	LocalBehavior   string            `yaml:"local_behavior" toml:"local_behavior"`               // draft, no-push, dry-run, disabled
+	Privileged      bool              `yaml:"privileged,omitempty" toml:"privileged,omitempty"`   // Requires root privileges (skip user mapping)
+	PullPolicy      string            `yaml:"pull_policy,omitempty" toml:"pull_policy,omitempty"` // always, if-not-present, never (default: env-based)
+	Timeout         string            `yaml:"timeout,omitempty" toml:"timeout,omitempty"`         // duration string (e.g., "5m", "45m"), default: 30m
 }
 
 // Option defines a configurable parameter for a preset.
