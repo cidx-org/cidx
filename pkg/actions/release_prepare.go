@@ -61,6 +61,24 @@ const CommitLogFormat = "--pretty=format:%H|%s|%b<<<END>>>"
 // counted as breaking.
 var conventionalRe = regexp.MustCompile(`^(\w+)(?:\(([^)]+)\))?(!)?:\s*(.+)$`)
 
+// breakingFooterRe matches the footer Conventional Commits defines: at the
+// start of a line, and followed by a colon. `BREAKING-CHANGE:` is the spec's
+// own synonym, since a footer token may not contain spaces.
+//
+// Anchored because it was not, and a substring search over the whole body read
+// a sentence *about* the footer as one: "so a BREAKING CHANGE footer
+// mentioning another type in the body is not mistaken for the header" (#392)
+// moved the suggested version to 4.0.0 (issue #402). ParseCommit is the single
+// parser of the release flow, so one loose match moved it everywhere at once —
+// and the guard of #395 then refused the tag, which is how it was found.
+var breakingFooterRe = regexp.MustCompile(`(?m)^\s*BREAKING[ -]CHANGE\s*:`)
+
+// hasBreakingFooter reports a body carrying the footer, as opposed to prose
+// naming it. The `!` marker on the subject is read separately, in ParseCommit.
+func hasBreakingFooter(body string) bool {
+	return breakingFooterRe.MatchString(body)
+}
+
 // prRe matches a "(#123)" marker. The one a squash merge appends is the last
 // of the subject, not the first: a title is free to cite an issue or another
 // PR in its text, and GitHub adds its number after it (issue #376).
@@ -75,7 +93,7 @@ func ParseCommit(subject, body string) CommitInfo {
 		Type:     "other",
 		Subject:  subject,
 		Body:     body,
-		Breaking: strings.Contains(body, "BREAKING CHANGE"),
+		Breaking: hasBreakingFooter(body),
 	}
 
 	if m := conventionalRe.FindStringSubmatch(subject); m != nil {

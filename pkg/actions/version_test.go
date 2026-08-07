@@ -204,6 +204,37 @@ func TestParseCommit(t *testing.T) {
 			want:    CommitInfo{Type: "fix", Subject: "unrelated", Breaking: true},
 		},
 		{
+			// A footer arrives after the description, which is where every
+			// real one in this repository's history sits.
+			name:    "a footer after a paragraph",
+			subject: "feat: something",
+			body:    "Some explanation.\n\nBREAKING CHANGE: the flag is gone\n",
+			want:    CommitInfo{Type: "feat", Subject: "something", Breaking: true},
+		},
+		{
+			name:    "the hyphenated spelling the spec also defines",
+			subject: "feat: something",
+			body:    "BREAKING-CHANGE: the flag is gone",
+			want:    CommitInfo{Type: "feat", Subject: "something", Breaking: true},
+		},
+		{
+			// Issue #402, and the sentence that caused it: #392's body
+			// explains how a footer is read, and was read as one. cidx then
+			// suggested 4.0.0 for a history with nothing breaking in it.
+			name:    "a sentence naming the footer is not a footer",
+			subject: "feat(pr): warn when the commit and the PR title disagree",
+			body:    "The type is read from the first line, so a BREAKING CHANGE footer\nmentioning another type in the body is not mistaken for the header.\n",
+			want:    CommitInfo{Type: "feat", Scope: "pr", Subject: "warn when the commit and the PR title disagree"},
+		},
+		{
+			// The same trap one indent deeper: a quoted body, which the
+			// messages in this repository carry routinely.
+			name:    "the words inside a sentence, mid-line",
+			subject: "docs: explain the release flow",
+			body:    "Commitizen files a BREAKING CHANGE footer under its own heading.\n",
+			want:    CommitInfo{Type: "docs", Subject: "explain the release flow"},
+		},
+		{
 			// The number goes to PR and comes out of the subject: the notes
 			// print it themselves, and with the marker left in they named
 			// every PR twice (issue #376).
