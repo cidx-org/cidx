@@ -80,8 +80,8 @@ func (a *ArtifactDownloadAction) Execute(ctx context.Context) error {
 		return err
 	}
 
-	if err := os.MkdirAll(a.dir, 0o755); err != nil {
-		return fmt.Errorf("failed to create %s: %w", a.dir, err)
+	if err := a.claimDestination(); err != nil {
+		return err
 	}
 
 	log.Infof("📦 Downloading %d artifact(s) of run %s into %s", len(selected), a.runID, a.dir)
@@ -108,8 +108,64 @@ func (a *ArtifactDownloadAction) Execute(ctx context.Context) error {
 		return fmt.Errorf("nothing was extracted from the %d artifact(s) of run %s", len(selected), a.runID)
 	}
 
+	if err := os.WriteFile(filepath.Join(a.dir, runMarker), []byte(a.runID+"\n"), 0o600); err != nil {
+		return fmt.Errorf("failed to record which run %s holds: %w", a.dir, err)
+	}
+
 	fmt.Printf("\n✅ %d file(s) from %d artifact(s) in %s\n", files, len(selected)-skipped, a.dir)
 	fmt.Printf("   Read them with: cidx security vuln prune --results %s\n", a.dir)
+	return nil
+}
+
+// runMarker names the run whose evidence a destination holds. A dotfile, so
+// the readers -- which look results up by the image they are about -- never see
+// it, and outside the flat namespace an artifact entry could collide with.
+const runMarker = ".cidx-run"
+
+// claimDestination makes the destination hold this run's evidence and no other.
+//
+// Issue #359: the download used to write into whatever was there, so a previous
+// run's files survived beside the new ones -- 105 announced, 107 on disk. The
+// readers cannot tell them apart, because they look a result up by the image it
+// is about: a stale file for an image the catalogue still pins is read as
+// current, and the measurement is quietly wrong.
+//
+// Refusing every non-empty destination was not open: `scan-results` is the
+// default that `vuln prune`, `security baseline` and `security summary` share,
+// so reusing it is the ordinary flow rather than a mistake. What decides is
+// whose directory it is. A marker naming the run makes that answerable, and
+// only a directory carrying one is ever emptied -- a directory cidx did not
+// write may be anything, and is refused instead.
+func (a *ArtifactDownloadAction) claimDestination() error {
+	if err := os.MkdirAll(a.dir, 0o755); err != nil {
+		return fmt.Errorf("failed to create %s: %w", a.dir, err)
+	}
+
+	entries, err := os.ReadDir(a.dir)
+	if err != nil {
+		return fmt.Errorf("failed to read %s: %w", a.dir, err)
+	}
+	if len(entries) == 0 {
+		return nil
+	}
+
+	held, err := os.ReadFile(filepath.Join(a.dir, runMarker))
+	if err != nil {
+		return fmt.Errorf("%s is not empty and was not written by cidx, so it will not be emptied: "+
+			"point --output at a directory of its own, or clear this one yourself", a.dir)
+	}
+
+	if strings.TrimSpace(string(held)) == a.runID {
+		return nil
+	}
+
+	log.Infof("🧹 %s holds run %s — replacing it with run %s", a.dir, strings.TrimSpace(string(held)), a.runID)
+	for _, entry := range entries {
+		if err := os.RemoveAll(filepath.Join(a.dir, entry.Name())); err != nil {
+			return fmt.Errorf("failed to clear %s: %w", a.dir, err)
+		}
+	}
+
 	return nil
 }
 

@@ -44,7 +44,10 @@ func zipOf(t *testing.T, entries map[string]string) []byte {
 	return buf.Bytes()
 }
 
-// filesIn lists what the download left on disk, sorted.
+// filesIn lists the evidence the download left on disk, sorted. Dotfiles are
+// not evidence: the run marker of #359 is metadata about the directory, and
+// the readers -- which look a result up by the image it is about -- never see
+// it either.
 func filesIn(t *testing.T, dir string) []string {
 	t.Helper()
 
@@ -55,6 +58,9 @@ func filesIn(t *testing.T, dir string) []string {
 
 	var names []string
 	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
 		if entry.IsDir() {
 			names = append(names, entry.Name()+"/")
 			continue
