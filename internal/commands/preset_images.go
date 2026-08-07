@@ -130,6 +130,16 @@ type tagUpdate struct {
 	// other case, including the ordinary one where the family is simply at its
 	// own head.
 	Superseding string
+
+	// CurrentPublished is when the tag the catalogue pins was itself published.
+	//
+	// The cooldown reads the *candidate's* date and asks "is it old enough to
+	// trust?". Nobody was asking the mirror-image question — "is what we run
+	// suspiciously old?" — and four of the five images that reported "nothing
+	// to update" in #238 were in fact stale or abandoned, prettier by thirteen
+	// months. The listing carries a date per tag, so this costs no request
+	// (issue #282). Zero when the registry publishes none.
+	CurrentPublished time.Time
 }
 
 // getLatestTag fetches the latest tag for an image from its registry, together
@@ -196,11 +206,16 @@ func newestOf(currentTag string, listing tagListing, now time.Time) tagUpdate {
 	newest := presets.NewerTag(currentTag, listing.Tags, now)
 	if newest == "" {
 		return tagUpdate{
-			Latest:      currentTag,
-			Superseding: presets.SupersedingVariant(currentTag, listing.Tags),
+			Latest:           currentTag,
+			Superseding:      presets.SupersedingVariant(currentTag, listing.Tags),
+			CurrentPublished: listing.Published[currentTag],
 		}
 	}
-	return tagUpdate{Latest: newest, Published: listing.Published[newest]}
+	return tagUpdate{
+		Latest:           newest,
+		Published:        listing.Published[newest],
+		CurrentPublished: listing.Published[currentTag],
+	}
 }
 
 // registryDatesTags reports whether a registry says when a version became
@@ -700,6 +715,15 @@ type scanTarget struct {
 	// digest, and nothing here detects that (#328). Reported so the silence
 	// does not read as "up to date".
 	UnversionedTag bool `json:"unversioned_tag,omitempty"`
+
+	// StaleTag reports that the pinned tag has not been republished in over a
+	// year. Orthogonal to everything above: the image resolves, its family is
+	// alive, no newer version exists — and it may still be abandoned. The
+	// cooldown reads a candidate's date to ask whether it is old enough to
+	// trust; nothing asked whether what we run is suspiciously old, and four
+	// of the five images that reported "nothing to update" in #238 were stale
+	// (issue #282).
+	StaleTag string `json:"stale_tag,omitempty"`
 }
 
 // The two network calls scan-targets makes, as package variables so the
@@ -804,6 +828,14 @@ func buildScanTargets(imagePresets map[string][]string, affectingUs map[string][
 		imageRegistry, _ := parseRegistry(imageName)
 		update, err := latestTagFunc(imageName, currentTag, now)
 		latestTag, published := update.Latest, update.Published
+
+		// Asked outside the switch on purpose: an image can be at the head of
+		// its family, on a version no tag supersedes, and still be abandoned.
+		// The switch below decides what to promote; this says what to look at
+		// (#282).
+		if reason, stale := presets.StaleTag(update.CurrentPublished, now, currentTag); stale {
+			target.StaleTag = reason
+		}
 
 		switch {
 		case err != nil:

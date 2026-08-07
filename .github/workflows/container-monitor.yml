@@ -147,6 +147,20 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
 
+          # A pinned tag nobody has republished in over a year. Orthogonal to
+          # every section above: the image resolves, its family is alive, no
+          # newer version exists — and it may still be abandoned. Four of the
+          # five images that reported "nothing to update" in #238 were in this
+          # state, and every check answered that all was well (#282). Listed,
+          # not annotated, for the same reason as the section above: it is a
+          # standing property, not an event.
+          STALE=$(echo "$TARGETS_JSON" | jq -r '.[] | select(.stale_tag != null) | "- \(.current_image) — \(.stale_tag)"')
+          if [ -n "$STALE" ]; then
+            echo "### Pinned tag has not moved in a long time" >> $GITHUB_STEP_SUMMARY
+            echo "$STALE" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
           # Show current (nothing newer found)
           CURRENT=$(echo "$TARGETS_JSON" | jq -r '.[] | select(.is_update == false and .candidate_image == null and .newer_version == null and .frozen_variant == null and .unversioned_tag == null) | "- \(.scan_image)"')
           if [ -n "$CURRENT" ]; then
