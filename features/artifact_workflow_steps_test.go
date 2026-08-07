@@ -62,6 +62,10 @@ func RegisterArtifactWorkflowSteps(ctx *godog.ScenarioContext, tc *TestContext) 
 	})
 
 	ctx.Then(`^the results directory holds exactly:$`, tc.resultsDirectoryHoldsExactly)
+
+	// A results directory holds one run's evidence, never two (#359)
+	ctx.Given(`^the results directory holds the evidence of run "([^"]*)"$`, tc.resultsDirectoryHoldsRun)
+	ctx.Given(`^the results directory holds a file cidx did not write$`, tc.resultsDirectoryHoldsAForeignFile)
 	ctx.Then(`^"([^"]*)" holds "([^"]*)"$`, tc.resultFileHolds)
 	ctx.Then(`^the download is refused$`, tc.theRequestIsRefused)
 	ctx.Then(`^the rerun is refused$`, tc.theRequestIsRefused)
@@ -359,6 +363,22 @@ func captureOutput(fn func() error) (string, error) {
 	return <-done, runErr
 }
 
+// resultsDirectoryHoldsRun stages a destination as an earlier download left
+// it: one stale result, and the marker naming the run that wrote it (#359).
+func (tc *TestContext) resultsDirectoryHoldsRun(runID string) error {
+	dir := tc.resultsDir()
+	if err := os.WriteFile(filepath.Join(dir, "trivy-stale.json"), []byte("{}"), 0o600); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, ".cidx-run"), []byte(runID+"\n"), 0o600)
+}
+
+// resultsDirectoryHoldsAForeignFile stages a directory cidx never wrote: no
+// marker, so nothing there may be assumed to be disposable.
+func (tc *TestContext) resultsDirectoryHoldsAForeignFile() error {
+	return os.WriteFile(filepath.Join(tc.resultsDir(), "notes.txt"), []byte("mine"), 0o600)
+}
+
 func (tc *TestContext) resultsDirectoryHoldsExactly(table *godog.Table) error {
 	if tc.ExitCode != 0 {
 		return fmt.Errorf("the download failed: %s", tc.Output)
@@ -377,6 +397,10 @@ func (tc *TestContext) resultsDirectoryHoldsExactly(table *godog.Table) error {
 	var got []string
 	for _, entry := range entries {
 		name := entry.Name()
+		// The run marker of #359 is metadata, not evidence.
+		if strings.HasPrefix(name, ".") {
+			continue
+		}
 		if entry.IsDir() {
 			name += "/"
 		}

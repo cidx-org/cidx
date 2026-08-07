@@ -92,3 +92,51 @@ Feature: Fetching a run's artifacts from cidx
       When I download the artifacts of run "999"
       Then the download is refused
       And the refusal names "999"
+
+  Rule: A results directory holds one run's evidence, never two
+
+    # Issue #359. The download wrote into its destination without clearing it,
+    # so a previous run's files survived alongside the new ones — the command
+    # announced "105 file(s)" while 107 landed. Nothing downstream can tell
+    # them apart: `vuln prune`, `security baseline` and `security summary` look
+    # results up by the image they are about, so a stale file for an image the
+    # catalogue still pins is read as current and the measurement is quietly
+    # wrong. That is the class of error the whole suppression-evidence design
+    # (#311, #324, #333) exists to prevent.
+    #
+    # The destination is a fixed directory by default, so refusing every
+    # non-empty one would break the ordinary flow. What decides is whose
+    # directory it is: the download leaves a marker naming the run it wrote,
+    # and only a directory carrying that marker is ever emptied.
+
+    Scenario: Downloading another run replaces the evidence rather than mixing it
+      Given the results directory holds the evidence of run "700"
+      And run "724" produced artifacts:
+        | artifact | file              | content |
+        | trivy-0  | trivy-alpine.json | {}      |
+      When I download the artifacts of run "724"
+      Then the results directory holds exactly:
+        | trivy-alpine.json |
+
+    # Nothing is cleared here, and that is the point: what is already there is
+    # the same run's evidence, so a re-download adds to it rather than
+    # discarding a fetch that may have been partial.
+    Scenario: Downloading the same run again keeps what it already fetched
+      Given the results directory holds the evidence of run "724"
+      And run "724" produced artifacts:
+        | artifact | file              | content |
+        | trivy-0  | trivy-alpine.json | {}      |
+      When I download the artifacts of run "724"
+      Then the results directory holds exactly:
+        | trivy-alpine.json |
+        | trivy-stale.json  |
+
+    # A directory cidx did not write is never emptied: it may be anything.
+    Scenario: A directory that is not a results directory is left alone
+      Given the results directory holds a file cidx did not write
+      And run "724" produced artifacts:
+        | artifact | file              | content |
+        | trivy-0  | trivy-alpine.json | {}      |
+      When I download the artifacts of run "724"
+      Then the download is refused
+      And the refusal names "not written by cidx"
