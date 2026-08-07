@@ -1,4 +1,4 @@
-package main
+package guards
 
 import (
 	"io/fs"
@@ -16,7 +16,7 @@ import (
 // warning itself was exempt, because it named the deprecated form in order to
 // steer the user off it; with the tree gone there is nothing left to exempt.
 func TestNoDeprecatedActionHintsInGoSources(t *testing.T) {
-	err := filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(projectRoot, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}

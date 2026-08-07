@@ -1,7 +1,8 @@
-package main
+package guards
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -27,8 +28,8 @@ var scannerImages = []string{"aquasec/trivy:", "anchore/grype:"}
 // was skipped. So the invariant is pinned here rather than left to review.
 func TestScansCarryTheRunnerCredentials(t *testing.T) {
 	for _, workflow := range []string{
-		".github/workflows/security-audit.yml",
-		".github/workflows/container-monitor.yml",
+		filepath.Join(projectRoot, ".github/workflows/security-audit.yml"),
+		filepath.Join(projectRoot, ".github/workflows/container-monitor.yml"),
 	} {
 		content, err := os.ReadFile(workflow)
 		if err != nil {

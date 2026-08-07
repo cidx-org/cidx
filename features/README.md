@@ -132,9 +132,11 @@ Specifies how named pipelines execute their phases:
 
 ## Running Scenarios
 
-The suites live in the root package, together with the `*_steps_test.go` step
-definitions they need. Always name a package, never a single file:
-`go test ./features_test.go` fails to build with `undefined: RegisterCommonSteps`.
+The suites live in this directory, together with the `*_steps_test.go` step
+definitions they need — a scenario and the code implementing it are one `ls`
+apart. Always name a package, never a single file:
+`go test ./features/features_test.go` fails to build with
+`undefined: RegisterCommonSteps`.
 
 ### Run All Scenarios
 
@@ -182,10 +184,11 @@ cidx run test
 ```
 
 The test phase runs the `go-test` preset, whose command is `go test -v ./...`.
-It reaches the root package, which is where these suites live. It used to run
-`./pkg/... ./cmd/...` and reach neither them nor `internal/commands`, so
-`cidx.toml` repaired it with an override; #357 fixed the catalogue instead, on
-the grounds that a default every project has to repair is not a default.
+It reaches every package, this one included. It used to run
+`./pkg/... ./cmd/...` and reach neither these suites — which then sat in the
+repository root — nor `internal/commands`, so `cidx.toml` repaired it with an
+override; #357 fixed the catalogue instead, on the grounds that a default every
+project has to repair is not a default.
 
 ## Writing New Scenarios
 

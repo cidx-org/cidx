@@ -16,8 +16,8 @@ const projectRoot = "../.."
 // TestTheTestPhaseRunsEveryPackageThatHasTests is the standing guard behind
 // issue #344.
 //
-// The godog suites live in the root package (#271) and, since #317, every CLI
-// test lives in `internal/commands`. The `go-test` preset ran
+// The godog suites live in `features/` and, since #317, every CLI test lives
+// in `internal/commands`. The `go-test` preset ran
 // `go test -v ./pkg/... ./cmd/...` and reached neither, so this repository
 // repaired it with a one-line override; #357 widened the catalogue to `./...`
 // and the override is gone. Narrowing the resolved command — in the preset now,
@@ -30,11 +30,12 @@ const projectRoot = "../.."
 // `TestNoTestPresetRunsOnlyPartOfTheProject`, in `pkg/presets`, states the rule
 // for the catalogue itself and for every project that uses it.
 //
-// The guard lives here, under ./pkg/..., and not next to the project-level
-// guards in the root package, on purpose: the command it checks is what decides
-// whether the root package is compiled at all, so a guard placed there would be
-// skipped by the exact narrowing it exists to catch and CI would stay green
-// twice over. Under ./pkg/... it runs whatever the command has been reduced to.
+// The guard lives here, under ./pkg/..., and not with the repository-wide
+// guards of internal/guards, on purpose: the command it checks decides which
+// packages are compiled at all, so a guard placed in a package that command can
+// stop naming would be skipped by the exact narrowing it exists to catch, and
+// CI would stay green twice over. Under ./pkg/... it survives whatever the
+// command has been reduced to.
 func TestTheTestPhaseRunsEveryPackageThatHasTests(t *testing.T) {
 	cfg, err := Load(filepath.Join(projectRoot, "cidx.toml"))
 	if err != nil {
@@ -60,7 +61,7 @@ func TestTheTestPhaseRunsEveryPackageThatHasTests(t *testing.T) {
 				continue
 			}
 			t.Errorf("[containers.%s] resolves to %q, which does not run %s — the tests there would never run in CI (#344). "+
-				"`./...` is what covers every package, the root godog suite and internal/commands included.",
+				"`./...` is what covers every package, features/ and internal/commands included.",
 				container, command, spell(pkg))
 		}
 	}

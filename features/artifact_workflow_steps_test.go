@@ -6,7 +6,7 @@
 //
 //go:debug zipinsecurepath=0
 
-package main
+package features
 
 import (
 	"archive/zip"

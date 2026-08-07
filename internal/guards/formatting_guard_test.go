@@ -1,6 +1,7 @@
-package main
+package guards
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -31,7 +32,7 @@ var writeFlags = []string{"--write", "--fix"}
 // checks, it does not write. Writing lives in the `format` phase, which no
 // pipeline lists, and this test is also what keeps it out of one.
 func TestCheckingPhasesNeverWrite(t *testing.T) {
-	cfg, err := config.Load("cidx.toml")
+	cfg, err := config.Load(filepath.Join(projectRoot, "cidx.toml"))
 	if err != nil {
 		t.Fatalf("failed to load cidx.toml: %v", err)
 	}
