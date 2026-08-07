@@ -454,7 +454,20 @@ jobs:
         if: steps.promote.outputs.has_changes == 'true' && !inputs.dry_run
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # A pull request opened with GITHUB_TOKEN starts no workflows —
+          # GitHub's anti-recursion rule — so the promotion PR of #381 arrived
+          # with no checks at all, and `cidx pr merge` would have waved it
+          # through on "No workflow checks on this commit" (#259's warning
+          # doing its job on a PR nobody had validated). A PAT is the
+          # documented way out: the PR is opened as a user, so `pull_request`
+          # workflows run on it (#382).
+          #
+          # The fallback keeps the monitor working before the secret exists and
+          # if it ever expires: an unset secret is an empty string, which is
+          # falsy, so this degrades to exactly today's behaviour — a PR with no
+          # checks — rather than failing the run. What tells you the token
+          # lapsed is the PR showing up unchecked again.
+          token: ${{ secrets.PROMOTION_PR_TOKEN || secrets.GITHUB_TOKEN }}
           # What a promotion legitimately touches: the image bump itself, and
           # whatever `cz bump --changelog` rewrites above (version_files in
           # .cz.toml, plus the changelog). Everything else in this workspace is
