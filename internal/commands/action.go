@@ -13,6 +13,24 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+// commitPushWatchAction resolves the remote before anything happens, and that
+// is a decision rather than an oversight (issue #358).
+//
+// The eager-provider sweeps of #227, #350 and #356 moved every other command to
+// withRepoAndLazyProvider: a command whose local-only steps never reach the
+// remote must not fail on an unusable one. cpw looks like the last of that
+// family and is deliberately not treated as one, because deferring here would
+// not move construction — it would change what an unusable remote *means* for a
+// command that has already mutated the repository.
+//
+// cpw's contract is commit, push and watch. Lazily, an unparseable origin or an
+// expired token would leave a commit made and a push attempted, then fail; the
+// user would be somewhere they did not ask to be, after the side effects rather
+// than before. Failing first leaves the working tree exactly as it was, with
+// nothing to amend or reset — the same posture #307 chose for the code phase,
+// which runs before the commit for that reason.
+//
+// TestCPWRefusesBeforeTouchingTheRepository holds the line.
 func commitPushWatchAction(c *cli.Context) error {
 	return withRepoAndProvider(func(repo *vcs.Repository, provider remote.Provider) error {
 		action := actions.NewCommitPushWatch(repo, provider, c.String("message"), !c.Bool("no-verify"))
