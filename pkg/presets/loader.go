@@ -23,23 +23,24 @@ type PresetsFile struct {
 
 // PresetTOML represents a preset in TOML format
 type PresetTOML struct {
-	Name          string                `toml:"name"`
-	Phase         string                `toml:"phase"`
-	Image         string                `toml:"image"`
-	Description   string                `toml:"description"`
-	Hardened      bool                  `toml:"hardened"`
-	Command       string                `toml:"command"`
-	Entrypoint    []string              `toml:"entrypoint"`
-	Workdir       string                `toml:"workdir"`
-	Volumes       []string              `toml:"volumes"`
-	Env           map[string]string     `toml:"env"`
-	ConfigFiles   []string              `toml:"config_files"`
-	Options       map[string]OptionTOML `toml:"options"`
-	RequireCI     bool                  `toml:"require_ci"`
-	LocalBehavior string                `toml:"local_behavior"`
-	Privileged    bool                  `toml:"privileged"`
-	PullPolicy    string                `toml:"pull_policy"`
-	Timeout       string                `toml:"timeout"`
+	Name            string                `toml:"name"`
+	Phase           string                `toml:"phase"`
+	Image           string                `toml:"image"`
+	Description     string                `toml:"description"`
+	Hardened        bool                  `toml:"hardened"`
+	Command         string                `toml:"command"`
+	Entrypoint      []string              `toml:"entrypoint"`
+	ImageEntrypoint []string              `toml:"image_entrypoint"`
+	Workdir         string                `toml:"workdir"`
+	Volumes         []string              `toml:"volumes"`
+	Env             map[string]string     `toml:"env"`
+	ConfigFiles     []string              `toml:"config_files"`
+	Options         map[string]OptionTOML `toml:"options"`
+	RequireCI       bool                  `toml:"require_ci"`
+	LocalBehavior   string                `toml:"local_behavior"`
+	Privileged      bool                  `toml:"privileged"`
+	PullPolicy      string                `toml:"pull_policy"`
+	Timeout         string                `toml:"timeout"`
 }
 
 // OptionTOML represents an option in TOML format.
@@ -158,23 +159,24 @@ func parsePresetsData(data []byte, source string) (map[string]Preset, error) {
 	registry := make(map[string]Preset)
 	for name, tomlPreset := range presetsFile.Presets {
 		preset := Preset{
-			Name:          tomlPreset.Name,
-			Phase:         tomlPreset.Phase,
-			Image:         tomlPreset.Image,
-			Description:   tomlPreset.Description,
-			Hardened:      tomlPreset.Hardened,
-			Command:       tomlPreset.Command,
-			Entrypoint:    tomlPreset.Entrypoint,
-			Workdir:       tomlPreset.Workdir,
-			Volumes:       tomlPreset.Volumes,
-			Env:           tomlPreset.Env,
-			ConfigFiles:   tomlPreset.ConfigFiles,
-			Options:       make(map[string]Option),
-			RequireCI:     tomlPreset.RequireCI,
-			LocalBehavior: tomlPreset.LocalBehavior,
-			Privileged:    tomlPreset.Privileged,
-			PullPolicy:    tomlPreset.PullPolicy,
-			Timeout:       tomlPreset.Timeout,
+			Name:            tomlPreset.Name,
+			Phase:           tomlPreset.Phase,
+			Image:           tomlPreset.Image,
+			Description:     tomlPreset.Description,
+			Hardened:        tomlPreset.Hardened,
+			Command:         tomlPreset.Command,
+			Entrypoint:      tomlPreset.Entrypoint,
+			ImageEntrypoint: tomlPreset.ImageEntrypoint,
+			Workdir:         tomlPreset.Workdir,
+			Volumes:         tomlPreset.Volumes,
+			Env:             tomlPreset.Env,
+			ConfigFiles:     tomlPreset.ConfigFiles,
+			Options:         make(map[string]Option),
+			RequireCI:       tomlPreset.RequireCI,
+			LocalBehavior:   tomlPreset.LocalBehavior,
+			Privileged:      tomlPreset.Privileged,
+			PullPolicy:      tomlPreset.PullPolicy,
+			Timeout:         tomlPreset.Timeout,
 		}
 
 		// Convert options
