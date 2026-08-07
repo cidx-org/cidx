@@ -96,6 +96,14 @@ type Provider interface {
 	// Empty strings leave the corresponding field unchanged.
 	UpdatePullRequest(ctx context.Context, prNumber int, title, body string) error
 
+	// GetPullRequestTitle returns the title of a pull request.
+	//
+	// The interface could write a title before it could read one, which is how
+	// a mistyped conventional-commit type survived to the release: the squash
+	// subject comes from the title, and the title is the last thing anyone
+	// re-reads (issue #361).
+	GetPullRequestTitle(ctx context.Context, prNumber int) (string, error)
+
 	// GetPullRequestChecks returns the status of all checks/workflows for a PR
 	GetPullRequestChecks(ctx context.Context, prNumber int) (*PRChecks, error)
 

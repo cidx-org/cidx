@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cidx-org/cidx/v2/pkg/remote"
@@ -159,6 +160,65 @@ func (a *CommitPushWatchAction) runVerification(ctx context.Context) error {
 	return verificationOutcome(verifyBeforePush(ctx))
 }
 
+// warnOnTypeMismatch says so when the commit just pushed and the pull request
+// it lands in disagree about what kind of change this is.
+//
+// The type is a guess made at the moment you know the least about a change --
+// before writing it -- so getting it wrong is ordinary. What is not ordinary is
+// how it surfaces: `pr merge` squashes under the *title*, commitizen files the
+// changelog from the squash subject, and nobody re-reads a title. A change
+// started as `feat`, discovered to be a `fix`, and committed as one would still
+// have been released under Features (issue #361).
+//
+// A warning rather than a refusal: the commit is already pushed, both readings
+// are legitimate mid-branch, and the fix is one `cidx pr edit --title` away.
+// Best-effort too — a title that cannot be read is not a reason to fail a watch
+// that is otherwise fine.
+func (a *CommitPushWatchAction) warnOnTypeMismatch(ctx context.Context, prNumber int) {
+	title, err := a.provider.GetPullRequestTitle(ctx, prNumber)
+	if err != nil {
+		return
+	}
+
+	commitType, titleType, differ := typesDiffer(a.message, title)
+	if !differ {
+		return
+	}
+
+	log.Warnf("⚠️  This commit is a '%s', the pull request is titled '%s'", commitType, titleType)
+	log.Warnf("   The squash subject comes from the title, and the changelog from the squash subject,")
+	log.Warnf("   so the release would file this under '%s'. Retitle it with: cidx pr edit --title \"...\"", titleType)
+}
+
+// typesDiffer reports the conventional-commit types of a commit message and a
+// pull request title when they disagree.
+//
+// Both have to be recognisable for the comparison to mean anything: a title
+// that is not conventional carries no claim to contradict, and neither does a
+// commit message. Scope and the breaking marker are deliberately not compared —
+// only the type decides the changelog section.
+func typesDiffer(message, title string) (commitType, titleType string, differ bool) {
+	commitType = conventionalType(message)
+	titleType = conventionalType(title)
+
+	if commitType == "" || titleType == "" || commitType == titleType {
+		return "", "", false
+	}
+
+	return commitType, titleType, true
+}
+
+// conventionalType returns the type of a conventional-commit header, or "" when
+// the first line is not one.
+func conventionalType(text string) string {
+	first, _, _ := strings.Cut(strings.TrimSpace(text), "\n")
+	if m := conventionalTypeRe.FindStringSubmatch(strings.TrimSpace(first)); m != nil {
+		return m[1]
+	}
+
+	return ""
+}
+
 // watchCI finds the PR for branch, waits for CI checks to start on the
 // pushed commit, then streams check updates until completion.
 //
@@ -202,6 +262,8 @@ func (a *CommitPushWatchAction) watchCI(ctx context.Context, branch, pushedSHA s
 	}
 	log.Infof("📍 Watching CI for commit %s", shortSHA)
 	log.Infof("🔗 %s", prURL)
+
+	a.warnOnTypeMismatch(ctx, prNumber)
 
 	displayChecksStatus(checks)
 

@@ -453,6 +453,21 @@ func (c *Client) MergePullRequest(ctx context.Context, prNumber int, method stri
 	return nil
 }
 
+// GetPullRequestTitle returns the title of a merge request.
+//
+// GitLab prefixes a draft's title with "Draft: ", which is the platform's
+// marker rather than part of what the author wrote — UpdatePullRequest below
+// re-applies it for the same reason. It is stripped here so a caller reading
+// the title reads the title.
+func (c *Client) GetPullRequestTitle(ctx context.Context, prNumber int) (string, error) {
+	mr, _, err := c.client.MergeRequests.GetMergeRequest(c.projectID, int64(prNumber), nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to get merge request: %w", err)
+	}
+
+	return strings.TrimPrefix(mr.Title, "Draft: "), nil
+}
+
 // UpdatePullRequest updates the title and/or description of a merge request.
 // Empty strings leave the corresponding field unchanged. The "Draft: " title
 // prefix is preserved so retitling a draft MR does not mark it ready.

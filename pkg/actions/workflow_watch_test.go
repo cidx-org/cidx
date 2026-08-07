@@ -179,6 +179,10 @@ func (f *fakeProvider) WatchPullRequestChecks(_ context.Context, _ int) (<-chan 
 	panic("not implemented in fake")
 }
 
+func (f *fakeProvider) GetPullRequestTitle(_ context.Context, _ int) (string, error) {
+	return "", nil
+}
+
 // Compile-time assertion that fakeProvider satisfies remote.Provider.
 var _ remote.Provider = (*fakeProvider)(nil)
 
