@@ -49,9 +49,12 @@ Feature: Presets Leave The Workspace As They Found It
     # such an image clears the entrypoint on purpose, the way gh-release and
     # commitizen do; these do not.
 
+    # The range is shown resolved, which is what the container is handed: the
+    # preset declares FROM and TO as defaults, and since #384 a scenario sees
+    # the same expansion the executor performs.
     Scenario: commitlint receives a commit range, not its own name
       When I resolve the preset "commitlint" without overrides
-      Then the resolved command should be "--default-config --from ${FROM} --to ${TO}"
+      Then the resolved command should be "--default-config --from origin/main --to HEAD"
 
     Scenario: goreleaser receives a subcommand, not its own name
       When I resolve the preset "goreleaser" without overrides

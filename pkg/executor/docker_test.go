@@ -246,49 +246,6 @@ func TestExpandVolumes(t *testing.T) {
 	}
 }
 
-func TestExpandCommand(t *testing.T) {
-	tests := []struct {
-		name    string
-		command string
-		env     map[string]string
-		want    string
-	}{
-		{
-			"simple substitution",
-			"trivy fs --severity ${SEVERITY} .",
-			map[string]string{"SEVERITY": "HIGH"},
-			"trivy fs --severity HIGH .",
-		},
-		{
-			"no substitution",
-			"trivy scan .",
-			map[string]string{"UNUSED": "val"},
-			"trivy scan .",
-		},
-		{
-			"multiple substitutions",
-			"${TOOL} ${ACTION}",
-			map[string]string{"TOOL": "trivy", "ACTION": "scan"},
-			"trivy scan",
-		},
-		{
-			"shell command preserves structure",
-			"sh -c 'echo ${MSG}'",
-			map[string]string{"MSG": "hello"},
-			"sh -c 'echo hello'",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := expandCommand(tt.command, tt.env)
-			if got != tt.want {
-				t.Errorf("expandCommand(%q, %v) = %q, want %q", tt.command, tt.env, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestIsUnauthorizedError(t *testing.T) {
 	tests := []struct {
 		name string

@@ -519,9 +519,12 @@ func (r *Runner) expandWorkspace(volumes []string) []string {
 
 // printLocalSafetyDryRun shows what would be executed in local safety mode
 func (r *Runner) printLocalSafetyDryRun(containerConfig *config.ContainerConfig) {
+	// Resolved the way the executor resolves it, or the preview would answer a
+	// different question than the run: it printed the preset's declared
+	// IMAGE_TAG while the container was handed the exported one (issue #384).
 	r.logger.Infof("  ⚠️  Would execute (local safety - not running):")
 	r.logger.Infof("     Image: %s", containerConfig.Image)
-	r.logger.Infof("     Command: %s", containerConfig.Command)
+	r.logger.Infof("     Command: %s", presets.ExpandCommand(containerConfig.Command, containerConfig.Env))
 	r.logger.Infof("     Workdir: %s", containerConfig.Workdir)
 
 	if len(containerConfig.Volumes) > 0 {
@@ -536,7 +539,7 @@ func (r *Runner) printLocalSafetyDryRun(containerConfig *config.ContainerConfig)
 	if len(containerConfig.Env) > 0 {
 		r.logger.Infof("     Environment:")
 		for _, k := range slices.Sorted(maps.Keys(containerConfig.Env)) {
-			r.logger.Infof("       %s=%s", k, containerConfig.Env[k])
+			r.logger.Infof("       %s=%s", k, presets.ResolveEnvValue(k, containerConfig.Env[k]))
 		}
 	}
 
