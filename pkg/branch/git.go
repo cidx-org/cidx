@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cidx-org/cidx/v2/pkg/vcs"
+	"github.com/cidx-org/cidx/v3/pkg/vcs"
 )
 
 // GitBranch represents raw git branch data

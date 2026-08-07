@@ -1,4 +1,4 @@
-module github.com/cidx-org/cidx/v2
+module github.com/cidx-org/cidx/v3
 
 go 1.26
 

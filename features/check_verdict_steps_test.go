@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cidx-org/cidx/v2/internal/commands"
+	"github.com/cidx-org/cidx/v3/internal/commands"
 	"github.com/cucumber/godog"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"

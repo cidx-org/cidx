@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cidx-org/cidx/v2/pkg/config"
+	"github.com/cidx-org/cidx/v3/pkg/config"
 )
 
 func TestGitHub_NoPipelines(t *testing.T) {
@@ -205,7 +205,7 @@ func TestGitHub_DefaultIsExternal(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if !strings.Contains(output, "go install github.com/cidx-org/cidx/v2/cmd/cidx@latest") {
+	if !strings.Contains(output, "go install github.com/cidx-org/cidx/v3/cmd/cidx@latest") {
 		t.Error("default bootstrap should use `go install`, got:\n" + output)
 	}
 	if strings.Contains(output, "go build -o bin/cidx ./cmd/cidx") {
@@ -293,7 +293,7 @@ func TestIsCidxRepo(t *testing.T) {
 				if err := os.WriteFile(filepath.Join(cmdDir, "main.go"), []byte("package main\n"), 0644); err != nil {
 					t.Fatal(err)
 				}
-				gomod := "module github.com/cidx-org/cidx/v2\n\ngo 1.23\n"
+				gomod := "module github.com/cidx-org/cidx/v3\n\ngo 1.23\n"
 				if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(gomod), 0644); err != nil {
 					t.Fatal(err)
 				}
@@ -415,7 +415,7 @@ func TestGitHub_BootstrapPinsGeneratingVersion(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if !strings.Contains(output, "go install github.com/cidx-org/cidx/v2/cmd/cidx@v1.7.0") {
+	if !strings.Contains(output, "go install github.com/cidx-org/cidx/v3/cmd/cidx@v1.7.0") {
 		t.Error("release build should pin bootstrap to its own version, got:\n" + output)
 	}
 	if strings.Contains(output, "@latest") {
@@ -440,7 +440,7 @@ func TestGitHub_DevBuildFallsBackToLatest(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if !strings.Contains(output, "go install github.com/cidx-org/cidx/v2/cmd/cidx@latest") {
+	if !strings.Contains(output, "go install github.com/cidx-org/cidx/v3/cmd/cidx@latest") {
 		t.Error("dev build should fall back to @latest, got:\n" + output)
 	}
 }

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cidx-org/cidx/v2/pkg/generate"
+	"github.com/cidx-org/cidx/v3/pkg/generate"
 	"github.com/cucumber/godog"
 	"github.com/urfave/cli/v2"
 	"gopkg.in/yaml.v3"

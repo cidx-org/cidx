@@ -3,7 +3,7 @@ package environment
 import (
 	"fmt"
 
-	"github.com/cidx-org/cidx/v2/pkg/presets"
+	"github.com/cidx-org/cidx/v3/pkg/presets"
 )
 
 // removedBehaviorNoPush is not a mode, it is a value CIDX still recognises in

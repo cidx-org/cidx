@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/cidx-org/cidx/v2/pkg/generate"
+	"github.com/cidx-org/cidx/v3/pkg/generate"
 	"github.com/urfave/cli/v2"
 )
 

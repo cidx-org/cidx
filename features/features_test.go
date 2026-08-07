@@ -9,7 +9,7 @@ import (
 	"github.com/cucumber/godog"
 	"github.com/cucumber/godog/colors"
 
-	"github.com/cidx-org/cidx/v2/pkg/executor"
+	"github.com/cidx-org/cidx/v3/pkg/executor"
 )
 
 // Test repository configuration

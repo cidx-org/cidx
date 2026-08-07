@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/cidx-org/cidx/v2/pkg/config"
-	"github.com/cidx-org/cidx/v2/pkg/executor"
-	"github.com/cidx-org/cidx/v2/pkg/pipeline"
+	"github.com/cidx-org/cidx/v3/pkg/config"
+	"github.com/cidx-org/cidx/v3/pkg/executor"
+	"github.com/cidx-org/cidx/v3/pkg/pipeline"
 )
 
 // The two ways the pre-push check has nothing to say. Both let the push

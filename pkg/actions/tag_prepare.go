@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cidx-org/cidx/v2/pkg/config"
-	"github.com/cidx-org/cidx/v2/pkg/vcs"
+	"github.com/cidx-org/cidx/v3/pkg/config"
+	"github.com/cidx-org/cidx/v3/pkg/vcs"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -81,6 +81,14 @@ func (a *TagPrepareAction) Execute(ctx context.Context) error {
 		return fmt.Errorf("failed to save version: %w", err)
 	}
 	log.Infof("✓ Target version saved to %s", TagVersionFile)
+
+	// Reported here as well as refused at `tag create`, so a major that cannot
+	// be published is known while the release is still being prepared rather
+	// than at the last step (#395). A warning, because prepare only writes a
+	// file: what is being prepared may well be the commit that fixes it.
+	if err := CheckModuleMajor(workDir, nextVersion); err != nil {
+		log.Warnf("⚠️  %v", err)
+	}
 
 	if err := SaveTagMessage(workDir, message); err != nil {
 		return fmt.Errorf("failed to save message: %w", err)

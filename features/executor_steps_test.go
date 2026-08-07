@@ -6,9 +6,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/cidx-org/cidx/v2/pkg/config"
-	"github.com/cidx-org/cidx/v2/pkg/executor"
-	"github.com/cidx-org/cidx/v2/pkg/presets"
+	"github.com/cidx-org/cidx/v3/pkg/config"
+	"github.com/cidx-org/cidx/v3/pkg/executor"
+	"github.com/cidx-org/cidx/v3/pkg/presets"
 	"github.com/cucumber/godog"
 )
 

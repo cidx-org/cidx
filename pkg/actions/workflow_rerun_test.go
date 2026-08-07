@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cidx-org/cidx/v2/pkg/remote"
+	"github.com/cidx-org/cidx/v3/pkg/remote"
 )
 
 // failedRun is the shape #342 is about: one job of a run died on the

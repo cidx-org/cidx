@@ -6,7 +6,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cidx-org/cidx/v2/pkg/presets"
+	"github.com/cidx-org/cidx/v3/pkg/presets"
 	"github.com/urfave/cli/v2"
 )
 

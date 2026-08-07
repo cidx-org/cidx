@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cidx-org/cidx/v2/pkg/registry"
+	"github.com/cidx-org/cidx/v3/pkg/registry"
 )
 
 // stubRuntimeProbes replaces the environment probes for the duration of a test.

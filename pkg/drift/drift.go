@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cidx-org/cidx/v2/pkg/config"
+	"github.com/cidx-org/cidx/v3/pkg/config"
 	"gopkg.in/yaml.v3"
 )
 

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cidx-org/cidx/v2/pkg/remote"
+	"github.com/cidx-org/cidx/v3/pkg/remote"
 )
 
 // zipOf builds an artifact archive from a name/content map. Nothing here

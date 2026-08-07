@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cidx-org/cidx/v2/pkg/config"
-	"github.com/cidx-org/cidx/v2/pkg/vcs"
+	"github.com/cidx-org/cidx/v3/pkg/config"
+	"github.com/cidx-org/cidx/v3/pkg/vcs"
 	log "github.com/sirupsen/logrus"
 )
 

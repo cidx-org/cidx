@@ -21,9 +21,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cidx-org/cidx/v2/internal/commands"
-	"github.com/cidx-org/cidx/v2/pkg/actions"
-	"github.com/cidx-org/cidx/v2/pkg/remote"
+	"github.com/cidx-org/cidx/v3/internal/commands"
+	"github.com/cidx-org/cidx/v3/pkg/actions"
+	"github.com/cidx-org/cidx/v3/pkg/remote"
 	"github.com/cucumber/godog"
 	"github.com/urfave/cli/v2"
 )

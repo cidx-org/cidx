@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cidx-org/cidx/v2/internal/commands"
+	"github.com/cidx-org/cidx/v3/internal/commands"
 	"github.com/urfave/cli/v2"
 )
 

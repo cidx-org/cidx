@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cidx-org/cidx/v2/pkg/branch"
+	"github.com/cidx-org/cidx/v3/pkg/branch"
 	"github.com/cucumber/godog"
 )
 

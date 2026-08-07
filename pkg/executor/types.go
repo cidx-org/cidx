@@ -3,7 +3,7 @@ package executor
 import (
 	"context"
 
-	"github.com/cidx-org/cidx/v2/pkg/config"
+	"github.com/cidx-org/cidx/v3/pkg/config"
 )
 
 // Executor defines the interface for executing tools in containers

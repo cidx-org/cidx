@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cidx-org/cidx/v2/pkg/remote"
+	"github.com/cidx-org/cidx/v3/pkg/remote"
 )
 
 // TestFailedChecks_MirrorsTheProviderCount covers #347: the names printed under
