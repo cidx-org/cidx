@@ -1,4 +1,4 @@
-package main
+package guards
 
 import (
 	"os"
@@ -34,7 +34,7 @@ const createPullRequestAction = "uses: peter-evans/create-pull-request@"
 // So the invariant is pinned here: any step that opens a PR from a runner
 // workspace states which paths it commits.
 func TestPullRequestActionsNameWhatTheyCommit(t *testing.T) {
-	workflows, err := filepath.Glob(filepath.Join(".github", "workflows", "*.yml"))
+	workflows, err := filepath.Glob(filepath.Join(projectRoot, ".github", "workflows", "*.yml"))
 	if err != nil {
 		t.Fatalf("failed to list the workflows: %v", err)
 	}

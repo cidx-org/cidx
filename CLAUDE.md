@@ -127,11 +127,11 @@ If a command is missing, broken, or has bad UX -- **that becomes the next priori
 **BDD (Gherkin + godog)** -- System-level behavior:
 
 - Feature files in `features/` organized by domain (events, security, pipelines, presets, executor)
-- Step definitions in `*_steps_test.go` at project root
+- Step definitions in `features/*_steps_test.go`, beside the `.feature` files they implement
 - Simulation engine (no real Docker needed to run specs)
 - `Strict: true` for unit scenarios, `Strict: false` only for `@docker-required` scenarios
-- `TestFeatures` (strict, 342 scenarios) and `TestFeaturesDocker` (best-effort, 19 scenarios, skipped when no container runtime answers)
-- The suites live in the **root package**, which the `go-test` preset used to skip — along with `internal/commands`, where every CLI test has lived since #317. `cidx.toml` carried an override to put them back until #357 moved the fix into the catalogue: the preset says `go test -v ./...` now and this repository states no command at all. Two guards keep it that way — `TestNoTestPresetRunsOnlyPartOfTheProject` (in `pkg/presets`) fails on a catalogue test preset that names a subtree, and `TestTheTestPhaseRunsEveryPackageThatHasTests` (in `pkg/config`, so that it still runs under a narrowed command) fails when the resolved command stops covering a package that holds tests (#344)
+- `TestFeatures` (strict, 349 scenarios) and `TestFeaturesDocker` (best-effort, 19 scenarios, skipped when no container runtime answers)
+- The suites live in **`features/`**, the package that also holds the `.feature` files: a scenario and the step that implements it are one `ls` apart. They used to sit in a root `package main` with no source file in it, which the `go-test` preset then skipped — along with `internal/commands`, where every CLI test has lived since #317. `cidx.toml` carried an override to put them back until #357 moved the fix into the catalogue: the preset says `go test -v ./...` now and this repository states no command at all. Two guards keep it that way — `TestNoTestPresetRunsOnlyPartOfTheProject` (in `pkg/presets`) fails on a catalogue test preset that names a subtree, and `TestTheTestPhaseRunsEveryPackageThatHasTests` (in `pkg/config`) fails when the resolved command stops covering a package that holds tests (#344)
 - Scenarios that describe the CLI import `internal/commands` and resolve against `commands.NewApp()` — the real tree, never a copy of it (#317)
 
 **Unit tests** -- Package-level correctness:
@@ -139,7 +139,7 @@ If a command is missing, broken, or has bad UX -- **that becomes the next priori
 - Standard Go `*_test.go` files in each package
 - Focus on edge cases and error paths that BDD doesn't cover
 
-**Test playground**: `cidx-org/cidx-test-playground` on GitHub -- used for integration tests that need a real remote repo (PR creation, artifact management, workflow watching). Referenced in `features_test.go`.
+**Test playground**: `cidx-org/cidx-test-playground` on GitHub -- used for integration tests that need a real remote repo (PR creation, artifact management, workflow watching). Referenced in `features/features_test.go`.
 
 **The hierarchy**: BDD scenarios define WHAT the system does. Unit tests verify HOW individual pieces work. BDD comes first.
 
@@ -167,12 +167,18 @@ internal/
     repo.go      cidx repo — PR, cpw, branch, workflow, artifact, cleanup
     release_cmd.go cidx release — prepare, preview, create, commit, tag
     security_cmd.go cidx security — vuln, registry
+  guards/        Repository-wide invariants, tests only (locale, hints, phases)
   tui/           Shared terminal styles
 
 cmd/cidx/        main() and the `Version` ldflags symbol — nothing else
-features/        BDD scenarios (Gherkin)
+features/        BDD scenarios (Gherkin) and the steps that run them
 docs/            Project documentation
 ```
+
+The module root holds no Go file. Everything is a package under `cmd/`, `pkg/`,
+`internal/` or `features/` — the root used to be a `package main` with no source
+in it and twenty-seven test files, which is neither a package anyone imports nor
+a place anyone looks.
 
 `cmd/cidx` is deliberately a three-line `package main`. The tree used to live
 there, in a second `package main` that nothing could import, so the godog suite

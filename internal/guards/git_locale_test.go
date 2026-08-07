@@ -1,4 +1,4 @@
-package main
+package guards
 
 import (
 	"io/fs"
@@ -23,10 +23,10 @@ import (
 func TestEveryGitInvocationPinsTheLocale(t *testing.T) {
 	// The helper is where the pinning lives, so it is the one file that builds
 	// a git command by hand.
-	helper := filepath.Join("pkg", "vcs", "git.go")
+	helper := filepath.Join(projectRoot, "pkg", "vcs", "git.go")
 
 	scanned := 0
-	err := filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(projectRoot, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}

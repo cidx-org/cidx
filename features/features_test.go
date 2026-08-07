@@ -1,4 +1,4 @@
-package main
+package features
 
 import (
 	"context"
@@ -30,7 +30,7 @@ func TestFeatures(t *testing.T) {
 		ScenarioInitializer: InitializeScenario,
 		Options: &godog.Options{
 			Format:   getFormat(),
-			Paths:    []string{"features"},
+			Paths:    []string{"."},
 			Tags:     "~@docker-required",
 			TestingT: t,
 			Output:   colors.Colored(os.Stdout),
@@ -62,7 +62,7 @@ func TestFeaturesDocker(t *testing.T) {
 		ScenarioInitializer: InitializeScenario,
 		Options: &godog.Options{
 			Format:   getFormat(),
-			Paths:    []string{"features"},
+			Paths:    []string{"."},
 			Tags:     "@docker-required",
 			TestingT: t,
 			Output:   colors.Colored(os.Stdout),
