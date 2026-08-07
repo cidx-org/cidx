@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/cidx-org/cidx/v2/pkg/registry"
 )
 
 // stubRuntimeProbes replaces the environment probes for the duration of a test.
@@ -177,9 +179,85 @@ func TestCheckConfigFile(t *testing.T) {
 	}
 }
 
+// TestRun names what doctor covers, rather than counting it. A count says
+// nothing about what is missing, and adding the hardened-image check of #399
+// broke it while telling the reader only that a number had changed.
 func TestRun(t *testing.T) {
-	result := Run()
-	if len(result.Checks) != 3 {
-		t.Errorf("expected 3 checks, got %d", len(result.Checks))
+	want := []string{"Container runtime", "Git repository", "Config file", "Hardened images"}
+
+	var got []string
+	for _, check := range Run().Checks {
+		got = append(got, check.Name)
+	}
+
+	if strings.Join(got, ", ") != strings.Join(want, ", ") {
+		t.Errorf("doctor reports %v, want %v", got, want)
+	}
+}
+
+// stageRegistryStatus makes the hardened-image check read a staged answer
+// instead of the machine's Docker config.
+func stageRegistryStatus(t *testing.T, info *registry.RegistryInfo, err error) {
+	t.Helper()
+
+	original := registryStatus
+	registryStatus = func(string) (*registry.RegistryInfo, error) { return info, err }
+	t.Cleanup(func() { registryStatus = original })
+}
+
+// TestHardenedImageAccessWarnsWhenNotAuthenticated covers issue #399.
+//
+// doctor reported "All checks passed" on a machine where every hardened image
+// was unpullable: it knew about the runtime, the repository and the config, and
+// never asked the one question that was failing. The answer already existed
+// behind `cidx registry status dhi.io`.
+func TestHardenedImageAccessWarnsWhenNotAuthenticated(t *testing.T) {
+	stageRegistryStatus(t, &registry.RegistryInfo{Name: "dhi.io", Authenticated: false}, nil)
+
+	check := checkHardenedImageAccess()
+
+	if check.Status != StatusWarn {
+		t.Errorf("status = %v, want a warning: a preset on a hardened image cannot pull", check.Status)
+	}
+	if !strings.Contains(check.Suggestion, "registry login dhi.io") {
+		t.Errorf("suggestion = %q, want the command that fixes it", check.Suggestion)
+	}
+}
+
+// TestHardenedImageAccessPassesWhenAuthenticated: the ordinary case says who,
+// so a wrong account is visible rather than merely "authenticated".
+func TestHardenedImageAccessPassesWhenAuthenticated(t *testing.T) {
+	stageRegistryStatus(t, &registry.RegistryInfo{Name: "dhi.io", Authenticated: true, Username: "someone"}, nil)
+
+	check := checkHardenedImageAccess()
+
+	if check.Status != StatusPass {
+		t.Fatalf("status = %v, want pass", check.Status)
+	}
+	if !strings.Contains(check.Detail, "someone") {
+		t.Errorf("detail = %q, want the account named", check.Detail)
+	}
+}
+
+// TestHardenedImageAccessIsNeverAFailure: doctor speaks about the environment,
+// and a project using none of the hardened presets is entitled to no
+// credentials. A warning informs; a failure would make `cidx doctor` exit
+// non-zero for a machine that is fine.
+func TestHardenedImageAccessIsNeverAFailure(t *testing.T) {
+	for _, staged := range []struct {
+		name string
+		info *registry.RegistryInfo
+		err  error
+	}{
+		{"not authenticated", &registry.RegistryInfo{Authenticated: false}, nil},
+		{"the config cannot be read", nil, errors.New("no such file")},
+	} {
+		t.Run(staged.name, func(t *testing.T) {
+			stageRegistryStatus(t, staged.info, staged.err)
+
+			if check := checkHardenedImageAccess(); check.Status == StatusFail {
+				t.Errorf("status = fail, want a warning: %s", check.Detail)
+			}
+		})
 	}
 }

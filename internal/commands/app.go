@@ -102,6 +102,24 @@ func buildApp() *cli.App {
 				},
 				Subcommands: workflowCommand().Subcommands,
 			},
+			// Fifteen messages across the code and the docs tell the user to
+			// run `cidx registry ...`, and none of them worked: the tree has
+			// it under `security`, so the suggested line answered "No help
+			// topic for 'registry'" — at the exact moment someone is locked
+			// out of a registry and reading for a way back in (#399).
+			//
+			// The alias rather than fifteen corrections, because the messages
+			// were right about what people type. `pr`, `cpw` and `workflow`
+			// are here for the same reason.
+			{
+				Name:   "registry",
+				Usage:  "Alias for 'security registry'",
+				Hidden: true,
+				Action: func(c *cli.Context) error {
+					return c.App.Run(append([]string{c.App.Name, "security", "registry"}, c.Args().Slice()...))
+				},
+				Subcommands: registryCommand().Subcommands,
+			},
 			{
 				Name:        "demo",
 				Hidden:      true,

@@ -8,13 +8,17 @@ import (
 
 	"github.com/cidx-org/cidx/v2/pkg/config"
 	"github.com/cidx-org/cidx/v2/pkg/executor"
+	"github.com/cidx-org/cidx/v2/pkg/registry"
 	"github.com/cidx-org/cidx/v2/pkg/vcs"
 )
 
 // Package variables so tests can stub environment probes.
 var (
 	commandVersion = getCommandVersion
-	podmanUsable   = executor.PodmanUsable
+	registryStatus = func(name string) (*registry.RegistryInfo, error) {
+		return registry.NewManager().Status(name)
+	}
+	podmanUsable = executor.PodmanUsable
 )
 
 // Status represents the result of a single check.
@@ -77,6 +81,7 @@ func Run() *Result {
 	r.Checks = append(r.Checks, checkContainerRuntime())
 	r.Checks = append(r.Checks, checkGitRepo())
 	r.Checks = append(r.Checks, checkConfigFile())
+	r.Checks = append(r.Checks, checkHardenedImageAccess())
 	return r
 }
 
@@ -147,6 +152,46 @@ func checkContainerRuntime() Check {
 	check.Status = StatusFail
 	check.Detail = "not found"
 	check.Suggestion = "Install Docker (https://docs.docker.com/get-docker/) or Podman (https://podman.io/)"
+	return check
+}
+
+// hardenedRegistry is where the catalogue's Docker Hardened Images live. A
+// preset pinned there cannot be pulled without credentials, whatever else is
+// healthy.
+const hardenedRegistry = "dhi.io"
+
+// checkHardenedImageAccess reports whether the images the catalogue pins can be
+// pulled at all.
+//
+// doctor answered "All checks passed" — runtime, repository, config — on a
+// machine where every hardened image was unpullable, which is the shape this
+// project keeps meeting: a check that is green about everything except the
+// thing that is broken (#367, #382, #399). The registry answer already existed
+// behind `cidx security registry status dhi.io`; doctor simply never asked.
+//
+// A warning, not a failure: a project using none of the hardened presets is
+// entitled to no credentials, and doctor speaks about the environment rather
+// than about one repository's choices.
+func checkHardenedImageAccess() Check {
+	check := Check{Name: "Hardened images"}
+
+	info, err := registryStatus(hardenedRegistry)
+	if err != nil {
+		check.Status = StatusWarn
+		check.Detail = fmt.Sprintf("cannot tell: %v", err)
+		check.Suggestion = "Check the Docker config: " + hardenedRegistry + " credentials are read from it"
+		return check
+	}
+
+	if !info.Authenticated {
+		check.Status = StatusWarn
+		check.Detail = "not authenticated to " + hardenedRegistry
+		check.Suggestion = "Presets on hardened images will fail to pull. Authenticate with: cidx registry login " + hardenedRegistry
+		return check
+	}
+
+	check.Status = StatusPass
+	check.Detail = fmt.Sprintf("%s authenticated (%s)", hardenedRegistry, info.Username)
 	return check
 }
 

@@ -54,6 +54,7 @@ jobs:
         run: chmod +x bin/cidx
 
       - name: Login to Docker Hardened Images
+        id: dhi-login
         if: env.DOCKERHUB_USERNAME != ''
         uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
         with:
@@ -62,6 +63,33 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+
+      # docker/login-action answers `unauthorized: Unauthorized` and nothing
+      # else, on nine steps across three workflows that fail at once — which
+      # reads as a broken repository rather than one expired credential. It took
+      # pushing an empty commit from main to establish that the pull request
+      # under review was not the cause (#399). The action cannot explain itself;
+      # this step can, and it changes no outcome: the job has already failed.
+      - name: Explain the failed DHI login
+        if: failure() && steps.dhi-login.conclusion == 'failure'
+        run: |
+          echo "::error::Could not authenticate to dhi.io — the catalogue's images cannot be pulled."
+          echo ""
+          echo "A credential, not a code change: every branch fails this way until it is fixed."
+          echo ""
+          echo "  1. A Docker Hub password change revokes personal access tokens. If the password"
+          echo "     changed, DOCKERHUB_TOKEN is dead and a new one is needed:"
+          echo "     https://app.docker.com/settings/personal-access-tokens"
+          echo "     (Public Repo Read-only is enough to pull.)"
+          echo ""
+          echo "  2. Put it back at the REPOSITORY level, which is what these jobs read:"
+          echo "       gh secret set DOCKERHUB_TOKEN --repo ${{ github.repository }}"
+          echo ""
+          echo "     A secret of the same name on an environment or the organisation is shadowed"
+          echo "     by the repository one. To see which you actually updated, compare the dates:"
+          echo "       gh api repos/${{ github.repository }}/actions/secrets"
+          echo ""
+          echo "  3. Locally, 'cidx doctor' reports this too."
 
       - name: Run security checks
         run: ./bin/cidx run security
@@ -87,6 +115,7 @@ jobs:
         run: chmod +x bin/cidx
 
       - name: Login to Docker Hardened Images
+        id: dhi-login
         if: env.DOCKERHUB_USERNAME != ''
         uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
         with:
@@ -95,6 +124,33 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+
+      # docker/login-action answers `unauthorized: Unauthorized` and nothing
+      # else, on nine steps across three workflows that fail at once — which
+      # reads as a broken repository rather than one expired credential. It took
+      # pushing an empty commit from main to establish that the pull request
+      # under review was not the cause (#399). The action cannot explain itself;
+      # this step can, and it changes no outcome: the job has already failed.
+      - name: Explain the failed DHI login
+        if: failure() && steps.dhi-login.conclusion == 'failure'
+        run: |
+          echo "::error::Could not authenticate to dhi.io — the catalogue's images cannot be pulled."
+          echo ""
+          echo "A credential, not a code change: every branch fails this way until it is fixed."
+          echo ""
+          echo "  1. A Docker Hub password change revokes personal access tokens. If the password"
+          echo "     changed, DOCKERHUB_TOKEN is dead and a new one is needed:"
+          echo "     https://app.docker.com/settings/personal-access-tokens"
+          echo "     (Public Repo Read-only is enough to pull.)"
+          echo ""
+          echo "  2. Put it back at the REPOSITORY level, which is what these jobs read:"
+          echo "       gh secret set DOCKERHUB_TOKEN --repo ${{ github.repository }}"
+          echo ""
+          echo "     A secret of the same name on an environment or the organisation is shadowed"
+          echo "     by the repository one. To see which you actually updated, compare the dates:"
+          echo "       gh api repos/${{ github.repository }}/actions/secrets"
+          echo ""
+          echo "  3. Locally, 'cidx doctor' reports this too."
 
       - name: Run code quality checks
         run: ./bin/cidx run code
@@ -118,6 +174,7 @@ jobs:
         run: chmod +x bin/cidx
 
       - name: Login to Docker Hardened Images
+        id: dhi-login
         if: env.DOCKERHUB_USERNAME != ''
         uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
         with:
@@ -133,6 +190,33 @@ jobs:
       # the scenario and step totals are the evidence that the suite is a real
       # gate. It used to be --verbose, which bought the same output at the price
       # of logrus at Debug and the raw JSON of every image pull (issue #273).
+      # docker/login-action answers `unauthorized: Unauthorized` and nothing
+      # else, on nine steps across three workflows that fail at once — which
+      # reads as a broken repository rather than one expired credential. It took
+      # pushing an empty commit from main to establish that the pull request
+      # under review was not the cause (#399). The action cannot explain itself;
+      # this step can, and it changes no outcome: the job has already failed.
+      - name: Explain the failed DHI login
+        if: failure() && steps.dhi-login.conclusion == 'failure'
+        run: |
+          echo "::error::Could not authenticate to dhi.io — the catalogue's images cannot be pulled."
+          echo ""
+          echo "A credential, not a code change: every branch fails this way until it is fixed."
+          echo ""
+          echo "  1. A Docker Hub password change revokes personal access tokens. If the password"
+          echo "     changed, DOCKERHUB_TOKEN is dead and a new one is needed:"
+          echo "     https://app.docker.com/settings/personal-access-tokens"
+          echo "     (Public Repo Read-only is enough to pull.)"
+          echo ""
+          echo "  2. Put it back at the REPOSITORY level, which is what these jobs read:"
+          echo "       gh secret set DOCKERHUB_TOKEN --repo ${{ github.repository }}"
+          echo ""
+          echo "     A secret of the same name on an environment or the organisation is shadowed"
+          echo "     by the repository one. To see which you actually updated, compare the dates:"
+          echo "       gh api repos/${{ github.repository }}/actions/secrets"
+          echo ""
+          echo "  3. Locally, 'cidx doctor' reports this too."
+
       - name: Run tests
         run: ./bin/cidx run --stream test
 
@@ -156,6 +240,7 @@ jobs:
         run: chmod +x bin/cidx
 
       - name: Login to Docker Hardened Images
+        id: dhi-login
         if: env.DOCKERHUB_USERNAME != ''
         uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
         with:
@@ -164,6 +249,33 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+
+      # docker/login-action answers `unauthorized: Unauthorized` and nothing
+      # else, on nine steps across three workflows that fail at once — which
+      # reads as a broken repository rather than one expired credential. It took
+      # pushing an empty commit from main to establish that the pull request
+      # under review was not the cause (#399). The action cannot explain itself;
+      # this step can, and it changes no outcome: the job has already failed.
+      - name: Explain the failed DHI login
+        if: failure() && steps.dhi-login.conclusion == 'failure'
+        run: |
+          echo "::error::Could not authenticate to dhi.io — the catalogue's images cannot be pulled."
+          echo ""
+          echo "A credential, not a code change: every branch fails this way until it is fixed."
+          echo ""
+          echo "  1. A Docker Hub password change revokes personal access tokens. If the password"
+          echo "     changed, DOCKERHUB_TOKEN is dead and a new one is needed:"
+          echo "     https://app.docker.com/settings/personal-access-tokens"
+          echo "     (Public Repo Read-only is enough to pull.)"
+          echo ""
+          echo "  2. Put it back at the REPOSITORY level, which is what these jobs read:"
+          echo "       gh secret set DOCKERHUB_TOKEN --repo ${{ github.repository }}"
+          echo ""
+          echo "     A secret of the same name on an environment or the organisation is shadowed"
+          echo "     by the repository one. To see which you actually updated, compare the dates:"
+          echo "       gh api repos/${{ github.repository }}/actions/secrets"
+          echo ""
+          echo "  3. Locally, 'cidx doctor' reports this too."
 
       - name: Build final binary
         run: ./bin/cidx run build
