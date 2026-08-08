@@ -1105,12 +1105,12 @@ description = "Perform a dry run"
 command_flag = "--dry-run"
 
 # Probatum: Test-oriented check runner (https://github.com/probatum-org/probatum)
-# Runs the repo's probatum.yaml: service boot + readiness, HTTP checks, log
+# Runs the repo's probatum.toml: service boot + readiness, HTTP checks, log
 # windows, with owned teardown. Verdict: exit 0 pass, 1 failed, 2 couldn't run.
 [presets.probatum]
 name = "probatum"
 phase = "test"
-image = "ghcr.io/probatum-org/probatum:0.2.1@sha256:c78575afc4469d5d310f449f8133927d4b2859e6ea66a720d82205e1dfb09ef1"
+image = "ghcr.io/probatum-org/probatum:0.3.0@sha256:328bfec801abb375d3462abd54eb70c2247f1825e678d1fefaf4bf7c5be08182"
 image_entrypoint = ["probatum"]
 # The image is Alpine/musl and ships no glibc loader; a glibc binary fails with
 # the shell's misleading "sh: <path>: not found" even though the file exists (#195).
