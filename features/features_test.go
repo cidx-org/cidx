@@ -117,6 +117,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	RegisterArtifactWorkflowSteps(ctx, testCtx)
 	RegisterPRChecksSteps(ctx, testCtx)
 	RegisterCheckVerdictSteps(ctx, testCtx)
+	RegisterWatchTargetSteps(ctx, testCtx)
 
 	// Hooks
 	ctx.Before(func(ctx context.Context, sc *godog.Scenario) (context.Context, error) {
@@ -141,6 +142,14 @@ func getFormat() string {
 
 // TestContext holds shared test state
 type TestContext struct {
+	// The watch-target guard (#414): the two commits it compares, and what it
+	// decided. Kept here rather than in the steps file for the same reason
+	// every other scenario's state is — one context per scenario, reset by godog.
+	watchLocalSHA  string
+	watchRemoteSHA string
+	watchProceeds  bool
+	watchMessage   string
+
 	Environment    string
 	CI             bool
 	Provider       string

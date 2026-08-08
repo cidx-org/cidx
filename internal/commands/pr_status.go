@@ -7,6 +7,8 @@ import (
 	"github.com/cidx-org/cidx/v3/pkg/branch"
 	"github.com/cidx-org/cidx/v3/pkg/config"
 	"github.com/cidx-org/cidx/v3/pkg/remote"
+	"github.com/cidx-org/cidx/v3/pkg/vcs"
+	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 )
 
@@ -104,7 +106,44 @@ func prWatchAction(c *cli.Context) error {
 		return err
 	}
 
+	// What the checks are for, before reporting what they say (#414).
+	if err := checkWatchTarget(info); err != nil {
+		return err
+	}
+
 	return watchPRChecks(manager, branchName, info, c.Bool("quiet"))
+}
+
+// checkWatchTarget refuses a watch that would report on a commit other than the
+// one in hand, and states which commit it is reporting on when it does proceed.
+func checkWatchTarget(info *branch.PRInfo) error {
+	proceed, message := JudgeWatchTarget(localHeadSHA(), info.HeadSHA)
+	if !proceed {
+		return errors.New(message)
+	}
+
+	log.Info(message)
+	return nil
+}
+
+// localHeadSHA is the commit in hand, or "" when it cannot be read. A variable
+// so tests can stage it, the same seam readPRInfo already uses.
+//
+// Best-effort on purpose: JudgeWatchTarget treats an empty SHA as "could not
+// tell" and says so rather than refusing, so a repository this cannot resolve
+// still gets a watch — just never a silent one.
+var localHeadSHA = func() string {
+	repo, err := vcs.OpenRepository(".")
+	if err != nil {
+		return ""
+	}
+
+	sha, err := repo.GetHeadSHA()
+	if err != nil {
+		return ""
+	}
+
+	return sha
 }
 
 func prOpenAction(c *cli.Context) error {
