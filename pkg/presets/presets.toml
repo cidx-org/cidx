@@ -83,7 +83,7 @@ command_flag = "--write"
 [presets.trivy]
 name = "trivy"
 phase = "security"
-image = "dhi.io/trivy:0.71@sha256:f957a8173ddfc1e82cd4454fd760011e65cb03f42ffe67a91fe105a140ffade5"
+image = "dhi.io/trivy:0.71@sha256:fd727baaf00f823f59c2936f2c797c61750e2440b736c5b787722c18dd9518aa"
 image_entrypoint = ["trivy"]
 hardened = true
 command = "fs /work"
@@ -379,7 +379,7 @@ command_flag = "-fmt"
 [presets.govulncheck]
 name = "govulncheck"
 phase = "security"
-image = "dhi.io/golang:1.26.5-alpine-dev@sha256:753793e50e16daafaf70566409c752ed05f177fb34ad5b488918bbccae462413"
+image = "dhi.io/golang:1.26.5-alpine-dev@sha256:29fe0a7d2a5ab0c236fbde3a7f63801755585ed260b6f2f564e831c92bfa9f34"
 image_entrypoint = []
 hardened = true
 command = "sh -c 'go install golang.org/x/vuln/cmd/govulncheck@latest && PATH=$PATH:/tmp/go/bin govulncheck ./...'"
@@ -413,7 +413,7 @@ GOTOOLCHAIN = "auto"
 [presets.go-mod-tidy]
 name = "go-mod-tidy"
 phase = "code"
-image = "dhi.io/golang:1.26.5-alpine-dev@sha256:753793e50e16daafaf70566409c752ed05f177fb34ad5b488918bbccae462413"
+image = "dhi.io/golang:1.26.5-alpine-dev@sha256:29fe0a7d2a5ab0c236fbde3a7f63801755585ed260b6f2f564e831c92bfa9f34"
 image_entrypoint = []
 hardened = true
 command = "go mod tidy -diff"
@@ -470,7 +470,7 @@ command_flag = "--severity"
 [presets.gofmt]
 name = "gofmt"
 phase = "code"
-image = "dhi.io/golang:1.26.5-alpine-dev@sha256:753793e50e16daafaf70566409c752ed05f177fb34ad5b488918bbccae462413"
+image = "dhi.io/golang:1.26.5-alpine-dev@sha256:29fe0a7d2a5ab0c236fbde3a7f63801755585ed260b6f2f564e831c92bfa9f34"
 image_entrypoint = []
 hardened = true
 command = "gofmt -l ."
@@ -487,7 +487,7 @@ GOTOOLCHAIN = "auto"
 [presets.go-test]
 name = "go-test"
 phase = "test"
-image = "dhi.io/golang:1.26.5-alpine-dev@sha256:753793e50e16daafaf70566409c752ed05f177fb34ad5b488918bbccae462413"
+image = "dhi.io/golang:1.26.5-alpine-dev@sha256:29fe0a7d2a5ab0c236fbde3a7f63801755585ed260b6f2f564e831c92bfa9f34"
 image_entrypoint = []
 hardened = true
 command = "go test -v ./..."
@@ -523,7 +523,7 @@ command_flag = "-race"
 [presets.godog]
 name = "godog"
 phase = "test"
-image = "dhi.io/golang:1.26.5-alpine-dev@sha256:753793e50e16daafaf70566409c752ed05f177fb34ad5b488918bbccae462413"
+image = "dhi.io/golang:1.26.5-alpine-dev@sha256:29fe0a7d2a5ab0c236fbde3a7f63801755585ed260b6f2f564e831c92bfa9f34"
 image_entrypoint = []
 hardened = true
 command = "go test -v -run TestFeatures ./..."
@@ -560,7 +560,7 @@ env_var = "GODOG_FORMAT"
 [presets.go-build]
 name = "go-build"
 phase = "build"
-image = "dhi.io/golang:1.26.5-alpine-dev@sha256:753793e50e16daafaf70566409c752ed05f177fb34ad5b488918bbccae462413"
+image = "dhi.io/golang:1.26.5-alpine-dev@sha256:29fe0a7d2a5ab0c236fbde3a7f63801755585ed260b6f2f564e831c92bfa9f34"
 image_entrypoint = []
 hardened = true
 command = "sh -c 'VERSION=$(cat VERSION 2>/dev/null || echo dev); go build -ldflags \"-X main.Version=${VERSION} ${LDFLAGS}\" -o bin/cidx ./cmd/cidx'"
@@ -635,7 +635,7 @@ command_flag = "--cache"
 [presets.docker-buildx]
 name = "docker-buildx"
 phase = "docker"
-image = "dhi.io/docker:29-cli@sha256:fa44d1f9627e0136f8e321cb13702e18c7b1ec9557fcced0d602feb32251e434"
+image = "dhi.io/docker:29-cli@sha256:5962df1dad91fbf81be7c795c00d6137c6a46ac28acada6af9f0af7c92133966"
 image_entrypoint = ["docker"]
 hardened = true
 command = "buildx build --platform linux/amd64,linux/arm64 -t ${IMAGE_NAME}:${IMAGE_TAG} --push ."
@@ -794,7 +794,7 @@ command_flag = "--diff"
 [presets.mypy]
 name = "mypy"
 phase = "code"
-image = "dhi.io/python:3.13.14-alpine-dev@sha256:cc27331edde031b8beabe3055f7816b06a36c0dbf4401f2fbc98735ba1910a6a"
+image = "dhi.io/python:3.13.14-alpine-dev@sha256:8c3820102033dff6a1e5de0fad001747c7b0979c372d6ffc1ac95dd0e03eed82"
 image_entrypoint = []
 hardened = true
 command = "sh -c 'pip install --quiet mypy && PATH=$PATH:/tmp/.local/bin mypy .'"
@@ -816,7 +816,7 @@ command_flag = "--strict"
 [presets.bandit]
 name = "bandit"
 phase = "security"
-image = "dhi.io/python:3.13.14-alpine-dev@sha256:cc27331edde031b8beabe3055f7816b06a36c0dbf4401f2fbc98735ba1910a6a"
+image = "dhi.io/python:3.13.14-alpine-dev@sha256:8c3820102033dff6a1e5de0fad001747c7b0979c372d6ffc1ac95dd0e03eed82"
 image_entrypoint = []
 hardened = true
 command = "sh -c 'pip install --quiet bandit && PATH=$PATH:/tmp/.local/bin bandit -r .'"
@@ -855,7 +855,7 @@ command_flag = "--confidence-level"
 [presets.pip-audit]
 name = "pip-audit"
 phase = "security"
-image = "dhi.io/python:3.13.14-alpine-dev@sha256:cc27331edde031b8beabe3055f7816b06a36c0dbf4401f2fbc98735ba1910a6a"
+image = "dhi.io/python:3.13.14-alpine-dev@sha256:8c3820102033dff6a1e5de0fad001747c7b0979c372d6ffc1ac95dd0e03eed82"
 image_entrypoint = []
 hardened = true
 command = "sh -c 'pip install --quiet pip-audit && PATH=$PATH:/tmp/.local/bin pip-audit'"
@@ -880,7 +880,7 @@ command_flag = "--fix"
 [presets.pytest]
 name = "pytest"
 phase = "test"
-image = "dhi.io/python:3.13.14-alpine-dev@sha256:cc27331edde031b8beabe3055f7816b06a36c0dbf4401f2fbc98735ba1910a6a"
+image = "dhi.io/python:3.13.14-alpine-dev@sha256:8c3820102033dff6a1e5de0fad001747c7b0979c372d6ffc1ac95dd0e03eed82"
 image_entrypoint = []
 hardened = true
 command = "sh -c 'pip install --quiet pytest pytest-cov && PATH=$PATH:/tmp/.local/bin pytest'"
@@ -911,7 +911,7 @@ command_flag = "--cov=."
 [presets.python-build]
 name = "python-build"
 phase = "build"
-image = "dhi.io/python:3.13.14-alpine-dev@sha256:cc27331edde031b8beabe3055f7816b06a36c0dbf4401f2fbc98735ba1910a6a"
+image = "dhi.io/python:3.13.14-alpine-dev@sha256:8c3820102033dff6a1e5de0fad001747c7b0979c372d6ffc1ac95dd0e03eed82"
 image_entrypoint = []
 hardened = true
 command = "sh -c 'pip install --quiet build && python -m build'"
@@ -928,7 +928,7 @@ OUTPUT_DIR = "dist"
 [presets.twine]
 name = "twine"
 phase = "release"
-image = "dhi.io/python:3.13.14-alpine-dev@sha256:cc27331edde031b8beabe3055f7816b06a36c0dbf4401f2fbc98735ba1910a6a"
+image = "dhi.io/python:3.13.14-alpine-dev@sha256:8c3820102033dff6a1e5de0fad001747c7b0979c372d6ffc1ac95dd0e03eed82"
 image_entrypoint = []
 hardened = true
 command = "sh -c 'pip install --quiet twine && PATH=$PATH:/tmp/.local/bin twine upload dist/*'"
