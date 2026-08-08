@@ -301,18 +301,18 @@ It is not annotated as a warning. This is a standing property of the pin, not an
 
 ### A tag rebuilt under the same name
 
-Everything above compares tag *names*. A rebuild changes no name, so none of it can see one — and the pin, whose whole purpose is that content cannot change under us, is exactly what makes the question unaskable anywhere else. `cidx preset scan-targets` therefore asks the registry one extra thing per image: **what does the pinned tag resolve to today?** When that digest is not the digest pinned beside it, the target reports `rebuilt`, and the summary lists it under **Pinned tag rebuilt upstream**.
+Everything above compares tag _names_. A rebuild changes no name, so none of it can see one — and the pin, whose whole purpose is that content cannot change under us, is exactly what makes the question unaskable anywhere else. `cidx preset scan-targets` therefore asks the registry one extra thing per image: **what does the pinned tag resolve to today?** When that digest is not the digest pinned beside it, the target reports `rebuilt`, and the summary lists it under **Pinned tag rebuilt upstream**.
 
 The same comparison reads two ways, which is why it runs against every image rather than only the unversioned ones:
 
 - On a tag carrying no version, a moved digest is the update channel working as designed. It is the only channel `trixie-curl` and `stable` have.
 - On a versioned tag, the version names the same release, so whatever changed is something the version does not describe — normally a rebuild against patched base packages.
 
-**The second case is not the rare one.** The first run against the catalogue found five moved digests, and four were `dhi.io` images on versioned tags: `docker:29-cli`, `golang:1.26.5-alpine-dev`, `python:3.13.14-alpine-dev`, `trivy:0.71`. Continuous rebuilds against patched bases are the proposition those images are run for, and the pin was holding the catalogue away from every one of them while the promotion path — which only ever sees a new version *number* — reported all four as current. The fifth was `buildpack-deps:trixie-curl`, republished the day before, which is the case [#332](https://github.com/cidx-org/cidx/issues/332) was opened about.
+**The second case is not the rare one.** The first run against the catalogue found five moved digests, and four were `dhi.io` images on versioned tags: `docker:29-cli`, `golang:1.26.5-alpine-dev`, `python:3.13.14-alpine-dev`, `trivy:0.71`. Continuous rebuilds against patched bases are the proposition those images are run for, and the pin was holding the catalogue away from every one of them while the promotion path — which only ever sees a new version _number_ — reported all four as current. The fifth was `buildpack-deps:trixie-curl`, republished the day before, which is the case [#332](https://github.com/cidx-org/cidx/issues/332) was opened about.
 
 **Reported, never promoted.** Adopting a new digest on an unchanged tag is the quietest substitution there is, and precisely the one digest pinning exists to refuse: a compromised publisher pushes to the same name, and no scan sees a backdoor that carries no CVE ([what we are actually defending against](#what-we-are-actually-defending-against)). The pin's promise is that what runs is what was reviewed, and a rebuild is by definition unreviewed. So this produces a line for a human to weigh and a PR to open by hand — roughly monthly, against a guarantee that cannot be bought back once it is spent.
 
-Unlike the two sections around it, it *is* annotated as a warning: a repin clears it. That is the test those sections set — a signal that no action resolves is noise, a signal that an action resolves is work.
+Unlike the two sections around it, it _is_ annotated as a warning: a repin clears it. That is the test those sections set — a signal that no action resolves is noise, a signal that an action resolves is work.
 
 A lookup that fails says nothing rather than `rebuilt`. An absence of evidence must not read as evidence — the rule the cooldown and [the staleness signal](#a-base-that-stopped-being-supported) both already follow, and the one that matters most here, since a false positive on this signal sends someone chasing a supply-chain incident that never happened.
 
