@@ -49,10 +49,17 @@ scan-results/
 # Internal notes
 .cidx/ideas/
 
-# Tag staging files: local hand-off between `release tag prepare` and
-# `release tag create`, never committed (release notes are, so they stay)
+# Staging files: the local hand-off between a `prepare` step and the `create`
+# that consumes it, never committed. The release notes are the exception and
+# stay tracked — they are the record of what a release said.
+#
+# release-version was missing from this list, so the file the v3.0.0 release
+# left behind was tracked, and `release create` refused the next release on its
+# own leftover: "you have uncommitted changes" about the artefact it had just
+# written itself.
 .cidx/tag-version
 .cidx/tag-message
+.cidx/release-version
 
 #AI
 .serena
