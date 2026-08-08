@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cidx-org/cidx/v3/pkg/actions"
 	"github.com/cidx-org/cidx/v3/pkg/branch"
 )
 
@@ -53,7 +54,7 @@ func TestCheckWatchTarget_AnUnknownCommitNeitherPassesNorRefuses(t *testing.T) {
 		t.Fatalf("an unverifiable commit must not stop a watch: %v", err)
 	}
 
-	proceed, message := JudgeWatchTarget("c54d85c", "")
+	proceed, message := actions.JudgeWatchTarget("c54d85c", "")
 	if !proceed || !strings.Contains(message, "Could not verify") {
 		t.Errorf("it has to say the check could not be made, got proceed=%v %q", proceed, message)
 	}

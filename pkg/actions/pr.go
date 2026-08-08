@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -431,6 +432,14 @@ func (a *PRAction) mergePR(ctx context.Context) error {
 		return fmt.Errorf("failed to find PR: %w", err)
 	}
 
+	// What this would land, before anything else looks at it. Ahead of the
+	// checks block on purpose: --skip-checks is the path with no other
+	// verification on it, and a dry run that skipped this would preview a merge
+	// that cannot happen.
+	if err := a.checkMergeTarget(ctx, prNumber); err != nil {
+		return err
+	}
+
 	// Pre-merge checks validation (unless skipped)
 	if !a.skipChecks && !a.dryRun {
 		log.Info("🔍 Waiting for CI to start and checking PR status...")
@@ -838,4 +847,41 @@ func (a *PRAction) deleteRemoteBranch(workDir, mergedBranch string) {
 			log.Warnf("  ⚠️  Could not delete remote branch: %s", outputStr)
 		}
 	}
+}
+
+// checkMergeTarget refuses a merge that would land a commit other than the one
+// in hand, and says which commit it is landing when it does proceed.
+//
+// Both reads are best-effort: a SHA that cannot be established means "could not
+// tell", which JudgeMergeTarget lets through with a warning rather than
+// blocking every merge behind a lookup that failed.
+func (a *PRAction) checkMergeTarget(ctx context.Context, prNumber int) error {
+	proceed, message := JudgeMergeTarget(a.localHeadSHA(), a.remoteHeadSHA(ctx, prNumber))
+	if !proceed {
+		return errors.New(message)
+	}
+
+	log.Info(message)
+	return nil
+}
+
+// localHeadSHA is the commit in hand, or "" when it cannot be read.
+func (a *PRAction) localHeadSHA() string {
+	sha, err := a.repo.GetHeadSHA()
+	if err != nil {
+		return ""
+	}
+
+	return sha
+}
+
+// remoteHeadSHA is the commit the pull request is on, or "" when the provider
+// does not say.
+func (a *PRAction) remoteHeadSHA(ctx context.Context, prNumber int) string {
+	checks, err := a.provider.GetPullRequestChecks(ctx, prNumber)
+	if err != nil || checks == nil {
+		return ""
+	}
+
+	return checks.HeadSHA
 }
