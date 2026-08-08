@@ -15,6 +15,7 @@ Welcome to the CIDX (CI with Declarative eXecution) documentation.
 - [Philosophy](core-concepts/philosophy.md) - Why CIDX exists and its design principles
 - [DevOps Integration](core-concepts/devops.md) - How CIDX fits into your DevOps loop
 - [Security & Environments](core-concepts/security.md) - Local safety modes and environment detection
+- [The Image Supply Chain](core-concepts/image-supply-chain.md) - Diagrams: how a pinned image is watched, gated and replaced
 - [Container Reuse](core-concepts/container-reuse.md) - Performance optimization details
 
 ### 📖 Guides
