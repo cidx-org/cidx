@@ -337,6 +337,91 @@ func TestBuildScanTargetsLeavesAHealthyLineAlone(t *testing.T) {
 		t.Errorf("FrozenVariant = %q, PolicyReason = %q; want an up-to-date image to claim neither",
 			target.FrozenVariant, target.PolicyReason)
 	}
+	if target.Rebuilt != "" {
+		t.Errorf("Rebuilt = %q; want silence from a tag that still resolves to the digest pinned beside it", target.Rebuilt)
+	}
+}
+
+// TestBuildScanTargetsReportsATagRebuiltUnderTheSameName is issue #332, and it
+// was not hypothetical: when the comparison was first run against the
+// catalogue, `buildpack-deps:trixie-curl` had been republished the day before
+// and every signal cidx had — missing, frozen_variant, unversioned_tag,
+// stale_tag, the promotion path itself — reported the image as current. The pin
+// held, which is what a pin is for; nothing said that upstream had moved on.
+//
+// Reported, never promoted: adopting a digest on an unchanged tag is the one
+// substitution digest pinning exists to refuse.
+func TestBuildScanTargetsReportsATagRebuiltUnderTheSameName(t *testing.T) {
+	now := scanNow(t)
+	current := "buildpack-deps:trixie-curl@sha256:" + zeroDigest
+	stubRegistry(t, "trixie-curl", now.AddDate(0, 0, -1), nil)
+
+	// The tag has moved; the digest we pin still resolves, so the image is not
+	// missing. Telling the two references apart is the whole point of asking
+	// twice.
+	rebuiltTo := "sha256:" + strings.Repeat("b", 64)
+	stubDigestResolution(t, func(image, reference string) (string, error) {
+		if strings.HasPrefix(reference, "sha256:") {
+			return reference, nil
+		}
+		return rebuiltTo, nil
+	})
+
+	target := onlyTarget(t, buildScanTargets(
+		map[string][]string{current: {"cargo-audit"}}, nil, now))
+
+	if target.Rebuilt == "" {
+		t.Fatal("the pinned tag resolves elsewhere: reporting nothing files a moved image under Current (no updates)")
+	}
+	if target.Missing {
+		t.Error("the pinned digest still resolves: the image is rebuilt, not deleted")
+	}
+	if target.CandidateImage != "" || target.IsUpdate || target.ScanImage != current {
+		t.Errorf("ScanImage = %q, CandidateImage = %q, IsUpdate = %v; a rebuild is reported, never promoted",
+			target.ScanImage, target.CandidateImage, target.IsUpdate)
+	}
+	if !strings.Contains(target.Rebuilt, "sha256:bbbbbbbbbbbb") {
+		t.Errorf("Rebuilt = %q, want it to name the digest the tag moved to", target.Rebuilt)
+	}
+
+	// container-monitor.yml selects this state with jq, so the field name is
+	// part of the contract.
+	encoded, err := json.Marshal(target)
+	if err != nil {
+		t.Fatalf("failed to encode scan target: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"rebuilt":`) {
+		t.Errorf("scan target JSON = %s, want a rebuilt field container-monitor.yml can select", encoded)
+	}
+}
+
+// TestBuildScanTargetsDoesNotGuessARebuildFromAFailedLookup: the tag lookup is
+// an extra request, and a registry that will not answer it must leave the
+// catalogue where it was. An absence of evidence is not evidence — the rule the
+// cooldown (#242) and StaleTag (#282) both already follow, applied to the one
+// signal whose false positive would send someone chasing a supply-chain
+// incident that never happened.
+func TestBuildScanTargetsDoesNotGuessARebuildFromAFailedLookup(t *testing.T) {
+	now := scanNow(t)
+	current := "buildpack-deps:trixie-curl@sha256:" + zeroDigest
+	stubRegistry(t, "trixie-curl", time.Time{}, nil)
+
+	stubDigestResolution(t, func(image, reference string) (string, error) {
+		if strings.HasPrefix(reference, "sha256:") {
+			return reference, nil
+		}
+		return "", fmt.Errorf("registry docker.io returned HTTP 429 for %s", reference)
+	})
+
+	target := onlyTarget(t, buildScanTargets(
+		map[string][]string{current: {"cargo-audit"}}, nil, now))
+
+	if target.Rebuilt != "" {
+		t.Errorf("Rebuilt = %q; a lookup that failed says nothing about what the tag points at", target.Rebuilt)
+	}
+	if target.Missing {
+		t.Error("the pinned digest resolved: a failed tag lookup must not call the image gone")
+	}
 }
 
 // TestBuildScanTargetsReportsATagThatCarriesNoVersion: the third state #328

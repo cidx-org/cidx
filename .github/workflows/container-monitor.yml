@@ -189,8 +189,30 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
 
+          # A pinned tag that resolves to a different digest than the one pinned
+          # beside it: the same name, different content (#332). Two readings of
+          # one comparison — on a tag carrying no version this is the only
+          # update channel the image has, and on a versioned tag it is a change
+          # the version does not describe, which for the hardened images is the
+          # patched-base-package rebuild they are run for. Hence every image,
+          # not only the unversioned ones: four of the five first found were
+          # dhi.io on versioned tags.
+          #
+          # Annotated, unlike the two sections above: those are standing
+          # properties of the pin that no action clears, this is an event that
+          # a repin resolves. Never promoted — adopting a digest on an
+          # unchanged tag is the substitution digest pinning exists to refuse,
+          # and no scan can see a backdoor that carries no CVE.
+          REBUILT=$(echo "$TARGETS_JSON" | jq -r '.[] | select(.rebuilt != null) | "- \(.current_image) — \(.rebuilt)"')
+          if [ -n "$REBUILT" ]; then
+            echo "### Pinned tag rebuilt upstream" >> $GITHUB_STEP_SUMMARY
+            echo "$REBUILT" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "$TARGETS_JSON" | jq -r '.[] | select(.rebuilt != null) | "::warning::pinned tag rebuilt: \(.current_image) — \(.rebuilt)"'
+          fi
+
           # Show current (nothing newer found)
-          CURRENT=$(echo "$TARGETS_JSON" | jq -r '.[] | select(.is_update == false and .candidate_image == null and .newer_version == null and .frozen_variant == null and .unversioned_tag == null) | "- \(.scan_image)"')
+          CURRENT=$(echo "$TARGETS_JSON" | jq -r '.[] | select(.is_update == false and .candidate_image == null and .newer_version == null and .frozen_variant == null and .unversioned_tag == null and .rebuilt == null) | "- \(.scan_image)"')
           if [ -n "$CURRENT" ]; then
             echo "### Current (no updates)" >> $GITHUB_STEP_SUMMARY
             echo "$CURRENT" >> $GITHUB_STEP_SUMMARY
