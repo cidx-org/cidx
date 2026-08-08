@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/cidx-org/cidx/v3/pkg/actions"
 	"github.com/cidx-org/cidx/v3/pkg/branch"
 	"github.com/cidx-org/cidx/v3/pkg/config"
 	"github.com/cidx-org/cidx/v3/pkg/remote"
@@ -117,7 +118,7 @@ func prWatchAction(c *cli.Context) error {
 // checkWatchTarget refuses a watch that would report on a commit other than the
 // one in hand, and states which commit it is reporting on when it does proceed.
 func checkWatchTarget(info *branch.PRInfo) error {
-	proceed, message := JudgeWatchTarget(localHeadSHA(), info.HeadSHA)
+	proceed, message := actions.JudgeWatchTarget(localHeadSHA(), info.HeadSHA)
 	if !proceed {
 		return errors.New(message)
 	}

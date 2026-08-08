@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cidx-org/cidx/v3/internal/commands"
+	"github.com/cidx-org/cidx/v3/pkg/actions"
 	"github.com/cucumber/godog"
 )
 
 // RegisterWatchTargetSteps registers the steps for the guard that stops a watch
 // reporting on a commit the reader does not have.
 //
-// The steps drive commands.JudgeWatchTarget, the whole of the decision. The
+// The steps drive actions.JudgeWatchTarget, the whole of the decision. The
 // plumbing around it — reading local HEAD, carrying the pull request's head SHA
 // through PRInfo — is covered by the unit tests of internal/commands, the same
 // split failing_checks.feature already makes.
@@ -22,9 +22,13 @@ func RegisterWatchTargetSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Given(`^the pull request reports no head commit$`, tc.prReportsNoHeadCommit)
 
 	ctx.When(`^cidx checks what the watch is about to report on$`, tc.judgeTheWatchTarget)
+	ctx.When(`^cidx checks what the merge is about to land$`, tc.judgeTheMergeTarget)
 
 	ctx.Then(`^the watch proceeds$`, tc.theWatchProceeds)
 	ctx.Then(`^the watch refuses$`, tc.theWatchRefuses)
+	ctx.Then(`^the merge proceeds$`, tc.theWatchProceeds)
+	ctx.Then(`^the merge refuses$`, tc.theWatchRefuses)
+	ctx.Then(`^the merge says the commit could not be verified$`, tc.watchSaysUnverified)
 	ctx.Then(`^the watch names the commit "([^"]*)"$`, tc.theWatchNamesTheCommit)
 	ctx.Then(`^the refusal names the commit "([^"]*)" as the local one$`, tc.refusalNamesLocal)
 	ctx.Then(`^the refusal names the commit "([^"]*)" as the one under test$`, tc.refusalNamesUnderTest)
@@ -53,7 +57,12 @@ func (tc *TestContext) prReportsNoHeadCommit() error {
 }
 
 func (tc *TestContext) judgeTheWatchTarget() error {
-	tc.watchProceeds, tc.watchMessage = commands.JudgeWatchTarget(tc.watchLocalSHA, tc.watchRemoteSHA)
+	tc.watchProceeds, tc.watchMessage = actions.JudgeWatchTarget(tc.watchLocalSHA, tc.watchRemoteSHA)
+	return nil
+}
+
+func (tc *TestContext) judgeTheMergeTarget() error {
+	tc.watchProceeds, tc.watchMessage = actions.JudgeMergeTarget(tc.watchLocalSHA, tc.watchRemoteSHA)
 	return nil
 }
 
@@ -82,7 +91,11 @@ func (tc *TestContext) refusalNamesLocal(sha string) error {
 }
 
 func (tc *TestContext) refusalNamesUnderTest(sha string) error {
-	return tc.watchMessageContains("these checks are for " + sha)
+	if strings.Contains(tc.watchMessage, "these checks are for "+sha) ||
+		strings.Contains(tc.watchMessage, "pull request is at "+sha) {
+		return nil
+	}
+	return fmt.Errorf("expected the message to name %s as the commit under test, got:\n%s", sha, tc.watchMessage)
 }
 
 func (tc *TestContext) refusalMentions(text string) error {
