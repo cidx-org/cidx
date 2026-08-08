@@ -724,6 +724,14 @@ type scanTarget struct {
 	// of the five images that reported "nothing to update" in #238 were stale
 	// (issue #282).
 	StaleTag string `json:"stale_tag,omitempty"`
+
+	// Rebuilt reports that the pinned tag resolves to a different digest today
+	// than the one pinned beside it: the same name, different content. The
+	// other half of what #328 could only describe — an unversioned tag's
+	// updates arrive this way and nothing detected them — and, on a versioned
+	// tag, an anomaly worth a question upstream (issue #332). Never promoted,
+	// only reported: see presets.RebuiltTag.
+	Rebuilt string `json:"rebuilt,omitempty"`
 }
 
 // The two network calls scan-targets makes, as package variables so the
@@ -835,6 +843,26 @@ func buildScanTargets(imagePresets map[string][]string, affectingUs map[string][
 		// (#282).
 		if reason, stale := presets.StaleTag(update.CurrentPublished, now, currentTag); stale {
 			target.StaleTag = reason
+		}
+
+		// Asked outside the switch for the same reason, and it is the one
+		// question the pin itself makes unaskable anywhere else: the switch
+		// compares tags, and a rebuild changes no tag. Only when a digest is
+		// actually pinned — with nothing pinned there is nothing to have moved
+		// away from (#332).
+		if currentDigest != "" && currentTag != "" {
+			// A separate call from verifyPinnedImage below, which resolves the
+			// digest: that one asks whether what we run still exists, this one
+			// asks what the name points at now. Two questions, and the pin is
+			// exactly what makes them different.
+			if live, digestErr := resolveDigestFunc(imageName, currentTag); digestErr == nil {
+				if reason, rebuilt := presets.RebuiltTag(currentDigest, live, currentTag, update.CurrentPublished, now); rebuilt {
+					target.Rebuilt = reason
+				}
+			}
+			// A lookup that fails says nothing rather than "rebuilt": an
+			// absence of evidence must not read as evidence, which is the rule
+			// StaleTag and the cooldown both already follow.
 		}
 
 		switch {
