@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cidx-org/cidx/v3/pkg/actions"
 	"github.com/cucumber/godog"
 	"github.com/cucumber/godog/colors"
 
@@ -118,6 +119,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	RegisterPRChecksSteps(ctx, testCtx)
 	RegisterCheckVerdictSteps(ctx, testCtx)
 	RegisterWatchTargetSteps(ctx, testCtx)
+	RegisterCPWSteps(ctx, testCtx)
 
 	// Hooks
 	ctx.Before(func(ctx context.Context, sc *godog.Scenario) (context.Context, error) {
@@ -149,6 +151,12 @@ type TestContext struct {
 	watchRemoteSHA string
 	watchProceeds  bool
 	watchMessage   string
+
+	// What a cpw run decided to do (#416).
+	cpwHasChanges  bool
+	cpwHasUnpushed bool
+	cpwPlan        actions.CPWPlan
+	cpwMessage     string
 
 	Environment    string
 	CI             bool

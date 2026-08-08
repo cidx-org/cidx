@@ -281,3 +281,50 @@ func (r *Repository) GetRemoteURL() (string, error) {
 
 	return remote.Config().URLs[0], nil
 }
+
+// HasUnpushedCommits reports whether this branch holds commits the remote does
+// not have.
+//
+// `git rev-list --count @{u}..HEAD` answers it in one call, and the failure
+// mode is the interesting half: a branch that was never pushed has no upstream
+// to resolve, so git errors rather than answering zero. Reading that as
+// "nothing to push" would strand exactly the branches most in need of a push —
+// the brand new ones — so it counts as ahead (#416).
+//
+// Like every other git decision here, it reads git's own sentences, which is
+// why Git() pins LC_ALL=C (#364).
+func (r *Repository) HasUnpushedCommits() (bool, error) {
+	w, err := r.repo.Worktree()
+	if err != nil {
+		return false, fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	workDir := w.Filesystem.Root()
+
+	output, err := Git(workDir, "rev-list", "--count", "@{u}..HEAD").CombinedOutput()
+	if err != nil {
+		if noUpstreamConfigured(string(output)) {
+			return true, nil
+		}
+		return false, fmt.Errorf("failed to count unpushed commits: %w\n%s", err, output)
+	}
+
+	return strings.TrimSpace(string(output)) != "0", nil
+}
+
+// noUpstreamConfigured matches git's several ways of saying that a branch has
+// no upstream to compare against.
+func noUpstreamConfigured(output string) bool {
+	for _, sentence := range []string{
+		"no upstream",
+		"does not have an upstream",
+		"unknown revision or path not in the working tree",
+		"bad revision",
+	} {
+		if strings.Contains(strings.ToLower(output), sentence) {
+			return true
+		}
+	}
+
+	return false
+}
