@@ -1,3 +1,25 @@
+## v3.1.0 (2026-08-08)
+
+### Feat
+
+- **presets**: record the five DHI entrypoints, completing the catalogue (#397)
+- **presets**: catch a command that hands its tool its own name, offline (#396)
+- **monitor**: report a pinned tag nobody has republished in over a year (#393)
+- **pr**: warn when the commit and the PR title disagree about what kind of change this is (#392)
+
+### Fix
+
+- **release**: stop release create refusing the next release on its own leftover (#404)
+- **release**: read BREAKING CHANGE as the footer it is, not as a substring (#403)
+- **release**: move the module path to /v3 and refuse a major the path cannot publish (#401)
+- **cli**: make a broken registry credential legible (#400)
+- **artifact**: keep one run's evidence in a results directory, never two (#391)
+- **monitor**: give a promotion PR a current baseline, and stop pr watch calling an empty check list green (#386)
+
+### Refactor
+
+- **test**: move the godog suite into features/ and the repository guards into internal/guards (#390)
+
 ## v3.0.0 (2026-08-06)
 
 ### BREAKING CHANGE
