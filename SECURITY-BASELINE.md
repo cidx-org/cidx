@@ -70,10 +70,10 @@ the daily security audit reports it.
 | `commitizen/commitizen:4.16.5@sha256:451d0150ed7804c51cf201b2e9bd3f351867badbb7dc98f195cad740fdeaabaa` | commitizen | alpine 3.24.1 | 8 | none |
 | `commitlint/commitlint:21.2.1@sha256:f4b38082bec66b4cd1b37a0357145dded515c4468e2b339ec9ba31f86461f6b9` | commitlint | alpine 3.24.1 | 22 | none |
 | `dhi.io/alpine-base:3.24@sha256:84a21d3dfb87eb1c0bf1b532350f2aa0bf7d0df6246c398cc5c14b29002b7310` | test-hot-reload | alpine 3.24 | 0 | none |
-| `dhi.io/docker:29-cli@sha256:5962df1dad91fbf81be7c795c00d6137c6a46ac28acada6af9f0af7c92133966` | docker-buildx | debian 13.6 | 10 | none |
-| `dhi.io/golang:1.26.5-alpine-dev@sha256:29fe0a7d2a5ab0c236fbde3a7f63801755585ed260b6f2f564e831c92bfa9f34` | go-build, go-mod-tidy, go-test, godog, gofmt, govulncheck | alpine 3.24 | 2 | none |
-| `dhi.io/python:3.13.14-alpine-dev@sha256:8c3820102033dff6a1e5de0fad001747c7b0979c372d6ffc1ac95dd0e03eed82` | bandit, mypy, pip-audit, pytest, python-build, twine | alpine 3.24 | 5 | none |
-| `dhi.io/trivy:0.71@sha256:fd727baaf00f823f59c2936f2c797c61750e2440b736c5b787722c18dd9518aa` | trivy | debian 13.6 | 2 | none |
+| `dhi.io/docker:29-cli@sha256:fa44d1f9627e0136f8e321cb13702e18c7b1ec9557fcced0d602feb32251e434` | docker-buildx | debian 13.6 | 10 | none |
+| `dhi.io/golang:1.26.5-alpine-dev@sha256:753793e50e16daafaf70566409c752ed05f177fb34ad5b488918bbccae462413` | go-build, go-mod-tidy, go-test, godog, gofmt, govulncheck | alpine 3.24 | 2 | none |
+| `dhi.io/python:3.13.14-alpine-dev@sha256:cc27331edde031b8beabe3055f7816b06a36c0dbf4401f2fbc98735ba1910a6a` | bandit, mypy, pip-audit, pytest, python-build, twine | alpine 3.24 | 5 | none |
+| `dhi.io/trivy:0.71@sha256:f957a8173ddfc1e82cd4454fd760011e65cb03f42ffe67a91fe105a140ffade5` | trivy | debian 13.6 | 2 | none |
 | `ghcr.io/ansible/community-ansible-dev-tools:v26.7.1@sha256:4d4db3e75c48ce64763d26adbca58ff3f8b93a8ddae785373ac973b4f20a7d92` | ansible-galaxy-build, ansible-galaxy-publish, ansible-lint, ansible-syntax, ansible-test, molecule, yamllint | fedora 44 | 95 | 6 |
 | `ghcr.io/astral-sh/ruff:0.8.2@sha256:84b0ad0023906db70b759b3b29e455dad0638159bf2de2b95086db1ab175917b` | ruff | none | 0 | none |
 | `ghcr.io/osscontainertools/kaniko:v1.28.0@sha256:f072b11159668f4d11ba3a38d489db7ff18eb961b8140de91a437c71c1747583` | kaniko | none | 4 | none |
