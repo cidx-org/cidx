@@ -6,7 +6,7 @@ The prose, the incidents behind each rule and the arguments for them live in [Se
 
 ## The one-sentence version
 
-Every image is pinned by digest, so nothing upstream can reach the catalogue by accident; a weekly job then asks what _could_ replace each pin, scans the answer twice, and opens a pull request only for the replacements that survive every gate.
+Every image is pinned by digest, so nothing upstream can reach the catalogue by accident; a weekly job then asks what _could_ replace each pin, puts the answer in front of two independent scanners, and opens a pull request only for the replacements that survive every gate. The scanners are pinned by digest too — they are the gate, so nothing about them may be mutable either.
 
 ```mermaid
 flowchart LR
@@ -89,10 +89,11 @@ flowchart TD
     G2{"gate 2 — digest resolvable?<br/>a promotion may never<br/>write back a mutable tag"} -->|no| ERR["error, no promotion"]
     G2 -->|yes| G3
 
+    G2 -->|"no scanner result<br/>for the candidate"| BLOCK
+
     G3{"gate 3 — does the candidate<br/>introduce anything the running<br/>image does not already carry?"}
     G3 -->|"introduces nothing new"| PROMOTE["promoted<br/><i>PR opened</i>"]
     G3 -->|"introduces findings"| BLOCK["blocked<br/><i>reported, not merged</i>"]
-    G3 -->|"no same-day evidence<br/>of what we run"| BLOCK
 
     classDef bad fill:#fdd,stroke:#c33,color:#000
     classDef warn fill:#fef3c7,stroke:#d97706,color:#000
@@ -102,11 +103,12 @@ flowchart TD
     class PROMOTE good
 ```
 
-Three properties are worth naming, because each was learned the hard way:
+Four properties are worth naming, because each was learned the hard way:
 
 - **The cooldown has an exception.** Fourteen days of soak is the right default, and it is the wrong default when the image we run today is knowingly vulnerable — then waiting is the risk. The waiver reads the vulnerabilities already recorded against the running image, so it costs no extra scan.
 - **The scan gate is differential.** Not "is the candidate clean" — several catalogue images have never been clean — but "does the candidate introduce anything the running image does not already carry". An absolute gate froze every promotion for months.
-- **Missing evidence is never a pass.** No same-day scan of the running image means no comparison, which means no promotion. Absence of evidence is not evidence, in both directions.
+- **Missing evidence is never a pass — but "missing" means two different things.** With no scanner result for the _candidate_, there is nothing to judge and it is held: a promotion needs positive evidence, not the absence of bad news. With no same-day result for the _image we already run_, the comparison still happens, against the acceptances file alone. That is the **stricter** verdict, not a lenient one: the running image's findings are what _excuse_ a finding on the candidate, so a narrower baseline makes promotion harder. Fail-closed here means never widening the excuse set on an assumption.
+- **A promotion may rest on one scanner.** Trivy and Grype both run; when only one returns a result, the other's silence is a failed pull, not a clean image. Holding every promotion on that would rebuild the permanently-stuck gate the differential verdict replaced — so the verdict proceeds and records which scanners actually backed it, and the promotion PR names the versions cleared by only one. That is the honest version of "scanned twice", and it is the shape of the mistake in the section below.
 
 ## The states, and who is expected to act
 
@@ -150,6 +152,16 @@ Two lessons came out of that, and they are the reason this page exists.
 **One scanner is not the measurement.** The first pass used Trivy alone and concluded that all four rebuilds carried nothing. Grype, run afterwards on the same eight images, found that the `trivy:0.71` rebuild had fixed two HIGH findings — `GHSA-hrxh-6v49-42gf` in `google.golang.org/grpc` and `GO-2026-5970` in `golang.org/x/text` — that Trivy never reported. The weekly job has always run both and taken the union, for exactly this reason; the ad-hoc measurement did not, and reached a wrong conclusion.
 
 **A signal that often has nothing to say still earns its place.** Three of the four rebuilds genuinely carried no vulnerability change at any severity, under either scanner. That is the argument _for_ reporting rather than adopting, not against detecting: had `rebuilt` been wired to automatic promotion, three of those four would have spent the pin's guarantee on unreviewed content for no measurable gain — and the fourth would have been indistinguishable from them until someone measured.
+
+## The tools are part of the supply chain too
+
+For a long time the policy governed the images it inspected and not the ones doing the inspecting. `container-monitor.yml` and `security-audit.yml` ran `aquasec/trivy:latest` and `anchore/grype:latest` — ten invocations, none pinned — with the runner's docker config mounted so each container could read the DHI credentials.
+
+The credentials are the smaller half. **These containers _are_ the gate.** A scanner that reported "no findings" would clear every candidate in the catalogue, and the differential verdict, the cooldown and the acceptances file would all agree with it, because none of them has any other source of truth about what an image carries. The entire policy rested on two references pinned by nothing.
+
+Both are now pinned by digest in a workflow-level `env:`, and the same reasoning covers `pip install commitizen`, which runs in the job that rewrites `presets.toml` and opens the pull request. `TestWorkflowToolsArePinned` fails on a workflow that runs an unpinned image or installs an unversioned package.
+
+The first version of that guard matched the image only at the end of a line, and so missed every Trivy invocation — `docker run … aquasec/trivy:latest image \` puts the reference mid-line. It was caught by reverting the fix and watching the guard stay green on half the bug. **A guard that sees part of a defect is worse than none, because it reports green.**
 
 ## Where each piece lives
 

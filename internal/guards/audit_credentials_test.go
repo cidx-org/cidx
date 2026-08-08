@@ -10,7 +10,13 @@ import (
 // scannerImages are the two scanners the audit and the monitor invoke. A
 // `docker run` naming one of them and pointing it at the matrix image is a scan,
 // and a scan has to be able to authenticate.
-var scannerImages = []string{"aquasec/trivy:", "anchore/grype:"}
+//
+// They are named by the workflow env holding their pinned reference rather than
+// by `aquasec/trivy:` and `anchore/grype:` literally. Pinning the scanners
+// moved the reference out of the command and into `env:`, and this guard —
+// correctly — then found no scan at all and refused to pass on nothing rather
+// than reporting green over a workflow it could no longer read.
+var scannerImages = []string{"$TRIVY_IMAGE", "$GRYPE_IMAGE"}
 
 // TestScansCarryTheRunnerCredentials is the standing guard behind issue #284.
 //

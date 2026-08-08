@@ -19,6 +19,13 @@ permissions:
 env:
   TRIVY_DB_REPOSITORY: ghcr.io/aquasecurity/trivy-db
   GRYPE_DB_AUTO_UPDATE: false
+  # The scanners are pinned by digest for the same reason the catalogue they
+  # scan is (rule 1 of the supply-chain policy, #242) — and with more at stake.
+  # These containers run with the DHI credentials mounted, and their output *is*
+  # the promotion gate: a scanner reporting "no findings" would clear every
+  # candidate in the catalogue. TestWorkflowToolsArePinned fails on a `:latest`.
+  TRIVY_IMAGE: "aquasec/trivy:0.73.0@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c"
+  GRYPE_IMAGE: "anchore/grype:v0.116.1@sha256:1e71065c0a4cff3e6bd3b8add525ffac4343eb4971694eb90a31cf6d4d3e85db"
 
 jobs:
   # Job 1: Get unique images and setup databases
@@ -74,7 +81,7 @@ jobs:
           mkdir -p ~/.cache/trivy/db
           docker run --rm \
             -v ~/.cache/trivy:/root/.cache/trivy \
-            aquasec/trivy:latest image --download-db-only
+            "$TRIVY_IMAGE" image --download-db-only
           sudo chown -R $USER:$USER ~/.cache/trivy
 
       - name: Cache Grype DB
@@ -92,7 +99,7 @@ jobs:
           docker run --rm \
             -v ~/.cache/grype:/root/.cache/grype \
             -e GRYPE_DB_CACHE_DIR=/root/.cache/grype/db \
-            anchore/grype:latest db update
+            "$GRYPE_IMAGE" db update
           sudo chown -R $USER:$USER ~/.cache/grype
 
   # Job 2: Trivy scan (parallel)
@@ -228,7 +235,7 @@ jobs:
             "${DOCKER_AUTH[@]}" \
             -v "$(pwd)/.trivyignore:/root/.trivyignore:ro" \
             -v "$HOME/.cache/trivy:/root/.cache/trivy" \
-            aquasec/trivy:latest image \
+            "$TRIVY_IMAGE" image \
             --severity HIGH,CRITICAL \
             --ignorefile /root/.trivyignore \
             --skip-db-update \
@@ -241,7 +248,7 @@ jobs:
             "${DOCKER_AUTH[@]}" \
             -v "$(pwd)/.trivyignore:/root/.trivyignore:ro" \
             -v "$HOME/.cache/trivy:/root/.cache/trivy" \
-            aquasec/trivy:latest image \
+            "$TRIVY_IMAGE" image \
             --severity HIGH,CRITICAL \
             --ignorefile /root/.trivyignore \
             --skip-db-update \
@@ -260,7 +267,7 @@ jobs:
             "${DOCKER_AUTH[@]}" \
             -v "$(pwd)/.trivyignore:/root/.trivyignore:ro" \
             -v "$HOME/.cache/trivy:/root/.cache/trivy" \
-            aquasec/trivy:latest image \
+            "$TRIVY_IMAGE" image \
             --severity HIGH,CRITICAL \
             --ignorefile /root/.trivyignore \
             --skip-db-update \
@@ -397,7 +404,7 @@ jobs:
             -v "$HOME/.cache/grype:/root/.cache/grype:ro" \
             -e GRYPE_DB_AUTO_UPDATE=false \
             -e GRYPE_DB_CACHE_DIR=/root/.cache/grype/db \
-            anchore/grype:latest \
+            "$GRYPE_IMAGE" \
             "registry:$IMAGE" \
             --config /.grype.yaml \
             -o json > results/grype-${SAFE_NAME}.json 2>/dev/null || true
@@ -409,7 +416,7 @@ jobs:
             -v "$HOME/.cache/grype:/root/.cache/grype:ro" \
             -e GRYPE_DB_AUTO_UPDATE=false \
             -e GRYPE_DB_CACHE_DIR=/root/.cache/grype/db \
-            anchore/grype:latest \
+            "$GRYPE_IMAGE" \
             "registry:$IMAGE" \
             --config /.grype.yaml > results/grype-${SAFE_NAME}.txt 2>&1 || true
 
@@ -428,7 +435,7 @@ jobs:
             -v "$HOME/.cache/grype:/root/.cache/grype:ro" \
             -e GRYPE_DB_AUTO_UPDATE=false \
             -e GRYPE_DB_CACHE_DIR=/root/.cache/grype/db \
-            anchore/grype:latest \
+            "$GRYPE_IMAGE" \
             "registry:$IMAGE" \
             --config /.grype.yaml \
             --fail-on high \
