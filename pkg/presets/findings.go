@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// Triaging a scanner finding (docs/core-concepts/security.md, issue #238).
+// Triaging a scanner finding (docs/core-concepts/vulnerability-management.md, issue #238).
 //
 // A CIDX container lives for seconds, listens on nothing and persists nothing,
 // so the threat it defends against is a compromised image — not a parser flaw in

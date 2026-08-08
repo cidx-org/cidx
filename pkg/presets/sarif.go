@@ -338,7 +338,7 @@ func SARIF(alerts []Alert) SarifLog {
 		Runs: []SarifRun{{
 			Tool: SarifTool{Driver: SarifDriver{
 				Name:           "CIDX catalogue audit",
-				InformationURI: "https://github.com/cidx-org/cidx/blob/main/docs/core-concepts/security.md#supply-chain-policy",
+				InformationURI: "https://github.com/cidx-org/cidx/blob/main/docs/core-concepts/supply-chain-policy.md",
 				Rules:          rules,
 			}},
 			Results: results,

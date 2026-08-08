@@ -142,7 +142,7 @@ func TestEvaluatePromotionClaimsNoWaiverItDidNotNeed(t *testing.T) {
 }
 
 // TestPromotionCooldownIsTheDocumentedWindow pins the constant against the
-// written policy (docs/core-concepts/security.md): the two must not drift.
+// written policy (docs/core-concepts/supply-chain-policy.md): the two must not drift.
 func TestPromotionCooldownIsTheDocumentedWindow(t *testing.T) {
 	if got := wholeDays(PromotionCooldown); got != 14 {
 		t.Errorf("PromotionCooldown = %d days, want 14 as documented", got)

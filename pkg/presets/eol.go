@@ -8,7 +8,7 @@ import (
 )
 
 // End of support for the base an image is built on
-// (docs/core-concepts/security.md, issue #303).
+// (docs/core-concepts/image-lifecycle.md, issue #303).
 //
 // A CVE scan answers "what is broken in this image today". It does not answer
 // "will anything ever fix it". Once the distribution underneath an image stops

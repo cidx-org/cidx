@@ -220,7 +220,7 @@ func newestOf(currentTag string, listing tagListing, now time.Time) tagUpdate {
 
 // registryDatesTags reports whether a registry says when a version became
 // publicly available — the date rule 2 of the image supply-chain policy
-// measures its cooldown against (docs/core-concepts/security.md).
+// measures its cooldown against (docs/core-concepts/supply-chain-policy.md).
 //
 // Docker Hub (`last_updated`), Quay.io (`start_ts`) and gcr.io
 // (`timeUploadedMs`) do. ghcr.io and dhi.io do not, and there is nothing left

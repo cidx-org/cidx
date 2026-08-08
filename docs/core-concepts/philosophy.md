@@ -437,5 +437,5 @@ containers = ["terraform-validate", "drift-detection", "compliance-check"]
 ## Learn More
 
 - [DevOps Integration](./devops.md) - How CIDX fits in DevOps lifecycle
-- [Environment Security](./security.md) - Local safety modes explained
+- [Environments & Local Safety](./environments.md) - Local safety modes explained
 - [BDD Scenarios](../../features/) - Living documentation of CIDX behavior

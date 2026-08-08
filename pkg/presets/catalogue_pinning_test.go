@@ -13,7 +13,7 @@ import (
 var pinnedImagePattern = regexp.MustCompile(`^[^@\s]+:[^@:/\s]+@sha256:[0-9a-f]{64}$`)
 
 // TestCatalogueImagesArePinnedByDigest is the standing guard behind rule 1 of
-// the image supply-chain policy (issue #242, docs/core-concepts/security.md):
+// the image supply-chain policy (issue #242, docs/core-concepts/supply-chain-policy.md):
 // every built-in preset image is pinned `image:tag@sha256:...`.
 //
 // A tag alone is mutable — `commitizen:4.15.1` can point at different content
@@ -85,7 +85,7 @@ func TestCatalogueImageDigestsAreConsistent(t *testing.T) {
 }
 
 // TestCataloguePinsOneReferencePerRepository is what makes the repository-keyed
-// alert fingerprint unambiguous (#313, docs/core-concepts/security.md).
+// alert fingerprint unambiguous (#313, docs/core-concepts/vulnerability-management.md).
 //
 // A triage alert is identified by its repository and its CVE, so that a repin
 // does not close it and reopen it. The price of dropping the reference from the
