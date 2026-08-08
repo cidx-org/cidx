@@ -261,7 +261,7 @@ per release, and a preset for it would add complexity for no friction removed
 So `release.yml` is the _publication_ workflow, not an implementation of
 `[pipelines.release]`. That pipeline is the end-to-end rehearsal `cidx run
 release` walks locally with the guardrails on (`gh-release` drafts, `kaniko`
-does not push) — see [Local Safety](../core-concepts/security.md). The two are
+does not push) — see [Local Safety](../core-concepts/environments.md). The two are
 not meant to coincide, which is why `cidx.toml` states `workflow = "none"` on
 `[pipelines.release]` so `cidx check workflow` does not compare them (issue
 #233). See [`cidx check workflow`](../reference/cli.md#cidx-check-workflow).

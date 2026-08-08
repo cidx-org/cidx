@@ -9,7 +9,7 @@ import (
 )
 
 // Where the catalogue stands, in one page
-// (docs/core-concepts/security.md, issue #308).
+// (docs/core-concepts/vulnerability-management.md, issue #308).
 //
 // Two views already exist. The Security tab (#301) is the detail: one alert per
 // finding, dated, closed by itself when a repin removes it — and 169 of them.
@@ -383,7 +383,7 @@ func writeSummaryWhereToLook(sb *strings.Builder, s CatalogueSummary) {
 	fmt.Fprintf(sb, "| Whether an acceptance stands — the source of truth | %s |\n",
 		link("`"+ExceptionsFile+"`", blob(s.Links.Repo, ExceptionsFile)))
 	fmt.Fprintf(sb, "| Why any of this is judged the way it is | %s |\n\n",
-		link("the supply-chain policy", blob(s.Links.Repo, "docs/core-concepts/security.md")))
+		link("the supply-chain policy", blob(s.Links.Repo, "docs/core-concepts/supply-chain-policy.md")))
 }
 
 func writeSummaryDigest(sb *strings.Builder, s CatalogueSummary) {

@@ -14,7 +14,11 @@ Welcome to the CIDX (CI with Declarative eXecution) documentation.
 
 - [Philosophy](core-concepts/philosophy.md) - Why CIDX exists and its design principles
 - [DevOps Integration](core-concepts/devops.md) - How CIDX fits into your DevOps loop
-- [Security & Environments](core-concepts/security.md) - Local safety modes and environment detection
+- [Environments & Local Safety](core-concepts/environments.md) - Environment detection and local safety modes
+- [Supply-Chain Policy](core-concepts/supply-chain-policy.md) - How the images CIDX runs are pinned and chosen
+- [The Image Lifecycle](core-concepts/image-lifecycle.md) - How CIDX notices an image has moved, frozen or died
+- [Vulnerability Management](core-concepts/vulnerability-management.md) - Judging findings, exceptions, where to look
+- [The Image Supply Chain, in Diagrams](core-concepts/image-supply-chain.md) - The same machinery as a map
 - [The Image Supply Chain](core-concepts/image-supply-chain.md) - Diagrams: how a pinned image is watched, gated and replaced
 - [Container Reuse](core-concepts/container-reuse.md) - Performance optimization details
 

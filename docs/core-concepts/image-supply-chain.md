@@ -2,7 +2,7 @@
 
 CIDX ships a catalogue of container images and decides, every week and without a human, which of them may be replaced. This page is the map of that machinery: what runs, in what order, what each signal means, and — the part that took the longest to learn — what each signal is _worth_.
 
-The prose, the incidents behind each rule and the arguments for them live in [Security & Environments → Supply-Chain Policy](security.md#supply-chain-policy). This page is the shape.
+This page is the shape. The prose is three pages beside it: [Supply-Chain Policy](supply-chain-policy.md) states the rules and how an image is chosen, [The Image Lifecycle](image-lifecycle.md) is every way one can go quiet, and [Vulnerability Management](vulnerability-management.md) is what becomes of a finding once a scanner reports it.
 
 ## The one-sentence version
 
@@ -188,6 +188,7 @@ The split is deliberate and it is a rule: **every decision lives in Go, where it
 
 ## Related
 
-- [Supply-Chain Policy](security.md#supply-chain-policy) — the three rules, the incidents, the arguments
-- [A tag rebuilt under the same name](security.md#a-tag-rebuilt-under-the-same-name) — the `rebuilt` signal in prose
+- [Supply-Chain Policy](supply-chain-policy.md) — the three rules and the argument for each
+- [The Image Lifecycle](image-lifecycle.md) — every state in the tree above, and the incident behind it
+- [A tag rebuilt under the same name](image-lifecycle.md#a-tag-rebuilt-under-the-same-name) — the `rebuilt` signal in prose
 - [Creating Presets](../guides/creating-presets.md) — adding an image to the catalogue

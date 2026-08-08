@@ -8,7 +8,7 @@ import (
 )
 
 // The lifecycle of a vulnerability exception
-// (docs/core-concepts/security.md, issue #238).
+// (docs/core-concepts/vulnerability-management.md, issue #238).
 //
 // An exception records a judgement about a CVE in an image, in our usage — and
 // that judgement survives a version bump, because none of what it rests on

@@ -8,7 +8,7 @@ import (
 )
 
 // Rules 2 and 3 of the image supply-chain policy
-// (docs/core-concepts/security.md, issue #242).
+// (docs/core-concepts/supply-chain-policy.md, issue #242).
 //
 // Rule 1 made every catalogue reference immutable. That closes the "same tag,
 // different content" vector but not the one it exists for: a version published
