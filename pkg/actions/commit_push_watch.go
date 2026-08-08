@@ -58,8 +58,19 @@ func (a *CommitPushWatchAction) Execute(ctx context.Context) error {
 		return fmt.Errorf("failed to check for changes: %w", err)
 	}
 
-	if !hasChanges {
-		log.Info("No changes to commit")
+	// A clean tree is not the same as nothing to do: the commits may already be
+	// written and simply not pushed, which is how a branch stayed local while
+	// cpw reported success and a watch went green on its parent (#416).
+	hasUnpushed, err := a.repo.HasUnpushedCommits()
+	if err != nil {
+		return fmt.Errorf("failed to check for unpushed commits: %w", err)
+	}
+
+	plan, message := PlanCommitPushWatch(hasChanges, hasUnpushed)
+	if message != "" {
+		log.Info(message)
+	}
+	if plan == CPWNothingToDo {
 		return nil
 	}
 
@@ -70,12 +81,15 @@ func (a *CommitPushWatchAction) Execute(ctx context.Context) error {
 		return err
 	}
 
-	// 3. Commit
-	log.Info("📝 Creating commit...")
-	if err := a.repo.Commit(a.message); err != nil {
-		return fmt.Errorf("commit failed: %w", err)
+	// 3. Commit -- skipped when there is nothing new in the tree and the work
+	// to push is already committed.
+	if plan == CPWCommitAndPush {
+		log.Info("📝 Creating commit...")
+		if err := a.repo.Commit(a.message); err != nil {
+			return fmt.Errorf("commit failed: %w", err)
+		}
+		log.Info("✓ Commit created")
 	}
-	log.Info("✓ Commit created")
 
 	// 4. Push
 	log.Info("📤 Pushing to remote...")
