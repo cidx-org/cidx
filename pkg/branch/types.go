@@ -111,6 +111,11 @@ type PRInfo struct {
 	BranchName  string
 	BaseBranch  string
 	AuthorLogin string
+
+	// HeadSHA is the commit the pull request's checks belong to. A watch
+	// compares it against local HEAD before reporting anything: they are the
+	// same commit only when the push actually happened (#414).
+	HeadSHA string
 }
 
 // PRChecksInfo contains check/CI status

@@ -369,6 +369,7 @@ func (m *Manager) GetPRInfo(branchName string) (*PRInfo, error) {
 		BranchName:  branchName,
 		BaseBranch:  pr.GetBase().GetRef(),
 		AuthorLogin: pr.GetUser().GetLogin(),
+		HeadSHA:     pr.GetHead().GetSHA(),
 	}
 
 	// Determine status
