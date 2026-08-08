@@ -11,6 +11,17 @@ on:
         type: boolean
         default: false
 
+# The scanners are pinned by digest for the same reason the catalogue they scan
+# is (rule 1 of the supply-chain policy, #242) — and with more at stake. These
+# containers run mutable code on the runner with the DHI credentials mounted,
+# and their output *is* the promotion gate: a scanner that reported "no
+# findings" would promote every candidate in the catalogue. Pinning the images
+# the policy governs while running the policy itself from `:latest` was the hole
+# this closes. TestWorkflowToolsArePinned fails on a `:latest` here.
+env:
+  TRIVY_IMAGE: "aquasec/trivy:0.73.0@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c"
+  GRYPE_IMAGE: "anchore/grype:v0.116.1@sha256:1e71065c0a4cff3e6bd3b8add525ffac4343eb4971694eb90a31cf6d4d3e85db"
+
 permissions:
   contents: write
   pull-requests: write
@@ -296,7 +307,7 @@ jobs:
           docker run --rm \
             -v "$HOME/.docker:/docker-config:ro" \
             -e DOCKER_CONFIG=/docker-config \
-            aquasec/trivy:latest image \
+            "$TRIVY_IMAGE" image \
             --severity HIGH,CRITICAL \
             --quiet \
             --format json \
@@ -374,7 +385,7 @@ jobs:
           docker run --rm \
             -v "$HOME/.docker:/docker-config:ro" \
             -e DOCKER_CONFIG=/docker-config \
-            anchore/grype:latest \
+            "$GRYPE_IMAGE" \
             "$IMAGE" \
             --quiet \
             -o json > "$OUT" || true
@@ -501,6 +512,27 @@ jobs:
             echo "SCAN_EOF"
           } >> $GITHUB_OUTPUT
 
+          # A promotion backed by one scanner is allowed on purpose — holding
+          # everything because a registry login flaked would rebuild the
+          # permanently-stuck gate the differential verdict replaced — but the
+          # PR used to claim both had scanned every version regardless. The
+          # verdict records which ones actually produced a result, so the claim
+          # is generated from that rather than asserted. A scanner that returned
+          # nothing is a failed pull, not a clean image, and a verdict resting
+          # on one instrument is exactly how a confident wrong answer is
+          # produced (#332).
+          PARTIAL=$(echo "$VERDICTS" | jq -r '.[] | select(.promote == true and ((.scanned_by // []) | length) < 2) | "- `\(.new_image)` — \((.scanned_by // ["no scanner"]) | join(", ")) only"')
+          if [ -z "$PARTIAL" ]; then
+            PARTIAL="_None: both scanners produced a result for every version above._"
+          else
+            echo "$VERDICTS" | jq -r '.[] | select(.promote == true and ((.scanned_by // []) | length) < 2) | "::warning::promoted on a single scanner: \(.new_image) — \((.scanned_by // []) | join(", "))"'
+          fi
+          {
+            echo "partial_scans<<PARTIAL_EOF"
+            echo "$PARTIAL"
+            echo "PARTIAL_EOF"
+          } >> $GITHUB_OUTPUT
+
           # Rule 3 requires the waiver to be visible in the promotion PR:
           # which vulnerability, on which image, fixed by which version. Only
           # for candidates actually promoted — a waiver claimed for a candidate
@@ -563,7 +595,12 @@ jobs:
         if: steps.promote.outputs.has_changes == 'true' && !inputs.dry_run
         id: bump
         run: |
-          pip install commitizen
+          # Pinned for the same reason the scanners above are: this step
+          # rewrites presets.toml's version and opens the pull request, so an
+          # unpinned resolve here is mutable code with write access to the
+          # thing the whole policy protects. The version tracks the
+          # `commitizen` preset in the catalogue — promote both together.
+          pip install commitizen==4.16.5
           CURRENT=$(cz version --project 2>/dev/null || echo "0.0.0")
           cz bump --yes --increment PATCH --changelog 2>&1 || true
           NEW=$(cz version --project 2>/dev/null || echo "unknown")
@@ -643,12 +680,23 @@ jobs:
 
             ### Security validation (#247)
 
-            Trivy and Grype scanned every version below. Each was promoted
-            because it introduces no HIGH/CRITICAL finding beyond what is
-            already accepted for the image it replaces
+            Every version below was scanned before promotion, and each line
+            names the scanners that actually produced a result. A version was
+            promoted because it introduces no HIGH/CRITICAL finding beyond what
+            is already accepted for the image it replaces
             (`known-vulnerabilities.toml`):
 
             ${{ steps.promote.outputs.scan_report }}
+
+            #### Backed by a single scanner
+
+            Trivy and Grype are both run against every candidate. When only one
+            returns a result the other's silence is a failed pull, not a clean
+            image, and the verdict rests on one instrument — which is how a
+            confident wrong answer gets produced (#332). Promotions in that
+            position are named here rather than folded into the line above:
+
+            ${{ steps.promote.outputs.partial_scans }}
 
             Candidates that did introduce one are held back, and named in the
             run summary under *Held by the scan gate*.
