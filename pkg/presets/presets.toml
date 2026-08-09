@@ -568,6 +568,13 @@ workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
 
 [presets.go-build.env]
+# The artifact leaves this container: it is built in an Alpine image and run
+# wherever the user runs it. With cgo on, `go build` links against whatever libc
+# the image ships -- musl here -- and the binary then fails to start on Debian,
+# Ubuntu or anything glibc, with the kernel's misleading "not found" (#195, #419).
+# Off, the binary carries everything it needs and runs anywhere. release.yml has
+# said so since #281; the catalogue was the half that had not caught up.
+CGO_ENABLED = "0"
 HOME = "/tmp"
 GOPATH = "/tmp/go"
 GOMODCACHE = "/tmp/go-mod-cache"
@@ -1075,6 +1082,9 @@ name = "cargo-build"
 phase = "build"
 image = "rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd"
 image_entrypoint = []
+# The warning used to live only on `probatum`, which is the tool you are not
+# using at the moment you make the mistake. It belongs on the producer too.
+description = "Produces a glibc-linked binary: the image is Debian, so the artifact runs on glibc hosts and will not start on an Alpine/musl image such as probatum's (misleading 'not found' on a file that exists). Build with --target x86_64-unknown-linux-musl for an artifact that runs anywhere."
 command = "cargo build --release"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
