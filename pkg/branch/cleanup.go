@@ -59,9 +59,10 @@ func (m *Manager) Cleanup(opts CleanupOptions) (*CleanupResult, error) {
 
 		// Delete local branch
 		if branch.Location == LocationLocal || branch.Location == LocationBoth {
-			// Force delete if --force flag OR if branch is merged (confirmed by GitHub)
-			// This handles local-only branches where git can't verify merge status
-			forceDelete := opts.Force || branch.Status == StatusMerged
+			// Forced only when nothing is at stake -- see MayForceDelete. The
+			// old `opts.Force || merged` overruled `git branch -d` on branches
+			// carrying commits the remote had never seen (#417).
+			forceDelete := MayForceDelete(opts.Force, branch.Status, branch.LocalCommitHash, branch.RemoteCommitHash)
 			if err := DeleteLocalBranch(branch.Name, forceDelete); err != nil {
 				result.Skipped = append(result.Skipped, SkippedBranch{
 					Name:   branch.Name,
@@ -200,4 +201,39 @@ func findBranch(branches []Info, name string) *Info {
 		}
 	}
 	return nil
+}
+
+// MayForceDelete decides whether a branch may be deleted with `git branch -D`.
+//
+// `git branch -d` refuses a branch that is not fully merged, comparing against
+// the upstream when there is one. That is the right question, and it is already
+// asked -- so the old `-d, and -D if that fails` sequence could only ever fire
+// on a refusal git meant, which is the two cases where deleting loses work
+// (#417).
+//
+// Forcing is still needed in one place. Once the remote branch is gone, a
+// squash-merged branch has no upstream left to compare against and its commits
+// are reachable from nothing -- the squash replaced them in the trunk -- so -d
+// refuses a deletion that is perfectly safe. There the merged verdict is the
+// only evidence there is, and it decides.
+//
+// What it must not do is decide when the working copy has moved on. A local tip
+// the remote does not have is a commit the merge did not take, and no verdict
+// about the pull request says anything about it.
+func MayForceDelete(explicitForce bool, status Status, localHash, remoteHash string) bool {
+	if explicitForce {
+		return true
+	}
+
+	if status != StatusMerged {
+		return false
+	}
+
+	// Both sides known and disagreeing: the branch holds something the merge
+	// never saw.
+	if localHash != "" && remoteHash != "" && localHash != remoteHash {
+		return false
+	}
+
+	return true
 }

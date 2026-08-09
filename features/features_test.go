@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/cidx-org/cidx/v3/pkg/actions"
+	"github.com/cidx-org/cidx/v3/pkg/branch"
 	"github.com/cucumber/godog"
 	"github.com/cucumber/godog/colors"
 
@@ -120,6 +121,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	RegisterCheckVerdictSteps(ctx, testCtx)
 	RegisterWatchTargetSteps(ctx, testCtx)
 	RegisterCPWSteps(ctx, testCtx)
+	RegisterBranchDeletionSteps(ctx, testCtx)
 
 	// Hooks
 	ctx.Before(func(ctx context.Context, sc *godog.Scenario) (context.Context, error) {
@@ -157,6 +159,13 @@ type TestContext struct {
 	cpwHasUnpushed bool
 	cpwPlan        actions.CPWPlan
 	cpwMessage     string
+
+	// How a branch deletion was decided (#417).
+	deleteStatus     branch.Status
+	deleteLocalHash  string
+	deleteRemoteHash string
+	deleteForce      bool
+	deleteForced     bool
 
 	Environment    string
 	CI             bool
