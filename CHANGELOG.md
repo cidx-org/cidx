@@ -1,3 +1,18 @@
+## v3.2.0 (2026-08-09)
+
+### Feat
+
+- **cli**: refuse a merge that would land a commit you do not have (#415)
+- **cli**: refuse a watch that reports on a commit you do not have (#414)
+- **security**: see a tag rebuilt under the same name (#408)
+
+### Fix
+
+- **release**: commit the release notes, not the scratch state beside them (#418)
+- **cli**: stop forcing a branch deletion git had just refused (#417)
+- **cli**: push what cpw has, not only what it just made (#416)
+- **security**: pin the tools that enforce the pinning policy, and map the machinery (#411)
+
 ## v3.1.0 (2026-08-08)
 
 ### Feat
