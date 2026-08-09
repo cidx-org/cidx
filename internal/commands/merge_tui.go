@@ -626,11 +626,14 @@ func (m mergeModel) runPostMergeActions() tea.Cmd {
 				statusMessages = append(statusMessages, fmt.Sprintf("✓ Deleted remote branch: %s", headBranch))
 			}
 
-			// Delete local branch
-			cmd = vcs.Git("", "branch", "-D", headBranch)
+			// Delete local branch with `-d`, never `-D`: git refuses a branch
+			// holding commits its upstream does not have, and forcing past that
+			// destroys the only copy of them (#417).
+			cmd = vcs.Git("", "branch", "-d", headBranch)
 			if err := cmd.Run(); err != nil {
-				// Not critical, branch might not exist locally
-				statusMessages = append(statusMessages, fmt.Sprintf("⚠ Local branch not deleted: %s", headBranch))
+				// Not critical: the branch may not exist locally, or may still
+				// hold something, in which case keeping it is the point.
+				statusMessages = append(statusMessages, fmt.Sprintf("⚠ Local branch kept: %s", headBranch))
 			} else {
 				statusMessages = append(statusMessages, fmt.Sprintf("✓ Deleted local branch: %s", headBranch))
 			}

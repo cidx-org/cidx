@@ -817,15 +817,14 @@ func (a *PRAction) postMergeCleanup(mergedBranch string) error {
 
 	// 3. Delete local branch
 	log.Infof("  → Deleting local branch '%s'...", mergedBranch)
-	deleteLocalCmd := vcs.Git(workDir, "branch", "-d", mergedBranch)
-	if output, err := deleteLocalCmd.CombinedOutput(); err != nil {
-		// Use -D if -d fails (branch might not be fully merged from git's perspective)
-		deleteLocalCmd = vcs.Git(workDir, "branch", "-D", mergedBranch)
-		if output, err := deleteLocalCmd.CombinedOutput(); err != nil {
-			log.Warnf("  ⚠️  Could not delete local branch: %s", strings.TrimSpace(string(output)))
-		}
-	} else {
-		_ = output // Branch deleted successfully
+	// `git branch -d`, and nothing else. It refuses a branch that is not fully
+	// merged into its upstream, which after a squash merge is exactly the
+	// branch carrying a commit that never reached the remote -- so the old
+	// fallback to `-D` overruled git only in the cases where git was right, and
+	// deleted the one copy of that work (#417).
+	if output, err := vcs.Git(workDir, "branch", "-d", mergedBranch).CombinedOutput(); err != nil {
+		log.Warnf("  ⚠️  Kept local branch '%s': %s", mergedBranch, strings.TrimSpace(string(output)))
+		log.Info("     Delete it yourself once its commits are somewhere else: git branch -D " + mergedBranch)
 	}
 
 	// 4. Delete remote branch
