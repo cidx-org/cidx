@@ -50,21 +50,18 @@ func (a *ReleaseCommitAction) Execute(ctx context.Context) error {
 	if a.dryRun {
 		log.Info("🏁 Dry-run mode: would execute:")
 		log.Infof("   git add %s", notesFile)
-		log.Infof("   git add %s", ReleaseVersionFile)
 		log.Infof("   git commit -m \"chore: prepare release v%s\"", version)
 		return nil
 	}
 
-	// Stage the release notes file
+	// The notes, and only the notes. ReleaseVersionFile is scratch state between
+	// prepare and create -- .gitignore lists it beside .cidx/tag-version and
+	// .cidx/tag-message -- so staging it made `git add` refuse an ignored path
+	// and no release could be cut through cidx at all (#418). It stays on disk,
+	// because `release create` reads it back.
 	addCmd := vcs.Git(workDir, "add", notesFile)
 	if output, err := addCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to stage release notes: %w\n%s", err, output)
-	}
-
-	// Stage the version file
-	addVersionCmd := vcs.Git(workDir, "add", ReleaseVersionFile)
-	if output, err := addVersionCmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to stage version file: %w\n%s", err, output)
 	}
 
 	// Commit the release notes with version in message
