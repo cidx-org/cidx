@@ -77,7 +77,7 @@ the daily security audit reports it.
 | `ghcr.io/ansible/community-ansible-dev-tools:v26.7.1@sha256:4d4db3e75c48ce64763d26adbca58ff3f8b93a8ddae785373ac973b4f20a7d92` | ansible-galaxy-build, ansible-galaxy-publish, ansible-lint, ansible-syntax, ansible-test, molecule, yamllint | fedora 44 | 95 | 6 |
 | `ghcr.io/astral-sh/ruff:0.8.2@sha256:84b0ad0023906db70b759b3b29e455dad0638159bf2de2b95086db1ab175917b` | ruff | none | 0 | none |
 | `ghcr.io/osscontainertools/kaniko:v1.28.0@sha256:f072b11159668f4d11ba3a38d489db7ff18eb961b8140de91a437c71c1747583` | kaniko | none | 4 | none |
-| `ghcr.io/probatum-org/probatum:0.8.0@` | probatum | alpine 3.24.1 | 0 | none |
+| `ghcr.io/probatum-org/probatum:0.8.0@sha256:b1f7a2bb4c1a44a29ee62b92fca4c6f6fb60fbc56843421dcd65c430d3697f51` | probatum | alpine 3.24.1 | 0 | none |
 | `ghcr.io/securego/gosec:2.28.0@sha256:4342ad119a7c69f3f4e4ce78d81ba183dc774a70a7a4c6eeb15fe9e511f214f0` | gosec | alpine 3.24.1 | 6 | none |
 | `golangci/golangci-lint:v2.12.2-alpine@sha256:91b27804074a0bacea298707f016911e60cf0cdbc6c7bf5ccacb5f0606d18d60` | golangci-lint | alpine 3.23.4 | 48 | none |
 | `goreleaser/goreleaser:v2.17.0@sha256:054eefd282c02233a2556ce2d1a60cd2f51dc565ffc2520dc38b5deb4dd1ad30` | goreleaser | alpine 3.24.1 | 32 | none |
