@@ -259,6 +259,13 @@ policy](../core-concepts/supply-chain-policy.md) for why, and
 issue #242 for the decision record. `TestCatalogueImagesArePinnedByDigest`
 rejects a preset added without a digest.
 
+If the preset **builds something** — anything whose output is an executable that
+leaves the container — the image also decides where that output is allowed to
+run, and getting it wrong surfaces as a `not found` on a file that plainly
+exists. Read [What Leaves the
+Container](../core-concepts/artifacts-across-containers.md) before choosing one;
+`TestEveryBuildPresetSaysWhatItsArtifactNeeds` will ask you the question anyway.
+
 Resolve the digest of the **multi-arch index**, not of a single architecture —
 pinning one platform's manifest would break every runner on another:
 

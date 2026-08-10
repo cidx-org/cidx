@@ -19,6 +19,7 @@ Welcome to the CIDX (CI with Declarative eXecution) documentation.
 - [The Image Lifecycle](core-concepts/image-lifecycle.md) - How CIDX notices an image has moved, frozen or died
 - [Vulnerability Management](core-concepts/vulnerability-management.md) - Judging findings, exceptions, where to look
 - [The Image Supply Chain, in Diagrams](core-concepts/image-supply-chain.md) - The same machinery as a map
+- [What Leaves the Container](core-concepts/artifacts-across-containers.md) - Why a built binary reports "not found" when it is right there
 - [The Image Supply Chain](core-concepts/image-supply-chain.md) - Diagrams: how a pinned image is watched, gated and replaced
 - [Container Reuse](core-concepts/container-reuse.md) - Performance optimization details
 
