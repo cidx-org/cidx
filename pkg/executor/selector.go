@@ -52,6 +52,15 @@ func NewSelector(dryRun, verbose, quiet bool) (*Selector, error) {
 
 // Select chooses the appropriate executor for a tool based on backend preference
 func (s *Selector) Select(toolName string, backend BackendType) (Executor, error) {
+	// A dry run describes containers and starts none, so whether a daemon is
+	// listening decides nothing. Asking anyway made `cidx run --dry-run` refuse
+	// to answer wherever it could not have executed — which is the position
+	// every reader of a preview is in (#426). Same rule #276 settled for
+	// `pr create --dry-run` and the network.
+	if s.dryRun {
+		return s.selectForDescription(backend)
+	}
+
 	switch backend {
 	case BackendDocker:
 		return s.selectDocker()
@@ -233,3 +242,39 @@ func (e *PodmanExecutor) Close() error {
 
 // Ensure PodmanExecutor implements Executor interface
 var _ Executor = (*PodmanExecutor)(nil)
+
+// selectForDescription hands back an executor for a run that will only print.
+//
+// It honours an explicitly requested backend, because the description names the
+// backend and answering about Podman when Docker was asked for would describe
+// the wrong thing. What it does not do is check that anything is listening: the
+// executor is in dry-run mode and its Run() writes to the log rather than to a
+// daemon.
+//
+// The clients are constructed at NewSelector and only fail there on a malformed
+// endpoint, so this returns an error in the one case where nothing could be
+// built at all -- and says why, rather than reporting a daemon that is down.
+func (s *Selector) selectForDescription(backend BackendType) (Executor, error) {
+	switch backend {
+	case BackendDocker:
+		if s.docker == nil {
+			return nil, errors.New("docker client could not be initialized, so there is nothing to describe a run with")
+		}
+		return s.docker, nil
+
+	case BackendPodman:
+		if s.podman == nil {
+			return nil, errors.New("podman client could not be initialized, so there is nothing to describe a run with")
+		}
+		return s.podman, nil
+
+	default:
+		if s.docker != nil {
+			return s.docker, nil
+		}
+		if s.podman != nil {
+			return s.podman, nil
+		}
+		return nil, errors.New("no container client could be initialized, so there is nothing to describe a run with")
+	}
+}
