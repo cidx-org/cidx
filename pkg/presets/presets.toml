@@ -1120,7 +1120,7 @@ command_flag = "--dry-run"
 [presets.probatum]
 name = "probatum"
 phase = "test"
-image = "ghcr.io/probatum-org/probatum:0.6.1@sha256:c23bd5ad264830efc708fa56e84128858a3a242a8ec262f9c95bfe1c010c5b3a"
+image = "ghcr.io/probatum-org/probatum:0.8.0@"
 image_entrypoint = ["probatum"]
 # The image is Alpine/musl and ships no glibc loader; a glibc binary fails with
 # the shell's misleading "sh: <path>: not found" even though the file exists (#195).
