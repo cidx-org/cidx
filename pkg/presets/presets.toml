@@ -1084,7 +1084,7 @@ image = "rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5
 image_entrypoint = []
 # The warning used to live only on `probatum`, which is the tool you are not
 # using at the moment you make the mistake. It belongs on the producer too.
-description = "Produces a glibc-linked binary: the image is Debian, so the artifact runs on glibc hosts and will not start on an Alpine/musl image such as probatum's (misleading 'not found' on a file that exists). Build with --target x86_64-unknown-linux-musl for an artifact that runs anywhere."
+description = "Produces a glibc-linked binary: the image is Debian, so the artifact runs on glibc hosts and will not start on an Alpine/musl image such as probatum's (misleading 'not found' on a file that exists). Build with `rustup target add x86_64-unknown-linux-musl && cargo build --release --target x86_64-unknown-linux-musl` for an artifact that runs anywhere -- the slim image ships the gnu target only."
 command = "cargo build --release"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
