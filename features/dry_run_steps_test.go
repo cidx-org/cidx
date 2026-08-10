@@ -3,6 +3,8 @@ package features
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -36,6 +38,11 @@ func RegisterDryRunSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Then(`^it should report the branch "([^"]*)" it would create$`, tc.shouldReportTheWouldBeBranch)
 	ctx.Then(`^the checked-out commit should be the one it started on$`, tc.headShouldNotHaveMoved)
 	ctx.Then(`^no branch "([^"]*)" should exist$`, tc.branchShouldNotExist)
+
+	ctx.Given(`^no container runtime answers$`, tc.noContainerRuntimeAnswers)
+	ctx.When(`^I preview the pipeline "([^"]*)"$`, tc.previewPipeline)
+	ctx.Then(`^it should report the image it would run$`, tc.shouldReportTheImageItWouldRun)
+	ctx.Then(`^no container should have been started$`, tc.noContainerShouldHaveBeenStarted)
 }
 
 // repositoryWithUnreachableRemote builds a one-commit repository on main with
@@ -142,4 +149,142 @@ func (tc *TestContext) branchShouldNotExist(branch string) error {
 		return fmt.Errorf("the preview created the branch it was only asked to describe: %s", out)
 	}
 	return nil
+}
+
+// The pipeline preview, issue #426. Same rule as the pull request preview above,
+// one command over: `cidx run --dry-run` has to answer where nothing can run.
+//
+// The runtime is neutralised by pointing every backend at a socket that does not
+// exist, because the suite runs on machines that do have Docker -- and a
+// scenario that only proves something on a machine without one proves it
+// nowhere. rememberEnv puts the variables back after the scenario.
+
+func (tc *TestContext) noContainerRuntimeAnswers() error {
+	for key, value := range map[string]string{
+		"DOCKER_HOST":    "unix:///nonexistent/cidx-dry-run.sock",
+		"CONTAINER_HOST": "unix:///nonexistent/cidx-dry-run.sock",
+	} {
+		tc.rememberEnv(key)
+		if err := os.Setenv(key, value); err != nil {
+			return fmt.Errorf("failed to neutralise %s: %w", key, err)
+		}
+	}
+	return nil
+}
+
+// previewPipeline types the command line the reader types, at the tree the
+// binary runs.
+func (tc *TestContext) previewPipeline(target string) error {
+	dir, err := tc.pipelinePreviewWorkspace()
+	if err != nil {
+		return err
+	}
+
+	restore, err := chdirTo(dir)
+	if err != nil {
+		return err
+	}
+	defer restore()
+
+	var out bytes.Buffer
+	app := commands.NewApp()
+	app.Writer, app.ErrWriter = &out, &out
+
+	// The pipeline logs through a logrus built at construction time, which reads
+	// os.Stderr as it is *then* -- so the swap has to happen before app.Run, not
+	// on the standard logger the pull-request preview above redirects.
+	done, err := captureStderr()
+	if err != nil {
+		return err
+	}
+
+	tc.ExitCode = 0
+	runErr := app.Run([]string{"cidx", "run", "--dry-run", target})
+
+	logged := done()
+	tc.Output = logged + out.String()
+	if runErr != nil {
+		tc.Output += "\n" + runErr.Error()
+		tc.ExitCode = 1
+	}
+	return nil
+}
+
+// captureStderr redirects os.Stderr into a pipe and returns the function that
+// restores it and yields what was written. Read on a goroutine, because a dry
+// run that outgrew the pipe buffer would otherwise block for ever.
+func captureStderr() (func() string, error) {
+	original := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		return nil, fmt.Errorf("failed to capture stderr: %w", err)
+	}
+	os.Stderr = w
+
+	collected := make(chan string, 1)
+	go func() {
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, r)
+		collected <- buf.String()
+	}()
+
+	return func() string {
+		os.Stderr = original
+		_ = w.Close()
+		text := <-collected
+		_ = r.Close()
+		return text
+	}, nil
+}
+
+// pipelinePreviewWorkspace is a project declaring one phase and one container,
+// which is all a preview needs to have something to describe.
+func (tc *TestContext) pipelinePreviewWorkspace() (string, error) {
+	dir, err := os.MkdirTemp("", "cidx-dry-run-*")
+	if err != nil {
+		return "", fmt.Errorf("failed to create the workspace: %w", err)
+	}
+	tc.GitRepo = dir
+
+	config := `[security]
+containers = ["trivy"]
+
+[pipelines.ci]
+phases = ["security"]
+`
+	if err := os.WriteFile(filepath.Join(dir, "cidx.toml"), []byte(config), 0o600); err != nil {
+		return "", fmt.Errorf("failed to write cidx.toml: %w", err)
+	}
+	return dir, nil
+}
+
+func (tc *TestContext) shouldReportTheImageItWouldRun() error {
+	if !strings.Contains(tc.Output, "trivy") {
+		return fmt.Errorf("the preview named no image, so it described nothing:\n%s", tc.Output)
+	}
+	return nil
+}
+
+// A preview that started something is the one thing this rule forbids. The
+// runtime is unreachable, so anything actually attempted would have surfaced as
+// a connection failure in the output.
+func (tc *TestContext) noContainerShouldHaveBeenStarted() error {
+	for _, evidence := range []string{"Cannot connect to the Docker daemon", "connection refused", "no such file or directory"} {
+		if strings.Contains(tc.Output, evidence) {
+			return fmt.Errorf("the preview reached for the runtime -- %q appears in:\n%s", evidence, tc.Output)
+		}
+	}
+	return nil
+}
+
+// chdirTo enters dir and returns the function that goes back.
+func chdirTo(dir string) (func(), error) {
+	before, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read the working directory: %w", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		return nil, fmt.Errorf("failed to enter %s: %w", dir, err)
+	}
+	return func() { _ = os.Chdir(before) }, nil
 }

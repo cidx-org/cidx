@@ -36,3 +36,27 @@ Feature: A dry run changes nothing and needs nothing
       When I preview a pull request titled "feat: something"
       Then the checked-out commit should be the one it started on
       And no branch "feat/something" should exist
+
+  Rule: A dry run of a pipeline needs no container runtime
+
+    # The same rule, one command over again. `cidx run --dry-run` describes the
+    # containers it would start -- image, command, volumes -- and starts none of
+    # them. It still refused to say anything without a running Docker daemon:
+    # the flag reached the executor, which would only have printed, but the
+    # selector checked the daemon was up before handing that executor over and
+    # failed with "executor selection failed: Docker daemon is not running".
+    #
+    # Found by running cidx inside a container that had no daemon, which is the
+    # position every reader of a preview is in: asking what would happen,
+    # somewhere that cannot make it happen.
+
+    Scenario: Previewing a pipeline with no container runtime answering
+      Given no container runtime answers
+      When I preview the pipeline "ci"
+      Then the preview should succeed
+      And it should report the image it would run
+
+    Scenario: The preview starts nothing
+      Given no container runtime answers
+      When I preview the pipeline "ci"
+      Then no container should have been started
