@@ -28,7 +28,7 @@ func gateContext(t *testing.T, fail bool) *cli.Context {
 }
 
 func TestGateOn_FailsOnFindingsThatNeedAJudgement(t *testing.T) {
-	summary := presets.CatalogueSummary{Triage: presets.Triage{Actionable: 152}}
+	summary := presets.CatalogueSummary{Triage: presets.Triage{Actionable: 152}, Unanswered: 152}
 
 	err := gateOn(gateContext(t, true), summary)
 	if err == nil {
@@ -54,9 +54,62 @@ func TestGateOn_IgnoresFindingsAFixAlreadyExistsFor(t *testing.T) {
 // Without the flag the command is a renderer, and a page that exits non-zero
 // wherever it is run is unusable locally.
 func TestGateOn_IsSilentUnlessAsked(t *testing.T) {
-	summary := presets.CatalogueSummary{Triage: presets.Triage{Actionable: 152}}
+	summary := presets.CatalogueSummary{Unanswered: 152}
 
 	if err := gateOn(gateContext(t, false), summary); err != nil {
 		t.Fatalf("rendering the page is not a verdict: %v", err)
+	}
+}
+
+// An accepted finding is one somebody has already argued, with a date on it. It
+// stays in Carried — the baseline reports what an image ships — and it must
+// leave the queue, or writing the argument changes nothing and the gate can
+// never be reached by doing the work (#439).
+//
+// Nobody hit this before: every exception on file was a kernel-header one, an
+// exempt class that was never Actionable, so acceptance and actionability had
+// not once overlapped.
+func TestUnaccepted_DropsWhatAnExceptionAlreadyAnswers(t *testing.T) {
+	carried := map[string][]presets.Finding{
+		"rust:1.97.1-slim": {
+			{ID: "CVE-2026-1111", Severity: "HIGH"},
+			{ID: "CVE-2026-2222", Severity: "HIGH"},
+		},
+	}
+	accepted := []Vulnerability{{CVE: "cve-2026-1111", Repository: "rust"}}
+
+	left := unaccepted(carried, accepted)["rust:1.97.1-slim"]
+	if len(left) != 1 || left[0].ID != "CVE-2026-2222" {
+		t.Fatalf("the argued finding should have left the queue and the other stayed, got %v", left)
+	}
+}
+
+// The match is per repository: the same CVE argued on one image says nothing
+// about another that also carries it.
+func TestUnaccepted_IsPerRepository(t *testing.T) {
+	carried := map[string][]presets.Finding{
+		"rust:1.97.1-slim":  {{ID: "CVE-2026-1111"}},
+		"pyfound/black:1.0": {{ID: "CVE-2026-1111"}},
+	}
+	accepted := []Vulnerability{{CVE: "CVE-2026-1111", Repository: "rust"}}
+
+	left := unaccepted(carried, accepted)
+	if len(left["rust:1.97.1-slim"]) != 0 {
+		t.Error("argued on rust, so it must leave rust's queue")
+	}
+	if len(left["pyfound/black:1.0"]) != 1 {
+		t.Error("nobody argued it on black -- collapsing the two would accept an image nobody looked at")
+	}
+}
+
+// And the gate reads that number, not the classification.
+func TestGateOn_GoesGreenOnceEverythingIsArgued(t *testing.T) {
+	summary := presets.CatalogueSummary{
+		Triage:     presets.Triage{Carried: 637, Actionable: 152},
+		Unanswered: 0,
+	}
+
+	if err := gateOn(gateContext(t, true), summary); err != nil {
+		t.Fatalf("every finding is argued, so nothing is waiting on a human: %v", err)
 	}
 }

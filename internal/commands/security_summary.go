@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cidx-org/cidx/v3/pkg/presets"
@@ -79,7 +80,7 @@ func securitySummaryCommand() *cli.Command {
 			}
 
 			fmt.Printf("Wrote %s: %d finding(s) needing triage, %d acceptance(s) past their date, %d image(s) unscanned.\n",
-				out, summary.Triage.Actionable, len(summary.Expired), len(summary.Unscanned))
+				out, summary.Unanswered, len(summary.Expired), len(summary.Unscanned))
 			return gateOn(c, summary)
 		},
 	}
@@ -115,6 +116,7 @@ func buildCatalogueSummary(
 	exceptions := exceptionsFor(accepted, presets.ExceptionsFile)
 
 	return presets.CatalogueSummary{
+		Unanswered:   triageCatalogue(unaccepted(carried, accepted)).Actionable,
 		Images:       len(imagePresets),
 		Unscanned:    unscanned,
 		CarriedFloor: !accounted,
@@ -189,5 +191,37 @@ func gateOn(c *cli.Context, summary presets.CatalogueSummary) error {
 	return fmt.Errorf("the catalogue is waiting on a human: %d finding(s) with no fix at any version, "+
 		"%d acceptance(s) past their date, plus any base named on the page above. The findings are in "+
 		"the Security tab; an exception is argued with: cidx security vuln add <CVE> <image>",
-		summary.Triage.Actionable, len(summary.Expired))
+		summary.Unanswered, len(summary.Expired))
+}
+
+// unaccepted drops the findings an exception already answers.
+//
+// Carried deliberately keeps them: the baseline reports what an image carries
+// and what was accepted as two numbers, and hiding the second inside the first
+// is how that file once read "0 accepted findings" on a catalogue carrying 596.
+// Triage over that set therefore counts a finding somebody has already argued,
+// which is right for "what does this image carry" and wrong for "what is left
+// for a human" -- the question the gate and the page's headline ask (#439).
+//
+// Nobody noticed because the exceptions on file were all kernel-header ones:
+// an exempt class, never Actionable, so acceptance and actionability had never
+// once overlapped.
+func unaccepted(carried map[string][]presets.Finding, accepted []Vulnerability) map[string][]presets.Finding {
+	answered := make(map[string]bool, len(accepted))
+	for _, v := range accepted {
+		answered[v.Repository+"\x00"+strings.ToUpper(v.CVE)] = true
+	}
+
+	left := make(map[string][]presets.Finding, len(carried))
+	for image, findings := range carried {
+		repository := imageRepository(image)
+		kept := make([]presets.Finding, 0, len(findings))
+		for _, f := range findings {
+			if !answered[repository+"\x00"+strings.ToUpper(f.ID)] {
+				kept = append(kept, f)
+			}
+		}
+		left[image] = kept
+	}
+	return left
 }
