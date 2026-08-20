@@ -68,6 +68,12 @@ type CatalogueSummary struct {
 	// Triage is the partition [Summarise] produces, summed per image.
 	Triage Triage
 
+	// Unanswered is Triage.Actionable minus what an exception already answers:
+	// what is genuinely left for a human. Triage counts the whole carried set,
+	// accepted findings included, because that is what the baseline reports
+	// (#439).
+	Unanswered int
+
 	// Accepted is how many HIGH/CRITICAL acceptances cover a repository the
 	// catalogue runs today, and Expired the subset past its date.
 	Accepted int
@@ -108,7 +114,7 @@ func (s CatalogueSummary) basesIn(state string) []BaseNote {
 // fixed again — so they are never added together. This only asks whether all
 // three are empty, which is the one thing worth saying in a headline.
 func (s CatalogueSummary) Waiting() bool {
-	return s.Triage.Actionable > 0 ||
+	return s.Unanswered > 0 ||
 		len(s.Expired) > 0 ||
 		len(s.basesIn(BaseEnded)) > 0 ||
 		len(s.basesIn(BaseEndingSoon)) > 0 ||
@@ -157,7 +163,7 @@ func (s CatalogueSummary) Digest() SummaryDigest {
 		Scanned:             s.Scanned(),
 		Unscanned:           orEmpty(s.Unscanned),
 		Carried:             s.Triage.Carried,
-		NeedingTriage:       s.Triage.Actionable,
+		NeedingTriage:       s.Unanswered,
 		FixedUpstream:       s.Triage.Fixable,
 		ExemptGoStdlib:      s.Triage.GoStdlib,
 		ExemptKernelHeaders: s.Triage.KernelHeaders,
@@ -211,7 +217,7 @@ func writeSummaryHeadline(sb *strings.Builder, s CatalogueSummary) {
 		sb.WriteString("**Nothing is waiting for a decision.** ")
 	} else {
 		var parts []string
-		if n := s.Triage.Actionable; n > 0 {
+		if n := s.Unanswered; n > 0 {
 			parts = append(parts, fmt.Sprintf("%s need a judgement", plural(n, "finding", "findings")))
 		}
 		if n := len(s.Expired); n > 0 {
@@ -256,7 +262,7 @@ func writeSummaryWaiting(sb *strings.Builder, s CatalogueSummary) {
 	sb.WriteString("| What | How many | Where to act |\n")
 	sb.WriteString("| ---- | -------- | ------------ |\n")
 	fmt.Fprintf(sb, "| Findings with no fix at any version | %d | %s |\n",
-		s.Triage.Actionable, link("the Security tab", securityTab(s.Links.Repo)))
+		s.Unanswered, link("the Security tab", securityTab(s.Links.Repo)))
 	fmt.Fprintf(sb, "| Acceptances past their expiry date | %d | %s |\n",
 		len(s.Expired), link("`"+ExceptionsFile+"`", blob(s.Links.Repo, ExceptionsFile)))
 	fmt.Fprintf(sb, "| Bases no longer supported | %d | %s |\n",

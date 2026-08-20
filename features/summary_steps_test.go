@@ -92,11 +92,15 @@ func (tc *TestContext) summariseCatalogueStatus() error {
 		Images:    len(tc.catalogueImages()),
 		Unscanned: unscanned,
 		Triage:    triage,
-		Accepted:  len(accepted),
-		Expired:   presets.ExpiredExceptions(accepted, summaryToday),
-		Bases:     bases,
-		Day:       summaryToday,
-		Links:     presets.SummaryLinks{Repo: "https://github.com/cidx-org/cidx"},
+		// No scenario here stages an acceptance that covers a finding, so what
+		// is left for a human is the whole actionable set. A scenario that did
+		// would set this to the difference (#439).
+		Unanswered: triage.Actionable,
+		Accepted:   len(accepted),
+		Expired:    presets.ExpiredExceptions(accepted, summaryToday),
+		Bases:      bases,
+		Day:        summaryToday,
+		Links:      presets.SummaryLinks{Repo: "https://github.com/cidx-org/cidx"},
 	}
 
 	tc.Config["summary"] = summary
