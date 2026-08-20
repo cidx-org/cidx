@@ -50,6 +50,10 @@ func securitySummaryCommand() *cli.Command {
 				Aliases: []string{"o"},
 				Usage:   "Where to write the page (default: stdout)",
 			},
+			&cli.BoolFlag{
+				Name:  "fail-if-waiting",
+				Usage: "Exit non-zero when anything on the page needs a human (for the audit gate)",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			imagePresets, err := catalogueImages()
@@ -68,7 +72,7 @@ func securitySummaryCommand() *cli.Command {
 			out := c.String("output")
 			if out == "" {
 				fmt.Print(page)
-				return nil
+				return gateOn(c, summary)
 			}
 			if err := os.WriteFile(out, []byte(page), 0644); err != nil {
 				return fmt.Errorf("failed to write %s: %w", out, err)
@@ -76,7 +80,7 @@ func securitySummaryCommand() *cli.Command {
 
 			fmt.Printf("Wrote %s: %d finding(s) needing triage, %d acceptance(s) past their date, %d image(s) unscanned.\n",
 				out, summary.Triage.Actionable, len(summary.Expired), len(summary.Unscanned))
-			return nil
+			return gateOn(c, summary)
 		},
 	}
 }
@@ -164,4 +168,26 @@ func summaryLinks() presets.SummaryLinks {
 		links.Run = links.Repo + "/actions/runs/" + run
 	}
 	return links
+}
+
+// gateOn turns the page into the audit's verdict when --fail-if-waiting is set.
+//
+// The gate asks the same question the page answers, deliberately: the audit used
+// to fail on every unaccepted HIGH/CRITICAL, which included the 427 findings a
+// fix already exists for — and the policy forbids writing exceptions for those
+// ("never write an exception for one of these, it would record a decision where
+// there is only a wait"). The only route to green was the one thing the policy
+// refuses, so the audit was red for weeks and stopped meaning anything (#436).
+//
+// Waiting() is what the Security tab already publishes, so the gate, the tab and
+// SECURITY-BASELINE.md cannot disagree about what needs a human.
+func gateOn(c *cli.Context, summary presets.CatalogueSummary) error {
+	if !c.Bool("fail-if-waiting") || !summary.Waiting() {
+		return nil
+	}
+
+	return fmt.Errorf("the catalogue is waiting on a human: %d finding(s) with no fix at any version, "+
+		"%d acceptance(s) past their date, plus any base named on the page above. The findings are in "+
+		"the Security tab; an exception is argued with: cidx security vuln add <CVE> <image>",
+		summary.Triage.Actionable, len(summary.Expired))
 }
