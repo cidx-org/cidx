@@ -34,7 +34,13 @@ Welcome to the CIDX (CI with Declarative eXecution) documentation.
 - [Container Options](reference/container-options.md) - Every key a `[containers.<name>]` section may carry
 - [CLI Reference](reference/cli.md) - Command line interface documentation
 - [Containers Registry](reference/tools.md) - List of all available container presets
+- [Git Operations](architecture-git-operations.md) - Why git runs as a binary and providers as libraries
 
 ## 🤝 Contributing
 
-See [CLAUDE.md](../CLAUDE.md) for development guidelines.
+See [CLAUDE.md](../CLAUDE.md) for development guidelines, and read these two first
+— they decide whether a feature belongs here at all, before any question of how
+to build it:
+
+- [Product Guardrails](GUARDRAILS.md) - The five rules a feature is checked against
+- [Product Scope](PRODUCT_SCOPE.md) - What CIDX does, and what it deliberately leaves to others
