@@ -299,12 +299,11 @@ jobs:
           echo "   recorded against it can never be shown to be obsolete."
           exit 1
 
-      - name: Fail if vulnerable
-        if: steps.scan.outputs.status == 'vulnerable'
-        run: |
-          echo "❌ Unhandled vulnerabilities found in ${{ matrix.image }}"
-          echo "   Add exceptions with: cidx security vuln add <CVE> ${{ matrix.image }}"
-          exit 1
+      # No per-image gate. A leg failing on any unaccepted HIGH/CRITICAL failed on
+      # the 427 findings a fix already exists for, and the policy forbids writing
+      # exceptions for those -- so the only route to green was the one thing it
+      # refuses, and the audit was red for weeks (#436). What needs a human is
+      # decided once, in the report job, by the same call the Security tab uses.
 
   # Job 3: Grype scan (parallel)
   grype-scan:
@@ -462,12 +461,11 @@ jobs:
           echo "   recorded against it can never be shown to be obsolete."
           exit 1
 
-      - name: Fail if vulnerable
-        if: steps.scan.outputs.status == 'vulnerable'
-        run: |
-          echo "❌ Unhandled vulnerabilities found in ${{ matrix.image }}"
-          echo "   Add exceptions with: cidx security vuln add <CVE> ${{ matrix.image }}"
-          exit 1
+      # No per-image gate. A leg failing on any unaccepted HIGH/CRITICAL failed on
+      # the 427 findings a fix already exists for, and the policy forbids writing
+      # exceptions for those -- so the only route to green was the one thing it
+      # refuses, and the audit was red for weeks (#436). What needs a human is
+      # decided once, in the report job, by the same call the Security tab uses.
 
   # Job 4: Check for expired exceptions
   check-exceptions:
@@ -825,6 +823,8 @@ jobs:
         uses: github/codeql-action/upload-sarif@7188fc363630916deb702c7fdcf4e481b751f97a # v4.37.1
         with:
           sarif_file: catalogue.sarif
+          # (gate below: the tab is published before the run is allowed to fail,
+          # so a red audit still leaves the findings that made it red readable)
           # One analysis for the whole catalogue. The alternative — one upload
           # per image, since two uploads without distinct categories overwrite
           # each other — would be 21 analyses the alert list offers no way to
@@ -832,6 +832,13 @@ jobs:
           # stay current. What distinguishes an image in the UI is the alert
           # itself, and that works inside a single analysis.
           category: catalogue
+
+      # The verdict, once, after the findings are published. It asks the page's
+      # own question -- is anything waiting on a human -- so the gate, the
+      # Security tab and SECURITY-BASELINE.md cannot disagree (#436).
+      - name: Fail if the catalogue is waiting on a human
+        if: always()
+        run: ./bin/cidx security summary --results artifacts --fail-if-waiting -o /dev/null
 
       # Everything above is detail: one alert per finding in the Security tab,
       # one annotation per base on the run, one artifact per scanner. None of it
