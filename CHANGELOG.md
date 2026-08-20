@@ -1,3 +1,15 @@
+## v3.3.0 (2026-08-20)
+
+### Feat
+
+- **config**: let a container declare it must not be reused (#435)
+
+### Fix
+
+- **security**: gate the audit on what needs a human, not on every finding (#436)
+- **run**: let a dry run answer where nothing can run (#427)
+- **presets**: build an artifact that runs where the user runs it (#423)
+
 ## v3.2.0 (2026-08-09)
 
 ### Feat
