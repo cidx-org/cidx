@@ -39,6 +39,7 @@ type PresetTOML struct {
 	RequireCI       bool                  `toml:"require_ci"`
 	LocalBehavior   string                `toml:"local_behavior"`
 	Privileged      bool                  `toml:"privileged"`
+	Ephemeral       bool                  `toml:"ephemeral"`
 	PullPolicy      string                `toml:"pull_policy"`
 	Timeout         string                `toml:"timeout"`
 }
@@ -175,6 +176,7 @@ func parsePresetsData(data []byte, source string) (map[string]Preset, error) {
 			RequireCI:       tomlPreset.RequireCI,
 			LocalBehavior:   tomlPreset.LocalBehavior,
 			Privileged:      tomlPreset.Privileged,
+			Ephemeral:       tomlPreset.Ephemeral,
 			PullPolicy:      tomlPreset.PullPolicy,
 			Timeout:         tomlPreset.Timeout,
 		}

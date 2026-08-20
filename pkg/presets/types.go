@@ -41,6 +41,7 @@ type Preset struct {
 	RequireCI       bool              `yaml:"require_ci" toml:"require_ci"`                       // Requires CI environment
 	LocalBehavior   string            `yaml:"local_behavior" toml:"local_behavior"`               // draft, no-push, dry-run, disabled
 	Privileged      bool              `yaml:"privileged,omitempty" toml:"privileged,omitempty"`   // Requires root privileges (skip user mapping)
+	Ephemeral       bool              `yaml:"ephemeral,omitempty" toml:"ephemeral,omitempty"`     // Never reuse: this container writes to disk (#434)
 	PullPolicy      string            `yaml:"pull_policy,omitempty" toml:"pull_policy,omitempty"` // always, if-not-present, never (default: env-based)
 	Timeout         string            `yaml:"timeout,omitempty" toml:"timeout,omitempty"`         // duration string (e.g., "5m", "45m"), default: 30m
 }
@@ -267,6 +268,9 @@ func PresetFromOverrides(name string, overrides map[string]any) Preset {
 	}
 	if privileged, ok := overrides["privileged"].(bool); ok {
 		p.Privileged = privileged
+	}
+	if ephemeral, ok := overrides["ephemeral"].(bool); ok {
+		p.Ephemeral = ephemeral
 	}
 	if pullPolicy, ok := overrides["pull_policy"].(string); ok {
 		p.PullPolicy = pullPolicy

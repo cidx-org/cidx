@@ -27,6 +27,7 @@ var overrideKeys = map[string]bool{
 	"env":         true,
 	"phase":       true,
 	"privileged":  true,
+	"ephemeral":   true,
 	"pull_policy": true,
 	"timeout":     true,
 }

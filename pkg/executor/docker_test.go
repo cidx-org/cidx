@@ -103,9 +103,25 @@ func TestDecideRecreate(t *testing.T) {
 		existingHash string
 		newHash      string
 		noReuse      string
+		ephemeral    bool
 		wantReason   bool // true if a recreate reason should be returned
 		wantContains string
 	}{
+		{
+			name:         "ephemeral container is recreated even when the hash matches",
+			existingHash: "abc123",
+			newHash:      "abc123",
+			ephemeral:    true,
+			wantReason:   true,
+			wantContains: "ephemeral",
+		},
+		{
+			name:         "a container that is not ephemeral still reuses",
+			existingHash: "abc123",
+			newHash:      "abc123",
+			ephemeral:    false,
+			wantReason:   false,
+		},
 		{
 			name:         "matching hash, no override → reuse",
 			existingHash: "abc123",
@@ -149,7 +165,7 @@ func TestDecideRecreate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := decideRecreate(tt.existingHash, tt.newHash, tt.noReuse)
+			got := decideRecreate(tt.existingHash, tt.newHash, tt.noReuse, tt.ephemeral)
 			if tt.wantReason && got == "" {
 				t.Errorf("expected a recreate reason, got empty string")
 			}

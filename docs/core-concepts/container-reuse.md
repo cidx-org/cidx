@@ -245,3 +245,30 @@ Planned improvements:
 - [ ] **`--no-cache` flag**: Skip cache, force fresh operations
 - [ ] **Named volumes**: Use Docker volumes for even better cache management
 - [ ] **Cache size reporting**: Show cache usage per container
+
+## When a container must not be reused
+
+Reuse is right by default — it is what keeps a build cache alive between runs.
+It is wrong for a container whose job is to _write to its own filesystem_: the
+second run finds the first run's output already there, and a check that claimed
+to assert "what this command just generated" quietly asserts against leftovers.
+A wrong green, which is worse than a red.
+
+`CIDX_NO_REUSE` was the only escape hatch and fits neither half of that. It is
+global, so isolating one container throws away every other container's cache;
+and it is an environment variable, so whether a check is isolated depends on how
+someone invoked cidx rather than on what the check needs. Forgetting it fails
+silently.
+
+So a container declares it, next to its other options:
+
+```toml
+[containers.probatum]
+ephemeral = true    # never reuse; this one writes to disk
+```
+
+A preset can ship it too, and `probatum` does — it runs commands that write, so
+users get the safe behaviour without having to know any of this. The declaration
+is checked before the config hash: it is a property of the container, not of how
+cidx was invoked, and it has to hold even when nothing about the config changed
+(issue #434).
