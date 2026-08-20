@@ -1122,6 +1122,11 @@ name = "probatum"
 phase = "test"
 image = "ghcr.io/probatum-org/probatum:0.8.0@sha256:b1f7a2bb4c1a44a29ee62b92fca4c6f6fb60fbc56843421dcd65c430d3697f51"
 image_entrypoint = ["probatum"]
+# Never reused: probatum's checks run commands that write to the container's
+# filesystem, and a reused one hands the next run the last one's leftovers --
+# a scaffolding check that generated a directory once would then be asserting
+# against that directory rather than against what it just generated (#434).
+ephemeral = true
 # The image is Alpine/musl and ships no glibc loader; a glibc binary fails with
 # the shell's misleading "sh: <path>: not found" even though the file exists (#195).
 description = "Executes static or musl-linked artifacts only: the image is Alpine (no glibc loader), so glibc binaries built by cargo-build will not run (misleading 'sh: <path>: not found'). Build with --target x86_64-unknown-linux-musl."

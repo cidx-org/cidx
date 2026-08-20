@@ -426,6 +426,7 @@ func (r *Runner) RunTool(ctx context.Context, toolName string) error {
 		Env:         mergedPreset.Env,
 		ConfigFiles: mergedPreset.ConfigFiles,
 		Privileged:  mergedPreset.Privileged,
+		Ephemeral:   mergedPreset.Ephemeral,
 		PullPolicy:  r.resolvePullPolicy(mergedPreset.PullPolicy),
 		Timeout:     mergedPreset.Timeout,
 		Workspace:   r.config.Workspace,

@@ -31,6 +31,7 @@ Welcome to the CIDX (CI with Declarative eXecution) documentation.
 
 ### 🔧 Reference
 
+- [Container Options](reference/container-options.md) - Every key a `[containers.<name>]` section may carry
 - [CLI Reference](reference/cli.md) - Command line interface documentation
 - [Containers Registry](reference/tools.md) - List of all available container presets
 

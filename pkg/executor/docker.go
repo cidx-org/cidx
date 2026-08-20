@@ -450,7 +450,7 @@ func (e *DockerExecutor) getOrCreateContainer(ctx context.Context, containerConf
 		newHash := configHash(containerConfig.Image, command, containerConfig.Workdir, containerConfig.Entrypoint, volumes, containerConfig.Env)
 		existingHash := existingContainer.Labels["cidx.config_hash"]
 
-		recreateReason := decideRecreate(existingHash, newHash, os.Getenv(noReuseEnv))
+		recreateReason := decideRecreate(existingHash, newHash, os.Getenv(noReuseEnv), containerConfig.Ephemeral)
 
 		if recreateReason != "" {
 			e.logger.Infof("  🔄 Recreating container %s — %s", containerName, recreateReason)
@@ -715,8 +715,12 @@ func expandVolumes(volumes []string) []string {
 // Returns "" when the container is safe to reuse.
 //
 // Decision signals, in priority order:
-//  1. noReuseValue != "" — user-forced recreate via CIDX_NO_REUSE env var
+//  0. noReuseValue != "" — user-forced recreate via CIDX_NO_REUSE env var
 //     (escape hatch for debugging or strict immutability)
+//  1. ephemeral — the container declared that it writes to disk, so a reused
+//     one would hand the next run the last one's leftovers. Checked first: it
+//     is a property of the container, not of how cidx was invoked, and it has
+//     to hold even when the hash matches (#434).
 //  2. existingHash == "" — container was created by a cidx version that
 //     didn't write the `cidx.config_hash` label (pre-#144). We can't prove
 //     it's current, so treat as stale.
@@ -725,8 +729,10 @@ func expandVolumes(volumes []string) []string {
 //
 // Extracted from getOrCreateContainer so the policy is unit-testable without
 // a live Docker daemon.
-func decideRecreate(existingHash, newHash, noReuseValue string) string {
+func decideRecreate(existingHash, newHash, noReuseValue string, ephemeral bool) string {
 	switch {
+	case ephemeral:
+		return "container is declared ephemeral"
 	case noReuseValue != "":
 		return noReuseEnv + " set"
 	case existingHash == "":
