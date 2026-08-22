@@ -57,13 +57,13 @@ func securitySarifCommand() *cli.Command {
 				return err
 			}
 
-			accepted, err := acceptedExceptions(c.String("file"))
+			record, err := acceptedRecord(c.String("file"))
 			if err != nil {
 				return err
 			}
 
 			resultsDir := c.String("results")
-			alerts, scanned, missing := catalogueAlerts(imagePresets, resultsDir, accepted,
+			alerts, scanned, missing := catalogueAlerts(imagePresets, resultsDir, record,
 				c.String("presets"), c.String("file"), time.Now())
 
 			encoded, err := json.MarshalIndent(presets.SARIF(alerts), "", "  ")
@@ -97,7 +97,7 @@ func securitySarifCommand() *cli.Command {
 func catalogueAlerts(
 	imagePresets map[string][]string,
 	resultsDir string,
-	accepted []Vulnerability,
+	record *VulnerabilityFile,
 	presetsFile, vulnFile string,
 	today time.Time,
 ) (alerts []presets.Alert, scanned int, missing []string) {
@@ -123,24 +123,41 @@ func catalogueAlerts(
 	// filtering, so its finding reaches the triage above as well — and the
 	// alert about the entry is the one that survives, because it names the
 	// judgement that lapsed and points at the line to edit.
-	expired := presets.ExpiredExceptionAlerts(exceptionsFor(accepted, vulnFile), today)
+	expired := presets.ExpiredExceptionAlerts(ExceptionsFor(record, today, vulnFile), today)
 	return presets.MergeAlerts(alerts, expired), scanned, missing
 }
 
-// exceptionsFor reduces the accepted entries to what an alert about one says,
+// ExceptionsFor reduces the accepted entries to what an alert about one says,
 // and finds the line each sits on so the alert points at the entry to re-argue.
 //
 // Only HIGH and CRITICAL: that is the band the policy acts on, the band the
 // audit gates on, and the band the baseline claims to cover.
-func exceptionsFor(accepted []Vulnerability, vulnFile string) []presets.Exception {
+//
+// A member of a grouped decision carries the decision's review date as its
+// Expires, and — when the decision no longer stands — the verdict's reason as
+// Stopped. That reason comes from [ResolveWaivers], the same judgement the
+// ignore file is built from, so the alert and the file cannot disagree about
+// whether an entry still waives.
+func ExceptionsFor(record *VulnerabilityFile, today time.Time, vulnFile string) []presets.Exception {
+	if record == nil {
+		return nil
+	}
 	lines := vulnerabilityLines(vulnFile)
+	decisions := make(map[string]Decision, len(record.Decisions))
+	for _, d := range record.Decisions {
+		decisions[d.ID] = d
+	}
+	// An unloadable catalogue leaves no context; every member then reads
+	// "no context derived", which is fail-closed rendered rather than hidden.
+	contexts, _ := catalogueContexts(record)
+	verdicts := ResolveWaivers(record, contexts, today)
 
 	var out []presets.Exception
-	for _, v := range accepted {
+	for i, v := range record.Vulnerabilities {
 		if !isHighOrCritical(v.Severity) {
 			continue
 		}
-		out = append(out, presets.Exception{
+		e := presets.Exception{
 			CVE:        v.CVE,
 			Repository: v.Repository,
 			Severity:   v.Severity,
@@ -151,7 +168,20 @@ func exceptionsFor(accepted []Vulnerability, vulnFile string) []presets.Exceptio
 			// would end the quote rather than continue it.
 			Notes: strings.NewReplacer("\n", " ", "\r", "").Replace(v.Notes),
 			Line:  lines[v.Repository+" "+strings.ToUpper(v.CVE)],
-		})
+		}
+		if v.Decision != "" {
+			e.Expires = decisions[v.Decision].ReviewBy
+			if e.Status == "" {
+				e.Status = decisions[v.Decision].Treatment
+			}
+			if e.Notes == "" {
+				e.Notes = decisions[v.Decision].Reason
+			}
+			if !verdicts[i].Waived {
+				e.Stopped = verdicts[i].Reason
+			}
+		}
+		out = append(out, e)
 	}
 	return out
 }

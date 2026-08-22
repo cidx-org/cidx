@@ -261,7 +261,35 @@ func vulnCheckCommand() *cli.Command {
 
 			var expired, expiring, ok []Vulnerability
 
-			for _, v := range vulns.Vulnerabilities {
+			// A member is governed by its decision, not by a date of its own:
+			// it is expired when the decision no longer stands — for the
+			// reason the verdict names — and expiring when the decision's
+			// review date is near. Same judgement as the ignore file.
+			contexts, err := catalogueContexts(vulns)
+			if err != nil {
+				return err
+			}
+			verdicts := ResolveWaivers(vulns, contexts, today)
+			stopped := map[string]string{}
+			decisions := map[string]Decision{}
+			for _, d := range vulns.Decisions {
+				decisions[d.ID] = d
+			}
+
+			for i, v := range vulns.Vulnerabilities {
+				if v.Decision != "" {
+					switch {
+					case !verdicts[i].Waived:
+						stopped[v.CVE] = verdicts[i].Reason
+						expired = append(expired, v)
+					case presets.Waives(decisions[v.Decision].ReviewBy, warnDate):
+						ok = append(ok, v)
+					default:
+						expiring = append(expiring, v)
+					}
+					continue
+				}
+
 				expires, err := time.Parse("2006-01-02", v.Expires)
 				if err != nil {
 					if !jsonOutput {
@@ -307,6 +335,10 @@ func vulnCheckCommand() *cli.Command {
 				fmt.Printf("EXPIRED (%d) - Require immediate review:\n", len(expired))
 				fmt.Println(strings.Repeat("-", 50))
 				for _, v := range expired {
+					if why, member := stopped[v.CVE]; member {
+						fmt.Printf("  %s | %s | %s\n", v.CVE, v.Repository, why)
+						continue
+					}
 					fmt.Printf("  %s | %s | expired %s\n", v.CVE, v.Repository, v.Expires)
 				}
 				fmt.Println()
@@ -316,6 +348,10 @@ func vulnCheckCommand() *cli.Command {
 				fmt.Printf("EXPIRING SOON (%d) - Within %d days:\n", len(expiring), warnDays)
 				fmt.Println(strings.Repeat("-", 50))
 				for _, v := range expiring {
+					if v.Decision != "" {
+						fmt.Printf("  %s | %s | decision %s up for review by %s\n", v.CVE, v.Repository, v.Decision, decisions[v.Decision].ReviewBy)
+						continue
+					}
 					fmt.Printf("  %s | %s | expires %s\n", v.CVE, v.Repository, v.Expires)
 				}
 				fmt.Println()
@@ -323,10 +359,28 @@ func vulnCheckCommand() *cli.Command {
 
 			fmt.Printf("OK (%d) - Not expiring soon\n", len(ok))
 
-			// Remove expired if requested
+			// Remove expired if requested. Only legacy entries: a member that
+			// stopped waiving is a decision to re-argue, and deleting it would
+			// lose the history the re-arguing needs. The decision's own
+			// lifecycle, not this flag, is what retires a member.
 			if removeExpired && len(expired) > 0 {
-				// Keep only non-expired entries
-				vulns.Vulnerabilities = append(expiring, ok...)
+				kept := append(expiring, ok...)
+				var removable []Vulnerability
+				for _, v := range expired {
+					if v.Decision != "" {
+						kept = append(kept, v)
+						continue
+					}
+					removable = append(removable, v)
+				}
+				if len(removable) == 0 {
+					return cli.Exit("Expired entries are all members of grouped decisions: re-argue the decisions, nothing was removed", 1)
+				}
+				if len(removable) < len(expired) {
+					fmt.Printf("\n%d member(s) of grouped decisions left in place: re-argue their decisions instead.\n", len(expired)-len(removable))
+				}
+				expired = removable
+				vulns.Vulnerabilities = kept
 				sort.Slice(vulns.Vulnerabilities, func(i, j int) bool {
 					if vulns.Vulnerabilities[i].Image != vulns.Vulnerabilities[j].Image {
 						return vulns.Vulnerabilities[i].Image < vulns.Vulnerabilities[j].Image
@@ -966,11 +1020,21 @@ func vulnVerifyCommand() *cli.Command {
 // creates the file, and the second waives nothing without it, which errs towards
 // a scan reporting too much rather than too little.
 func acceptedExceptions(path string) ([]Vulnerability, error) {
+	record, err := acceptedRecord(path)
+	if err != nil {
+		return nil, err
+	}
+	return record.Vulnerabilities, nil
+}
+
+// acceptedRecord is [acceptedExceptions] with the decisions and contexts kept:
+// what the views need once a member waives under a decision rather than a date.
+func acceptedRecord(path string) (*VulnerabilityFile, error) {
 	vulns, err := loadVulnerabilities(path)
 	if err != nil {
 		return nil, fmt.Errorf("%w (run from the repository root, or pass the path explicitly)", err)
 	}
-	return vulns.Vulnerabilities, nil
+	return vulns, nil
 }
 
 func loadVulnerabilities(path string) (*VulnerabilityFile, error) {

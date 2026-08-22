@@ -87,7 +87,7 @@ func TestSummaryCountsOnlyTheAcceptancesPastTheirDate(t *testing.T) {
 		{CVE: "CVE-2026-1004", Repository: "tmknom/prettier", Severity: "MEDIUM", Expires: "2020-01-01"},
 	}
 
-	summary := buildCatalogueSummary(summaryCatalogue(), t.TempDir(), accepted, summaryDay())
+	summary := buildCatalogueSummary(summaryCatalogue(), t.TempDir(), &VulnerabilityFile{Vulnerabilities: accepted}, summaryDay())
 
 	if len(summary.Expired) != 1 || !strings.EqualFold(summary.Expired[0].CVE, "CVE-2026-1002") {
 		t.Fatalf("expired = %+v, want only CVE-2026-1002", summary.Expired)

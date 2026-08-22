@@ -92,11 +92,18 @@ type Exception struct {
 	Expires    string
 	Notes      string
 
+	// Stopped says why the entry no longer waives, as resolved against the
+	// grouped decision it references — the date that passed, the capability
+	// that appeared, the predicate nobody established. Empty for an entry
+	// judged by its own date alone, and for a member whose decision stands.
+	Stopped string
+
 	// Line is where the entry sits in [ExceptionsFile].
 	Line int
 }
 
-// ExpiredExceptions keeps the acceptances whose date has passed.
+// ExpiredExceptions keeps the acceptances that no longer waive: past their own
+// date, or members whose decision stopped standing and says why in Stopped.
 //
 // One definition, because two views read it: the alert published to code
 // scanning (#301) and the count on the status page (#308). A page saying "19
@@ -112,7 +119,7 @@ type Exception struct {
 func ExpiredExceptions(exceptions []Exception, today time.Time) []Exception {
 	var expired []Exception
 	for _, e := range exceptions {
-		if lapsed(e.Expires, today) {
+		if lapsed(e.Expires, today) || e.Stopped != "" {
 			expired = append(expired, e)
 		}
 	}
@@ -208,8 +215,21 @@ func ExpiredExceptionAlerts(exceptions []Exception, today time.Time) []Alert {
 	for _, e := range ExpiredExceptions(exceptions, today) {
 		id := strings.ToUpper(e.CVE)
 
+		// What stopped the waiver is the whole of the alert: a date for a legacy
+		// entry, the decision's own verdict for a member — and the verdict
+		// names the date, the capability or the predicate, which is what the
+		// reviewer needs to re-argue it.
+		why := fmt.Sprintf("expired on **%s**", e.Expires)
+		title := fmt.Sprintf("%s: the exception for %s expired on %s", e.Repository, id, e.Expires)
+		message := fmt.Sprintf("%s is accepted on %s by an exception that expired on %s and waives nothing until it is reviewed.", id, e.Repository, e.Expires)
+		if e.Stopped != "" {
+			why = "no longer stands: " + e.Stopped
+			title = fmt.Sprintf("%s: the acceptance of %s no longer stands", e.Repository, id)
+			message = fmt.Sprintf("%s is accepted on %s by a decision that no longer stands (%s) and waives nothing until it is reviewed.", id, e.Repository, e.Stopped)
+		}
+
 		var body strings.Builder
-		fmt.Fprintf(&body, "The exception accepting **%s** on `%s` expired on **%s**.\n\n", id, e.Repository, e.Expires)
+		fmt.Fprintf(&body, "The exception accepting **%s** on `%s` %s.\n\n", id, e.Repository, why)
 		if e.Notes != "" {
 			fmt.Fprintf(&body, "> %s\n\n", e.Notes)
 		}
@@ -218,9 +238,9 @@ func ExpiredExceptionAlerts(exceptions []Exception, today time.Time) []Alert {
 
 		alerts = append(alerts, Alert{
 			RuleID:      expiredRule + e.Repository + "/" + id,
-			Title:       fmt.Sprintf("%s: the exception for %s expired on %s", e.Repository, id, e.Expires),
+			Title:       title,
 			Body:        body.String(),
-			Message:     fmt.Sprintf("%s is accepted on %s by an exception that expired on %s and waives nothing until it is reviewed.", id, e.Repository, e.Expires),
+			Message:     message,
 			Severity:    strings.ToUpper(e.Severity),
 			File:        ExceptionsFile,
 			Line:        e.Line,
