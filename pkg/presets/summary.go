@@ -304,8 +304,14 @@ func writeExpiredDetails(sb *strings.Builder, s CatalogueSummary) {
 	sb.WriteString("| CVE | Repository | Severity | Expired | Justification |\n")
 	sb.WriteString("| --- | ---------- | -------- | ------- | ------------- |\n")
 	for _, e := range expired {
+		// A legacy entry lapsed on a date; a member stopped for the reason its
+		// decision's verdict names. The column carries whichever applies.
+		stopped := e.Expires
+		if e.Stopped != "" {
+			stopped = e.Stopped
+		}
 		fmt.Fprintf(sb, "| %s | `%s` | %s | %s | %s |\n",
-			strings.ToUpper(e.CVE), e.Repository, strings.ToUpper(e.Severity), e.Expires, cell(e.Notes))
+			strings.ToUpper(e.CVE), e.Repository, strings.ToUpper(e.Severity), cell(stopped), cell(e.Notes))
 	}
 	sb.WriteString("\n</details>\n\n")
 }

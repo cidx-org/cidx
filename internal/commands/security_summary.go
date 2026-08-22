@@ -62,12 +62,12 @@ func securitySummaryCommand() *cli.Command {
 				return err
 			}
 
-			accepted, err := acceptedExceptions(c.String("file"))
+			record, err := acceptedRecord(c.String("file"))
 			if err != nil {
 				return err
 			}
 
-			summary := buildCatalogueSummary(imagePresets, c.String("results"), accepted, time.Now())
+			summary := buildCatalogueSummary(imagePresets, c.String("results"), record, time.Now())
 			page := presets.RenderSummary(summary)
 
 			out := c.String("output")
@@ -94,7 +94,7 @@ func securitySummaryCommand() *cli.Command {
 func buildCatalogueSummary(
 	imagePresets map[string][]string,
 	resultsDir string,
-	accepted []Vulnerability,
+	record *VulnerabilityFile,
 	now time.Time,
 ) presets.CatalogueSummary {
 	// The same population SECURITY-BASELINE.md counts, suppressed half
@@ -103,6 +103,10 @@ func buildCatalogueSummary(
 	//
 	// Including the caveat, for the same reason. A count the results cannot
 	// vouch for is a floor in both places or in neither (#327).
+	var accepted []Vulnerability
+	if record != nil {
+		accepted = record.Vulnerabilities
+	}
 	carried, accounted := carriedFindings(imagePresets, resultsDir, accepted)
 
 	var unscanned []string
@@ -113,7 +117,7 @@ func buildCatalogueSummary(
 	}
 	sort.Strings(unscanned)
 
-	exceptions := exceptionsFor(accepted, presets.ExceptionsFile)
+	exceptions := ExceptionsFor(record, now, presets.ExceptionsFile)
 
 	return presets.CatalogueSummary{
 		Unanswered:   triageCatalogue(unaccepted(carried, accepted)).Actionable,

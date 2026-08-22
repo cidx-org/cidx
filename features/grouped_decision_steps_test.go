@@ -28,6 +28,7 @@ type decisionState struct {
 	firstWrite   string
 	secondWrite  string
 	readBack     *commands.VulnerabilityFile
+	stopped      []presets.Exception
 }
 
 // RegisterGroupedDecisionSteps registers the grouped vulnerability decision steps
@@ -42,6 +43,10 @@ func RegisterGroupedDecisionSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Step(`^the file is written and read back twice$`, tc.fileIsWrittenAndReadBackTwice)
 	ctx.Step(`^the second write should be byte-identical to the first$`, tc.secondWriteShouldBeIdentical)
 	ctx.Step(`^the read-back file should carry (\d+) decision, (\d+) context and (\d+) entries$`, tc.readBackFileShouldCarry)
+	ctx.Step(`^the acceptances that no longer stand are listed on "([^"]*)"$`, tc.acceptancesNoLongerStandingOn)
+	ctx.Step(`^"([^"]*)" should be listed as no longer standing$`, tc.shouldBeListedAsNoLongerStanding)
+	ctx.Step(`^"([^"]*)" should not be listed as no longer standing$`, tc.shouldNotBeListedAsNoLongerStanding)
+	ctx.Step(`^the reason for "([^"]*)" should mention "([^"]*)"$`, tc.reasonShouldMention)
 	ctx.Step(`^the "([^"]*)" context provides capabilities "([^"]*)"$`, tc.contextProvidesCapabilities)
 	ctx.Step(`^the "([^"]*)" context establishes no semantic predicates$`, tc.contextEstablishesNothing)
 	ctx.Step(`^the member "([^"]*)" on "([^"]*)" references decision "([^"]*)"$`, tc.memberReferencesDecision)
@@ -134,13 +139,13 @@ func (tc *TestContext) contextEstablishesNothing(repository string) error {
 
 func (tc *TestContext) memberReferencesDecision(cve, repository, decision string) error {
 	ds := tc.decisions()
-	ds.file.Vulnerabilities = append(ds.file.Vulnerabilities, commands.Vulnerability{CVE: cve, Repository: repository, Decision: decision})
+	ds.file.Vulnerabilities = append(ds.file.Vulnerabilities, commands.Vulnerability{CVE: cve, Repository: repository, Severity: "HIGH", Decision: decision})
 	return nil
 }
 
 func (tc *TestContext) aLegacyEntry(cve, repository, expires string) error {
 	ds := tc.decisions()
-	ds.file.Vulnerabilities = append(ds.file.Vulnerabilities, commands.Vulnerability{CVE: cve, Repository: repository, Expires: expires})
+	ds.file.Vulnerabilities = append(ds.file.Vulnerabilities, commands.Vulnerability{CVE: cve, Repository: repository, Severity: "HIGH", Expires: expires})
 	return nil
 }
 
@@ -385,6 +390,53 @@ func (tc *TestContext) readBackFileShouldCarry(decisions, contexts, entries int)
 	if len(f.Decisions) != decisions || len(f.Contexts) != contexts || len(f.Vulnerabilities) != entries {
 		return fmt.Errorf("read back %d decisions, %d contexts, %d entries; expected %d, %d, %d",
 			len(f.Decisions), len(f.Contexts), len(f.Vulnerabilities), decisions, contexts, entries)
+	}
+	return nil
+}
+
+// acceptancesNoLongerStandingOn applies what the Security tab and the status
+// page apply: ExceptionsFor over the record (the real catalogue's contexts
+// included), then ExpiredExceptions — the one definition both views read.
+func (tc *TestContext) acceptancesNoLongerStandingOn(date string) error {
+	day, err := time.Parse(time.DateOnly, date)
+	if err != nil {
+		return fmt.Errorf("bad day %q: %w", date, err)
+	}
+	ds := tc.decisions()
+	ds.stopped = presets.ExpiredExceptions(commands.ExceptionsFor(&ds.file, day, ""), day)
+	return nil
+}
+
+func (tc *TestContext) stoppedFor(cve string) (presets.Exception, bool) {
+	for _, e := range tc.decisions().stopped {
+		if strings.EqualFold(e.CVE, cve) {
+			return e, true
+		}
+	}
+	return presets.Exception{}, false
+}
+
+func (tc *TestContext) shouldBeListedAsNoLongerStanding(cve string) error {
+	if _, listed := tc.stoppedFor(cve); !listed {
+		return fmt.Errorf("%s is not listed among the acceptances that no longer stand", cve)
+	}
+	return nil
+}
+
+func (tc *TestContext) shouldNotBeListedAsNoLongerStanding(cve string) error {
+	if e, listed := tc.stoppedFor(cve); listed {
+		return fmt.Errorf("%s is listed as no longer standing (%s / %s)", cve, e.Expires, e.Stopped)
+	}
+	return nil
+}
+
+func (tc *TestContext) reasonShouldMention(cve, fragment string) error {
+	e, listed := tc.stoppedFor(cve)
+	if !listed {
+		return fmt.Errorf("%s is not listed", cve)
+	}
+	if !strings.Contains(e.Stopped, fragment) {
+		return fmt.Errorf("reason for %s is %q, which does not mention %q", cve, e.Stopped, fragment)
 	}
 	return nil
 }

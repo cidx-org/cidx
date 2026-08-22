@@ -171,3 +171,36 @@ Feature: Grouped vulnerability decisions
       When the file is written and read back twice
       Then the second write should be byte-identical to the first
       And the read-back file should carry 1 decision, 1 context and 2 entries
+
+  Rule: A member that stops waiving is announced where lapsed acceptances already are
+
+    # The Security tab and the status page already report an acceptance past
+    # its date. A member is governed by its decision instead of a date of its
+    # own, so it joins that population the moment its decision stops standing —
+    # and it says why, in the verdict's words, where a legacy entry says the
+    # date. One judgement, ResolveWaivers, feeds the ignore file and both views.
+
+    Scenario: The members of a lapsed decision are reported as acceptances that no longer stand
+      Given a decision "rust-inert" on "rust" reviewed until "2026-06-01"
+      And the decision "rust-inert" expects capabilities "publishing-credential"
+      And the member "CVE-2026-0001" on "rust" references decision "rust-inert"
+      When the acceptances that no longer stand are listed on "2026-09-01"
+      Then "CVE-2026-0001" should be listed as no longer standing
+      And the reason for "CVE-2026-0001" should mention "needs review"
+
+    Scenario: A member invalidated by its context is reported with the capability named
+      Given a decision "rust-naive" on "rust" reviewed until "2026-12-01"
+      And the decision "rust-naive" expects no capabilities
+      And the member "CVE-2026-0002" on "rust" references decision "rust-naive"
+      When the acceptances that no longer stand are listed on "2026-09-01"
+      Then "CVE-2026-0002" should be listed as no longer standing
+      And the reason for "CVE-2026-0002" should mention "publishing-credential appeared"
+
+    Scenario: The members of a decision that stands are not reported
+      Given a decision "rust-inert" on "rust" reviewed until "2026-12-01"
+      And the decision "rust-inert" expects capabilities "publishing-credential"
+      And the member "CVE-2026-0003" on "rust" references decision "rust-inert"
+      And a legacy entry "CVE-2026-0006" on "rust" expiring "2026-01-01"
+      When the acceptances that no longer stand are listed on "2026-09-01"
+      Then "CVE-2026-0003" should not be listed as no longer standing
+      And "CVE-2026-0006" should be listed as no longer standing
