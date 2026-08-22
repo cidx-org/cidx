@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -73,19 +74,14 @@ func (v Vulnerability) key() string {
 // The judgement is [presets.Waives] — one definition, so that the entry the
 // ignore file drops is exactly the entry the Security tab reports as lapsed.
 func waiving(vulns []Vulnerability, day time.Time) []Vulnerability {
-	var live []Vulnerability
-	for _, v := range vulns {
-		if presets.Waives(v.Expires, day) {
-			live = append(live, v)
-		}
-	}
-	return live
+	return WaivedEntries(&VulnerabilityFile{Vulnerabilities: vulns}, nil, day)
 }
 
 // VulnerabilityFile represents the known-vulnerabilities.toml structure
 type VulnerabilityFile struct {
-	Decisions       []Decision      `toml:"decisions"`
-	Vulnerabilities []Vulnerability `toml:"vulnerabilities"`
+	Contexts        []ReviewedContext `toml:"contexts"`
+	Decisions       []Decision        `toml:"decisions"`
+	Vulnerabilities []Vulnerability   `toml:"vulnerabilities"`
 }
 
 const defaultVulnFile = "known-vulnerabilities.toml"
@@ -724,19 +720,29 @@ func vulnIgnoreCommand() *cli.Command {
 				vulns = &VulnerabilityFile{}
 			}
 
-			var filtered []Vulnerability
+			// An acceptance past its date waives nothing (#303), and neither
+			// does a member whose decision no longer stands — lapsed,
+			// reviewed against a context the catalogue contradicts, or
+			// resting on a predicate nobody established. Until #303 every
+			// entry was written out whatever its date, so a lapsed one went
+			// on removing its finding from the audit's own results, and the
+			// finding could not surface anywhere downstream because the JSON
+			// is written after the filter.
+			contexts, err := catalogueContexts(vulns)
+			if err != nil {
+				return err
+			}
+			var filtered, live []Vulnerability
 			for _, v := range vulns.Vulnerabilities {
 				if v.Repository == repository {
 					filtered = append(filtered, v)
 				}
 			}
-
-			// An acceptance past its date waives nothing (#303). Until then
-			// every entry was written out whatever its date, so a lapsed one
-			// went on removing its finding from the audit's own results — and
-			// the finding could not surface anywhere downstream, because the
-			// JSON is written after the filter.
-			live := waiving(filtered, time.Now())
+			for _, v := range WaivedEntries(vulns, contexts, time.Now()) {
+				if v.Repository == repository {
+					live = append(live, v)
+				}
+			}
 			lapsed := len(filtered) - len(live)
 
 			var output string
@@ -775,7 +781,7 @@ func vulnIgnoreCommand() *cli.Command {
 					// Said out loud on the run that produced the results: an
 					// ignore file that shrank is the one thing that explains a
 					// scan reporting more than it did yesterday.
-					fmt.Fprintf(os.Stderr, ", %d past their expiry date and waiving nothing", lapsed)
+					fmt.Fprintf(os.Stderr, ", %d waiving nothing (past their date, or under a decision that no longer stands)", lapsed)
 				}
 				fmt.Fprintln(os.Stderr)
 			} else {
@@ -851,8 +857,12 @@ func vulnVerifyCommand() *cli.Command {
 			// their date: this command exists to check that the ignore file
 			// suppresses what it claims to, so it has to be built from the same
 			// entries `vuln ignore` writes (#303).
+			contexts, err := catalogueContexts(vulns)
+			if err != nil {
+				return err
+			}
 			imageExceptions := make(map[string][]Vulnerability)
-			for _, v := range waiving(vulns.Vulnerabilities, time.Now()) {
+			for _, v := range WaivedEntries(vulns, contexts, time.Now()) {
 				imageExceptions[v.Repository] = append(imageExceptions[v.Repository], v)
 			}
 
@@ -985,6 +995,12 @@ func LoadVulnerabilityFile(path string) (*VulnerabilityFile, error) {
 	return loadVulnerabilities(path)
 }
 
+// SaveVulnerabilityFile is the exported writer the BDD suite round-trips the
+// record through — the same hand-written layout every command writes.
+func SaveVulnerabilityFile(path string, file *VulnerabilityFile) error {
+	return saveVulnerabilities(path, file)
+}
+
 // migrateVulnerability moves a pre-#297 entry onto the repository key without
 // guessing what its repository should be.
 //
@@ -1019,14 +1035,6 @@ func migrateVulnerability(v Vulnerability) Vulnerability {
 // produce the same bytes and an added entry lands next to its neighbours instead
 // of at the end.
 func saveVulnerabilities(path string, vulns *VulnerabilityFile) error {
-	// The hand-written layout below knows nothing about the decisions table
-	// yet, so writing a file that carries one would silently drop every
-	// decision — and with them the authorization their members waive under.
-	// Refusing is the fail-closed posture: deterministic rewriting of
-	// decisions is a scenario still owed, not a corner to lose data in.
-	if len(vulns.Decisions) > 0 {
-		return fmt.Errorf("cannot rewrite %s: it carries %d grouped decisions and the deterministic writer does not support them yet", path, len(vulns.Decisions))
-	}
 	entries := deduplicateVulnerabilities(vulns.Vulnerabilities)
 	sort.Slice(entries, func(i, j int) bool {
 		if entries[i].Repository != entries[j].Repository {
@@ -1036,8 +1044,36 @@ func saveVulnerabilities(path string, vulns *VulnerabilityFile) error {
 	})
 	vulns.Vulnerabilities = entries
 
+	contexts := slices.Clone(vulns.Contexts)
+	sort.Slice(contexts, func(i, j int) bool { return contexts[i].Repository < contexts[j].Repository })
+	decisions := slices.Clone(vulns.Decisions)
+	sort.Slice(decisions, func(i, j int) bool { return decisions[i].ID < decisions[j].ID })
+
 	var sb strings.Builder
 	sb.WriteString(vulnFileHeader)
+	// Contexts and decisions come first: a member references what the
+	// reader has already seen, and the tables that change rarely sit above
+	// the one that changes on every audit.
+	for _, rc := range contexts {
+		sb.WriteString("\n[[contexts]]\n")
+		writeTOMLString(&sb, "repository", rc.Repository)
+		fmt.Fprintf(&sb, "  established = %s\n", tomlList(rc.Established))
+		writeTOMLString(&sb, "reviewed", rc.Reviewed)
+		writeTOMLString(&sb, "basis", rc.Basis)
+	}
+	for _, d := range decisions {
+		sb.WriteString("\n[[decisions]]\n")
+		writeTOMLString(&sb, "id", d.ID)
+		writeTOMLString(&sb, "repository", d.Repository)
+		writeTOMLString(&sb, "model", d.Model)
+		fmt.Fprintf(&sb, "  capabilities = %s\n", tomlList(d.Capabilities))
+		writeTOMLList(&sb, "requires", d.Requires)
+		writeTOMLString(&sb, "treatment", d.Treatment)
+		writeTOMLString(&sb, "reviewed", d.Reviewed)
+		writeTOMLString(&sb, "review_by", d.ReviewBy)
+		writeTOMLString(&sb, "reason", d.Reason)
+		fmt.Fprintf(&sb, "  references = %s\n", tomlList(d.References))
+	}
 	for _, v := range entries {
 		sb.WriteString("\n[[vulnerabilities]]\n")
 		writeTOMLString(&sb, "cve", v.CVE)
@@ -1050,6 +1086,7 @@ func saveVulnerabilities(path string, vulns *VulnerabilityFile) error {
 		writeTOMLString(&sb, "expires", v.Expires)
 		writeTOMLString(&sb, "notes", v.Notes)
 		fmt.Fprintf(&sb, "  references = %s\n", tomlList(v.References))
+		writeTOMLString(&sb, "decision", v.Decision)
 	}
 
 	if err := os.WriteFile(path, []byte(sb.String()), 0644); err != nil {
@@ -1078,6 +1115,16 @@ const vulnFileHeader = `# Known Vulnerabilities
 #   expires    - Date to re-check (YYYY-MM-DD), typically 30-90 days
 #   notes      - Explanation of why this is accepted
 #   references - Links to upstream issues/PRs tracking the fix
+#   decision   - The [[decisions]] entry authorizing this waiver; absent means a
+#                legacy entry judged on its own expiry
+#
+# [[decisions]] is one reviewed exposure judgement about a repository under the
+# aggregate context of every preset consuming it: id, repository, model,
+# capabilities (the mechanical context it was reviewed against), requires (the
+# semantic predicates it depends on), treatment, reviewed, review_by, reason,
+# references. [[contexts]] records, per repository, what a review established
+# that no declaration can derive: established, reviewed, basis.
+# See docs/discussions/vulnerability-decision-workflow.md.
 #
 # Generated by "cidx security vuln add" and "cidx security vuln prune"; hand edits
 # survive as long as they follow this layout.

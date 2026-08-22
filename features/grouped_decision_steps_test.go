@@ -25,6 +25,9 @@ type decisionState struct {
 	derived      []string
 	loadPath     string
 	loadErr      error
+	firstWrite   string
+	secondWrite  string
+	readBack     *commands.VulnerabilityFile
 }
 
 // RegisterGroupedDecisionSteps registers the grouped vulnerability decision steps
@@ -32,6 +35,13 @@ func RegisterGroupedDecisionSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Step(`^a decision "([^"]*)" on "([^"]*)" reviewed until "([^"]*)"$`, tc.aDecisionReviewedUntil)
 	ctx.Step(`^the decision "([^"]*)" expects capabilities "([^"]*)"$`, tc.decisionExpectsCapabilities)
 	ctx.Step(`^the decision "([^"]*)" requires "([^"]*)"$`, tc.decisionRequires)
+	ctx.Step(`^the decision "([^"]*)" expects no capabilities$`, tc.decisionExpectsNoCapabilities)
+	ctx.Step(`^the file records a reviewed context for "([^"]*)" establishing "([^"]*)"$`, tc.fileRecordsReviewedContext)
+	ctx.Step(`^the context is derived from the catalogue$`, tc.contextIsDerivedFromCatalogue)
+	ctx.Step(`^the ignore file for "([^"]*)" is built on "([^"]*)"$`, tc.ignoreFileIsBuiltOn)
+	ctx.Step(`^the file is written and read back twice$`, tc.fileIsWrittenAndReadBackTwice)
+	ctx.Step(`^the second write should be byte-identical to the first$`, tc.secondWriteShouldBeIdentical)
+	ctx.Step(`^the read-back file should carry (\d+) decision, (\d+) context and (\d+) entries$`, tc.readBackFileShouldCarry)
 	ctx.Step(`^the "([^"]*)" context provides capabilities "([^"]*)"$`, tc.contextProvidesCapabilities)
 	ctx.Step(`^the "([^"]*)" context establishes no semantic predicates$`, tc.contextEstablishesNothing)
 	ctx.Step(`^the member "([^"]*)" on "([^"]*)" references decision "([^"]*)"$`, tc.memberReferencesDecision)
@@ -273,6 +283,108 @@ func (tc *TestContext) shouldNotBeQueuedForRemediation(cve string) error {
 		if tr.CVE == cve {
 			return fmt.Errorf("%s is queued for remediation and should not be", cve)
 		}
+	}
+	return nil
+}
+
+func (tc *TestContext) decisionExpectsNoCapabilities(id string) error {
+	return tc.withDecision(id, func(d *commands.Decision) { d.Capabilities = nil })
+}
+
+func (tc *TestContext) fileRecordsReviewedContext(repository, predicates string) error {
+	ds := tc.decisions()
+	ds.file.Contexts = append(ds.file.Contexts, commands.ReviewedContext{
+		Repository:  repository,
+		Established: splitList(predicates),
+		Reviewed:    "2026-09-01",
+		Basis:       "staged by a scenario",
+	})
+	return nil
+}
+
+// contextIsDerivedFromCatalogue replaces whatever a scenario staged by hand
+// with what production computes: the real catalogue's consumers, and the
+// reviewed contexts the file records.
+func (tc *TestContext) contextIsDerivedFromCatalogue() error {
+	catalogue, err := presets.Catalogue()
+	if err != nil {
+		return err
+	}
+	ds := tc.decisions()
+	ds.contexts = commands.DeriveContexts(&ds.file, catalogue)
+	return nil
+}
+
+// ignoreFileIsBuiltOn applies what `cidx security vuln ignore` applies: the
+// waived entries of the whole file, kept for the one repository asked about.
+// It fills the same slot the SARIF scenarios read, so "the ignore file should
+// carry" means one thing across the suite.
+func (tc *TestContext) ignoreFileIsBuiltOn(repository, date string) error {
+	day, err := time.Parse(time.DateOnly, date)
+	if err != nil {
+		return fmt.Errorf("bad day %q: %w", date, err)
+	}
+	ds := tc.decisions()
+	ds.verdicts = commands.ResolveWaivers(&ds.file, ds.contexts, day)
+	var carried []string
+	for _, v := range commands.WaivedEntries(&ds.file, ds.contexts, day) {
+		if v.Repository == repository {
+			carried = append(carried, strings.ToUpper(v.CVE))
+		}
+	}
+	tc.Config["ignore_file"] = carried
+	return nil
+}
+
+func (tc *TestContext) fileIsWrittenAndReadBackTwice() error {
+	ds := tc.decisions()
+	dir, err := os.MkdirTemp("", "cidx-decisions")
+	if err != nil {
+		return err
+	}
+	tc.GitRepo = dir
+	path := filepath.Join(dir, "known-vulnerabilities.toml")
+
+	if err := commands.SaveVulnerabilityFile(path, &ds.file); err != nil {
+		return err
+	}
+	first, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	ds.firstWrite = string(first)
+
+	ds.readBack, err = commands.LoadVulnerabilityFile(path)
+	if err != nil {
+		return err
+	}
+	if err := commands.SaveVulnerabilityFile(path, ds.readBack); err != nil {
+		return err
+	}
+	second, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	ds.secondWrite = string(second)
+	return nil
+}
+
+func (tc *TestContext) secondWriteShouldBeIdentical() error {
+	ds := tc.decisions()
+	if ds.firstWrite != ds.secondWrite {
+		return fmt.Errorf("the two writes differ:\n--- first\n%s\n--- second\n%s", ds.firstWrite, ds.secondWrite)
+	}
+	return nil
+}
+
+func (tc *TestContext) readBackFileShouldCarry(decisions, contexts, entries int) error {
+	f := tc.decisions().readBack
+	if f == nil {
+		return fmt.Errorf("nothing was read back")
+	}
+	if len(f.Decisions) != decisions || len(f.Contexts) != contexts || len(f.Vulnerabilities) != entries {
+		return fmt.Errorf("read back %d decisions, %d contexts, %d entries; expected %d, %d, %d",
+			len(f.Decisions), len(f.Contexts), len(f.Vulnerabilities), decisions, contexts, entries)
 	}
 	return nil
 }
