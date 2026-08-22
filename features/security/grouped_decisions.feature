@@ -113,3 +113,61 @@ Feature: Grouped vulnerability decisions
       When the decision lifecycle is evaluated
       Then "CVE-2026-0001" should be queued for remediation with its clock starting "2026-09-15"
       And "CVE-2026-0002" should not be queued for remediation
+
+  Rule: The mechanical context is read off the catalogue, and the ignore file off the verdicts
+
+    # In production nobody stages the context by hand: it is derived from every
+    # catalogue preset whose image is the decision's repository. `rust` is
+    # consumed by cargo-publish, which declares CARGO_REGISTRY_TOKEN — so a
+    # decision reviewed without that capability was reviewed against a context
+    # that does not exist, and the ignore file is built from what still stands.
+
+    Scenario: The ignore file carries the members of a decision reviewed against the real context
+      Given a decision "rust-inert" on "rust" reviewed until "2026-12-01"
+      And the decision "rust-inert" expects capabilities "publishing-credential"
+      And the member "CVE-2026-0001" on "rust" references decision "rust-inert"
+      And a legacy entry "CVE-2026-0006" on "rust" expiring "2026-11-18"
+      When the context is derived from the catalogue
+      And the ignore file for "rust" is built on "2026-09-01"
+      Then the ignore file should carry "CVE-2026-0001"
+      And the ignore file should carry "CVE-2026-0006"
+
+    Scenario: A decision reviewed against a context the catalogue contradicts waives nothing
+      Given a decision "rust-naive" on "rust" reviewed until "2026-12-01"
+      And the decision "rust-naive" expects no capabilities
+      And the member "CVE-2026-0001" on "rust" references decision "rust-naive"
+      When the context is derived from the catalogue
+      And the ignore file for "rust" is built on "2026-09-01"
+      Then the ignore file should not carry "CVE-2026-0001"
+      And the verdict for "CVE-2026-0001" should mention "publishing-credential appeared"
+
+  Rule: Reviewed semantic context is recorded in the file, never assumed
+
+    # What no declaration can derive — that an invocation's input is bounded —
+    # is written down by the review that established it, per repository, with
+    # its basis. A decision requiring the predicate finds it there or nowhere.
+
+    Scenario: A reviewed context establishes the predicate a decision requires
+      Given a decision "bp-tool" on "buildpack-deps" reviewed until "2026-12-01"
+      And the decision "bp-tool" requires "bounded-input"
+      And the member "CVE-2026-0004" on "buildpack-deps" references decision "bp-tool"
+      And the file records a reviewed context for "buildpack-deps" establishing "bounded-input"
+      When the context is derived from the catalogue
+      And the waivers are resolved on "2026-09-01"
+      Then "CVE-2026-0004" should be waived
+
+  Rule: The file rewrites to the same bytes
+
+    # The writer is by hand for the reason #289 recorded: a diff of the record
+    # must read as what changed. Contexts, decisions and members each have a
+    # fixed layout and a fixed order, so the same content is the same file.
+
+    Scenario: Contexts, decisions and members survive a round trip unchanged
+      Given a decision "rust-inert" on "rust" reviewed until "2026-12-01"
+      And the decision "rust-inert" expects capabilities "publishing-credential"
+      And the member "CVE-2026-0001" on "rust" references decision "rust-inert"
+      And the file records a reviewed context for "rust" establishing "bounded-input"
+      And a legacy entry "CVE-2026-0006" on "rust" expiring "2026-11-18"
+      When the file is written and read back twice
+      Then the second write should be byte-identical to the first
+      And the read-back file should carry 1 decision, 1 context and 2 entries

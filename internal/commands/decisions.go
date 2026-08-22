@@ -179,3 +179,62 @@ func validateDecisionRefs(file *VulnerabilityFile) error {
 	}
 	return nil
 }
+
+// A ReviewedContext records what a review established about a repository's
+// consumers that no declaration can derive — the semantic predicates, with the
+// basis the review rested on. Absent means unknown, and unknown satisfies
+// nothing: a decision requiring "bounded-input" finds it here or nowhere.
+type ReviewedContext struct {
+	Repository  string   `toml:"repository"`
+	Established []string `toml:"established"`
+	Reviewed    string   `toml:"reviewed"`
+	Basis       string   `toml:"basis"`
+}
+
+// DeriveContexts builds the context every decision is judged against: the
+// mechanical capabilities read off every catalogue preset consuming the
+// repository, and the semantic predicates the file records as reviewed. The
+// catalogue is the source because the ignore file applies to the image, so a
+// benign consumer must never hide a privileged one sharing it.
+func DeriveContexts(file *VulnerabilityFile, catalogue map[string]presets.Preset) map[string]DecisionContext {
+	consumers := map[string][]presets.Preset{}
+	for _, p := range catalogue {
+		repository := imageRepository(p.Image)
+		consumers[repository] = append(consumers[repository], p)
+	}
+	contexts := make(map[string]DecisionContext, len(consumers))
+	for repository, ps := range consumers {
+		contexts[repository] = DecisionContext{Capabilities: presets.AggregateCapabilities(ps)}
+	}
+	for _, reviewed := range file.Contexts {
+		ctx := contexts[reviewed.Repository]
+		ctx.Semantics = reviewed.Established
+		contexts[reviewed.Repository] = ctx
+	}
+	return contexts
+}
+
+// catalogueContexts derives the contexts from the built-in catalogue, the way
+// every command that builds or checks an ignore file must: the catalogue is
+// what the audit scans, so it is what the decisions were reviewed against.
+func catalogueContexts(file *VulnerabilityFile) (map[string]DecisionContext, error) {
+	catalogue, err := presets.Catalogue()
+	if err != nil {
+		return nil, fmt.Errorf("deriving decision contexts: %w", err)
+	}
+	return DeriveContexts(file, catalogue), nil
+}
+
+// WaivedEntries keeps the entries whose verdict is a waiver — what the
+// scanners' ignore file is built from, and what `vuln verify` checks it
+// against. One judgement, [ResolveWaivers], so the file the audit writes and
+// the entry the views report cannot disagree.
+func WaivedEntries(file *VulnerabilityFile, contexts map[string]DecisionContext, day time.Time) []Vulnerability {
+	var live []Vulnerability
+	for i, verdict := range ResolveWaivers(file, contexts, day) {
+		if verdict.Waived {
+			live = append(live, file.Vulnerabilities[i])
+		}
+	}
+	return live
+}
