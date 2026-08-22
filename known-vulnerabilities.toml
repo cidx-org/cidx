@@ -33,6 +33,12 @@
 # survive as long as they follow this layout.
 
 [[contexts]]
+  repository = "dhi.io/python"
+  established = ["bounded-input"]
+  reviewed = "2026-08-22"
+  basis = "The interpreter consumes the repository's own code and tests, the dist/ the repository built, and PyPI's responses for the packages the repository pins. No preset parses content from outside the checkout and the pinned index."
+
+[[contexts]]
   repository = "ghcr.io/ansible/community-ansible-dev-tools"
   established = ["bounded-input"]
   reviewed = "2026-08-22"
@@ -59,6 +65,73 @@
   reviewed = "2026-08-22"
   review_by = "2026-11-18"
   reason = "podman is a tool a preset may run; what bounds it is the input -- the repository's own molecule scenarios -- and the socket it reaches is the host's. No fix at any version."
+  references = []
+
+[[decisions]]
+  id = "dhi-docker-cli-client-plugins"
+  repository = "dhi.io/docker"
+  model = "inert-package"
+  capabilities = ["docker-socket"]
+  treatment = "accepted-risk"
+  reviewed = "2026-08-22"
+  review_by = "2026-11-18"
+  reason = "The preset runs docker buildx build; the buildx plugin is static and the compose plugin is never invoked. The docker/docker CVEs are daemon-side handlers absent from both client plugins; the daemon is the host's. glibc is linked by the Go CLI, and the flagged paths are not the Go runtime's; the image's OpenSSL is linked by nothing the preset runs. No fix at any version."
+  references = []
+
+[[decisions]]
+  id = "dhi-python-interpreter-bounded-input"
+  repository = "dhi.io/python"
+  model = "tool-bounded-input"
+  capabilities = ["publishing-credential"]
+  requires = ["bounded-input"]
+  treatment = "accepted-risk"
+  reviewed = "2026-08-22"
+  review_by = "2026-11-18"
+  reason = "tarfile and html.parser are exercised by pip on sdists and the simple index, for pip-audit and the installs python-build and pytest perform; twine reads the dist/ the repository built. The input is the repository's own code and PyPI's responses for the packages it pins; the flaws are extraction-filter bypass and CPU exhaustion, not code execution. No fix at any version."
+  references = []
+
+[[decisions]]
+  id = "dhi-python-libraries-not-reached"
+  repository = "dhi.io/python"
+  model = "inert-package"
+  capabilities = ["publishing-credential"]
+  treatment = "accepted-risk"
+  reviewed = "2026-08-22"
+  review_by = "2026-11-18"
+  reason = "The interpreter loads OpenSSL for TLS to PyPI, and CVE-2026-14456 is in the QUIC server listener, a path no client use reaches; binutils is reached only by an sdist build of an object the project's dependency tree chose. No fix at any version."
+  references = []
+
+[[decisions]]
+  id = "gh-static-binary"
+  repository = "maniator/gh"
+  model = "inert-package"
+  capabilities = ["publishing-credential"]
+  treatment = "accepted-risk"
+  reviewed = "2026-08-22"
+  review_by = "2026-11-18"
+  reason = "gh is static; the image's OpenSSL is linked by nothing the preset runs (git is present and used locally only). No fix at any version."
+  references = []
+
+[[decisions]]
+  id = "goreleaser-static-binaries-and-client-plugin"
+  repository = "goreleaser/goreleaser"
+  model = "inert-package"
+  capabilities = ["docker-socket", "publishing-credential"]
+  treatment = "accepted-risk"
+  reviewed = "2026-08-22"
+  review_by = "2026-11-18"
+  reason = "goreleaser and the buildx plugin are static: the image's OpenSSL and binutils are not in their process (binutils is only reached by a cgo build the project chose). The docker/docker CVEs are daemon-side handlers reported against the client library the buildx plugin vendors; the daemon is the host's, through the socket. No fix at any version."
+  references = []
+
+[[decisions]]
+  id = "rust-debian-libraries-not-reached"
+  repository = "rust"
+  model = "inert-package"
+  capabilities = ["publishing-credential"]
+  treatment = "accepted-risk"
+  reviewed = "2026-08-22"
+  review_by = "2026-11-18"
+  reason = "perl, gzip, sqlite, tinfo, acl and the image's OpenSSL are neither linked by cargo/rustc nor invoked by any preset command (probed on the pinned digest, audit run 32557245489); glibc is linked, and the flagged paths (ns_printrr, scanf %mc, ungetwc) are not ones Rust std uses. cargo-publish's token travels through cargo's own TLS. No fix at any version."
   references = []
 
 [[vulnerabilities]]
@@ -638,88 +711,72 @@
   repository = "dhi.io/docker"
   first_seen = "dhi.io/docker:29-cli"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "dhi-docker-cli-client-plugins"
 
 [[vulnerabilities]]
   cve = "CVE-2026-41567"
   repository = "dhi.io/docker"
   first_seen = "dhi.io/docker:29-cli"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
   references = []
+  decision = "dhi-docker-cli-client-plugins"
 
 [[vulnerabilities]]
   cve = "CVE-2026-42306"
   repository = "dhi.io/docker"
   first_seen = "dhi.io/docker:29-cli"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
   references = []
+  decision = "dhi-docker-cli-client-plugins"
 
 [[vulnerabilities]]
   cve = "CVE-2026-5435"
   repository = "dhi.io/docker"
   first_seen = "dhi.io/docker:29-cli"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "dhi-docker-cli-client-plugins"
 
 [[vulnerabilities]]
   cve = "CVE-2026-5450"
   repository = "dhi.io/docker"
   first_seen = "dhi.io/docker:29-cli"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "dhi-docker-cli-client-plugins"
 
 [[vulnerabilities]]
   cve = "CVE-2026-5928"
   repository = "dhi.io/docker"
   first_seen = "dhi.io/docker:29-cli"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "dhi-docker-cli-client-plugins"
 
 [[vulnerabilities]]
   cve = "GHSA-RG2X-37C3-W2RH"
   repository = "dhi.io/docker"
   first_seen = "dhi.io/docker:29-cli"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
   references = []
+  decision = "dhi-docker-cli-client-plugins"
 
 [[vulnerabilities]]
   cve = "GHSA-X86F-5XW2-FM2R"
   repository = "dhi.io/docker"
   first_seen = "dhi.io/docker:29-cli"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
   references = []
+  decision = "dhi-docker-cli-client-plugins"
 
 [[vulnerabilities]]
   cve = "CVE-2026-14456"
@@ -759,66 +816,54 @@
   repository = "dhi.io/python"
   first_seen = "dhi.io/python:3.13.14-alpine-dev"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
   references = []
+  decision = "dhi-python-interpreter-bounded-input"
 
 [[vulnerabilities]]
   cve = "CVE-2026-11972"
   repository = "dhi.io/python"
   first_seen = "dhi.io/python:3.13.14-alpine-dev"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
   references = []
+  decision = "dhi-python-interpreter-bounded-input"
 
 [[vulnerabilities]]
   cve = "CVE-2026-14456"
   repository = "dhi.io/python"
   first_seen = "dhi.io/python:3.13.14-alpine-dev"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "dhi-python-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-15308"
   repository = "dhi.io/python"
   first_seen = "dhi.io/python:3.13.14-alpine-dev"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
   references = []
+  decision = "dhi-python-interpreter-bounded-input"
 
 [[vulnerabilities]]
   cve = "CVE-2026-3441"
   repository = "dhi.io/python"
   first_seen = "dhi.io/python:3.13.14-alpine-dev"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "dhi-python-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-3442"
   repository = "dhi.io/python"
   first_seen = "dhi.io/python:3.13.14-alpine-dev"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "dhi-python-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2024-25621"
@@ -1109,88 +1154,72 @@
   repository = "goreleaser/goreleaser"
   first_seen = "goreleaser/goreleaser:v2.17.0"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "goreleaser-static-binaries-and-client-plugin"
 
 [[vulnerabilities]]
   cve = "CVE-2025-69650"
   repository = "goreleaser/goreleaser"
   first_seen = "goreleaser/goreleaser:v2.17.0"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "goreleaser-static-binaries-and-client-plugin"
 
 [[vulnerabilities]]
   cve = "CVE-2026-14456"
   repository = "goreleaser/goreleaser"
   first_seen = "goreleaser/goreleaser:v2.17.0"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "goreleaser-static-binaries-and-client-plugin"
 
 [[vulnerabilities]]
   cve = "CVE-2026-3441"
   repository = "goreleaser/goreleaser"
   first_seen = "goreleaser/goreleaser:v2.17.0"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "goreleaser-static-binaries-and-client-plugin"
 
 [[vulnerabilities]]
   cve = "CVE-2026-3442"
   repository = "goreleaser/goreleaser"
   first_seen = "goreleaser/goreleaser:v2.17.0"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "goreleaser-static-binaries-and-client-plugin"
 
 [[vulnerabilities]]
   cve = "CVE-2026-41567"
   repository = "goreleaser/goreleaser"
   first_seen = "goreleaser/goreleaser:v2.17.0"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
   references = []
+  decision = "goreleaser-static-binaries-and-client-plugin"
 
 [[vulnerabilities]]
   cve = "CVE-2026-42306"
   repository = "goreleaser/goreleaser"
   first_seen = "goreleaser/goreleaser:v2.17.0"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
   references = []
+  decision = "goreleaser-static-binaries-and-client-plugin"
 
 [[vulnerabilities]]
   cve = "CVE-2026-6846"
   repository = "goreleaser/goreleaser"
   first_seen = "goreleaser/goreleaser:v2.17.0"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "goreleaser-static-binaries-and-client-plugin"
 
 [[vulnerabilities]]
   cve = "CVE-2026-14456"
@@ -1274,11 +1303,9 @@
   repository = "maniator/gh"
   first_seen = "maniator/gh:v2.95"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "gh-static-binary"
 
 [[vulnerabilities]]
   cve = "CVE-2025-69720"
@@ -1659,242 +1686,198 @@
   repository = "rust"
   first_seen = "rust:1.97.1-slim"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "rust-debian-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-11822"
   repository = "rust"
   first_seen = "rust:1.97.1-slim"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "rust-debian-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-11824"
   repository = "rust"
   first_seen = "rust:1.97.1-slim"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "rust-debian-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-12087"
   repository = "rust"
   first_seen = "rust:1.97.1-slim"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "rust-debian-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-13221"
   repository = "rust"
   first_seen = "rust:1.97.1-slim"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "rust-debian-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-14456"
   repository = "rust"
   first_seen = "rust:1.97.1-slim"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "rust-debian-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-41992"
   repository = "rust"
   first_seen = "rust:1.97.1-slim"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "rust-debian-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-42496"
   repository = "rust"
   first_seen = "rust:1.97.1-slim"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "rust-debian-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-42497"
   repository = "rust"
   first_seen = "rust:1.97.1-slim"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "rust-debian-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-48959"
   repository = "rust"
   first_seen = "rust:1.97.1-slim"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "rust-debian-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-48961"
   repository = "rust"
   first_seen = "rust:1.97.1-slim"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "rust-debian-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-48962"
   repository = "rust"
   first_seen = "rust:1.97.1-slim"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "rust-debian-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-5435"
   repository = "rust"
   first_seen = "rust:1.97.1-slim"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "rust-debian-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-54369"
   repository = "rust"
   first_seen = "rust:1.97.1-slim"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "rust-debian-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-54370"
   repository = "rust"
   first_seen = "rust:1.97.1-slim"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "rust-debian-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-5450"
   repository = "rust"
   first_seen = "rust:1.97.1-slim"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "rust-debian-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-57432"
   repository = "rust"
   first_seen = "rust:1.97.1-slim"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "rust-debian-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-57433"
   repository = "rust"
   first_seen = "rust:1.97.1-slim"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "rust-debian-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-5928"
   repository = "rust"
   first_seen = "rust:1.97.1-slim"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "rust-debian-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-7017"
   repository = "rust"
   first_seen = "rust:1.97.1-slim"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "rust-debian-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-8376"
   repository = "rust"
   first_seen = "rust:1.97.1-slim"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "rust-debian-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-9538"
   repository = "rust"
   first_seen = "rust:1.97.1-slim"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "rust-debian-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-14456"
