@@ -238,3 +238,35 @@ func WaivedEntries(file *VulnerabilityFile, contexts map[string]DecisionContext,
 	}
 	return live
 }
+
+// effectiveEntries returns the entries as a reader should see them: a member
+// presented with its decision's treatment, review date, reason and references
+// in the fields a legacy entry carries itself. It returns copies — the record
+// on disk keeps the fields empty, because filling them there would clone the
+// decision back into every member, which is the one thing the model exists to
+// stop. Writers read the record; readers read this.
+func (f *VulnerabilityFile) effectiveEntries() []Vulnerability {
+	byID := make(map[string]Decision, len(f.Decisions))
+	for _, d := range f.Decisions {
+		byID[d.ID] = d
+	}
+	out := make([]Vulnerability, len(f.Vulnerabilities))
+	for i, v := range f.Vulnerabilities {
+		if d, member := byID[v.Decision]; member {
+			if v.Status == "" {
+				v.Status = d.Treatment
+			}
+			if v.Expires == "" {
+				v.Expires = d.ReviewBy
+			}
+			if v.Notes == "" {
+				v.Notes = d.Reason
+			}
+			if len(v.References) == 0 {
+				v.References = d.References
+			}
+		}
+		out[i] = v
+	}
+	return out
+}

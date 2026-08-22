@@ -204,3 +204,20 @@ Feature: Grouped vulnerability decisions
       When the acceptances that no longer stand are listed on "2026-09-01"
       Then "CVE-2026-0003" should not be listed as no longer standing
       And "CVE-2026-0006" should be listed as no longer standing
+
+  Rule: A member is read with its decision's words, and stored without them
+
+    # Every view that lists acceptances — the committed baseline, `vuln list`,
+    # the Security tab, the status page — shows a member with the treatment,
+    # review date and reason of its decision, in the columns a legacy entry
+    # fills itself. The file keeps those fields empty on the member: filling
+    # them there would clone the decision back into every member, which is the
+    # one thing the model exists to stop.
+
+    Scenario: A member is presented with its decision's treatment, review date and reason
+      Given a decision "rust-inert" on "rust" reviewed until "2026-12-01"
+      And the decision "rust-inert" expects capabilities "publishing-credential"
+      And the decision "rust-inert" is treated as "accepted-risk" because "Affected packages are invoked by nothing this image runs."
+      And the member "CVE-2026-0001" on "rust" references decision "rust-inert"
+      When the acceptances that no longer stand are listed on "2026-09-01"
+      Then the acceptance "CVE-2026-0001" should read status "accepted-risk", expiry "2026-12-01" and reason "Affected packages are invoked by nothing this image runs."
