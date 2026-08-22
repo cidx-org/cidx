@@ -29,6 +29,11 @@ Welcome to the CIDX (CI with Declarative eXecution) documentation.
 - [Creating Presets](guides/creating-presets.md) - How to add new containers to CIDX
 - [CI/CD Integration](guides/ci-integration.md) - Setting up GitHub Actions, GitLab CI, etc.
 
+### 💬 Open Design Discussions
+
+- [Rethinking Vulnerability Management](discussions/vulnerability-management-reset.md) - Risk steering, automated preset updates, and cooldown versus urgent remediation
+- [Vulnerability Decision Workflow](discussions/vulnerability-decision-workflow.md) - How grouped decisions are resolved, reviewed, invalidated and migrated
+
 ### 🔧 Reference
 
 - [Container Options](reference/container-options.md) - Every key a `[containers.<name>]` section may carry

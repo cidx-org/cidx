@@ -1,0 +1,278 @@
+package features
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/cidx-org/cidx/v3/internal/commands"
+	"github.com/cidx-org/cidx/v3/pkg/presets"
+	"github.com/cucumber/godog"
+)
+
+// decisionState is one scenario's slice of the grouped-decision world: the
+// file being judged, the contexts derived for its repositories, and what the
+// last resolution or lifecycle evaluation said.
+type decisionState struct {
+	file         commands.VulnerabilityFile
+	contexts     map[string]commands.DecisionContext
+	verdicts     []commands.MemberVerdict
+	observations []commands.FixObservation
+	transitions  []commands.FixTransition
+	preset       presets.Preset
+	derived      []string
+	loadPath     string
+	loadErr      error
+}
+
+// RegisterGroupedDecisionSteps registers the grouped vulnerability decision steps
+func RegisterGroupedDecisionSteps(ctx *godog.ScenarioContext, tc *TestContext) {
+	ctx.Step(`^a decision "([^"]*)" on "([^"]*)" reviewed until "([^"]*)"$`, tc.aDecisionReviewedUntil)
+	ctx.Step(`^the decision "([^"]*)" expects capabilities "([^"]*)"$`, tc.decisionExpectsCapabilities)
+	ctx.Step(`^the decision "([^"]*)" requires "([^"]*)"$`, tc.decisionRequires)
+	ctx.Step(`^the "([^"]*)" context provides capabilities "([^"]*)"$`, tc.contextProvidesCapabilities)
+	ctx.Step(`^the "([^"]*)" context establishes no semantic predicates$`, tc.contextEstablishesNothing)
+	ctx.Step(`^the member "([^"]*)" on "([^"]*)" references decision "([^"]*)"$`, tc.memberReferencesDecision)
+	ctx.Step(`^a legacy entry "([^"]*)" on "([^"]*)" expiring "([^"]*)"$`, tc.aLegacyEntry)
+	ctx.Step(`^the waivers are resolved on "([^"]*)"$`, tc.waiversAreResolvedOn)
+	ctx.Step(`^"([^"]*)" should be waived$`, tc.shouldBeWaived)
+	ctx.Step(`^"([^"]*)" should not be waived$`, tc.shouldNotBeWaived)
+	ctx.Step(`^the verdict for "([^"]*)" should mention "([^"]*)"$`, tc.verdictShouldMention)
+
+	ctx.Step(`^a preset declaring env "([^"]*)" as "([^"]*)"$`, tc.aPresetDeclaringEnv)
+	ctx.Step(`^the preset mounts "([^"]*)"$`, tc.presetMounts)
+	ctx.Step(`^its capabilities are derived$`, tc.capabilitiesAreDerived)
+	ctx.Step(`^the derived capabilities should be "([^"]*)"$`, tc.derivedCapabilitiesShouldBe)
+
+	ctx.Step(`^a vulnerability file where "([^"]*)" references the unknown decision "([^"]*)"$`, tc.fileWithUnknownDecision)
+	ctx.Step(`^the vulnerability file is loaded$`, tc.vulnerabilityFileIsLoaded)
+	ctx.Step(`^loading should fail mentioning "([^"]*)"$`, tc.loadingShouldFailMentioning)
+
+	ctx.Step(`^suppressed scanner evidence reports "([^"]*)" fixed in "([^"]*)" observed on "([^"]*)"$`, tc.suppressedEvidenceReportsFix)
+	ctx.Step(`^the decision lifecycle is evaluated$`, tc.decisionLifecycleIsEvaluated)
+	ctx.Step(`^"([^"]*)" should be queued for remediation with its clock starting "([^"]*)"$`, tc.shouldBeQueuedForRemediation)
+	ctx.Step(`^"([^"]*)" should not be queued for remediation$`, tc.shouldNotBeQueuedForRemediation)
+}
+
+// decisions lazily initializes the scenario's decision state, so every step
+// shares one world and Reset gets a fresh one.
+func (tc *TestContext) decisions() *decisionState {
+	if tc.decisionScenario == nil {
+		tc.decisionScenario = &decisionState{contexts: map[string]commands.DecisionContext{}}
+	}
+	return tc.decisionScenario
+}
+
+func splitList(list string) []string {
+	if list == "" {
+		return nil
+	}
+	parts := strings.Split(list, ",")
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+	return parts
+}
+
+func (tc *TestContext) aDecisionReviewedUntil(id, repository, reviewBy string) error {
+	ds := tc.decisions()
+	ds.file.Decisions = append(ds.file.Decisions, commands.Decision{ID: id, Repository: repository, ReviewBy: reviewBy})
+	// A context entry must exist for the repository: a decision judged with no
+	// derived context at all fails closed, which is its own scenario.
+	if _, ok := ds.contexts[repository]; !ok {
+		ds.contexts[repository] = commands.DecisionContext{}
+	}
+	return nil
+}
+
+func (tc *TestContext) withDecision(id string, change func(*commands.Decision)) error {
+	ds := tc.decisions()
+	for i := range ds.file.Decisions {
+		if ds.file.Decisions[i].ID == id {
+			change(&ds.file.Decisions[i])
+			return nil
+		}
+	}
+	return fmt.Errorf("no decision %q staged", id)
+}
+
+func (tc *TestContext) decisionExpectsCapabilities(id, capabilities string) error {
+	return tc.withDecision(id, func(d *commands.Decision) { d.Capabilities = splitList(capabilities) })
+}
+
+func (tc *TestContext) decisionRequires(id, predicates string) error {
+	return tc.withDecision(id, func(d *commands.Decision) { d.Requires = splitList(predicates) })
+}
+
+func (tc *TestContext) contextProvidesCapabilities(repository, capabilities string) error {
+	ds := tc.decisions()
+	ctx := ds.contexts[repository]
+	ctx.Capabilities = splitList(capabilities)
+	ds.contexts[repository] = ctx
+	return nil
+}
+
+func (tc *TestContext) contextEstablishesNothing(repository string) error {
+	ds := tc.decisions()
+	ctx := ds.contexts[repository]
+	ctx.Semantics = nil
+	ds.contexts[repository] = ctx
+	return nil
+}
+
+func (tc *TestContext) memberReferencesDecision(cve, repository, decision string) error {
+	ds := tc.decisions()
+	ds.file.Vulnerabilities = append(ds.file.Vulnerabilities, commands.Vulnerability{CVE: cve, Repository: repository, Decision: decision})
+	return nil
+}
+
+func (tc *TestContext) aLegacyEntry(cve, repository, expires string) error {
+	ds := tc.decisions()
+	ds.file.Vulnerabilities = append(ds.file.Vulnerabilities, commands.Vulnerability{CVE: cve, Repository: repository, Expires: expires})
+	return nil
+}
+
+func (tc *TestContext) waiversAreResolvedOn(date string) error {
+	day, err := time.Parse(time.DateOnly, date)
+	if err != nil {
+		return fmt.Errorf("bad day %q: %w", date, err)
+	}
+	ds := tc.decisions()
+	ds.verdicts = commands.ResolveWaivers(&ds.file, ds.contexts, day)
+	return nil
+}
+
+func (tc *TestContext) verdictFor(cve string) (commands.MemberVerdict, error) {
+	for _, v := range tc.decisions().verdicts {
+		if v.CVE == cve {
+			return v, nil
+		}
+	}
+	return commands.MemberVerdict{}, fmt.Errorf("no verdict for %q", cve)
+}
+
+func (tc *TestContext) shouldBeWaived(cve string) error {
+	v, err := tc.verdictFor(cve)
+	if err != nil {
+		return err
+	}
+	if !v.Waived {
+		return fmt.Errorf("%s is not waived: %s", cve, v.Reason)
+	}
+	return nil
+}
+
+func (tc *TestContext) shouldNotBeWaived(cve string) error {
+	v, err := tc.verdictFor(cve)
+	if err != nil {
+		return err
+	}
+	if v.Waived {
+		return fmt.Errorf("%s is waived and should not be", cve)
+	}
+	return nil
+}
+
+func (tc *TestContext) verdictShouldMention(cve, fragment string) error {
+	v, err := tc.verdictFor(cve)
+	if err != nil {
+		return err
+	}
+	if !strings.Contains(v.Reason, fragment) {
+		return fmt.Errorf("verdict for %s says %q, which does not mention %q", cve, v.Reason, fragment)
+	}
+	return nil
+}
+
+func (tc *TestContext) aPresetDeclaringEnv(key, value string) error {
+	ds := tc.decisions()
+	if ds.preset.Env == nil {
+		ds.preset.Env = map[string]string{}
+	}
+	ds.preset.Env[key] = value
+	return nil
+}
+
+func (tc *TestContext) presetMounts(path string) error {
+	ds := tc.decisions()
+	ds.preset.Volumes = append(ds.preset.Volumes, "${WORKSPACE}:/work", path+":"+path)
+	return nil
+}
+
+func (tc *TestContext) capabilitiesAreDerived() error {
+	ds := tc.decisions()
+	ds.derived = presets.Capabilities(ds.preset)
+	return nil
+}
+
+func (tc *TestContext) derivedCapabilitiesShouldBe(expected string) error {
+	got := strings.Join(tc.decisions().derived, ", ")
+	if got != expected {
+		return fmt.Errorf("derived %q, expected %q", got, expected)
+	}
+	return nil
+}
+
+func (tc *TestContext) fileWithUnknownDecision(cve, decision string) error {
+	ds := tc.decisions()
+	dir, err := os.MkdirTemp("", "cidx-decisions")
+	if err != nil {
+		return err
+	}
+	tc.GitRepo = dir // reuse the context's cleanup of scenario directories
+	ds.loadPath = filepath.Join(dir, "known-vulnerabilities.toml")
+	content := fmt.Sprintf("[[vulnerabilities]]\n  cve = %q\n  repository = \"example\"\n  decision = %q\n", cve, decision)
+	return os.WriteFile(ds.loadPath, []byte(content), 0o644)
+}
+
+func (tc *TestContext) vulnerabilityFileIsLoaded() error {
+	ds := tc.decisions()
+	_, ds.loadErr = commands.LoadVulnerabilityFile(ds.loadPath)
+	return nil
+}
+
+func (tc *TestContext) loadingShouldFailMentioning(fragment string) error {
+	ds := tc.decisions()
+	if ds.loadErr == nil {
+		return fmt.Errorf("loading succeeded, expected a failure mentioning %q", fragment)
+	}
+	if !strings.Contains(ds.loadErr.Error(), fragment) {
+		return fmt.Errorf("load error %q does not mention %q", ds.loadErr, fragment)
+	}
+	return nil
+}
+
+func (tc *TestContext) suppressedEvidenceReportsFix(cve, version, observed string) error {
+	ds := tc.decisions()
+	ds.observations = append(ds.observations, commands.FixObservation{CVE: cve, FixedVersion: version, Observed: observed})
+	return nil
+}
+
+func (tc *TestContext) decisionLifecycleIsEvaluated() error {
+	ds := tc.decisions()
+	ds.transitions = commands.FixTransitions(&ds.file, ds.observations)
+	return nil
+}
+
+func (tc *TestContext) shouldBeQueuedForRemediation(cve, clockStart string) error {
+	for _, tr := range tc.decisions().transitions {
+		if tr.CVE == cve {
+			if tr.ClockStart != clockStart {
+				return fmt.Errorf("%s queued with clock %q, expected %q", cve, tr.ClockStart, clockStart)
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("%s is not queued for remediation", cve)
+}
+
+func (tc *TestContext) shouldNotBeQueuedForRemediation(cve string) error {
+	for _, tr := range tc.decisions().transitions {
+		if tr.CVE == cve {
+			return fmt.Errorf("%s is queued for remediation and should not be", cve)
+		}
+	}
+	return nil
+}

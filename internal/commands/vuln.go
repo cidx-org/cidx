@@ -40,6 +40,12 @@ type Vulnerability struct {
 	Notes      string   `toml:"notes"`
 	References []string `toml:"references"`
 
+	// Decision references the grouped decision that authorizes this entry's
+	// waiver, instead of cloning its status, expiry and note. Empty means a
+	// legacy entry judged on its own Expires, exactly as before the decisions
+	// table existed (docs/discussions/vulnerability-management-reset.md).
+	Decision string `toml:"decision,omitempty"`
+
 	// Image is the pre-#297 key, a whole `repo:tag`. It is read so an
 	// un-migrated file still parses, moved to FirstSeen on load, and never
 	// written back. An entry that still carries one has no repository, so it
@@ -78,6 +84,7 @@ func waiving(vulns []Vulnerability, day time.Time) []Vulnerability {
 
 // VulnerabilityFile represents the known-vulnerabilities.toml structure
 type VulnerabilityFile struct {
+	Decisions       []Decision      `toml:"decisions"`
 	Vulnerabilities []Vulnerability `toml:"vulnerabilities"`
 }
 
@@ -965,7 +972,17 @@ func loadVulnerabilities(path string) (*VulnerabilityFile, error) {
 	for i, v := range vulns.Vulnerabilities {
 		vulns.Vulnerabilities[i] = migrateVulnerability(v)
 	}
+	if err := validateDecisionRefs(&vulns); err != nil {
+		return nil, fmt.Errorf("failed to load %s: %w", path, err)
+	}
 	return &vulns, nil
+}
+
+// LoadVulnerabilityFile is the exported loader the BDD suite resolves the
+// grouped-decision contract against — same parse, same validation, so the
+// scenarios and the commands cannot come to read the file differently.
+func LoadVulnerabilityFile(path string) (*VulnerabilityFile, error) {
+	return loadVulnerabilities(path)
 }
 
 // migrateVulnerability moves a pre-#297 entry onto the repository key without
@@ -1002,6 +1019,14 @@ func migrateVulnerability(v Vulnerability) Vulnerability {
 // produce the same bytes and an added entry lands next to its neighbours instead
 // of at the end.
 func saveVulnerabilities(path string, vulns *VulnerabilityFile) error {
+	// The hand-written layout below knows nothing about the decisions table
+	// yet, so writing a file that carries one would silently drop every
+	// decision — and with them the authorization their members waive under.
+	// Refusing is the fail-closed posture: deterministic rewriting of
+	// decisions is a scenario still owed, not a corner to lose data in.
+	if len(vulns.Decisions) > 0 {
+		return fmt.Errorf("cannot rewrite %s: it carries %d grouped decisions and the deterministic writer does not support them yet", path, len(vulns.Decisions))
+	}
 	entries := deduplicateVulnerabilities(vulns.Vulnerabilities)
 	sort.Slice(entries, func(i, j int) bool {
 		if entries[i].Repository != entries[j].Repository {

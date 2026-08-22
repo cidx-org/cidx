@@ -122,6 +122,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	RegisterWatchTargetSteps(ctx, testCtx)
 	RegisterCPWSteps(ctx, testCtx)
 	RegisterBranchDeletionSteps(ctx, testCtx)
+	RegisterGroupedDecisionSteps(ctx, testCtx)
 
 	// Hooks
 	ctx.Before(func(ctx context.Context, sc *godog.Scenario) (context.Context, error) {
@@ -199,6 +200,10 @@ type TestContext struct {
 	// Tools a quiet-mode scenario staged, and how long the last run took.
 	Tools       []stagedTool
 	RunDuration time.Duration
+
+	// The grouped-decision world a scenario built (#440 discussion): the file,
+	// its contexts and the verdicts, lazily created by tc.decisions().
+	decisionScenario *decisionState
 }
 
 // stagedTool is a tool a scenario declares: what it writes to stdout and how it
@@ -254,6 +259,7 @@ func (tc *TestContext) Reset() {
 	tc.Executor = nil
 	tc.Tools = nil
 	tc.RunDuration = 0
+	tc.decisionScenario = nil
 }
 
 // Cleanup performs cleanup after scenario
