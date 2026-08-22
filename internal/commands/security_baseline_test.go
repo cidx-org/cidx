@@ -407,7 +407,10 @@ func TestSecurityBaselineIsCurrent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not load the catalogue: %v", err)
 	}
-	vulns, err := loadVulnerabilities(filepath.Join("..", "..", defaultVulnFile))
+	// The same reader the command uses: a member of a grouped decision is
+	// presented with its decision's treatment, review date and reason, and
+	// the committed file is rendered from that presentation.
+	accepted, err := acceptedExceptions(filepath.Join("..", "..", defaultVulnFile))
 	if err != nil {
 		t.Fatalf("could not read the accepted findings: %v", err)
 	}
@@ -418,8 +421,8 @@ func TestSecurityBaselineIsCurrent(t *testing.T) {
 	// line the two share is one no scan result could have moved.
 	firstCarried, firstBases := baselineMeasurement(imagePresets, 0)
 	secondCarried, secondBases := baselineMeasurement(imagePresets, 1)
-	first := strings.Split(renderSecurityBaseline(imagePresets, vulns.Vulnerabilities, firstCarried, firstBases, true), "\n")
-	second := strings.Split(renderSecurityBaseline(imagePresets, vulns.Vulnerabilities, secondCarried, secondBases, true), "\n")
+	first := strings.Split(renderSecurityBaseline(imagePresets, accepted, firstCarried, firstBases, true), "\n")
+	second := strings.Split(renderSecurityBaseline(imagePresets, accepted, secondCarried, secondBases, true), "\n")
 
 	if len(first) != len(second) {
 		t.Fatalf("the two renderings are %d and %d lines long: this test can no longer tell a measured line from a decided one",

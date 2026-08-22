@@ -29,6 +29,7 @@ type decisionState struct {
 	secondWrite  string
 	readBack     *commands.VulnerabilityFile
 	stopped      []presets.Exception
+	presented    []presets.Exception
 }
 
 // RegisterGroupedDecisionSteps registers the grouped vulnerability decision steps
@@ -47,6 +48,8 @@ func RegisterGroupedDecisionSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Step(`^"([^"]*)" should be listed as no longer standing$`, tc.shouldBeListedAsNoLongerStanding)
 	ctx.Step(`^"([^"]*)" should not be listed as no longer standing$`, tc.shouldNotBeListedAsNoLongerStanding)
 	ctx.Step(`^the reason for "([^"]*)" should mention "([^"]*)"$`, tc.reasonShouldMention)
+	ctx.Step(`^the decision "([^"]*)" is treated as "([^"]*)" because "([^"]*)"$`, tc.decisionTreatedAs)
+	ctx.Step(`^the acceptance "([^"]*)" should read status "([^"]*)", expiry "([^"]*)" and reason "([^"]*)"$`, tc.acceptanceShouldRead)
 	ctx.Step(`^the "([^"]*)" context provides capabilities "([^"]*)"$`, tc.contextProvidesCapabilities)
 	ctx.Step(`^the "([^"]*)" context establishes no semantic predicates$`, tc.contextEstablishesNothing)
 	ctx.Step(`^the member "([^"]*)" on "([^"]*)" references decision "([^"]*)"$`, tc.memberReferencesDecision)
@@ -403,7 +406,8 @@ func (tc *TestContext) acceptancesNoLongerStandingOn(date string) error {
 		return fmt.Errorf("bad day %q: %w", date, err)
 	}
 	ds := tc.decisions()
-	ds.stopped = presets.ExpiredExceptions(commands.ExceptionsFor(&ds.file, day, ""), day)
+	ds.presented = commands.ExceptionsFor(&ds.file, day, "")
+	ds.stopped = presets.ExpiredExceptions(ds.presented, day)
 	return nil
 }
 
@@ -439,4 +443,21 @@ func (tc *TestContext) reasonShouldMention(cve, fragment string) error {
 		return fmt.Errorf("reason for %s is %q, which does not mention %q", cve, e.Stopped, fragment)
 	}
 	return nil
+}
+
+func (tc *TestContext) decisionTreatedAs(id, treatment, reason string) error {
+	return tc.withDecision(id, func(d *commands.Decision) { d.Treatment = treatment; d.Reason = reason })
+}
+
+func (tc *TestContext) acceptanceShouldRead(cve, status, expiry, reason string) error {
+	for _, e := range tc.decisions().presented {
+		if !strings.EqualFold(e.CVE, cve) {
+			continue
+		}
+		if e.Status != status || e.Expires != expiry || e.Notes != reason {
+			return fmt.Errorf("%s reads status %q, expiry %q, reason %q", cve, e.Status, e.Expires, e.Notes)
+		}
+		return nil
+	}
+	return fmt.Errorf("%s is not among the presented acceptances", cve)
 }

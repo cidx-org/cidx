@@ -142,7 +142,7 @@ func vulnListCommand() *cli.Command {
 			imageFilter := c.String("image")
 			stale := c.Bool("stale")
 
-			entries := vulns.Vulnerabilities
+			entries := vulns.effectiveEntries()
 			if stale {
 				running, err := catalogueRepositories()
 				if err != nil {
@@ -1019,12 +1019,17 @@ func vulnVerifyCommand() *cli.Command {
 // `vuln add` and `vuln ignore` keep tolerating the absence on purpose: the first
 // creates the file, and the second waives nothing without it, which errs towards
 // a scan reporting too much rather than too little.
+//
+// What it returns is for reading: a member of a grouped decision comes back
+// presented with its decision's treatment, review date and reason
+// ([VulnerabilityFile.effectiveEntries]). A command that writes the file back
+// loads the record with [loadVulnerabilities] instead.
 func acceptedExceptions(path string) ([]Vulnerability, error) {
 	record, err := acceptedRecord(path)
 	if err != nil {
 		return nil, err
 	}
-	return record.Vulnerabilities, nil
+	return record.effectiveEntries(), nil
 }
 
 // acceptedRecord is [acceptedExceptions] with the decisions and contexts kept:

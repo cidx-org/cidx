@@ -143,17 +143,13 @@ func ExceptionsFor(record *VulnerabilityFile, today time.Time, vulnFile string) 
 		return nil
 	}
 	lines := vulnerabilityLines(vulnFile)
-	decisions := make(map[string]Decision, len(record.Decisions))
-	for _, d := range record.Decisions {
-		decisions[d.ID] = d
-	}
 	// An unloadable catalogue leaves no context; every member then reads
 	// "no context derived", which is fail-closed rendered rather than hidden.
 	contexts, _ := catalogueContexts(record)
 	verdicts := ResolveWaivers(record, contexts, today)
 
 	var out []presets.Exception
-	for i, v := range record.Vulnerabilities {
+	for i, v := range record.effectiveEntries() {
 		if !isHighOrCritical(v.Severity) {
 			continue
 		}
@@ -169,17 +165,8 @@ func ExceptionsFor(record *VulnerabilityFile, today time.Time, vulnFile string) 
 			Notes: strings.NewReplacer("\n", " ", "\r", "").Replace(v.Notes),
 			Line:  lines[v.Repository+" "+strings.ToUpper(v.CVE)],
 		}
-		if v.Decision != "" {
-			e.Expires = decisions[v.Decision].ReviewBy
-			if e.Status == "" {
-				e.Status = decisions[v.Decision].Treatment
-			}
-			if e.Notes == "" {
-				e.Notes = decisions[v.Decision].Reason
-			}
-			if !verdicts[i].Waived {
-				e.Stopped = verdicts[i].Reason
-			}
+		if v.Decision != "" && !verdicts[i].Waived {
+			e.Stopped = verdicts[i].Reason
 		}
 		out = append(out, e)
 	}
