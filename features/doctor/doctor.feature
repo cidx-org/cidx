@@ -47,11 +47,15 @@ Feature: Environment Doctor
 
   Rule: Doctor reports overall status
 
+    # The hardened-images check reads the Docker config, so this scenario
+    # stages one of its own: inheriting the runner's credentials made the
+    # promote job fail wherever nobody had run `docker login dhi.io`.
     @docker-required
     Scenario: All checks pass
       Given Docker daemon is running
       And I am in a Git repository
       And a valid "cidx.toml" exists
+      And I am authenticated to the hardened registry
       When I run "cidx doctor"
       Then the exit code should be 0
       And I should see "All checks passed"

@@ -1,7 +1,10 @@
 package features
 
 import (
+	"encoding/base64"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -25,6 +28,7 @@ func RegisterDoctorSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Then(`^I should see the number of issues found$`, tc.shouldSeeIssueCount)
 
 	ctx.Given(`^a valid "([^"]*)" exists$`, tc.aValidConfigExists)
+	ctx.Given(`^I am authenticated to the hardened registry$`, tc.authenticatedToHardenedRegistry)
 	ctx.Given(`^no "([^"]*)" exists$`, tc.noConfigExists)
 	ctx.Given(`^I am NOT in a Git repository$`, tc.notInGitRepo)
 }
@@ -206,4 +210,25 @@ func statusIcon(status doctor.Status) string {
 	default:
 		return "✗"
 	}
+}
+
+// authenticatedToHardenedRegistry stages a Docker config carrying a dhi.io
+// credential and points DOCKER_CONFIG at it — the same variable docker reads —
+// so the hardened-images check answers about what the scenario declared, not
+// about whoever last ran `docker login` on this machine.
+func (tc *TestContext) authenticatedToHardenedRegistry() error {
+	dir, err := tc.scenarioDir()
+	if err != nil {
+		return err
+	}
+	configDir := filepath.Join(dir, "docker-config")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		return err
+	}
+	config := `{"auths":{"dhi.io":{"auth":"` + base64.StdEncoding.EncodeToString([]byte("scenario:token")) + `"}}}`
+	if err := os.WriteFile(filepath.Join(configDir, "config.json"), []byte(config), 0o600); err != nil {
+		return err
+	}
+	tc.rememberEnv("DOCKER_CONFIG")
+	return os.Setenv("DOCKER_CONFIG", configDir)
 }
