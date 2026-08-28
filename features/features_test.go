@@ -123,6 +123,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	RegisterCPWSteps(ctx, testCtx)
 	RegisterBranchDeletionSteps(ctx, testCtx)
 	RegisterGroupedDecisionSteps(ctx, testCtx)
+	RegisterCatalogueReferenceSteps(ctx, testCtx)
 
 	// Hooks
 	ctx.Before(func(ctx context.Context, sc *godog.Scenario) (context.Context, error) {

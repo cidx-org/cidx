@@ -213,7 +213,7 @@ cidx security registry login    # Authenticate
 - [Installation](docs/getting-started/installation.md)
 - [Configuration](docs/getting-started/configuration.md)
 - [CI Integration](docs/guides/ci-integration.md)
-- [Available Tools](docs/reference/tools.md)
+- [Preset Catalogue](docs/reference/catalogue.md)
 - [CLI Reference](docs/reference/cli.md)
 - [Philosophy](docs/core-concepts/philosophy.md)
 - [Development Notes](CLAUDE.md)
