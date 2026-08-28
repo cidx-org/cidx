@@ -345,3 +345,14 @@ func TestGetDockerHubCredentials_FromAuths(t *testing.T) {
 		t.Errorf("got %q/%q, want hubuser/hubpass", creds.Username, creds.Secret)
 	}
 }
+
+// TestNewManagerHonoursDockerConfig pins the resolution order docker itself
+// uses: $DOCKER_CONFIG names the config directory when set, and the home
+// fallback applies only without it.
+func TestNewManagerHonoursDockerConfig(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DOCKER_CONFIG", dir)
+	if got, want := NewManager().configPath, filepath.Join(dir, "config.json"); got != want {
+		t.Fatalf("configPath = %q, want %q", got, want)
+	}
+}

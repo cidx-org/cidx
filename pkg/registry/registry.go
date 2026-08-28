@@ -40,11 +40,22 @@ type Manager struct {
 	configPath string
 }
 
-// NewManager creates a new registry manager
+// NewManager creates a new registry manager.
+//
+// The config directory is resolved the way docker itself resolves it:
+// $DOCKER_CONFIG first, ~/.docker otherwise. Reading only the home path
+// answered wrong on every machine where `docker login` wrote where
+// DOCKER_CONFIG points — including the BDD suite, whose doctor scenario
+// stages its own credentials there rather than inheriting the runner's
+// — the monitor's promote job failed on exactly that inheritance.
 func NewManager() *Manager {
-	home, _ := os.UserHomeDir()
+	dir := os.Getenv("DOCKER_CONFIG")
+	if dir == "" {
+		home, _ := os.UserHomeDir()
+		dir = filepath.Join(home, ".docker")
+	}
 	return &Manager{
-		configPath: filepath.Join(home, ".docker", "config.json"),
+		configPath: filepath.Join(dir, "config.json"),
 	}
 }
 
