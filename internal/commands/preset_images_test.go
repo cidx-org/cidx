@@ -218,6 +218,41 @@ func TestBuildScanTargetsKeepsAMatureFallback(t *testing.T) {
 	}
 }
 
+func TestBuildScanTargetsKeepsFallbackWhenLatestDigestDoesNotResolve(t *testing.T) {
+	now := scanNow(t)
+	current := "commitizen/commitizen:4.16.5@sha256:" + zeroDigest
+
+	originalLatest, originalDigest := latestTagFunc, resolveDigestFunc
+	t.Cleanup(func() {
+		latestTagFunc, resolveDigestFunc = originalLatest, originalDigest
+	})
+	latestTagFunc = func(image, currentTag string, now time.Time) (tagUpdate, error) {
+		return tagUpdate{
+			Latest:          "4.18.0",
+			Published:       now.AddDate(0, 0, -3),
+			Mature:          "4.17.0",
+			MaturePublished: now.AddDate(0, 0, -20),
+		}, nil
+	}
+	resolveDigestFunc = func(image, reference string) (string, error) {
+		if reference == "4.18.0" {
+			return "", fmt.Errorf("manifest disappeared")
+		}
+		return "sha256:" + zeroDigest, nil
+	}
+
+	targets := buildScanTargets(map[string][]string{current: {"commitizen"}}, nil, now)
+	if len(targets) != 2 {
+		t.Fatalf("got %d targets, want failed latest plus mature fallback", len(targets))
+	}
+	if !strings.Contains(targets[0].Error, "4.18.0") {
+		t.Errorf("latest error = %q, want the unresolvable tag named", targets[0].Error)
+	}
+	if !targets[1].IsUpdate || !strings.Contains(targets[1].CandidateImage, ":4.17.0@") {
+		t.Fatalf("mature fallback = %+v, want promotable 4.17.0", targets[1])
+	}
+}
+
 // TestBuildScanTargetsReportsAnUndatableVersionRatherThanAnEternalCandidate is
 // the trap #245 had to avoid: ghcr.io and dhi.io list their tags but date none
 // of them, and the cooldown is fail-closed. Offering a candidate there would

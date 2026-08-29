@@ -919,6 +919,28 @@ func buildScanTargets(imagePresets map[string][]string, affectingUs map[string][
 				"%s publishes no date for its tags, so the cooldown cannot be applied: review and pin %s by hand",
 				imageRegistry, latestTag)
 		case latestTag != "" && latestTag != currentTag:
+			// Build the mature fallback first. If the registry lists its head but
+			// that manifest no longer resolves, the older pinned candidate is still
+			// independently useful and must survive the error below.
+			if update.Mature != "" && update.Mature != latestTag {
+				matureDigest, matureErr := resolveDigestFunc(imageName, update.Mature)
+				if matureErr == nil {
+					candidate := fmt.Sprintf("%s:%s@%s", imageName, update.Mature, matureDigest)
+					matureDecision := presets.EvaluatePromotion(update.MaturePublished, now, nil)
+					matureTarget := scanTarget{
+						CurrentImage:   currentImage,
+						ScanImage:      candidate,
+						IsUpdate:       true,
+						Presets:        presetsUsing,
+						CandidateImage: candidate,
+						PublishedAt:    update.MaturePublished.UTC().Format(time.RFC3339),
+						AgeDays:        matureDecision.AgeDays,
+						PolicyReason:   matureDecision.Reason,
+					}
+					fallback = &matureTarget
+				}
+			}
+
 			// A candidate must be pinned before it is offered for
 			// promotion: container-monitor.yml writes scan_image
 			// verbatim into presets.toml, so a bare tag here would
@@ -950,29 +972,6 @@ func buildScanTargets(imagePresets map[string][]string, affectingUs map[string][
 				target.IsUpdate = true
 			}
 
-			// The registry head is not the only useful successor. If a distinct
-			// older version has already served the cooldown, scan it as a fallback:
-			// a fresh or vulnerable latest release must not strand the catalogue on
-			// an even older pin. Targets stay newest-first so scan-verdicts can stop
-			// at the first candidate that passes.
-			if update.Mature != "" && update.Mature != latestTag {
-				matureDigest, matureErr := resolveDigestFunc(imageName, update.Mature)
-				if matureErr == nil {
-					candidate := fmt.Sprintf("%s:%s@%s", imageName, update.Mature, matureDigest)
-					matureDecision := presets.EvaluatePromotion(update.MaturePublished, now, nil)
-					matureTarget := scanTarget{
-						CurrentImage:   currentImage,
-						ScanImage:      candidate,
-						IsUpdate:       true,
-						Presets:        presetsUsing,
-						CandidateImage: candidate,
-						PublishedAt:    update.MaturePublished.UTC().Format(time.RFC3339),
-						AgeDays:        matureDecision.AgeDays,
-						PolicyReason:   matureDecision.Reason,
-					}
-					fallback = &matureTarget
-				}
-			}
 		}
 
 		// The other half of rule 1: the reference the catalogue runs must
