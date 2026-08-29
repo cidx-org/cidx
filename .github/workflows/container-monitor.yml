@@ -557,16 +557,14 @@ jobs:
             git diff pkg/presets/presets.toml
           fi
 
-      # SECURITY-BASELINE.md states findings per pinned image, so a promotion
-      # invalidates it by definition. The evidence is already here — the same
-      # scan-results/ the verdict above was reached from — and regenerating it
-      # by hand after the fact is what #382 recorded. Before the test step, so
-      # TestSecurityBaselineIsCurrent judges the regenerated file.
-      - name: Regenerate the security baseline
+      # Both committed views derive from the catalogue changed above. Refresh
+      # them before the tests enforce that neither one is stale.
+      - name: Regenerate catalogue reports
         if: steps.promote.outputs.has_changes == 'true'
         run: |
           go build -o bin/cidx ./cmd/cidx
           ./bin/cidx security baseline --results scan-results
+          ./bin/cidx preset catalogue
 
       # `./...`, not `./pkg/... ./cmd/...`. The narrow form is the one #357
       # removed from the catalogue for skipping the root package and internal/,
@@ -637,10 +635,10 @@ jobs:
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
           token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-          # What a promotion legitimately touches: the image bump itself, and
-          # whatever `cz bump --changelog` rewrites above (version_files in
-          # .cz.toml, plus the changelog). Everything else in this workspace is
-          # not part of the promotion.
+          # What a promotion legitimately touches: the image bump, its two
+          # generated reports, and whatever `cz bump --changelog` rewrites
+          # above (version_files in .cz.toml, plus the changelog). Everything
+          # else in this workspace is not part of the promotion.
           #
           # Naming them is the point. The action's default is "commit whatever
           # is dirty", and this job is dirty by construction — it downloads
@@ -656,6 +654,7 @@ jobs:
           add-paths: |
             pkg/presets/presets.toml
             SECURITY-BASELINE.md
+            docs/reference/catalogue.md
             CHANGELOG.md
             VERSION
             .cz.toml

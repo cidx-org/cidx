@@ -4,12 +4,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 )
 
-// TestCatalogueReferenceIsCurrent regenerates the committed page offline and
-// fails on any difference — the same guard TestSecurityBaselineIsCurrent
-// holds for the baseline (#310), for the same reason: a page nothing
-// regenerates rots, and this one exists to replace one that had.
 func TestCatalogueReferenceIsCurrent(t *testing.T) {
 	committed, err := os.ReadFile(filepath.Join("..", "..", defaultCatalogueReferenceFile))
 	if err != nil {
@@ -20,6 +18,7 @@ func TestCatalogueReferenceIsCurrent(t *testing.T) {
 		t.Fatalf("could not render the page: %v", err)
 	}
 	if string(committed) != rendered {
-		t.Fatalf("%s is not an output of the current catalogue.\n\nRegenerate it — `cidx preset catalogue` — and commit the result.", defaultCatalogueReferenceFile)
+		t.Fatalf("%s is out of date (-committed +generated):\n%s\nRegenerate it with `cidx preset catalogue` and commit the result.",
+			defaultCatalogueReferenceFile, cmp.Diff(string(committed), rendered))
 	}
 }
