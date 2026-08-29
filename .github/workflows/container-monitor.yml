@@ -122,9 +122,10 @@ jobs:
           echo "Found **$COUNT** unique images to scan" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          # Candidates cleared for promotion: either past the 14-day cooldown,
-          # or waived out of it because the running image is knowingly
-          # vulnerable. policy_reason says which (#242).
+          # Candidates cleared for promotion: the registry head when eligible,
+          # plus the newest older version that already served the cooldown when
+          # it differs. That fallback prevents a fresh or unsafe head release
+          # from hiding a safe intermediate version.
           UPDATES=$(echo "$TARGETS_JSON" | jq -r '.[] | select(.is_update == true) | "- \(.current_image) → \(.scan_image) — \(.policy_reason)"')
           if [ -n "$UPDATES" ]; then
             echo "### Updates Available" >> $GITHUB_STEP_SUMMARY
@@ -460,9 +461,9 @@ jobs:
           VERDICTS=$(echo "$TARGETS_JSON" | ./bin/cidx preset scan-verdicts --results scan-results)
           echo "$VERDICTS" | jq -r '.[] | "\(.new_image): promote=\(.promote) — \(.reason)"'
 
-          # Only candidates that cleared both gates: the cooldown and its CVE
-          # exception in `cidx preset scan-targets` (#242), then the scan gate
-          # above.
+          # scan-verdicts considers candidates newest-first and returns at most
+          # one passing verdict per current image. If the registry head fails,
+          # its mature fallback can still be promoted.
           echo "$VERDICTS" | jq -c '.[] | select(.promote == true)' | while read -r verdict; do
             CURRENT=$(echo "$verdict" | jq -r '.current_image')
             NEW=$(echo "$verdict" | jq -r '.new_image')

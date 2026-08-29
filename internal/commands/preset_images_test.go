@@ -183,6 +183,41 @@ func TestBuildScanTargetsWaivesTheCooldownForAffectingCVEs(t *testing.T) {
 	}
 }
 
+// TestBuildScanTargetsKeepsAMatureFallback covers a monitor that missed an
+// intermediate release: the fresh registry head must not hide a version that
+// has already served the cooldown.
+func TestBuildScanTargetsKeepsAMatureFallback(t *testing.T) {
+	now := scanNow(t)
+	current := "commitizen/commitizen:4.16.5@sha256:" + zeroDigest
+
+	originalLatest, originalDigest := latestTagFunc, resolveDigestFunc
+	t.Cleanup(func() {
+		latestTagFunc, resolveDigestFunc = originalLatest, originalDigest
+	})
+	latestTagFunc = func(image, currentTag string, now time.Time) (tagUpdate, error) {
+		return tagUpdate{
+			Latest:          "4.18.0",
+			Published:       now.AddDate(0, 0, -3),
+			Mature:          "4.17.0",
+			MaturePublished: now.AddDate(0, 0, -20),
+		}, nil
+	}
+	resolveDigestFunc = func(image, tag string) (string, error) {
+		return "sha256:" + strings.Repeat(tag[:1], 64), nil
+	}
+
+	targets := buildScanTargets(map[string][]string{current: {"commitizen"}}, nil, now)
+	if len(targets) != 2 {
+		t.Fatalf("got %d targets, want the fresh latest and mature fallback", len(targets))
+	}
+	if targets[0].IsUpdate {
+		t.Fatal("the fresh 4.18.0 head should still be held by the cooldown")
+	}
+	if !targets[1].IsUpdate || !strings.Contains(targets[1].CandidateImage, ":4.17.0@") {
+		t.Fatalf("mature fallback = %+v, want promotable 4.17.0", targets[1])
+	}
+}
+
 // TestBuildScanTargetsReportsAnUndatableVersionRatherThanAnEternalCandidate is
 // the trap #245 had to avoid: ghcr.io and dhi.io list their tags but date none
 // of them, and the cooldown is fail-closed. Offering a candidate there would
@@ -517,6 +552,25 @@ func TestNewestOfHoldsEveryRegistryToTheSameRule(t *testing.T) {
 	}
 	if !got.Published.Equal(published) {
 		t.Errorf("Published = %v, want %v: without it the cooldown cannot be measured", got.Published, published)
+	}
+}
+
+func TestNewestOfKeepsTheNewestTagPastTheCooldown(t *testing.T) {
+	now := scanNow(t)
+	listing := tagListing{
+		Tags: []string{"4.16.5", "4.17.0", "4.18.0"},
+		Published: map[string]time.Time{
+			"4.17.0": now.AddDate(0, 0, -20),
+			"4.18.0": now.AddDate(0, 0, -3),
+		},
+	}
+
+	got := newestOf("4.16.5", listing, now)
+	if got.Latest != "4.18.0" || got.Mature != "4.17.0" {
+		t.Fatalf("newestOf = latest %q, mature %q; want 4.18.0 and 4.17.0", got.Latest, got.Mature)
+	}
+	if !got.MaturePublished.Equal(listing.Published["4.17.0"]) {
+		t.Errorf("MaturePublished = %v, want %v", got.MaturePublished, listing.Published["4.17.0"])
 	}
 }
 

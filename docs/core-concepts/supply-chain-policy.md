@@ -86,7 +86,7 @@ That was written as a consequence accepted in advance, and for six weeks it was 
 
 ## How the rules are applied
 
-`cidx preset scan-targets` decides, per image, what `container-monitor.yml` scans and which candidates are old enough to consider; `cidx preset scan-verdicts` then decides which of them the scan results allow. The workflow only reads those verdicts — the policy lives in code, where it is testable, rather than in shell scattered across a YAML file.
+`cidx preset scan-targets` decides, per image, what `container-monitor.yml` scans and which candidates are old enough to consider. It offers the registry head and, when different, the newest version that has already served the cooldown, so a fresh or unsafe head cannot hide a safe intermediate release. `cidx preset scan-verdicts` considers them newest-first and selects the first one the scan results allow. The workflow only reads those verdicts — the policy lives in code, where it is testable, rather than in shell scattered across a YAML file.
 
 **Where the age comes from.** The cooldown is measured against the date the registry reports for the candidate tag, taken from the same call that finds the tag, so it costs no extra request:
 

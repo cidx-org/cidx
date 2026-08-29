@@ -125,6 +125,12 @@ type tagUpdate struct {
 	// the registry does not say; see registryDatesTags.
 	Published time.Time
 
+	// Mature is the newest newer tag that has already served the cooldown.
+	// It is kept beside Latest so a fresh or unsafe head release cannot hide an
+	// older version that is already eligible for promotion.
+	Mature          string
+	MaturePublished time.Time
+
 	// Superseding names the variant family that replaced the pinned one, on a
 	// repository that stopped publishing it entirely (#252). Empty in every
 	// other case, including the ordinary one where the family is simply at its
@@ -211,9 +217,20 @@ func newestOf(currentTag string, listing tagListing, now time.Time) tagUpdate {
 			CurrentPublished: listing.Published[currentTag],
 		}
 	}
+	matureTags := make([]string, 0, len(listing.Tags))
+	for _, tag := range listing.Tags {
+		published := listing.Published[tag]
+		if !published.IsZero() && now.Sub(published) >= presets.PromotionCooldown {
+			matureTags = append(matureTags, tag)
+		}
+	}
+	mature := presets.NewerTag(currentTag, matureTags, now)
+
 	return tagUpdate{
 		Latest:           newest,
 		Published:        listing.Published[newest],
+		Mature:           mature,
+		MaturePublished:  listing.Published[mature],
 		CurrentPublished: listing.Published[currentTag],
 	}
 }
@@ -830,6 +847,7 @@ func buildScanTargets(imagePresets map[string][]string, affectingUs map[string][
 			IsUpdate:     false,
 			Presets:      presetsUsing,
 		}
+		var fallback *scanTarget
 
 		// Check for update
 		imageName, currentTag, currentDigest := parseImageRef(currentImage)
@@ -931,6 +949,30 @@ func buildScanTargets(imagePresets map[string][]string, affectingUs map[string][
 				target.ScanImage = target.CandidateImage
 				target.IsUpdate = true
 			}
+
+			// The registry head is not the only useful successor. If a distinct
+			// older version has already served the cooldown, scan it as a fallback:
+			// a fresh or vulnerable latest release must not strand the catalogue on
+			// an even older pin. Targets stay newest-first so scan-verdicts can stop
+			// at the first candidate that passes.
+			if update.Mature != "" && update.Mature != latestTag {
+				matureDigest, matureErr := resolveDigestFunc(imageName, update.Mature)
+				if matureErr == nil {
+					candidate := fmt.Sprintf("%s:%s@%s", imageName, update.Mature, matureDigest)
+					matureDecision := presets.EvaluatePromotion(update.MaturePublished, now, nil)
+					matureTarget := scanTarget{
+						CurrentImage:   currentImage,
+						ScanImage:      candidate,
+						IsUpdate:       true,
+						Presets:        presetsUsing,
+						CandidateImage: candidate,
+						PublishedAt:    update.MaturePublished.UTC().Format(time.RFC3339),
+						AgeDays:        matureDecision.AgeDays,
+						PolicyReason:   matureDecision.Reason,
+					}
+					fallback = &matureTarget
+				}
+			}
 		}
 
 		// The other half of rule 1: the reference the catalogue runs must
@@ -948,6 +990,9 @@ func buildScanTargets(imagePresets map[string][]string, affectingUs map[string][
 		}
 
 		targets = append(targets, target)
+		if fallback != nil {
+			targets = append(targets, *fallback)
+		}
 	}
 
 	return targets

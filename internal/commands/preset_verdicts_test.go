@@ -14,6 +14,7 @@ import (
 const (
 	runningRef   = "tmknom/prettier:3.6.2@sha256:" + zeroDigest
 	candidateRef = "tmknom/prettier:3.7.0@sha256:" + zeroDigest
+	fallbackRef  = "tmknom/prettier:3.6.3@sha256:" + zeroDigest
 )
 
 // writeTrivyResult writes the scanner output the monitor's Trivy job uploads,
@@ -148,6 +149,47 @@ func TestPromotionVerdictHoldsANewFinding(t *testing.T) {
 	}
 	if !strings.Contains(verdict.Reason, "CVE-2026-0002") {
 		t.Errorf("Reason = %q, want it to name the finding that held the promotion", verdict.Reason)
+	}
+}
+
+// TestPromotionVerdictFallsBackToTheNewestCandidateThatPasses: a vulnerable
+// registry head must not hide an older candidate that served the cooldown and
+// passes the scan gate.
+func TestPromotionVerdictFallsBackToTheNewestCandidateThatPasses(t *testing.T) {
+	dir := t.TempDir()
+	latest := promotableTarget()
+	fallback := promotableTarget()
+	fallback.ScanImage = fallbackRef
+	fallback.CandidateImage = fallbackRef
+
+	writeTrivyResult(t, dir, candidateRef, map[string]string{"CVE-2026-0002": "HIGH"})
+	writeTrivyResult(t, dir, fallbackRef, nil)
+
+	verdicts := buildPromotionVerdicts([]scanTarget{latest, fallback}, dir, nil)
+	if len(verdicts) != 2 {
+		t.Fatalf("got %d verdicts, want the rejected latest and accepted fallback", len(verdicts))
+	}
+	if verdicts[0].Promote {
+		t.Fatal("the latest candidate introduces a vulnerability and must be held")
+	}
+	if !verdicts[1].Promote || verdicts[1].NewImage != fallbackRef {
+		t.Fatalf("fallback verdict = %+v, want the older safe candidate promoted", verdicts[1])
+	}
+}
+
+func TestPromotionVerdictStopsAfterTheNewestCandidatePasses(t *testing.T) {
+	dir := t.TempDir()
+	latest := promotableTarget()
+	fallback := promotableTarget()
+	fallback.ScanImage = fallbackRef
+	fallback.CandidateImage = fallbackRef
+
+	writeTrivyResult(t, dir, candidateRef, nil)
+	writeTrivyResult(t, dir, fallbackRef, nil)
+
+	verdicts := buildPromotionVerdicts([]scanTarget{latest, fallback}, dir, nil)
+	if len(verdicts) != 1 || !verdicts[0].Promote || verdicts[0].NewImage != candidateRef {
+		t.Fatalf("verdicts = %+v, want only the newest passing candidate", verdicts)
 	}
 }
 
