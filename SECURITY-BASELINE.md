@@ -28,21 +28,10 @@ reports the ones no catalogue image carries any more.
 
 ## What the images carry
 
-Scanner results were available for 16 of the 21 images; the rest are marked
-`not scanned` below and count towards nothing.
-
-The catalogue carries **604** HIGH/CRITICAL findings, counted per image — the
-same CVE on five images is five repins. They split into four populations:
-
-| Population | Count | What it means |
-| ---------- | ----- | ------------- |
-| Go stdlib in a CLI binary | 103 | Exempt by class: it goes away when the publisher recompiles, and `net/http` is unreachable in a tool that opens no listener. |
-| Kernel headers | 72 | Exempt by class: the kernel is the host's, not the container's. The scanner flags the headers package for its version string. |
-| Fixed upstream | 294 | A fix exists. This is the images' age, not a decision — an exception must never be written for one. |
-| **Needing triage** | **135** | No fix at any version, and not exempt. The only population an exception is the right instrument for. |
-
-None of them is in CISA KEV. The highest EPSS score seen is 0.10. Both are reported
-for a human to read; neither gates anything.
+No scanner result was available when this file was generated, so what the
+images carry is not stated here. Point `cidx security baseline --results` at
+the JSON the Security Audit workflow uploaded. An absent number is not a
+zero.
 
 ## Images
 
@@ -61,27 +50,27 @@ the daily security audit reports it.
 
 | Image | Presets | Base | Carried HIGH/CRITICAL | Accepted |
 | ----- | ------- | ---- | --------------------- | -------- |
-| `buildpack-deps:trixie-curl@sha256:ef554489e8f8b0245ef3cb2742b4c6b6e53c43bd64366b13f624982c854af2eb` | cargo-audit | debian 13.6 | 48 | 44 |
-| `commitizen/commitizen:4.16.5@sha256:451d0150ed7804c51cf201b2e9bd3f351867badbb7dc98f195cad740fdeaabaa` | commitizen | alpine 3.24.1 | 9 | 6 |
-| `commitlint/commitlint:21.2.1@sha256:f4b38082bec66b4cd1b37a0357145dded515c4468e2b339ec9ba31f86461f6b9` | commitlint | alpine 3.24.1 | 27 | 1 |
+| `buildpack-deps:trixie-curl@sha256:ef554489e8f8b0245ef3cb2742b4c6b6e53c43bd64366b13f624982c854af2eb` | cargo-audit | not scanned | not scanned | 44 |
+| `commitizen/commitizen:4.16.5@sha256:451d0150ed7804c51cf201b2e9bd3f351867badbb7dc98f195cad740fdeaabaa` | commitizen | not scanned | not scanned | 6 |
+| `commitlint/commitlint:21.2.1@sha256:f4b38082bec66b4cd1b37a0357145dded515c4468e2b339ec9ba31f86461f6b9` | commitlint | not scanned | not scanned | 1 |
 | `dhi.io/alpine-base:3.24@sha256:c83afceb9027a70719ea5ed916754a94ecdbe33a64cb8bcbb4da9fbffaefe7b0` | test-hot-reload | not scanned | not scanned | 1 |
 | `dhi.io/docker:29-cli@sha256:b20e9ecc2dfb63c505d4442dc82b93fa36ccfb568a607d70ce0528f64ff678ca` | docker-buildx | not scanned | not scanned | 8 |
 | `dhi.io/golang:1.26.5-alpine-dev@sha256:0be40e8408fe1fa9fcfce328f13e76b0a39bc0268c564a1da50e90eb699a9709` | go-build, go-mod-tidy, go-test, godog, gofmt, govulncheck | not scanned | not scanned | 3 |
 | `dhi.io/python:3.13.14-alpine-dev@sha256:cc27331edde031b8beabe3055f7816b06a36c0dbf4401f2fbc98735ba1910a6a` | bandit, mypy, pip-audit, pytest, python-build, twine | not scanned | not scanned | 6 |
 | `dhi.io/trivy:0.74@sha256:d0e27ebe4919158a5db2f5bdd3d01e2723a6058ee8dbd53cc0ffa2931dc54b00` | trivy | not scanned | not scanned | none |
-| `ghcr.io/ansible/community-ansible-dev-tools:v26.7.1@sha256:4d4db3e75c48ce64763d26adbca58ff3f8b93a8ddae785373ac973b4f20a7d92` | ansible-galaxy-build, ansible-galaxy-publish, ansible-lint, ansible-syntax, ansible-test, molecule, yamllint | fedora 44 | 111 | 12 |
-| `ghcr.io/astral-sh/ruff:0.8.2@sha256:84b0ad0023906db70b759b3b29e455dad0638159bf2de2b95086db1ab175917b` | ruff | none | 0 | none |
-| `ghcr.io/osscontainertools/kaniko:v1.28.0@sha256:f072b11159668f4d11ba3a38d489db7ff18eb961b8140de91a437c71c1747583` | kaniko | none | 21 | none |
-| `ghcr.io/probatum-org/probatum:0.8.0@sha256:b1f7a2bb4c1a44a29ee62b92fca4c6f6fb60fbc56843421dcd65c430d3697f51` | probatum | alpine 3.24.1 | 1 | 1 |
-| `ghcr.io/securego/gosec:2.28.0@sha256:4342ad119a7c69f3f4e4ce78d81ba183dc774a70a7a4c6eeb15fe9e511f214f0` | gosec | alpine 3.24.1 | 24 | 6 |
-| `golangci/golangci-lint:v2.12.2-alpine@sha256:91b27804074a0bacea298707f016911e60cf0cdbc6c7bf5ccacb5f0606d18d60` | golangci-lint | alpine 3.23.4 | 62 | 9 |
-| `goreleaser/goreleaser:v2.17.0@sha256:054eefd282c02233a2556ce2d1a60cd2f51dc565ffc2520dc38b5deb4dd1ad30` | goreleaser | alpine 3.24.1 | 53 | 8 |
-| `jauderho/prettier:3.9.4@sha256:b233d9c847048561850a1a107e35318b28361cd9a850eac7edcd5d8bfd82cea2` | prettier | alpine 3.24.1 | 8 | 7 |
-| `koalaman/shellcheck:stable@sha256:bb596a0d169b85ddd81d8b6d3a2ff6d5baf5fca10b97f575ebc647c3dff62b3d` | shellcheck | none | 0 | none |
-| `maniator/gh:v2.95@sha256:c7e862eeb468003aba87847a03e214a21638cd898130d6e5894f019aec091913` | gh-release | alpine 3.24.1 | 22 | 1 |
-| `pyfound/black:26.5.1@sha256:bcdafe3e6a60fd181fde19859f7ee4c498557f03bb30af3fa880f502a66e5b5f` | black | debian 13.4 | 54 | 22 |
-| `rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd` | cargo-build, cargo-publish, cargo-test, clippy, rustfmt | debian 13.6 | 98 | 22 |
-| `zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f` | gitleaks | alpine 3.22.3 | 66 | 1 |
+| `ghcr.io/ansible/community-ansible-dev-tools:v26.7.1@sha256:4d4db3e75c48ce64763d26adbca58ff3f8b93a8ddae785373ac973b4f20a7d92` | ansible-galaxy-build, ansible-galaxy-publish, ansible-lint, ansible-syntax, ansible-test, molecule, yamllint | not scanned | not scanned | 12 |
+| `ghcr.io/astral-sh/ruff:0.8.2@sha256:84b0ad0023906db70b759b3b29e455dad0638159bf2de2b95086db1ab175917b` | ruff | not scanned | not scanned | none |
+| `ghcr.io/osscontainertools/kaniko:v1.28.0@sha256:f072b11159668f4d11ba3a38d489db7ff18eb961b8140de91a437c71c1747583` | kaniko | not scanned | not scanned | none |
+| `ghcr.io/probatum-org/probatum:0.8.0@sha256:b1f7a2bb4c1a44a29ee62b92fca4c6f6fb60fbc56843421dcd65c430d3697f51` | probatum | not scanned | not scanned | 1 |
+| `ghcr.io/securego/gosec:2.28.0@sha256:4342ad119a7c69f3f4e4ce78d81ba183dc774a70a7a4c6eeb15fe9e511f214f0` | gosec | not scanned | not scanned | 6 |
+| `golangci/golangci-lint:v2.12.2-alpine@sha256:91b27804074a0bacea298707f016911e60cf0cdbc6c7bf5ccacb5f0606d18d60` | golangci-lint | not scanned | not scanned | 9 |
+| `goreleaser/goreleaser:v2.17.0@sha256:054eefd282c02233a2556ce2d1a60cd2f51dc565ffc2520dc38b5deb4dd1ad30` | goreleaser | not scanned | not scanned | 8 |
+| `jauderho/prettier:3.9.4@sha256:b233d9c847048561850a1a107e35318b28361cd9a850eac7edcd5d8bfd82cea2` | prettier | not scanned | not scanned | 7 |
+| `koalaman/shellcheck:stable@sha256:bb596a0d169b85ddd81d8b6d3a2ff6d5baf5fca10b97f575ebc647c3dff62b3d` | shellcheck | not scanned | not scanned | none |
+| `maniator/gh:v2.95@sha256:c7e862eeb468003aba87847a03e214a21638cd898130d6e5894f019aec091913` | gh-release | not scanned | not scanned | 1 |
+| `pyfound/black:26.5.1@sha256:bcdafe3e6a60fd181fde19859f7ee4c498557f03bb30af3fa880f502a66e5b5f` | black | not scanned | not scanned | 22 |
+| `rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd` | cargo-build, cargo-publish, cargo-test, clippy, rustfmt | not scanned | not scanned | 22 |
+| `zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f` | gitleaks | not scanned | not scanned | 1 |
 
 ## Accepted findings
 
