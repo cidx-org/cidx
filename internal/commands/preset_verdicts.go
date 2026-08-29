@@ -129,9 +129,10 @@ func readScanTargets(path string) ([]scanTarget, error) {
 // version (rule 2): a promotion is never taken on an assumption.
 func buildPromotionVerdicts(targets []scanTarget, resultsDir string, accepted map[string][]string) []promotionVerdict {
 	verdicts := make([]promotionVerdict, 0, len(targets))
+	promoted := make(map[string]bool)
 
 	for _, target := range targets {
-		if !target.IsUpdate {
+		if !target.IsUpdate || promoted[target.CurrentImage] {
 			continue
 		}
 
@@ -167,6 +168,9 @@ func buildPromotionVerdicts(targets []scanTarget, resultsDir string, accepted ma
 		verdict.Introduces = decision.Introduces
 		verdict.ScannedBy = scanners
 		verdicts = append(verdicts, verdict)
+		if verdict.Promote {
+			promoted[target.CurrentImage] = true
+		}
 	}
 
 	return verdicts

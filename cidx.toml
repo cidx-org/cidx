@@ -82,15 +82,15 @@ GODOG_FORMAT = "progress"
 
 # ─── pipelines ───
 [pipelines.ci]
-phases = ["security", "code", "test", "build"]
+phases = ["code", "security", "test", "build"]
 description = "Full CI pipeline for all commits"
 
 [pipelines.pr]
-phases = ["security", "code", "test"]
+phases = ["code", "security", "test"]
 description = "Pull request validation (no build artifacts)"
 
 [pipelines.main]
-phases = ["security", "code", "test", "build"]
+phases = ["code", "security", "test", "build"]
 description = "Main branch pipeline (builds artifacts)"
 
 # The end-to-end release rehearsal, run locally: `cidx run release` walks every
@@ -103,7 +103,7 @@ description = "Main branch pipeline (builds artifacts)"
 # only the `docker` phase to `cidx run`. Comparing it with this list compares
 # two things that are not meant to coincide, so it is declared out (#233).
 [pipelines.release]
-phases = ["security", "code", "test", "build", "docker", "release"]
+phases = ["code", "security", "test", "build", "docker", "release"]
 description = "Complete release pipeline"
 workflow = "none"
 

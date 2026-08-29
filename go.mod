@@ -11,6 +11,7 @@ require (
 	github.com/cucumber/godog v0.15.1
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/go-git/go-git/v5 v5.19.1
+	github.com/google/go-cmp v0.7.0
 	github.com/google/go-github/v76 v76.0.0
 	github.com/sirupsen/logrus v1.9.4
 	github.com/urfave/cli/v2 v2.27.7

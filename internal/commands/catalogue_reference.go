@@ -12,21 +12,12 @@ import (
 
 const defaultCatalogueReferenceFile = "docs/reference/catalogue.md"
 
-// phaseOrder is the order the pipeline documentation already uses; a phase the
-// list does not know lands after these, alphabetically, rather than failing.
-var phaseOrder = map[string]int{
+var cataloguePhaseOrder = map[string]int{
 	"security": 0, "code": 1, "test": 2, "build": 3, "docker": 4, "release": 5,
 }
 
-// RenderCatalogueReference renders the committed catalogue page from the
-// built-in catalogue alone — the same cure the security baseline got in #310,
-// applied to the inventory: docs/reference/tools.md was written by hand and
-// listed 18 of 42 presets, six of them against the wrong image. Everything
-// here derives from the declarations; the only human field is the preset's
-// own description.
-//
-// No generation date, deterministic order (phase, then name), so the same
-// catalogue produces the same bytes and the diff is the change.
+// RenderCatalogueReference renders the committed page from the built-in
+// catalogue. With no generated timestamp, equal inputs produce equal bytes.
 func RenderCatalogueReference() (string, error) {
 	catalogue, err := presets.Catalogue()
 	if err != nil {
@@ -40,8 +31,8 @@ func RenderCatalogueReference() (string, error) {
 	sort.Slice(names, func(i, j int) bool {
 		pi, pj := catalogue[names[i]].Phase, catalogue[names[j]].Phase
 		if pi != pj {
-			oi, iKnown := phaseOrder[pi]
-			oj, jKnown := phaseOrder[pj]
+			oi, iKnown := cataloguePhaseOrder[pi]
+			oj, jKnown := cataloguePhaseOrder[pj]
 			switch {
 			case iKnown && jKnown:
 				return oi < oj
