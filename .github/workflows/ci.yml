@@ -77,6 +77,163 @@ jobs:
           path: bin/cidx
           retention-days: 1
 
+  # Renovate does the mechanical part: choose a release that has served the
+  # cooldown, update its tag and digest, and open a PR. This job owns the
+  # decision. It scans the exact before/after pair from the PR and blocks only
+  # a security regression, using the same tested verdict as Monday's monitor.
+  container-promotion:
+    name: Container Promotion
+    if: github.event_name == 'pull_request'
+    needs: [code]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      TRIVY_IMAGE: "aquasec/trivy:0.73.0@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c"
+      GRYPE_IMAGE: "anchore/grype:v0.116.1@sha256:1e71065c0a4cff3e6bd3b8add525ffac4343eb4971694eb90a31cf6d4d3e85db"
+    steps:
+      # A passing promotion changes two committed views derived from the
+      # catalogue. The same non-expiring App used by the Monday monitor writes
+      # those views back to same-repository PRs; fork PRs remain read-only.
+      - name: Mint a token for generated reports
+        id: app-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.CIDX_BOT_APP_ID }}
+          private-key: ${{ secrets.CIDX_BOT_PRIVATE_KEY }}
+
+      - name: Checkout proposed catalogue
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ steps.app-token.outputs.token || github.token }}
+
+      - name: Download CIDX binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cidx-binary
+          path: bin
+
+      - name: Make binary executable
+        run: chmod +x bin/cidx
+
+      - name: Read the exact image changes
+        id: targets
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git show "$BASE_SHA:pkg/presets/presets.toml" > /tmp/base-presets.toml
+          ./bin/cidx preset promotion-targets --base /tmp/base-presets.toml > /tmp/promotion-targets.json
+          IMAGES=$(jq -c '[.[] | .current_image, .scan_image] | unique' /tmp/promotion-targets.json)
+          COUNT=$(jq 'length' /tmp/promotion-targets.json)
+          echo "images=$IMAGES" >> "$GITHUB_OUTPUT"
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+
+          echo "## Container promotion" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$COUNT" -eq 0 ]; then
+            echo "No catalogue image changes in this pull request." >> "$GITHUB_STEP_SUMMARY"
+          else
+            jq -r '.[] | "- `\(.current_image)` → `\(.scan_image)` (\(.presets | join(", ")))"' /tmp/promotion-targets.json >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Login to Docker Hardened Images
+        if: contains(steps.targets.outputs.images, 'dhi.io/') && env.DOCKERHUB_USERNAME != ''
+        uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
+        with:
+          registry: dhi.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+
+      - name: Scan current and proposed images
+        if: steps.targets.outputs.count != '0'
+        env:
+          IMAGES: ${{ steps.targets.outputs.images }}
+        run: |
+          mkdir -p scan-results
+          echo "$IMAGES" | jq -r '.[]' | while read -r IMAGE; do
+            SAFE=$(echo "$IMAGE" | tr '/:@' '___')
+            echo "Scanning $IMAGE"
+
+            docker run --rm \
+              -v "$HOME/.docker:/docker-config:ro" \
+              -e DOCKER_CONFIG=/docker-config \
+              "$TRIVY_IMAGE" image \
+              --severity HIGH,CRITICAL --quiet --format json \
+              "$IMAGE" > "scan-results/trivy-$SAFE.json" || true
+
+            docker run --rm \
+              -v "$HOME/.docker:/docker-config:ro" \
+              -e DOCKER_CONFIG=/docker-config \
+              "$GRYPE_IMAGE" "$IMAGE" --quiet -o json \
+              > "scan-results/grype-$SAFE.json" || true
+          done
+
+      - name: Decide the promotion
+        id: verdict
+        if: steps.targets.outputs.count != '0'
+        run: |
+          ./bin/cidx preset scan-verdicts \
+            --targets /tmp/promotion-targets.json \
+            --results scan-results > /tmp/promotion-verdicts.json
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          jq -r '.[] | if .promote then
+            "### ✅ ACCEPTED — `\(.new_image)`\n\n\(.reason)"
+          else
+            "### ❌ REJECTED — `\(.new_image)`\n\n\(.reason)"
+          end' /tmp/promotion-verdicts.json >> "$GITHUB_STEP_SUMMARY"
+
+          REJECTED=$(jq '[.[] | select(.promote == false)] | length' /tmp/promotion-verdicts.json)
+          echo "rejected=$REJECTED" >> "$GITHUB_OUTPUT"
+
+      - name: Refresh the committed catalogue views
+        if: steps.verdict.outputs.rejected == '0'
+        run: |
+          ./bin/cidx security baseline --results scan-results
+          ./bin/cidx preset catalogue
+
+      - name: Commit generated catalogue views to the PR
+        if: >-
+          steps.verdict.outputs.rejected == '0'
+          && github.event.pull_request.head.repo.full_name == github.repository
+          && steps.app-token.outputs.token != ''
+        env:
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          if git diff --quiet -- SECURITY-BASELINE.md docs/reference/catalogue.md; then
+            exit 0
+          fi
+          git config user.name "cidx-bot[bot]"
+          git config user.email "cidx-bot[bot]@users.noreply.github.com"
+          git add SECURITY-BASELINE.md docs/reference/catalogue.md
+          git commit -m "docs(security): refresh container catalogue views"
+          git push origin "HEAD:$HEAD_BRANCH"
+
+      - name: Render findings for GitHub Security
+        if: steps.targets.outputs.count != '0'
+        run: ./bin/cidx security sarif --results scan-results -o promotion.sarif
+
+      - name: Upload findings to GitHub Security
+        if: steps.targets.outputs.count != '0'
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@7188fc363630916deb702c7fdcf4e481b751f97a # v4.37.1
+        with:
+          sarif_file: promotion.sarif
+          category: container-promotion
+
+      - name: Enforce the decision
+        if: steps.verdict.outputs.rejected != '' && steps.verdict.outputs.rejected != '0'
+        run: |
+          echo "::error::Container promotion rejected; the summary names every newly introduced HIGH/CRITICAL finding."
+          exit 1
+
   # Security: Scan for vulnerabilities and secrets
   security:
     name: Security

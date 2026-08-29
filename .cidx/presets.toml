@@ -16,3 +16,15 @@ image = "alpine:latest"
 command = "echo 'woof! .cidx/presets.toml is working!'"
 phase = "test"
 description = "Verifies that project-level presets are loaded"
+
+# Repository-only tooling: validate the Renovate policy through CIDX without
+# turning Renovate into a built-in preset imposed on projects using CIDX.
+[presets.renovate]
+name = "renovate"
+image = "renovate/renovate:44.51.0@sha256:0049d7ff17273a3e910ed06c0aa63efb2f4b88b274a3d87c2e8ea27804d35335"
+image_entrypoint = ["/usr/local/sbin/renovate-entrypoint.sh"]
+command = "renovate-config-validator renovate.json5"
+workdir = "/work"
+volumes = ["${WORKSPACE}:/work"]
+phase = "code"
+description = "Validates this repository's Renovate configuration"

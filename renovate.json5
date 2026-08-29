@@ -1,0 +1,40 @@
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: ["config:recommended"],
+  dependencyDashboard: true,
+  schedule: ["before 9am on Monday"],
+  timezone: "Europe/Paris",
+  labels: ["dependencies", "containers"],
+  prConcurrentLimit: 5,
+  prCreation: "not-pending",
+  internalChecksFilter: "strict",
+
+  // presets.toml is a cidx catalogue, not a Docker-native manifest. Capturing
+  // both fields lets Renovate update the readable tag and its immutable digest
+  // together; CI rejects a candidate if either one disappears.
+  customManagers: [
+    {
+      customType: "regex",
+      managerFilePatterns: ["/^pkg\\/presets\\/presets\\.toml$/"],
+      matchStrings: [
+        'image\\s*=\\s*"(?<depName>[^"\\s]+):(?<currentValue>[^@"\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})"',
+      ],
+      datasourceTemplate: "docker",
+      versioningTemplate: "docker",
+    },
+  ],
+
+  packageRules: [
+    {
+      description: "Let every container release age before proposing it",
+      matchDatasources: ["docker"],
+      matchFileNames: ["pkg/presets/presets.toml"],
+      minimumReleaseAge: "14 days",
+      minimumReleaseAgeBehaviour: "timestamp-required",
+      pinDigests: true,
+      separateMinorPatch: true,
+      commitMessagePrefix: "chore(deps):",
+      commitMessageTopic: "container {{depName}}",
+    },
+  ],
+}

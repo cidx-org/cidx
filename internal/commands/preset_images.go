@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/cidx-org/cidx/v3/pkg/presets"
 	"github.com/urfave/cli/v2"
 )
@@ -789,6 +790,92 @@ func presetScanTargetsCommand() *cli.Command {
 			return encoder.Encode(targets)
 		},
 	}
+}
+
+// presetPromotionTargetsCommand describes the exact image changes already
+// present in a pull request. Unlike scan-targets it never asks the registry for
+// a newer version: Renovate has made that choice, and the promotion gate must
+// scan the candidate in the diff rather than accidentally judging the version
+// that came after it.
+func presetPromotionTargetsCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "promotion-targets",
+		Usage: "Describe container image changes between a base catalogue and the checked-out catalogue",
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "base", Required: true, Usage: "Path to the base presets.toml"},
+			&cli.StringFlag{Name: "current", Value: "pkg/presets/presets.toml", Usage: "Path to the proposed presets.toml"},
+		},
+		Action: func(c *cli.Context) error {
+			targets, err := promotionTargets(c.String("base"), c.String("current"))
+			if err != nil {
+				return err
+			}
+			encoder := json.NewEncoder(os.Stdout)
+			encoder.SetIndent("", "  ")
+			return encoder.Encode(targets)
+		},
+	}
+}
+
+func promotionTargets(basePath, currentPath string) ([]scanTarget, error) {
+	read := func(path string) (map[string]presets.PresetTOML, error) {
+		var file presets.PresetsFile
+		if _, err := toml.DecodeFile(path, &file); err != nil {
+			return nil, fmt.Errorf("could not read catalogue %s: %w", path, err)
+		}
+		return file.Presets, nil
+	}
+
+	base, err := read(basePath)
+	if err != nil {
+		return nil, err
+	}
+	current, err := read(currentPath)
+	if err != nil {
+		return nil, err
+	}
+
+	type change struct {
+		old, next string
+		presets   []string
+	}
+	changes := make(map[string]*change)
+	for name, proposed := range current {
+		previous, existed := base[name]
+		if !existed || previous.Image == proposed.Image {
+			continue
+		}
+		key := previous.Image + "\x00" + proposed.Image
+		if changes[key] == nil {
+			changes[key] = &change{old: previous.Image, next: proposed.Image}
+		}
+		changes[key].presets = append(changes[key].presets, name)
+	}
+
+	keys := make([]string, 0, len(changes))
+	for key := range changes {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	targets := make([]scanTarget, 0, len(keys))
+	for _, key := range keys {
+		changed := changes[key]
+		_, tag, digest := parseImageRef(changed.next)
+		if tag == "" || digest == "" {
+			return nil, fmt.Errorf("candidate %q must retain a readable tag and an immutable digest", changed.next)
+		}
+		sort.Strings(changed.presets)
+		targets = append(targets, scanTarget{
+			CurrentImage:   changed.old,
+			ScanImage:      changed.next,
+			IsUpdate:       true,
+			Presets:        changed.presets,
+			CandidateImage: changed.next,
+			PolicyReason:   "candidate proposed in the pull request; Renovate enforces the 14-day minimum release age",
+		})
+	}
+	return targets, nil
 }
 
 // catalogueImages maps each distinct image of the built-in catalogue to the
