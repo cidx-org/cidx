@@ -194,14 +194,15 @@ jobs:
           echo "rejected=$REJECTED" >> "$GITHUB_OUTPUT"
 
       - name: Refresh the committed catalogue views
-        if: steps.verdict.outputs.rejected == '0'
+        if: steps.targets.outputs.count != '0' && steps.verdict.outputs.rejected == '0'
         run: |
           ./bin/cidx security baseline --results scan-results
           ./bin/cidx preset catalogue
 
       - name: Commit generated catalogue views to the PR
         if: >-
-          steps.verdict.outputs.rejected == '0'
+          steps.targets.outputs.count != '0'
+          && steps.verdict.outputs.rejected == '0'
           && github.event.pull_request.head.repo.full_name == github.repository
           && steps.app-token.outputs.token != ''
         env:
