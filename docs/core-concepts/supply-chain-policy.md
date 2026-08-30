@@ -86,6 +86,23 @@ That was written as a consequence accepted in advance, and for six weeks it was 
 
 ## How the rules are applied
 
+There are two entrances to the same decision. Renovate reads image references
+from `pkg/presets/presets.toml`, waits 14 days per release, keeps the readable
+tag and immutable digest together, and opens a pull request. The pull request's
+`Container Promotion` check then scans the exact old and proposed references
+with Trivy and Grype and calls `cidx preset scan-verdicts`. Its summary says
+**ACCEPTED** or **REJECTED** and names every newly introduced blocking finding;
+the findings are also uploaded to GitHub Security as SARIF. On acceptance, the
+bot refreshes the committed catalogue and security-baseline views in that same
+pull request.
+
+The Monday container monitor remains the reconciliation path. It scans the
+whole catalogue, catches missing, rebuilt, frozen and undatable images that a
+version updater cannot reason about, and can still propose a promotion when a
+registry exposes too little metadata for Renovate. A proposal is therefore
+immediate when Renovate can make one, while the weekly run proves that the
+actual catalogue has not drifted into silence.
+
 `cidx preset scan-targets` decides, per image, what `container-monitor.yml` scans and which candidates are old enough to consider. It offers the registry head and, when different, the newest version that has already served the cooldown, so a fresh or unsafe head cannot hide a safe intermediate release. `cidx preset scan-verdicts` considers them newest-first and selects the first one the scan results allow. The workflow only reads those verdicts — the policy lives in code, where it is testable, rather than in shell scattered across a YAML file.
 
 **Where the age comes from.** The cooldown is measured against the date the registry reports for the candidate tag, taken from the same call that finds the tag, so it costs no extra request:

@@ -24,7 +24,7 @@ linked_to_release = true
 containers = ["trivy", "gitleaks"]
 
 [code]
-containers = ["prettier", "golangci-lint", "commitizen", "shellcheck"]
+containers = ["prettier", "renovate", "golangci-lint", "commitizen", "shellcheck"]
 
 [test]
 containers = ["go-test"]
