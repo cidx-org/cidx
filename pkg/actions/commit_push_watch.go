@@ -70,35 +70,36 @@ func (a *CommitPushWatchAction) Execute(ctx context.Context) error {
 	if message != "" {
 		log.Info(message)
 	}
-	if plan == CPWNothingToDo {
-		return nil
+	if plan == CPWCommitAndPush && strings.TrimSpace(a.message) == "" {
+		return fmt.Errorf("a commit message is required when the working tree has changes: cidx cpw -m \"type: description\"")
 	}
-
-	// 2. Run the checks CI is about to run. Before the commit, which is where
-	// git puts its own pre-commit gate: a failure then leaves the tree exactly
-	// as it was, with nothing to amend or reset (issue #307).
-	if err := a.runVerification(ctx); err != nil {
-		return err
-	}
-
-	// 3. Commit -- skipped when there is nothing new in the tree and the work
-	// to push is already committed.
-	if plan == CPWCommitAndPush {
-		log.Info("📝 Creating commit...")
-		if err := a.repo.Commit(a.message); err != nil {
-			return fmt.Errorf("commit failed: %w", err)
+	if plan != CPWWatchOnly {
+		// 2. Run the checks CI is about to run. Before the commit, which is where
+		// git puts its own pre-commit gate: a failure then leaves the tree exactly
+		// as it was, with nothing to amend or reset (issue #307).
+		if err := a.runVerification(ctx); err != nil {
+			return err
 		}
-		log.Info("✓ Commit created")
+
+		// 3. Commit -- skipped when there is nothing new in the tree and the work
+		// to push is already committed.
+		if plan == CPWCommitAndPush {
+			log.Info("📝 Creating commit...")
+			if err := a.repo.Commit(a.message); err != nil {
+				return fmt.Errorf("commit failed: %w", err)
+			}
+			log.Info("✓ Commit created")
+		}
+
+		// 4. Push
+		log.Info("📤 Pushing to remote...")
+		if err := a.repo.Push(); err != nil {
+			return fmt.Errorf("push failed: %w", err)
+		}
+		log.Info("✓ Pushed to remote")
 	}
 
-	// 4. Push
-	log.Info("📤 Pushing to remote...")
-	if err := a.repo.Push(); err != nil {
-		return fmt.Errorf("push failed: %w", err)
-	}
-	log.Info("✓ Pushed to remote")
-
-	// 5. Watch CI for the commit we just pushed. The local HEAD SHA is the
+	// 5. Watch CI for the current commit. The local HEAD SHA is the
 	// source of truth: resolving the head from the provider API right after
 	// the push can return the previous commit (replication lag).
 	pushedSHA, err := a.repo.GetHeadSHA()

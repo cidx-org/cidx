@@ -4,8 +4,8 @@ package actions
 type CPWPlan int
 
 const (
-	// CPWNothingToDo: a clean tree, and the remote already has every commit.
-	CPWNothingToDo CPWPlan = iota
+	// CPWWatchOnly: a clean tree, and the remote already has every commit.
+	CPWWatchOnly CPWPlan = iota
 	// CPWPushOnly: a clean tree, but commits that never reached the remote.
 	CPWPushOnly
 	// CPWCommitAndPush: work in the tree, which is what cpw was built for.
@@ -32,7 +32,7 @@ func PlanCommitPushWatch(hasChanges, hasUnpushed bool) (plan CPWPlan, message st
 		return CPWPushOnly, "📤 Nothing to commit, but this branch has commits that never reached the remote -- pushing those"
 
 	default:
-		return CPWNothingToDo, "Nothing to commit, and nothing waiting to be pushed"
+		return CPWWatchOnly, "🔄 Nothing to commit or push -- resuming the current PR"
 	}
 }
 
@@ -42,5 +42,5 @@ func PlanCommitPushWatch(hasChanges, hasUnpushed bool) (plan CPWPlan, message st
 // just made (#307): the phase is about what CI is going to run, not about how
 // the commit came to exist.
 func (p CPWPlan) RunsCodePhase() bool {
-	return p != CPWNothingToDo
+	return p != CPWWatchOnly
 }

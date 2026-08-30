@@ -3,6 +3,8 @@ package actions
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -96,17 +98,44 @@ func TestExecute_PushesCommitsThatWereAlreadyWritten(t *testing.T) {
 	}
 }
 
-// TestExecute_StopsWhenThereIsGenuinelyNothingToDo keeps the fix from becoming
-// a push on every invocation.
-func TestExecute_StopsWhenThereIsGenuinelyNothingToDo(t *testing.T) {
+// TestExecute_ResumesTheCurrentPRWhenThereIsNothingToPush is the idempotent
+// half of cpw: rerunning the workflow watches the current commit without
+// manufacturing another commit or push.
+func TestExecute_ResumesTheCurrentPRWhenThereIsNothingToPush(t *testing.T) {
 	repo, workDir, _ := branchWithARemote(t)
 
 	if out, err := vcs.Git(workDir, "push", "--set-upstream", "origin", "feat/already-committed").CombinedOutput(); err != nil {
 		t.Skipf("cannot push the feature branch (%v): %s", err, out)
 	}
 
-	action := NewCommitPushWatch(repo, &noPRProvider{}, "", false)
+	headSHA, err := repo.GetHeadSHA()
+	if err != nil {
+		t.Fatalf("failed to read HEAD: %v", err)
+	}
+	provider := &cpwFakeProvider{
+		prNumber:   460,
+		waitSHA:    headSHA,
+		waitChecks: &remote.PRChecks{TotalCount: 1, WorkflowChecks: 1, Success: 1},
+	}
+	action := NewCommitPushWatch(repo, provider, "", false)
 	if err := action.Execute(context.Background()); err != nil {
-		t.Fatalf("a branch level with its remote is not an error: %v", err)
+		t.Fatalf("resuming a branch level with its remote is not an error: %v", err)
+	}
+	if provider.waitExpectedSHA != headSHA {
+		t.Errorf("cpw watched %q instead of current HEAD %q", provider.waitExpectedSHA, headSHA)
+	}
+}
+
+func TestExecute_RequiresAMessageOnlyWhenItHasChangesToCommit(t *testing.T) {
+	repo, workDir, _ := branchWithARemote(t)
+
+	if err := os.WriteFile(filepath.Join(workDir, "change.txt"), []byte("work\n"), 0o600); err != nil {
+		t.Fatalf("failed to create work: %v", err)
+	}
+
+	action := NewCommitPushWatch(repo, &noPRProvider{}, "", false)
+	err := action.Execute(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "commit message is required") {
+		t.Fatalf("expected an actionable missing-message error, got %v", err)
 	}
 }

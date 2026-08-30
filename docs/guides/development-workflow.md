@@ -145,6 +145,10 @@ them blocks the push:
 Only a real failure stops cpw, and it stops it _before_ the commit, so the tree
 is left exactly as it was.
 
+`cpw` is safe to run again after the push. When the tree is clean and the
+remote already has the current commit, it skips verification, commit and push,
+then resumes the checks of the pull request for that exact commit.
+
 ### 3. Mark PR Ready for Review
 
 When your work is complete and CI passes:

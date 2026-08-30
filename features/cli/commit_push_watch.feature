@@ -40,12 +40,12 @@ Feature: cpw pushes what it has, not only what it just made
       When cidx plans what cpw will do
       Then cpw commits and pushes
 
-    Scenario: With nothing to commit and nothing to push, cpw stops
+    Scenario: With nothing to commit and nothing to push, cpw resumes the current PR
       Given the working tree has nothing to commit
       And the branch is level with the remote
       When cidx plans what cpw will do
-      Then cpw does nothing
-      And cpw says there is nothing waiting to be pushed
+      Then cpw watches without pushing
+      And cpw says it is resuming the current PR
 
   Rule: What reaches CI is checked first, whether or not it was just committed
 
@@ -59,7 +59,7 @@ Feature: cpw pushes what it has, not only what it just made
       When cidx plans what cpw will do
       Then cpw runs the code phase first
 
-    Scenario: A run with nothing to do runs no code phase
+    Scenario: A watch-only run runs no code phase
       Given the working tree has nothing to commit
       And the branch is level with the remote
       When cidx plans what cpw will do
