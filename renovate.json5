@@ -1,6 +1,18 @@
 {
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
   extends: ["config:recommended"],
+  // Dependabot already owns Go modules and GitHub Actions. Renovate only owns
+  // the non-standard container references in the CIDX preset catalogue.
+  enabledManagers: ["custom.regex"],
+  // Docker Hardened Images require credentials that the hosted Renovate app
+  // does not have. They remain covered by the authenticated weekly monitor.
+  ignoreDeps: [
+    "dhi.io/alpine-base",
+    "dhi.io/docker",
+    "dhi.io/golang",
+    "dhi.io/python",
+    "dhi.io/trivy",
+  ],
   dependencyDashboard: true,
   schedule: ["before 9am on Monday"],
   timezone: "Europe/Paris",
