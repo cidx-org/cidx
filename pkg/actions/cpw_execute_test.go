@@ -3,6 +3,8 @@ package actions
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -121,5 +123,19 @@ func TestExecute_ResumesTheCurrentPRWhenThereIsNothingToPush(t *testing.T) {
 	}
 	if provider.waitExpectedSHA != headSHA {
 		t.Errorf("cpw watched %q instead of current HEAD %q", provider.waitExpectedSHA, headSHA)
+	}
+}
+
+func TestExecute_RequiresAMessageOnlyWhenItHasChangesToCommit(t *testing.T) {
+	repo, workDir, _ := branchWithARemote(t)
+
+	if err := os.WriteFile(filepath.Join(workDir, "change.txt"), []byte("work\n"), 0o600); err != nil {
+		t.Fatalf("failed to create work: %v", err)
+	}
+
+	action := NewCommitPushWatch(repo, &noPRProvider{}, "", false)
+	err := action.Execute(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "commit message is required") {
+		t.Fatalf("expected an actionable missing-message error, got %v", err)
 	}
 }

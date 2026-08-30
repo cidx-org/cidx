@@ -70,6 +70,9 @@ func (a *CommitPushWatchAction) Execute(ctx context.Context) error {
 	if message != "" {
 		log.Info(message)
 	}
+	if plan == CPWCommitAndPush && strings.TrimSpace(a.message) == "" {
+		return fmt.Errorf("a commit message is required when the working tree has changes: cidx cpw -m \"type: description\"")
+	}
 	if plan != CPWWatchOnly {
 		// 2. Run the checks CI is about to run. Before the commit, which is where
 		// git puts its own pre-commit gate: a failure then leaves the tree exactly

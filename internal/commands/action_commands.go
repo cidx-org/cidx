@@ -14,13 +14,13 @@ commit. Same contract as git's pre-commit hook, including --no-verify.
 
 The phase is skipped, with a message, when there is nothing to run (no code
 phase configured), nothing to run it in (no container runtime), or a pre-commit
-hook that already runs it on the commit.`,
+hook that already runs it on the commit. When there is nothing to commit or
+push, cpw resumes the current pull request and no message is needed.`,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:     "message",
-				Aliases:  []string{"m"},
-				Usage:    "Commit message",
-				Required: true,
+				Name:    "message",
+				Aliases: []string{"m"},
+				Usage:   "Commit message",
 			},
 			&cli.BoolFlag{
 				Name:  "no-verify",
