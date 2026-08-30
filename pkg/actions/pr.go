@@ -126,7 +126,7 @@ func (a *PRAction) createPR(ctx context.Context) error {
 			// Branch already has a PR
 			log.Warnf("⚠️  Branch '%s' already has PR #%d", currentBranch, existingPR)
 			log.Infof("🔗 %s", existingURL)
-			return fmt.Errorf("branch '%s' already has an associated PR. Use 'cidx pr ready' to mark it ready", currentBranch)
+			return unfinishedPRError(currentBranch, existingPR)
 		}
 
 		// Branch exists but has no PR - reuse it
@@ -223,6 +223,12 @@ func (a *PRAction) createPR(ctx context.Context) error {
 	printPRNextSteps()
 
 	return nil
+}
+
+func unfinishedPRError(branch string, number int) error {
+	return fmt.Errorf("branch '%s' still has open PR #%d -- finish it before starting another\n"+
+		"   Continue working: cidx cpw\n"+
+		"   Finish the PR:     cidx pr ready, then cidx pr merge", branch, number)
 }
 
 // createPRForExistingBranch creates a PR for an existing branch that has no associated PR

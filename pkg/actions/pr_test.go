@@ -74,6 +74,23 @@ func TestPRNextStepsSuggestCIDXCommands(t *testing.T) {
 	}
 }
 
+func TestUnfinishedPRErrorKeepsTheUserInTheCurrentWorkflow(t *testing.T) {
+	message := unfinishedPRError("feat/current-work", 461).Error()
+
+	for _, want := range []string{
+		"feat/current-work",
+		"PR #461",
+		"finish it before starting another",
+		"cidx cpw",
+		"cidx pr ready",
+		"cidx pr merge",
+	} {
+		if !strings.Contains(message, want) {
+			t.Errorf("unfinished PR guidance should mention %q, got:\n%s", want, message)
+		}
+	}
+}
+
 // TestPreMergeChecksSummary_NoWorkflowChecks covers #259: when the only checks
 // on the commit come from another app -- GitHub's own dependabot config check,
 // an external bot -- "All checks passed" claims a validation the repository's
