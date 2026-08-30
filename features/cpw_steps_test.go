@@ -24,9 +24,9 @@ func RegisterCPWSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 
 	ctx.Then(`^cpw commits and pushes$`, tc.cpwCommitsAndPushes)
 	ctx.Then(`^cpw pushes without committing$`, tc.cpwPushesOnly)
-	ctx.Then(`^cpw does nothing$`, tc.cpwDoesNothing)
+	ctx.Then(`^cpw watches without pushing$`, tc.cpwWatchesOnly)
 	ctx.Then(`^cpw says it is pushing commits that never reached the remote$`, tc.cpwSaysPushingUnpushed)
-	ctx.Then(`^cpw says there is nothing waiting to be pushed$`, tc.cpwSaysNothingWaiting)
+	ctx.Then(`^cpw says it is resuming the current PR$`, tc.cpwSaysResumingPR)
 	ctx.Then(`^cpw runs the code phase first$`, tc.cpwRunsCodePhase)
 	ctx.Then(`^cpw runs no code phase$`, tc.cpwRunsNoCodePhase)
 }
@@ -49,8 +49,8 @@ func (tc *TestContext) cpwPushesOnly() error {
 	return tc.expectPlan(actions.CPWPushOnly, "push without committing")
 }
 
-func (tc *TestContext) cpwDoesNothing() error {
-	return tc.expectPlan(actions.CPWNothingToDo, "do nothing")
+func (tc *TestContext) cpwWatchesOnly() error {
+	return tc.expectPlan(actions.CPWWatchOnly, "watch without pushing")
 }
 
 func (tc *TestContext) expectPlan(want actions.CPWPlan, described string) error {
@@ -64,8 +64,8 @@ func (tc *TestContext) cpwSaysPushingUnpushed() error {
 	return tc.cpwMessageContains("never reached the remote")
 }
 
-func (tc *TestContext) cpwSaysNothingWaiting() error {
-	return tc.cpwMessageContains("nothing waiting to be pushed")
+func (tc *TestContext) cpwSaysResumingPR() error {
+	return tc.cpwMessageContains("resuming the current PR")
 }
 
 func (tc *TestContext) cpwRunsCodePhase() error {
