@@ -31,20 +31,20 @@ is a reviewed **manual repin** ([image lifecycle](../core-concepts/image-lifecyc
 | `ansible-lint` | code | `ghcr.io/ansible/community-ansible-dev-tools:v26.7.1` |  |  | manual repin | — |
 | `ansible-syntax` | code | `ghcr.io/ansible/community-ansible-dev-tools:v26.7.1` |  |  | manual repin | — |
 | `black` | code | `pyfound/black:26.5.1` |  |  | automatic | — |
-| `clippy` | code | `rust:1.97.1-slim` |  |  | automatic | — |
+| `clippy` | code | `rust:1.98.0-slim` |  |  | automatic | — |
 | `commitizen` | code | `commitizen/commitizen:4.16.5` |  |  | automatic | — |
 | `commitlint` | code | `commitlint/commitlint:21.2.1` |  |  | automatic | — |
 | `go-mod-tidy` | code | `dhi.io/golang:1.26.5-alpine-dev` | yes |  | manual repin | — |
 | `gofmt` | code | `dhi.io/golang:1.26.5-alpine-dev` | yes |  | manual repin | — |
-| `golangci-lint` | code | `golangci/golangci-lint:v2.12.2-alpine` |  |  | automatic | — |
+| `golangci-lint` | code | `golangci/golangci-lint:v2.13.2-alpine` |  |  | automatic | — |
 | `mypy` | code | `dhi.io/python:3.13.14-alpine-dev` | yes |  | manual repin | — |
-| `prettier` | code | `jauderho/prettier:3.9.4` |  |  | automatic | — |
+| `prettier` | code | `jauderho/prettier:3.9.6` |  |  | automatic | — |
 | `ruff` | code | `ghcr.io/astral-sh/ruff:0.8.2` |  |  | manual repin | — |
-| `rustfmt` | code | `rust:1.97.1-slim` |  |  | automatic | — |
+| `rustfmt` | code | `rust:1.98.0-slim` |  |  | automatic | — |
 | `shellcheck` | code | `koalaman/shellcheck:stable` |  |  | automatic | — |
 | `yamllint` | code | `ghcr.io/ansible/community-ansible-dev-tools:v26.7.1` |  |  | manual repin | — |
 | `ansible-test` | test | `ghcr.io/ansible/community-ansible-dev-tools:v26.7.1` |  | docker-socket | manual repin | — |
-| `cargo-test` | test | `rust:1.97.1-slim` |  |  | automatic | — |
+| `cargo-test` | test | `rust:1.98.0-slim` |  |  | automatic | — |
 | `go-test` | test | `dhi.io/golang:1.26.5-alpine-dev` | yes |  | manual repin | — |
 | `godog` | test | `dhi.io/golang:1.26.5-alpine-dev` | yes |  | manual repin | — |
 | `molecule` | test | `ghcr.io/ansible/community-ansible-dev-tools:v26.7.1` |  | docker-socket | manual repin | — |
@@ -52,15 +52,15 @@ is a reviewed **manual repin** ([image lifecycle](../core-concepts/image-lifecyc
 | `pytest` | test | `dhi.io/python:3.13.14-alpine-dev` | yes |  | manual repin | — |
 | `test-hot-reload` | test | `dhi.io/alpine-base:3.24` | yes |  | manual repin | — |
 | `ansible-galaxy-build` | build | `ghcr.io/ansible/community-ansible-dev-tools:v26.7.1` |  |  | manual repin | — |
-| `cargo-build` | build | `rust:1.97.1-slim` |  |  | automatic | Produces a glibc-linked binary: the image is Debian, so the artifact runs on glibc hosts and will not start on an Alpine/musl image such as probatum's (misleading 'not found' on a file that exists). Build with `rustup target add x86_64-unknown-linux-musl && cargo build --release --target x86_64-unknown-linux-musl` for an artifact that runs anywhere -- the slim image ships the gnu target only. |
+| `cargo-build` | build | `rust:1.98.0-slim` |  |  | automatic | Produces a glibc-linked binary: the image is Debian, so the artifact runs on glibc hosts and will not start on an Alpine/musl image such as probatum's (misleading 'not found' on a file that exists). Build with `rustup target add x86_64-unknown-linux-musl && cargo build --release --target x86_64-unknown-linux-musl` for an artifact that runs anywhere -- the slim image ships the gnu target only. |
 | `go-build` | build | `dhi.io/golang:1.26.5-alpine-dev` | yes |  | manual repin | — |
 | `python-build` | build | `dhi.io/python:3.13.14-alpine-dev` | yes |  | manual repin | — |
 | `docker-buildx` | docker | `dhi.io/docker:29-cli` | yes | docker-socket | manual repin | — |
 | `kaniko` | docker | `ghcr.io/osscontainertools/kaniko:v1.28.0` |  |  | manual repin | — |
 | `ansible-galaxy-publish` | release | `ghcr.io/ansible/community-ansible-dev-tools:v26.7.1` |  | publishing-credential | manual repin | — |
-| `cargo-publish` | release | `rust:1.97.1-slim` |  | publishing-credential | automatic | — |
-| `gh-release` | release | `maniator/gh:v2.95` |  | publishing-credential | automatic | — |
-| `goreleaser` | release | `goreleaser/goreleaser:v2.17.0` |  | docker-socket, publishing-credential | automatic | — |
+| `cargo-publish` | release | `rust:1.98.0-slim` |  | publishing-credential | automatic | — |
+| `gh-release` | release | `maniator/gh:v2.98` |  | publishing-credential | automatic | — |
+| `goreleaser` | release | `goreleaser/goreleaser:v2.18.0` |  | docker-socket, publishing-credential | automatic | — |
 | `twine` | release | `dhi.io/python:3.13.14-alpine-dev` | yes | publishing-credential | manual repin | — |
 
 Digests are elided above for readability; the pins themselves live in
