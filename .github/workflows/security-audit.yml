@@ -32,6 +32,9 @@ jobs:
   setup:
     name: Setup
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
     outputs:
       images: ${{ steps.images.outputs.images }}
       count: ${{ steps.images.outputs.count }}
@@ -63,9 +66,22 @@ jobs:
       - name: Generate cache keys
         id: cache-keys
         run: |
-          DATE=$(date +%Y-%m-%d)
-          echo "trivy=trivy-db-$DATE" >> $GITHUB_OUTPUT
-          echo "grype=grype-db-$DATE" >> $GITHUB_OUTPUT
+          echo "trivy=trivy-db-${{ github.run_id }}" >> $GITHUB_OUTPUT
+          echo "grype=grype-db-${{ github.run_id }}" >> $GITHUB_OUTPUT
+
+      # These caches distribute one freshly downloaded database to every
+      # matrix leg; they are not an archive. Remove the previous audit's
+      # scanner caches before creating this run's immutable pair. Other
+      # repository caches (Go, builds, actions) are deliberately untouched.
+      - name: Purge vulnerability database caches from previous runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CACHE_IDS=$(gh api --paginate "/repos/${{ github.repository }}/actions/caches?per_page=100" \
+            --jq '.actions_caches[] | select(.key | startswith("trivy-db-") or startswith("grype-db-")) | .id')
+          for CACHE_ID in $CACHE_IDS; do
+            gh api --method DELETE "/repos/${{ github.repository }}/actions/caches/$CACHE_ID"
+          done
 
       - name: Cache Trivy DB
         id: trivy-cache
@@ -73,7 +89,6 @@ jobs:
         with:
           path: ~/.cache/trivy
           key: ${{ steps.cache-keys.outputs.trivy }}
-          restore-keys: trivy-db-
 
       - name: Download Trivy DB
         if: steps.trivy-cache.outputs.cache-hit != 'true'
@@ -90,7 +105,6 @@ jobs:
         with:
           path: ~/.cache/grype
           key: ${{ steps.cache-keys.outputs.grype }}
-          restore-keys: grype-db-
 
       - name: Download Grype DB
         if: steps.grype-cache.outputs.cache-hit != 'true'
@@ -169,7 +183,6 @@ jobs:
         with:
           path: ~/.cache/trivy
           key: ${{ needs.setup.outputs.trivy-cache-key }}
-          restore-keys: trivy-db-
           fail-on-cache-miss: true
 
       # `--results` states what went into the file, next to the JSON the scan is
@@ -372,7 +385,6 @@ jobs:
         with:
           path: ~/.cache/grype
           key: ${{ needs.setup.outputs.grype-cache-key }}
-          restore-keys: grype-db-
           fail-on-cache-miss: true
 
       # Same as the Trivy job, and the same file: the declaration is about the
