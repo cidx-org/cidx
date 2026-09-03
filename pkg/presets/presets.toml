@@ -46,7 +46,7 @@
 [presets.prettier]
 name = "prettier"
 phase = "code"
-image = "jauderho/prettier:3.9.4@sha256:b233d9c847048561850a1a107e35318b28361cd9a850eac7edcd5d8bfd82cea2"
+image = "jauderho/prettier:3.9.6@sha256:a12203a911b251e8b9b7da2b4395ae5ffcea93d081735b9d3269b94a8f540e00"
 image_entrypoint = ["prettier"]
 command = "--check ."
 workdir = "/work"
@@ -435,7 +435,7 @@ GOTOOLCHAIN = "auto"
 [presets.golangci-lint]
 name = "golangci-lint"
 phase = "code"
-image = "golangci/golangci-lint:v2.12.2-alpine@sha256:91b27804074a0bacea298707f016911e60cf0cdbc6c7bf5ccacb5f0606d18d60"
+image = "golangci/golangci-lint:v2.13.2-alpine@sha256:da1f79b184ff1d98781648407d05a99b9cba7b282aa3416b0a0eac102a3b0557"
 image_entrypoint = []
 command = "golangci-lint run --timeout 5m"
 workdir = "/work"
@@ -666,7 +666,7 @@ IMAGE_TAG = "latest"
 [presets.gh-release]
 name = "gh-release"
 phase = "release"
-image = "maniator/gh:v2.95@sha256:c7e862eeb468003aba87847a03e214a21638cd898130d6e5894f019aec091913"
+image = "maniator/gh:v2.98@sha256:2fe19af2457b1dc3ee99b259bae458d4371e27bcfc39532bcd338ed51ea7df56"
 image_entrypoint = ["gh"]
 entrypoint = [""]  # Override image entrypoint (gh) to allow shell commands
 # Smart command: uses prepared release notes if available (versioned filename), otherwise auto-generates
@@ -704,7 +704,7 @@ command_flag = "--notes-file"
 [presets.goreleaser]
 name = "goreleaser"
 phase = "release"
-image = "goreleaser/goreleaser:v2.17.0@sha256:054eefd282c02233a2556ce2d1a60cd2f51dc565ffc2520dc38b5deb4dd1ad30"
+image = "goreleaser/goreleaser:v2.18.0@sha256:a7609141326e383370858ab3ca2572e96e00fb212fe3fd5610cd4de434652faa"
 image_entrypoint = ["/sbin/tini", "--", "/entrypoint.sh"]
 command = "release --clean"
 workdir = "/work"
@@ -972,7 +972,7 @@ command_flag = "--repository"
 [presets.rustfmt]
 name = "rustfmt"
 phase = "code"
-image = "rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd"
+image = "rust:1.98.0-slim@sha256:17d1ba895198f9934c6314ec5346a0d5115372f3243390c3d731e242f35c2f27"
 image_entrypoint = []
 command = "sh -c 'rustup component add rustfmt && cargo fmt -- --check'"
 workdir = "/work"
@@ -984,7 +984,7 @@ config_files = ["rustfmt.toml", ".rustfmt.toml"]
 [presets.clippy]
 name = "clippy"
 phase = "code"
-image = "rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd"
+image = "rust:1.98.0-slim@sha256:17d1ba895198f9934c6314ec5346a0d5115372f3243390c3d731e242f35c2f27"
 image_entrypoint = []
 command = "sh -c 'rustup component add clippy && cargo clippy -- -D warnings'"
 workdir = "/work"
@@ -1056,7 +1056,7 @@ command_flag = "--deny warnings"
 [presets.cargo-test]
 name = "cargo-test"
 phase = "test"
-image = "rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd"
+image = "rust:1.98.0-slim@sha256:17d1ba895198f9934c6314ec5346a0d5115372f3243390c3d731e242f35c2f27"
 image_entrypoint = []
 command = "cargo test"
 workdir = "/work"
@@ -1080,7 +1080,7 @@ command_flag = "--all-features"
 [presets.cargo-build]
 name = "cargo-build"
 phase = "build"
-image = "rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd"
+image = "rust:1.98.0-slim@sha256:17d1ba895198f9934c6314ec5346a0d5115372f3243390c3d731e242f35c2f27"
 image_entrypoint = []
 # The warning used to live only on `probatum`, which is the tool you are not
 # using at the moment you make the mistake. It belongs on the producer too.
@@ -1099,7 +1099,7 @@ command_flag = "--target"
 [presets.cargo-publish]
 name = "cargo-publish"
 phase = "release"
-image = "rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd"
+image = "rust:1.98.0-slim@sha256:17d1ba895198f9934c6314ec5346a0d5115372f3243390c3d731e242f35c2f27"
 image_entrypoint = []
 command = "cargo publish"
 workdir = "/work"
