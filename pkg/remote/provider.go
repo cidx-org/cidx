@@ -148,6 +148,7 @@ type Job struct {
 	Name       string
 	Status     string // queued, in_progress, completed
 	Conclusion string // success, failure, cancelled, skipped
+	FailedStep string // first failed step, when the provider exposes it
 }
 
 // WorkflowUpdate represents a workflow status update

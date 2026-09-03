@@ -278,6 +278,26 @@ func (c *Client) WatchWorkflow(ctx context.Context, workflowID string) (<-chan r
 	return updates, nil
 }
 
+type listWorkflowJobsFunc func(context.Context, *github.ListWorkflowJobsOptions) (*github.Jobs, *github.Response, error)
+
+func allWorkflowJobs(ctx context.Context, list listWorkflowJobsFunc) ([]*github.WorkflowJob, error) {
+	opts := &github.ListWorkflowJobsOptions{ListOptions: github.ListOptions{PerPage: 100}}
+	var all []*github.WorkflowJob
+	for {
+		jobs, response, err := list(ctx, opts)
+		if err != nil {
+			return nil, err
+		}
+		if jobs != nil {
+			all = append(all, jobs.Jobs...)
+		}
+		if response == nil || response.NextPage == 0 {
+			return all, nil
+		}
+		opts.Page = response.NextPage
+	}
+}
+
 // convertWorkflow converts GitHub workflow run to our Workflow type
 func (c *Client) convertWorkflow(ctx context.Context, run *github.WorkflowRun) (*remote.Workflow, error) {
 	workflow := &remote.Workflow{
@@ -289,22 +309,19 @@ func (c *Client) convertWorkflow(ctx context.Context, run *github.WorkflowRun) (
 	}
 
 	// Fetch jobs for this workflow
-	jobs, _, err := c.client.Actions.ListWorkflowJobs(
-		ctx,
-		c.owner,
-		c.repo,
-		run.GetID(),
-		&github.ListWorkflowJobsOptions{},
-	)
+	jobs, err := allWorkflowJobs(ctx, func(ctx context.Context, opts *github.ListWorkflowJobsOptions) (*github.Jobs, *github.Response, error) {
+		return c.client.Actions.ListWorkflowJobs(ctx, c.owner, c.repo, run.GetID(), opts)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list jobs: %w", err)
 	}
 
-	for _, job := range jobs.Jobs {
+	for _, job := range jobs {
 		workflow.Jobs = append(workflow.Jobs, remote.Job{
 			Name:       job.GetName(),
 			Status:     job.GetStatus(),
 			Conclusion: job.GetConclusion(),
+			FailedStep: firstFailedStep(job),
 		})
 	}
 
