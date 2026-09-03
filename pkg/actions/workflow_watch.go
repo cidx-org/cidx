@@ -3,6 +3,7 @@ package actions
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cidx-org/cidx/v3/pkg/remote"
 	log "github.com/sirupsen/logrus"
@@ -119,6 +120,29 @@ func reportCompletion(w *remote.Workflow) error {
 		return nil
 	default:
 		log.Errorf("❌ Workflow failed: %s", w.Conclusion)
+		if details := FormatFailedWorkflowJobs(w.Jobs, "   "); details != "" {
+			log.Error(details)
+		}
 		return fmt.Errorf("workflow failed with conclusion: %s", w.Conclusion)
 	}
+}
+
+// FormatFailedWorkflowJobs renders the actionable part of a failed workflow:
+// the jobs that did not pass and, when the provider exposes it, where each one
+// stopped. Successful, skipped and neutral jobs add no noise to the verdict.
+func FormatFailedWorkflowJobs(jobs []remote.Job, indent string) string {
+	lines := make([]string, 0)
+	for _, job := range jobs {
+		switch job.Conclusion {
+		case "", "success", "skipped", "neutral":
+			continue
+		}
+
+		line := indent + "✗ " + job.Name
+		if job.FailedStep != "" {
+			line += " — failed step: " + job.FailedStep
+		}
+		lines = append(lines, line)
+	}
+	return strings.Join(lines, "\n")
 }

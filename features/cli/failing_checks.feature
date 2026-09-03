@@ -79,3 +79,20 @@ Feature: Naming the check that failed
         | Test  | success    |             |       |
       When I read the PR status
       Then the report lists no failing check
+
+  Rule: A completed workflow run names where it failed
+
+    # Issue #466. Reopening an already completed run returned only
+    # "Workflow failed: failure", although the provider had fetched its jobs.
+
+    Scenario: The completed run points directly at the failed step
+      Given the workflow run ended with jobs:
+        | job              | conclusion | failed step                                |
+        | Setup            | success    |                                            |
+        | Trivy            | success    |                                            |
+        | Report           | failure    | Generate Report                            |
+        | Promotion Policy | failure    | Fail if the catalogue is waiting on a human |
+      When a workflow watch reports that completed run
+      Then the report names the failing check "Report"
+      And the report names "Generate Report" as the failing step of "Report"
+      And the report names the failing check "Promotion Policy"

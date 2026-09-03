@@ -20,6 +20,29 @@ func notFoundResponse() *github.Response {
 	return &github.Response{Response: &http.Response{StatusCode: http.StatusNotFound}}
 }
 
+func TestAllWorkflowJobsReadsPastTheFirstPage(t *testing.T) {
+	failed := "failure"
+	name := "Report"
+	var pages []int
+
+	jobs, err := allWorkflowJobs(context.Background(), func(_ context.Context, opts *github.ListWorkflowJobsOptions) (*github.Jobs, *github.Response, error) {
+		pages = append(pages, opts.Page)
+		if opts.Page == 0 {
+			return &github.Jobs{Jobs: []*github.WorkflowJob{{Name: github.Ptr("Setup")}}}, &github.Response{NextPage: 2}, nil
+		}
+		return &github.Jobs{Jobs: []*github.WorkflowJob{{Name: &name, Conclusion: &failed}}}, &github.Response{}, nil
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(jobs) != 2 || jobs[1].GetName() != "Report" {
+		t.Fatalf("expected the failed job from page 2, got %+v", jobs)
+	}
+	if len(pages) != 2 || pages[0] != 0 || pages[1] != 2 {
+		t.Fatalf("expected pages [0 2], got %v", pages)
+	}
+}
+
 func TestLatestRunFromCandidates(t *testing.T) {
 	ctx := context.Background()
 

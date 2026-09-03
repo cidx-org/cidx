@@ -157,6 +157,12 @@ cidx cleanup                              # Remove stopped containers
 
 > **Shortcuts**: `cidx pr`, `cidx cpw`, and `cidx workflow` work as aliases for `cidx repo pr`, `cidx repo cpw`, and `cidx repo workflow`.
 
+CIDX deliberately does not create issues. GitHub's `gh issue create` and
+GitLab's `glab issue create` already handle labels, assignees, templates and
+milestones well. CIDX stays focused on execution and diagnosis: it should say
+what failed and where, leaving publication and project governance to the
+platform-native CLI.
+
 ## Configuration
 
 ### Custom presets

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cidx-org/cidx/v3/pkg/actions"
 	"github.com/cidx-org/cidx/v3/pkg/branch"
 	"github.com/cidx-org/cidx/v3/pkg/remote"
 	"github.com/cucumber/godog"
@@ -20,9 +21,11 @@ import (
 // watch loops through a package-level seam.
 func RegisterPRChecksSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Given(`^the pull request ended with checks:$`, tc.pullRequestEndedWithChecks)
+	ctx.Given(`^the workflow run ended with jobs:$`, tc.workflowRunEndedWithJobs)
 
 	ctx.When(`^I read the PR status$`, tc.readThePRStatus)
 	ctx.When(`^a watch closes on those checks$`, tc.aWatchClosesOnThoseChecks)
+	ctx.When(`^a workflow watch reports that completed run$`, tc.aWorkflowWatchReportsThatCompletedRun)
 
 	ctx.Then(`^the report still counts "([^"]*)"$`, tc.theReportContains)
 	ctx.Then(`^the report names the failing check "([^"]*)"$`, tc.theReportNamesTheFailingCheck)
@@ -30,6 +33,29 @@ func RegisterPRChecksSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Then(`^the report shows "([^"]*)"$`, tc.theReportContains)
 	ctx.Then(`^the report does not name "([^"]*)"$`, tc.theReportDoesNotName)
 	ctx.Then(`^the report lists no failing check$`, tc.theReportListsNoFailingCheck)
+}
+
+func (tc *TestContext) workflowRunEndedWithJobs(table *godog.Table) error {
+	jobs := make([]remote.Job, 0, len(table.Rows)-1)
+	for _, row := range table.Rows[1:] {
+		jobs = append(jobs, remote.Job{
+			Name:       row.Cells[0].Value,
+			Status:     "completed",
+			Conclusion: row.Cells[1].Value,
+			FailedStep: row.Cells[2].Value,
+		})
+	}
+	tc.Config["workflow_jobs"] = jobs
+	return nil
+}
+
+func (tc *TestContext) aWorkflowWatchReportsThatCompletedRun() error {
+	jobs, ok := tc.Config["workflow_jobs"].([]remote.Job)
+	if !ok {
+		return fmt.Errorf("no workflow jobs were staged")
+	}
+	tc.Output = actions.FormatFailedWorkflowJobs(jobs, "   ")
+	return nil
 }
 
 // pullRequestEndedWithChecks stages the answer the provider gives for a pull
