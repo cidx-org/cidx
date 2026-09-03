@@ -194,9 +194,17 @@ func (a *TagPrepareAction) getCommitSummary(tag string) string {
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-	if len(lines) > 10 {
-		lines = lines[:10]
-		lines = append(lines, fmt.Sprintf("... and %d more commits", len(lines)-10))
+	return FormatCommitSummary(lines, 10)
+}
+
+// FormatCommitSummary renders at most limit commits and reports exactly how
+// many were omitted. Both release interfaces use it so their previews cannot
+// disagree at the point where a tag is reviewed.
+func FormatCommitSummary(lines []string, limit int) string {
+	total := len(lines)
+	if total > limit {
+		lines = append([]string(nil), lines[:limit]...)
+		lines = append(lines, fmt.Sprintf("... and %d more commits", total-limit))
 	}
 
 	var sb strings.Builder
