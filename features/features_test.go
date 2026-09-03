@@ -118,6 +118,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	RegisterBranchSteps(ctx, testCtx)
 	RegisterArtifactWorkflowSteps(ctx, testCtx)
 	RegisterPRChecksSteps(ctx, testCtx)
+	RegisterReleaseSummarySteps(ctx, testCtx)
 	RegisterCheckVerdictSteps(ctx, testCtx)
 	RegisterWatchTargetSteps(ctx, testCtx)
 	RegisterCPWSteps(ctx, testCtx)

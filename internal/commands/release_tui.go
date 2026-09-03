@@ -202,18 +202,7 @@ func (m releaseModel) getCommitSummary(tag string) string {
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-	if len(lines) > 10 {
-		lines = lines[:10]
-		lines = append(lines, fmt.Sprintf("... and %d more commits", len(lines)-10))
-	}
-
-	var sb strings.Builder
-	for _, line := range lines {
-		if line != "" {
-			fmt.Fprintf(&sb, "- %s\n", line)
-		}
-	}
-	return sb.String()
+	return actions.FormatCommitSummary(lines, 10)
 }
 
 func (m releaseModel) getCommitsSince(tag string) []actions.CommitInfo {
