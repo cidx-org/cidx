@@ -1,3 +1,28 @@
+## v3.4.0 (2026-09-03)
+
+### Feat
+
+- **repo**: make cpw resume the current pull request (#460)
+- **security**: validate Renovate container promotions (#455)
+- **preset**: generate the catalogue reference page the hand-written one rotted into (#453)
+- **security**: convert the five context-sensitive groups to grouped decisions (#448)
+- **security**: convert the Ansible group to grouped decisions (#446)
+- **security**: surface grouped-decision verdicts in the views (#444)
+- **security**: resolve waivers through grouped decisions (#443)
+- **security**: specify grouped vulnerability decisions (#441)
+
+### Fix
+
+- **release**: count truncated tag changes correctly (#468)
+- **repo**: explain completed workflow failures (#467)
+- **security**: refresh vulnerability databases daily (#462)
+- **repo**: guide unfinished pull requests before starting (#461)
+- **deps**: scope Renovate to public catalogue images (#459)
+- **presets**: keep catalogue reports and promotions current (#454)
+- **presets**: repin the DHI images their publisher rebuilt, and lift trivy to 0.74 (#452)
+- **doctor**: stage the hardened-registry credential the scenario asserts on (#451)
+- **security**: count what is left for a human, not what was already argued (#439)
+
 ## v3.3.0 (2026-08-20)
 
 ### Feat
