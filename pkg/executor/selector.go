@@ -80,7 +80,7 @@ func (s *Selector) selectDocker() (Executor, error) {
 	}
 
 	if !s.docker.Available() {
-		return nil, errors.New("docker daemon is not running, start Docker and try again")
+		return nil, errors.New(ExplainDockerUnavailable(s.docker.availabilityError()))
 	}
 
 	return s.docker, nil
@@ -127,11 +127,14 @@ var podmanOnPath = func() bool {
 // buildUnavailableError creates a helpful error message when no executor is available
 func (s *Selector) buildUnavailableError() error {
 	var msg string
+	dockerAccessDenied := false
 
 	if s.docker == nil {
 		msg = "Docker is not installed or not accessible."
 	} else if !s.docker.Available() {
-		msg = "Docker daemon is not running."
+		dockerErr := s.docker.availabilityError()
+		dockerAccessDenied = errors.Is(dockerErr, os.ErrPermission)
+		msg = ExplainDockerUnavailable(dockerErr)
 	}
 
 	podmanInstalled := podmanOnPath()
@@ -141,14 +144,26 @@ func (s *Selector) buildUnavailableError() error {
 		msg += "\nPodman is installed, but cidx cannot use it — its Docker-compatible API socket is not available."
 	}
 
-	msg += "\n\nStart a container runtime:\n"
-	msg += "  sudo systemctl start docker  # Docker on Linux\n"
-	msg += "  open -a Docker               # Docker on macOS"
-	if podmanInstalled {
-		msg += fmt.Sprintf("\n  %s  # Podman API socket", PodmanSocketHint())
+	if !dockerAccessDenied {
+		msg += "\n\nStart a container runtime:\n"
+		msg += "  sudo systemctl start docker  # Docker on Linux\n"
+		msg += "  open -a Docker               # Docker on macOS"
+		if podmanInstalled {
+			msg += fmt.Sprintf("\n  %s  # Podman API socket", PodmanSocketHint())
+		}
 	}
 
 	return errors.New(msg)
+}
+
+// ExplainDockerUnavailable distinguishes an inaccessible socket from a daemon
+// that did not answer. Treating EPERM/EACCES as "not running" sends users toward
+// the wrong remedy and hid the sandbox restriction found while dogfooding.
+func ExplainDockerUnavailable(err error) string {
+	if errors.Is(err, os.ErrPermission) {
+		return "Docker socket access was denied. Check the socket permissions and whether this process is allowed to access the container runtime."
+	}
+	return "Docker daemon is not running."
 }
 
 // GetDocker returns the Docker executor (may be nil)

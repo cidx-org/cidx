@@ -8,6 +8,19 @@ Feature: Executor Backend Selection
 
   Rule: CIDX auto-detects available container runtimes
 
+    Scenario: Docker access is refused by the operating system
+      Given the Docker socket refuses access
+      When CIDX explains why Docker is unavailable
+      Then I should see "Docker socket access was denied"
+      And I should see "permissions"
+      And I should not see "Docker daemon is not running"
+
+    Scenario: The Docker daemon really does not answer
+      Given the Docker daemon cannot be reached
+      When CIDX explains why Docker is unavailable
+      Then I should see "Docker daemon is not running"
+      And I should not see "Docker socket access was denied"
+
     @docker-required
     Scenario: Docker is available and selected automatically
       Given Docker daemon is running

@@ -2,6 +2,7 @@ package features
 
 import (
 	"fmt"
+	"os"
 	"reflect"
 	"regexp"
 	"strings"
@@ -14,6 +15,10 @@ import (
 
 // RegisterExecutorSteps registers executor-related step definitions
 func RegisterExecutorSteps(ctx *godog.ScenarioContext, tc *TestContext) {
+	ctx.Given(`^the Docker socket refuses access$`, tc.theDockerSocketRefusesAccess)
+	ctx.Given(`^the Docker daemon cannot be reached$`, tc.theDockerDaemonCannotBeReached)
+	ctx.When(`^CIDX explains why Docker is unavailable$`, tc.cidxExplainsWhyDockerIsUnavailable)
+	ctx.Then(`^I should not see "([^"]*)"$`, tc.iShouldNotSee)
 	// Background
 	ctx.Step(`^I have a valid cidx\.toml configuration$`, tc.iHaveAValidCidxTomlConfiguration)
 
@@ -45,6 +50,32 @@ func RegisterExecutorSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Then(`^the container name should be a valid Docker container name$`, tc.containerNameShouldBeValid)
 	ctx.Then(`^the two container names should differ$`, tc.twoContainerNamesShouldDiffer)
 	ctx.Then(`^the two container names should be identical$`, tc.twoContainerNamesShouldBeIdentical)
+}
+
+func (tc *TestContext) theDockerSocketRefusesAccess() error {
+	tc.Config["docker_availability_error"] = fmt.Errorf("dial Docker socket: %w", os.ErrPermission)
+	return nil
+}
+
+func (tc *TestContext) theDockerDaemonCannotBeReached() error {
+	tc.Config["docker_availability_error"] = fmt.Errorf("connection refused")
+	return nil
+}
+
+func (tc *TestContext) cidxExplainsWhyDockerIsUnavailable() error {
+	err, ok := tc.Config["docker_availability_error"].(error)
+	if !ok {
+		return fmt.Errorf("no Docker availability error was staged")
+	}
+	tc.Output = executor.ExplainDockerUnavailable(err)
+	return nil
+}
+
+func (tc *TestContext) iShouldNotSee(unexpected string) error {
+	if strings.Contains(tc.Output, unexpected) {
+		return fmt.Errorf("output unexpectedly contains %q:\n%s", unexpected, tc.Output)
+	}
+	return nil
 }
 
 // dockerContainerNameRE is Docker's container name grammar.
