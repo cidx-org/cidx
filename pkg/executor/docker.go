@@ -12,6 +12,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cidx-org/cidx/v3/pkg/config"
@@ -57,6 +58,9 @@ type DockerExecutor struct {
 	quiet    bool
 	timeout  time.Duration
 	rootless bool // Podman rootless: adds --userns=keep-id
+
+	availabilityMu  sync.RWMutex
+	availabilityErr error
 
 	// pullFn overrides client.ImagePull in tests. Nil means use the real client.
 	pullFn func(ctx context.Context, ref string, opts image.PullOptions) (io.ReadCloser, error)
@@ -807,13 +811,22 @@ func (e *DockerExecutor) Close() error {
 	return e.client.Close()
 }
 
-// Available checks if Docker daemon is running and accessible
+// Available checks if Docker daemon is running and accessible.
 func (e *DockerExecutor) Available() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	_, err := e.client.Ping(ctx)
+	e.availabilityMu.Lock()
+	e.availabilityErr = err
+	e.availabilityMu.Unlock()
 	return err == nil
+}
+
+func (e *DockerExecutor) availabilityError() error {
+	e.availabilityMu.RLock()
+	defer e.availabilityMu.RUnlock()
+	return e.availabilityErr
 }
 
 // Name returns the executor backend name
