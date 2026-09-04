@@ -1,3 +1,9 @@
+## v3.4.1 (2026-09-04)
+
+### Fix
+
+- **executor**: make runtime detection resilient (#470)
+
 ## v3.4.0 (2026-09-03)
 
 ### Feat
