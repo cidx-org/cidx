@@ -35,7 +35,22 @@ Feature: Pipeline Execution
         | test     |
       And the pipeline should complete successfully
 
+    Scenario: Pipeline respects an unusual declared order
+      Given the pipeline "custom" is configured with phases "test, code, security"
+      When I run pipeline "custom"
+      Then phases should execute in order: "test, code, security"
+
   Rule: Pipeline stops on first failure
+
+    Scenario: Pipeline stops after a middle phase fails
+      Given I have a pipeline: code → security → test → build
+      And the "security" phase will fail
+      When I run the pipeline
+      Then phases should execute in order: "code, security"
+      And the pipeline should stop
+      And subsequent phases should NOT execute
+      And the pipeline should exit with non-zero code
+
 
     Scenario: Pipeline stops when security phase fails
       Given I have a pipeline with multiple phases
@@ -57,24 +72,17 @@ Feature: Pipeline Execution
 
   Rule: Named pipelines provide clear intent
 
-    # A pipeline used to have to "indicate its purpose" as well, and could not:
-    # the `description` key cidx.toml writes was dropped by the decoder without
-    # a word, and the step behind that line asserted nothing, which is why the
-    # claim survived (#349). #352 gave config.Pipeline the field and the runner
-    # prints it, so the description is now a fact rather than an intention —
-    # covered by TestLoad_PipelineDescription, since what a scenario can see
-    # here is still the phases.
-
     Scenario Outline: Different pipelines for different purposes
-      Given I run pipeline "<pipeline>"
+      Given the pipeline "<pipeline>" is configured with phases "<phases>"
+      When I run pipeline "<pipeline>"
       Then it should execute phases: <phases>
 
       Examples:
-        | pipeline | phases                                        |
-        | pr       | security, code, test                          |
-        | main     | security, code, test, build                   |
-        | release  | security, code, test, build, release, docker  |
-        | quick    | code                                          |
+        | pipeline | phases                                       |
+        | pr       | security, code, test                         |
+        | main     | security, code, test, build                  |
+        | release  | security, code, test, build, release, docker |
+        | quick    | code                                         |
 
   Rule: A dry run is how a pipeline is inspected before it runs
 
@@ -103,3 +111,9 @@ Feature: Pipeline Execution
       When I run "cidx run release --dry-run"
       Then I should see the release pipeline configuration
       And I should see the execution order
+
+  Rule: This repository validates code, security, tests and build in that order
+
+    Scenario: GitHub CI waits for each preceding validation gate
+      When I inspect this repository's CI workflow
+      Then its validation jobs should depend on each preceding gate

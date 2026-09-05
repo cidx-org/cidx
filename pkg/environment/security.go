@@ -15,7 +15,7 @@ const removedBehaviorNoPush = "no-push"
 // LocalBehavior defines how a preset behaves in local environment
 const (
 	BehaviorProduction = "production" // Full execution (dangerous in local)
-	BehaviorDraft      = "draft"      // Create drafts only (GitHub releases)
+	BehaviorDraft      = "draft"      // Preview only; creates no release
 	BehaviorDryRun     = "dry-run"    // Dry run only
 	BehaviorDisabled   = "disabled"   // Completely disabled in local
 )
@@ -73,7 +73,7 @@ func ValidatePreset(preset presets.Preset, env *Environment) (*ExecutionMode, er
 	case BehaviorDraft:
 		mode.Mode = BehaviorDraft
 		mode.IsDryRun = true // Force dry-run in local mode
-		mode.Reason = "Local mode: draft creation only"
+		mode.Reason = "Local mode: draft preview only (no release created)"
 		// For GitHub releases, force draft mode
 		mode.EnvChanges["DRAFT"] = "true"
 

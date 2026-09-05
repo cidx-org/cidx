@@ -46,17 +46,22 @@ Feature: Local Safety Modes
       Then the run should be held as a dry-run
       But image should NOT be pushed
 
-  Rule: GitHub releases are draft by default in local environment
+  Rule: Local releases are previews and create nothing
 
-    Scenario: gh-release creates draft locally
+    Scenario: gh-release previews a draft locally
       Given I am in local environment
       And the "gh-release" preset has local_behavior = "draft"
-      When I run "cidx run release"
-      Then I should see "Local safety: draft - Local mode: draft creation only"
+      When I run the release preset "gh-release" through the runner
+      Then I should see "Local safety: draft - Local mode: draft preview only (no release created)"
       And the command should include "--draft" flag
       And the environment variable "DRAFT" should be "true"
-      And GitHub release should be created as draft
+      And no release container should have been executed
       And release should NOT be published
+
+    Scenario: The release runner executes the preset in CI
+      Given I am in CI environment (GitHub Actions)
+      When I run the release preset "gh-release" through the runner
+      Then exactly one release container should have been executed
 
     Scenario: gh-release publishes in CI environment
       Given I am in CI environment (GitHub Actions)
@@ -75,9 +80,10 @@ Feature: Local Safety Modes
     Scenario: goreleaser creates no release locally
       Given I am in local environment
       And the "goreleaser" preset has local_behavior = "draft"
-      When I run tool "goreleaser"
+      When I run the release preset "goreleaser" through the runner
       Then the environment variable "DRAFT" should be "true"
       And the run should be held as a dry-run
+      And no release container should have been executed
       But release should NOT be published to GitHub
 
   Rule: Preset can require CI environment
@@ -108,10 +114,10 @@ Feature: Local Safety Modes
       And I should see message containing "<message>"
 
       Examples:
-        | behavior   | message                         |
-        | draft      | draft creation only             |
-        | dry-run    | dry-run only                    |
-        | production | production (use with caution!)  |
+        | behavior   | message                                |
+        | draft      | draft preview only (no release created) |
+        | dry-run    | dry-run only                           |
+        | production | production (use with caution!)         |
 
     # #353: it was accepted, it meant dry-run, and it promised a local build it
     # never performed. Refused by name rather than as an unknown value, so the

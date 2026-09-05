@@ -17,7 +17,7 @@ It does two things:
 
 - **Convention over Configuration** -- Presets eliminate boilerplate. Overrides are exceptional.
 - **Container-native** -- Everything runs in containers. Nothing on the host. Clean, reproducible.
-- **Security by Default** -- Docker Hardened Images, safe local modes (no-push, draft).
+- **Security by Default** -- Docker Hardened Images, safe local previews (dry-run, draft).
 - **KISS** -- Single config file. Container names are the only required input.
 - **Explicit over Magic** -- Dry-run mode, transparent merge logic, clear preset definitions.
 

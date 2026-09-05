@@ -51,7 +51,6 @@ func RegisterEventSteps(ctx *godog.ScenarioContext, testCtx *TestContext) {
 	ctx.Then(`^the GitHub release should NOT be published$`, testCtx.githubReleaseShouldNotBePublished)
 	ctx.Then(`^the "([^"]*)" phase should push images to registry$`, testCtx.phaseShouldPushImages)
 	ctx.Then(`^the "([^"]*)" phase should publish the GitHub release$`, testCtx.phaseShouldPublishRelease)
-	ctx.Then(`^the "([^"]*)" phase should create a draft release$`, testCtx.phaseShouldCreateDraftRelease)
 	ctx.Then(`^the release should be public$`, testCtx.theReleaseShouldBePublic)
 	ctx.Then(`^release notes should be generated$`, testCtx.releaseNotesShouldBeGenerated)
 	ctx.Then(`^I should see error about missing credentials$`, testCtx.shouldSeeErrorAboutCredentials)
@@ -346,17 +345,6 @@ func (tc *TestContext) phaseShouldPushImages(phase string) error {
 // phaseShouldPublishRelease checks phase published a release
 func (tc *TestContext) phaseShouldPublishRelease(phase string) error {
 	return tc.shouldExecutePhase(phase)
-}
-
-// phaseShouldCreateDraftRelease checks phase created a draft release
-func (tc *TestContext) phaseShouldCreateDraftRelease(phase string) error {
-	if err := tc.shouldExecutePhase(phase); err != nil {
-		return err
-	}
-	if !strings.Contains(tc.Output, "draft") {
-		return fmt.Errorf("expected draft release in output")
-	}
-	return nil
 }
 
 // theReleaseShouldBePublic checks release is public

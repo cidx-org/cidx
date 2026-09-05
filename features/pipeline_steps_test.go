@@ -2,8 +2,11 @@ package features
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
+	"github.com/BurntSushi/toml"
+	"github.com/cidx-org/cidx/v3/pkg/config"
 	"github.com/cucumber/godog"
 )
 
@@ -16,7 +19,7 @@ func RegisterPipelineSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Given(`^the "([^"]*)" phase will fail$`, tc.phaseWillFail)
 	ctx.Given(`^all phases will pass$`, tc.allPhasesWillPass)
 	ctx.Given(`^I have a pipeline: (.+)$`, tc.havePipelineFromDescription)
-	ctx.Given(`^I run pipeline "([^"]*)"$`, tc.runPipelineByName)
+	ctx.When(`^I run pipeline "([^"]*)"$`, tc.runPipelineByName)
 
 	// Pipeline execution steps
 	ctx.When(`^I run the pipeline$`, tc.runThePipeline)
@@ -42,41 +45,33 @@ func RegisterPipelineSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 
 // pipelineIsConfigured configures a pipeline with phases
 func (tc *TestContext) pipelineIsConfigured(pipeline, phases string) error {
-	if tc.Config["pipelines"] == nil {
-		tc.Config["pipelines"] = make(map[string]any)
-	}
-	pipelines := tc.Config["pipelines"].(map[string]any)
-	pipelines[pipeline] = map[string]string{
-		"phases": phases,
-	}
+	tc.Config["phases"] = splitPhases(phases)
+	tc.Config["runner_pipeline"] = true
 	tc.Pipeline = pipeline
 	return nil
 }
 
-// havePipelineConfiguredDocstring configures a pipeline from a docstring
+// havePipelineConfiguredDocstring decodes the pipeline the scenario declares.
 func (tc *TestContext) havePipelineConfiguredDocstring(name string, doc *godog.DocString) error {
-	tc.Pipeline = name
-	tc.Config["pipeline"] = name
-	// Parse phases from docstring
-	for _, line := range strings.Split(doc.Content, "\n") {
-		if strings.Contains(line, "phases") {
-			// Extract phase list
-			parts := strings.SplitN(line, "=", 2)
-			if len(parts) == 2 {
-				phaseStr := strings.Trim(parts[1], " []\"")
-				phases := strings.Split(phaseStr, ",")
-				for i, p := range phases {
-					phases[i] = strings.Trim(p, " \"")
-				}
-				tc.Config["phases"] = phases
-			}
-		}
+	var declared struct {
+		Pipelines map[string]config.Pipeline `toml:"pipelines"`
 	}
+	if err := toml.Unmarshal([]byte(doc.Content), &declared); err != nil {
+		return fmt.Errorf("decode scenario pipeline: %w", err)
+	}
+	p, ok := declared.Pipelines[name]
+	if !ok || len(p.Phases) == 0 {
+		return fmt.Errorf("scenario declares no pipeline %q with phases", name)
+	}
+	tc.Pipeline = name
+	tc.Config["phases"] = p.Phases
+	tc.Config["runner_pipeline"] = true
 	return nil
 }
 
 // havePipelineWithMultiplePhases configures a pipeline with multiple phases
 func (tc *TestContext) havePipelineWithMultiplePhases() error {
+	tc.Config["runner_pipeline"] = true
 	tc.Pipeline = "test"
 	tc.Config["pipeline"] = "test"
 	tc.Config["phases"] = []string{"security", "code", "test", "build"}
@@ -103,6 +98,7 @@ func (tc *TestContext) havePipelineFromDescription(desc string) error {
 		cleanPhases = append(cleanPhases, strings.TrimSpace(p))
 	}
 	tc.Config["phases"] = cleanPhases
+	tc.Config["runner_pipeline"] = true
 	tc.Pipeline = "custom"
 	return nil
 }
@@ -128,86 +124,50 @@ func (tc *TestContext) runThePipeline() error {
 	return tc.runCommand("cidx run " + pipeline)
 }
 
-// runCustomPipeline runs a pipeline with explicit phases
+// runCustomPipeline exercises the real orchestration with recorded containers.
 func (tc *TestContext) runCustomPipeline(phases []string) error {
-	tc.LastCommand = "cidx run custom"
+	return tc.runDeclaredPipeline(tc.Pipeline, phases, false)
+}
 
-	// Simulate environment header
-	if tc.CI {
-		if tc.Provider != "" {
-			tc.Output += fmt.Sprintf("Environment: %s (CI mode)\n", tc.Provider)
-		} else {
-			tc.Output += "Environment: CI (CI mode)\n"
-		}
-	} else {
-		tc.Output += "Environment: Local (safe mode)\n"
-	}
-
-	for _, phase := range phases {
-		shouldFail := false
-		failMessage := ""
-
-		if tc.Config[fmt.Sprintf("phase_%s_fails", phase)] == true {
-			shouldFail = true
-			failMessage = fmt.Sprintf("%s check failed", phase)
-		}
-
-		if shouldFail {
-			tc.Output += fmt.Sprintf("PHASE: %s\n", strings.ToUpper(phase))
-			tc.Output += fmt.Sprintf("Running [%s]\n", phase)
-			tc.Output += failMessage + "\n"
-			tc.Output += fmt.Sprintf("✗ %s failed\n", phase)
-			tc.ExecutedPhases = append(tc.ExecutedPhases, phase)
-			tc.FailedPhases = append(tc.FailedPhases, phase)
-			tc.ExitCode = 1
-			return nil
-		}
-
-		tc.Output += fmt.Sprintf("PHASE: %s\n", strings.ToUpper(phase))
-		tc.Output += fmt.Sprintf("Running [%s]\n", phase)
-		tc.Output += fmt.Sprintf("✓ %s completed successfully\n", phase)
-		tc.ExecutedPhases = append(tc.ExecutedPhases, phase)
+func (tc *TestContext) assertPhaseOrder(expected []string) error {
+	if !slices.Equal(tc.ExecutedPhases, expected) {
+		return fmt.Errorf("executed phases %v, expected exactly %v", tc.ExecutedPhases, expected)
 	}
 	return nil
 }
 
-// phasesShouldExecuteInOrder verifies phases executed in correct order
 func (tc *TestContext) phasesShouldExecuteInOrder(expectedOrder string) error {
-	if len(tc.ExecutedPhases) == 0 {
-		return fmt.Errorf("no phases were executed")
-	}
-	return nil
+	return tc.assertPhaseOrder(splitPhases(expectedOrder))
 }
 
-// phasesShouldExecuteInExactOrder verifies exact phase order from table
 func (tc *TestContext) phasesShouldExecuteInExactOrder(table *godog.Table) error {
-	expectedPhases := []string{}
-	for _, row := range table.Rows {
-		if len(row.Cells) >= 2 {
-			expectedPhases = append(expectedPhases, row.Cells[1].Value)
+	var expected []string
+	for _, row := range table.Rows[1:] {
+		if len(row.Cells) != 2 {
+			return fmt.Errorf("expected order and phase columns")
 		}
+		expected = append(expected, row.Cells[1].Value)
 	}
-
-	if len(tc.ExecutedPhases) == 0 && len(expectedPhases) > 0 {
-		return fmt.Errorf("expected phases to execute, but none were executed")
-	}
-	return nil
+	return tc.assertPhaseOrder(expected)
 }
 
-// phasesShouldExecuteInOrderTable verifies phase order from table without header
 func (tc *TestContext) phasesShouldExecuteInOrderTable(table *godog.Table) error {
-	if len(tc.ExecutedPhases) == 0 {
-		return fmt.Errorf("expected phases to execute, but none were executed")
+	var expected []string
+	for _, row := range table.Rows {
+		if len(row.Cells) != 1 {
+			return fmt.Errorf("expected one phase per row")
+		}
+		expected = append(expected, row.Cells[0].Value)
 	}
-	return nil
+	return tc.assertPhaseOrder(expected)
 }
 
 // pipelineShouldStop verifies pipeline stopped on failure
 func (tc *TestContext) pipelineShouldStop() error {
-	if len(tc.FailedPhases) == 0 {
-		return fmt.Errorf("no failed phases recorded, pipeline did not stop as expected")
+	if tc.ExitCode == 0 {
+		return fmt.Errorf("pipeline succeeded instead of stopping")
 	}
-	return nil
+	return tc.subsequentPhasesShouldNotExecute()
 }
 
 // pipelineShouldExecuteCompletely verifies all phases executed
@@ -273,18 +233,15 @@ func (tc *TestContext) subsequentPhasesShouldNotExecute() error {
 
 // allThreePhasesShouldExecute checks three phases executed
 func (tc *TestContext) allThreePhasesShouldExecute() error {
-	if len(tc.ExecutedPhases) < 3 {
-		return fmt.Errorf("expected at least 3 phases, got %d: %v", len(tc.ExecutedPhases), tc.ExecutedPhases)
+	if len(tc.ExecutedPhases) != 3 {
+		return fmt.Errorf("expected exactly 3 phases, got %d: %v", len(tc.ExecutedPhases), tc.ExecutedPhases)
 	}
 	return nil
 }
 
 // shouldExecutePhasesList checks phases from comma-separated list
 func (tc *TestContext) shouldExecutePhasesList(phaseList string) error {
-	if len(tc.ExecutedPhases) == 0 {
-		return fmt.Errorf("no phases were executed")
-	}
-	return nil
+	return tc.assertPhaseOrder(splitPhases(phaseList))
 }
 
 // declaredPhases is the phase list the scenario wrote into its pipeline.
@@ -313,7 +270,7 @@ func (tc *TestContext) shouldSeeWhichPhases() error {
 		return err
 	}
 	for _, phase := range phases {
-		if !strings.Contains(tc.Output, phase+" phase") {
+		if !strings.Contains(tc.Output, "PHASE: "+strings.ToUpper(phase)) {
 			return fmt.Errorf("the dry-run does not name the %q phase:\n%s", phase, tc.Output)
 		}
 	}
@@ -329,11 +286,11 @@ func (tc *TestContext) shouldSeeExecutionOrder() error {
 	}
 	cursor := 0
 	for _, phase := range phases {
-		at := strings.Index(tc.Output[cursor:], phase+" phase")
+		at := strings.Index(tc.Output[cursor:], "PHASE: "+strings.ToUpper(phase))
 		if at < 0 {
 			return fmt.Errorf("the %q phase is missing or out of order in:\n%s", phase, tc.Output)
 		}
-		cursor += at + len(phase)
+		cursor += at + len("PHASE: "+phase)
 	}
 	return nil
 }

@@ -56,7 +56,7 @@ Specifies how CIDX behaves when a version tag is pushed:
 
 - Tag triggers full pipeline in CI
 - Docker pushes in CI, builds without push locally
-- Release publishes in CI, creates draft locally
+- Release publishes in CI, previews locally without creating a draft
 
 ### Merge to Main (`events/merge_to_main.feature`)
 
@@ -86,13 +86,13 @@ Specifies how dangerous operations are protected in local environment:
 
 **Release Operations**:
 
-- `local_behavior = "draft"` → Creates draft releases
+- `local_behavior = "draft"` → Previews releases without creating a draft
 - CI environment → Publishes releases normally
 
 **Key Scenarios**:
 
 - docker-buildx safe in local, pushes in CI
-- gh-release creates draft locally, publishes in CI
+- gh-release previews locally, publishes in CI
 - Preset can require CI environment
 
 ### Environment Detection (`security/environment_detection.feature`)

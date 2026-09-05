@@ -37,10 +37,10 @@ Full execution (use with caution!)
 
 ### `local_behavior = "draft"` ✅ Recommended for releases
 
-Creates drafts only (GitHub releases)
+Previews the release command; creates no release, including no draft.
 
-- Automatically adds `--draft` flag
-- Safe for testing release process locally
+- Adds `--draft` to the displayed `gh-release` command and sets `DRAFT=true`
+- Starts no container and makes no release API request
 - **Example**: `gh-release`, `goreleaser`
 
 ### `local_behavior = "dry-run"` ✅ Recommended for Docker
@@ -77,7 +77,7 @@ name = "gh-release"
 phase = "release"
 # ...
 require_ci = false           # Allow local execution
-local_behavior = "draft"     # Create drafts only in local
+local_behavior = "draft"     # Preview only; no release created locally
 
 [presets.docker-buildx]
 name = "docker-buildx"
@@ -116,10 +116,10 @@ cidx run quick
 # Full local validation (safe, no publish)
 cidx run pr
 
-# Test release locally (creates draft)
+# Preview release locally (creates nothing)
 cidx run release
-# → Docker builds without push
-# → GitHub release created as draft
+# → Docker build command is displayed; no image is built
+# → Release command is displayed; no draft is created
 ```
 
 ### CI/CD

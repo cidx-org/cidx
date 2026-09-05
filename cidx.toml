@@ -94,7 +94,7 @@ phases = ["code", "security", "test", "build"]
 description = "Main branch pipeline (builds artifacts)"
 
 # The end-to-end release rehearsal, run locally: `cidx run release` walks every
-# phase with the local guardrails on (gh-release drafts, kaniko does not push),
+# phase with the local guardrails on (gh-release previews, kaniko does not build or push),
 # which is the whole point of declaring it here.
 #
 # No workflow implements it. `release.yml` is the *publication* workflow: it

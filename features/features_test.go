@@ -104,6 +104,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	RegisterSarifSteps(ctx, testCtx)
 	RegisterSummarySteps(ctx, testCtx)
 	RegisterPipelineSteps(ctx, testCtx)
+	RegisterRunnerSteps(ctx, testCtx)
 	RegisterExecutorSteps(ctx, testCtx)
 	RegisterPresetSteps(ctx, testCtx)
 	RegisterQuietSteps(ctx, testCtx)
