@@ -582,150 +582,28 @@ jobs:
           pattern: "{trivy,grype}-*"
           merge-multiple: true
 
+      # The job and the tracking issue share one rendered page. Scanner job
+      # results remain visible even if an artifact or the renderer fails.
       - name: Generate Report
+        id: catalogue-summary
+        if: always()
+        env:
+          TRIVY_STATUS: ${{ needs.trivy-scan.result }}
+          GRYPE_STATUS: ${{ needs.grype-scan.result }}
+          EXCEPTIONS_STATUS: ${{ needs.check-exceptions.result }}
+          EXPIRING_COUNT: ${{ needs.check-exceptions.outputs.expiring }}
         run: |
-          TRIVY_STATUS="${{ needs.trivy-scan.result }}"
-          GRYPE_STATUS="${{ needs.grype-scan.result }}"
-          EXCEPTIONS_STATUS="${{ needs.check-exceptions.outputs.status }}"
-          EXPIRED_COUNT="${{ needs.check-exceptions.outputs.expired }}"
-          EXPIRING_COUNT="${{ needs.check-exceptions.outputs.expiring }}"
-          IMAGE_COUNT="${{ needs.setup.outputs.count }}"
+          {
+            printf '## Audit execution\n\n| Job | Result |\n| --- | --- |\n'
+            printf '| Trivy | %s |\n| Grype | %s |\n| Exception check | %s |\n\n' \
+              "$TRIVY_STATUS" "$GRYPE_STATUS" "$EXCEPTIONS_STATUS"
+            printf 'Exceptions expiring within 7 days: %s.\n\n' "${EXPIRING_COUNT:-unavailable}"
+            printf '[Scanner logs and raw scan artifacts](%s/%s/actions/runs/%s#artifacts)\n\n' \
+              "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-          # Header
-          echo "# 🔒 Security Audit Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Date:** $(date -u '+%Y-%m-%d %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
-          echo "**Images Scanned:** $IMAGE_COUNT" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          # Scanner Results Summary
-          echo "## 📊 Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Scanner | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
-          if [ "$TRIVY_STATUS" = "success" ]; then
-            echo "| Trivy | ✅ Pass |" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "| Trivy | ❌ Fail |" >> $GITHUB_STEP_SUMMARY
-          fi
-          if [ "$GRYPE_STATUS" = "success" ]; then
-            echo "| Grype | ✅ Pass |" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "| Grype | ❌ Fail |" >> $GITHUB_STEP_SUMMARY
-          fi
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          # Vulnerability Details
-          echo "## 🔍 Vulnerability Details" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          # Process Trivy results
-          if ls artifacts/trivy-*.txt 1> /dev/null 2>&1; then
-            echo "### Trivy Findings" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            for file in artifacts/trivy-*.txt; do
-              IMAGE_NAME=$(basename "$file" .txt | sed 's/^trivy-//' | tr '_' '/' | tr '_' ':')
-              if grep -q "Total:" "$file" 2>/dev/null; then
-                VULN_COUNT=$(grep -oP 'Total: \K\d+' "$file" 2>/dev/null || echo "0")
-                if [ "$VULN_COUNT" != "0" ]; then
-                  echo "<details>" >> $GITHUB_STEP_SUMMARY
-                  echo "<summary>📦 <code>$IMAGE_NAME</code> - $VULN_COUNT vulnerabilities</summary>" >> $GITHUB_STEP_SUMMARY
-                  echo "" >> $GITHUB_STEP_SUMMARY
-                  echo '```' >> $GITHUB_STEP_SUMMARY
-                  cat "$file" >> $GITHUB_STEP_SUMMARY
-                  echo '```' >> $GITHUB_STEP_SUMMARY
-                  echo "</details>" >> $GITHUB_STEP_SUMMARY
-                  echo "" >> $GITHUB_STEP_SUMMARY
-                fi
-              elif grep -qE "(HIGH|CRITICAL)" "$file" 2>/dev/null; then
-                echo "<details>" >> $GITHUB_STEP_SUMMARY
-                echo "<summary>📦 <code>$IMAGE_NAME</code> - vulnerabilities found</summary>" >> $GITHUB_STEP_SUMMARY
-                echo "" >> $GITHUB_STEP_SUMMARY
-                echo '```' >> $GITHUB_STEP_SUMMARY
-                cat "$file" >> $GITHUB_STEP_SUMMARY
-                echo '```' >> $GITHUB_STEP_SUMMARY
-                echo "</details>" >> $GITHUB_STEP_SUMMARY
-                echo "" >> $GITHUB_STEP_SUMMARY
-              fi
-            done
-          fi
-
-          # Process Grype results
-          if ls artifacts/grype-*.txt 1> /dev/null 2>&1; then
-            echo "### Grype Findings" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            for file in artifacts/grype-*.txt; do
-              IMAGE_NAME=$(basename "$file" .txt | sed 's/^grype-//' | tr '_' '/' | tr '_' ':')
-              if grep -qE "(High|Critical)" "$file" 2>/dev/null; then
-                echo "<details>" >> $GITHUB_STEP_SUMMARY
-                echo "<summary>📦 <code>$IMAGE_NAME</code> - vulnerabilities found</summary>" >> $GITHUB_STEP_SUMMARY
-                echo "" >> $GITHUB_STEP_SUMMARY
-                echo '```' >> $GITHUB_STEP_SUMMARY
-                cat "$file" >> $GITHUB_STEP_SUMMARY
-                echo '```' >> $GITHUB_STEP_SUMMARY
-                echo "</details>" >> $GITHUB_STEP_SUMMARY
-                echo "" >> $GITHUB_STEP_SUMMARY
-              fi
-            done
-          fi
-
-          # Exception Status
-          # "Some exceptions have expired or will expire soon" said neither
-          # how many nor which, and read the same whether one entry was a week
-          # past its date or the whole file had rotted (#238). Name them.
-          echo "## 📋 Vulnerability Exceptions" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          if [ "$EXCEPTIONS_STATUS" = "ok" ]; then
-            echo "✅ All exceptions are valid and not expired." >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ **$EXPIRED_COUNT expired**, $EXPIRING_COUNT expiring within 7 days." >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "An expired exception waives nothing: it was written with a date so that the" >> $GITHUB_STEP_SUMMARY
-            echo "acceptance would be re-argued, not inherited. Re-date it, or delete it." >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            EXPIRED_LIST=$(./bin/cidx security vuln check --days 7 --json 2>/dev/null \
-              | jq -r '.expired[] | "| \(.CVE) | \(.Repository) | \(.Severity) | \(.Expires) |"')
-            if [ -n "$EXPIRED_LIST" ]; then
-              echo "<details>" >> $GITHUB_STEP_SUMMARY
-              echo "<summary>⏰ Expired exceptions ($EXPIRED_COUNT)</summary>" >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-              echo "| CVE | Repository | Severity | Expired |" >> $GITHUB_STEP_SUMMARY
-              echo "|-----|------------|----------|---------|" >> $GITHUB_STEP_SUMMARY
-              echo "$EXPIRED_LIST" >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-              echo "</details>" >> $GITHUB_STEP_SUMMARY
-            fi
-          fi
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          # Current Exceptions List
-          echo "### Current Exceptions" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          EXCEPTIONS=$(./bin/cidx security vuln list 2>/dev/null)
-          if [ -n "$EXCEPTIONS" ]; then
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            echo "$EXCEPTIONS" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-          else
-            echo "_No exceptions configured_" >> $GITHUB_STEP_SUMMARY
-          fi
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          # Next Steps
-          if [ "$TRIVY_STATUS" != "success" ] || [ "$GRYPE_STATUS" != "success" ]; then
-            echo "## 🛠️ Next Steps" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "1. Review vulnerability details above" >> $GITHUB_STEP_SUMMARY
-            echo "2. For accepted risks, add exceptions:" >> $GITHUB_STEP_SUMMARY
-            echo '   ```bash' >> $GITHUB_STEP_SUMMARY
-            echo '   cidx security vuln add <CVE-ID> <IMAGE>' >> $GITHUB_STEP_SUMMARY
-            echo '   ```' >> $GITHUB_STEP_SUMMARY
-            echo "3. Verify exceptions work locally:" >> $GITHUB_STEP_SUMMARY
-            echo '   ```bash' >> $GITHUB_STEP_SUMMARY
-            echo '   cidx security vuln verify' >> $GITHUB_STEP_SUMMARY
-            echo '   ```' >> $GITHUB_STEP_SUMMARY
-            echo "4. Commit and push changes" >> $GITHUB_STEP_SUMMARY
-          fi
+          ./bin/cidx security summary --results artifacts -o "$RUNNER_TEMP/status.md"
+          cat "$RUNNER_TEMP/status.md" >> "$GITHUB_STEP_SUMMARY"
 
       # A CVE scan says what is broken today; it never says whether anything
       # will ever fix it. Once the distribution under an image stops being
@@ -880,17 +758,16 @@ jobs:
       # here keeps: that state would have to be invented before it could be
       # compared.
       #
-      # `if: always()` for the same reason as the two steps above: a run that
-      # went red is exactly the one whose status is worth reading, and the page
-      # names the images no scanner answered for rather than counting them clean.
+      # Publish the exact page already appended to the job summary, even when
+      # the later policy gate fails. A failed renderer must not publish a body.
       - name: Publish the status summary
-        if: always()
+        if: always() && steps.catalogue-summary.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TRACKING_LABEL: security-status
         run: |
-          ./bin/cidx security summary --results artifacts -o "$RUNNER_TEMP/status.md"
+          test -s "$RUNNER_TEMP/status.md"
 
           # The label is the key, so it has to exist before it can be applied.
           # Creating it here rather than by hand keeps the mechanism whole: a
