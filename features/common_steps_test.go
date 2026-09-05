@@ -395,6 +395,14 @@ func (tc *TestContext) simulateCIDXCommand(cmdStr string) error {
 		}
 	}
 
+	if tc.Config["runner_pipeline"] == true {
+		phases, err := tc.declaredPhases()
+		if err != nil {
+			return err
+		}
+		return tc.runDeclaredPipeline(pipelineName, phases, isDryRun)
+	}
+
 	// Whether the run is quiet is not read off the flags: commands.ResolveQuiet
 	// owns that decision (CI is quiet by default, --stream and --verbose win
 	// over it), and the scenarios must see the decision, not a copy of it.
@@ -633,9 +641,6 @@ func (tc *TestContext) reportLocalSafetyOf(preset presets.Preset) {
 	}
 
 	tc.Output += fmt.Sprintf("Local safety: %s - %s\n", mode.Mode, mode.Reason)
-	if mode.Mode == environment.BehaviorDraft {
-		tc.Output += "Created draft release\n"
-	}
 }
 
 // applyCIBehavior applies CI-specific behaviors for a phase

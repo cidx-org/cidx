@@ -21,7 +21,6 @@ func RegisterSecuritySteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Step(`^Docker image should be built successfully$`, tc.dockerImageShouldBeBuilt)
 	ctx.Step(`^Docker image should NOT be pushed to registry$`, tc.dockerImageShouldNotBePushed)
 	ctx.Step(`^Docker image should be pushed to registry$`, tc.dockerImageShouldBePushed)
-	ctx.Step(`^GitHub release should be created as draft$`, tc.githubReleaseShouldBeDraft)
 	ctx.Step(`^GitHub release should be published$`, tc.githubReleaseShouldBePublished)
 	ctx.Step(`^release should NOT be published$`, tc.releaseShouldNotBePublished)
 	ctx.Step(`^release should be public$`, tc.releaseShouldBePublic)
@@ -512,14 +511,6 @@ func (tc *TestContext) dockerImageShouldBePushed() error {
 	return fmt.Errorf("expected image to be pushed (CI only)")
 }
 
-// githubReleaseShouldBeDraft verifies GitHub release was created as draft
-func (tc *TestContext) githubReleaseShouldBeDraft() error {
-	if strings.Contains(tc.Output, "draft") {
-		return nil
-	}
-	return fmt.Errorf("expected draft release")
-}
-
 // githubReleaseShouldBePublished verifies GitHub release was published
 func (tc *TestContext) githubReleaseShouldBePublished() error {
 	if tc.CI {
@@ -652,7 +643,7 @@ func (tc *TestContext) runThatPreset() error {
 func (tc *TestContext) shouldExecuteInMode(mode string) error {
 	switch mode {
 	case "draft":
-		mode = "draft creation only"
+		mode = "draft preview only (no release created)"
 	case "dry-run":
 		mode = "dry-run only"
 	case "production":

@@ -296,12 +296,12 @@ If the answer is unclear → we don't build it (yet).
 
 CIDX ensures **dangerous operations are safe to test locally**:
 
-#### Docker: Build Without Push
+#### Docker: Preview Only
 
 ```
 Local environment:
   cidx run docker
-  → Builds image ✓
+  → Previews build command; builds no image ✓
   → Does NOT push ✗
   → Message: "Local safety: dry-run"
 
@@ -311,12 +311,12 @@ CI environment:
   → Pushes to registry ✓
 ```
 
-#### Release: Draft Only
+#### Release: Preview Only
 
 ```
 Local environment:
   cidx run release
-  → Creates draft release ✓
+  → Previews release command; creates no draft ✓
   → Does NOT publish ✗
   → Message: "Local safety: draft"
 

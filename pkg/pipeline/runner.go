@@ -23,10 +23,18 @@ type RunnerOptions struct {
 	Concurrency int
 }
 
+// ExecutorSelector supplies the container backend. The runner owns phase
+// ordering and failure handling; the selected executor owns container execution.
+type ExecutorSelector interface {
+	Select(string, executor.BackendType) (executor.Executor, error)
+	DockerAvailable() bool
+	PodmanAvailable() bool
+}
+
 // Runner orchestrates pipeline execution
 type Runner struct {
 	config      *config.Config
-	selector    *executor.Selector
+	selector    ExecutorSelector
 	backend     executor.BackendType
 	logger      *logrus.Logger
 	env         *environment.Environment
@@ -70,7 +78,7 @@ func NewRunnerWithSelector(cfg *config.Config, selector *executor.Selector, back
 }
 
 // NewRunnerWithOptions creates a new pipeline runner with full options
-func NewRunnerWithOptions(cfg *config.Config, selector *executor.Selector, opts RunnerOptions) *Runner {
+func NewRunnerWithOptions(cfg *config.Config, selector ExecutorSelector, opts RunnerOptions) *Runner {
 	logger := logrus.New()
 	env := environment.Detect()
 

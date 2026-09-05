@@ -36,7 +36,7 @@ Feature: Release Tag Deployment
         | v0.0.1       |
         | v10.20.30    |
 
-  Rule: Release phase publishes in CI, creates draft locally
+  Rule: Release phase publishes in CI, previews locally
 
     Scenario: Release publishes in CI environment
       Given I am in CI environment (GitHub Actions)
@@ -47,16 +47,15 @@ Feature: Release Tag Deployment
       And release notes should be generated
       And artifacts should be attached
 
-    Scenario: Release creates draft in local environment
+    Scenario: Release previews a draft in local environment
       Given I am in local environment
       And I have tag "v1.0.0" locally
-      When I run "cidx run release"
-      Then I should see "Local safety: draft - Local mode: draft creation only"
-      And the "release" phase should create a draft release
+      When I run the release preset "gh-release" through the runner
+      Then I should see "Local safety: draft - Local mode: draft preview only (no release created)"
+      And no release container should have been executed
       And the GitHub release should NOT be published
-      And I should see message "Created draft release"
 
-  Rule: Docker phase pushes in CI, builds only locally
+  Rule: Docker phase pushes in CI, previews locally
 
     Scenario: Docker pushes images in CI environment
       Given I am in CI environment (GitHub Actions)
