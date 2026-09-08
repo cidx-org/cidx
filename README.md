@@ -9,15 +9,21 @@ Everything runs in Docker or Podman — nothing is installed on your machine. 40
 
 ## Installation
 
-Install with Go (latest):
+One static binary, no toolchain — every release ships `linux`/`darwin` × `amd64`/`arm64`, `windows-amd64.exe`, and a `checksums.txt`:
+
+```bash
+curl -fsSLO https://github.com/cidx-org/cidx/releases/latest/download/cidx-linux-amd64
+curl -fsSL  https://github.com/cidx-org/cidx/releases/latest/download/checksums.txt | sha256sum -c --ignore-missing
+sudo install -m 755 cidx-linux-amd64 /usr/local/bin/cidx
+```
+
+Or with Go 1.26+ (note the `/v3` in the module path — the bare path resolves to a stale v1.8.0):
 
 ```bash
 go install github.com/cidx-org/cidx/v3/cmd/cidx@latest
 ```
 
-Or download a release binary from [Releases](https://github.com/cidx-org/cidx/releases).
-
-For other methods, see [docs/getting-started/installation.md](docs/getting-started/installation.md).
+Other platforms, checksum on macOS, pinning a version: [docs/getting-started/installation.md](docs/getting-started/installation.md).
 
 ## Quick Start
 
