@@ -104,6 +104,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	RegisterSarifSteps(ctx, testCtx)
 	RegisterSummarySteps(ctx, testCtx)
 	RegisterAuditReportSteps(ctx, testCtx)
+	RegisterRuntimeImageSteps(ctx, testCtx)
 	RegisterPipelineSteps(ctx, testCtx)
 	RegisterRunnerSteps(ctx, testCtx)
 	RegisterExecutorSteps(ctx, testCtx)

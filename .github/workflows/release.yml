@@ -109,7 +109,9 @@ jobs:
       # close a window that is already closed downstream: this job failing
       # blocks `release`, so no GitHub Release ever points at a broken image.
       - name: Verify the published image runs
-        run: docker run --rm ghcr.io/${{ github.repository }}:${{ github.ref_name }} --version
+        run: |
+          docker run --rm ghcr.io/${{ github.repository }}:${{ github.ref_name }} --version
+          docker run --rm --entrypoint curl ghcr.io/${{ github.repository }}:${{ github.ref_name }} --version
 
   # Release: Create GitHub Release with all binaries
   release:
