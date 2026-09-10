@@ -8,6 +8,9 @@
 # is the current one. Pinned by digest, rule 1 of the supply-chain policy.
 FROM docker:29-cli@sha256:27a51d5ab1cd38d9eeaba7b415b8c07bc10c31e1cf1ec8d78f6413fcfab3f44f
 
+# CI job scripts using this image need HTTPS downloads.
+RUN apk add --no-cache curl
+
 # Copy pre-built CIDX binary from GitHub Actions
 # The binary is built in the CI pipeline and passed as a build context.
 # `.dockerignore` re-includes this exact path out of an otherwise ignored
