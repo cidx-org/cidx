@@ -158,7 +158,7 @@ func (s *stubProvider) MarkPullRequestReady(context.Context, int) error {
 func (s *stubProvider) GetPullRequestByBranch(context.Context, string) (int, string, error) {
 	panic("not reached by these scenarios")
 }
-func (s *stubProvider) MergePullRequest(context.Context, int, string) error {
+func (s *stubProvider) MergePullRequest(context.Context, int, string) (*remote.MergeResult, error) {
 	panic("not reached by these scenarios")
 }
 func (s *stubProvider) UpdatePullRequest(context.Context, int, string, string) error {

@@ -90,7 +90,7 @@ type Provider interface {
 	GetPullRequestByBranch(ctx context.Context, branch string) (number int, url string, err error)
 
 	// MergePullRequest merges a pull request
-	MergePullRequest(ctx context.Context, prNumber int, method string) error
+	MergePullRequest(ctx context.Context, prNumber int, method string) (*MergeResult, error)
 
 	// UpdatePullRequest updates the title and/or body of a pull request.
 	// Empty strings leave the corresponding field unchanged.
@@ -305,4 +305,10 @@ type CommitInfo struct {
 	Message string
 	Author  string
 	Date    time.Time
+}
+
+// MergeResult identifies the commit landed on the target branch.
+type MergeResult struct {
+	Branch string
+	SHA    string
 }

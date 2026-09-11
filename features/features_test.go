@@ -124,6 +124,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	RegisterReleaseSummarySteps(ctx, testCtx)
 	RegisterCheckVerdictSteps(ctx, testCtx)
 	RegisterWatchTargetSteps(ctx, testCtx)
+	RegisterPostMergeSteps(ctx, testCtx)
 	RegisterCPWSteps(ctx, testCtx)
 	RegisterBranchDeletionSteps(ctx, testCtx)
 	RegisterGroupedDecisionSteps(ctx, testCtx)

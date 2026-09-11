@@ -598,7 +598,7 @@ func (m mergeModel) doMerge() tea.Cmd {
 		method := mergeMethods[m.mergeMethod]
 
 		// Perform the merge
-		err := m.provider.MergePullRequest(ctx, m.prNumber, method)
+		_, err := m.provider.MergePullRequest(ctx, m.prNumber, method)
 		if err != nil {
 			return prMergeErrorMsg{err: err}
 		}
