@@ -65,7 +65,7 @@ func (c *Client) GetPullRequestByBranch(ctx context.Context, branch string) (int
 }
 
 // MergePullRequest merges a pull request
-func (c *Client) MergePullRequest(ctx context.Context, prNumber int, method string) error {
+func (c *Client) MergePullRequest(ctx context.Context, prNumber int, method string) (*remote.MergeResult, error) {
 	// Validate merge method
 	validMethods := map[string]bool{
 		"merge":  true,
@@ -73,7 +73,12 @@ func (c *Client) MergePullRequest(ctx context.Context, prNumber int, method stri
 		"rebase": true,
 	}
 	if !validMethods[method] {
-		return fmt.Errorf("invalid merge method: %s (valid: merge, squash, rebase)", method)
+		return nil, fmt.Errorf("invalid merge method: %s (valid: merge, squash, rebase)", method)
+	}
+
+	pr, err := c.GetPullRequest(ctx, prNumber)
+	if err != nil {
+		return nil, err
 	}
 
 	// Merge the PR
@@ -81,12 +86,12 @@ func (c *Client) MergePullRequest(ctx context.Context, prNumber int, method stri
 		MergeMethod: method,
 	}
 
-	_, _, err := c.client.PullRequests.Merge(ctx, c.owner, c.repo, prNumber, "", options)
+	result, _, err := c.client.PullRequests.Merge(ctx, c.owner, c.repo, prNumber, "", options)
 	if err != nil {
-		return fmt.Errorf("failed to merge pull request: %w", err)
+		return nil, fmt.Errorf("failed to merge pull request: %w", err)
 	}
 
-	return nil
+	return &remote.MergeResult{Branch: pr.GetBase().GetRef(), SHA: result.GetSHA()}, nil
 }
 
 // UpdatePullRequest updates the title and/or body of a pull request.

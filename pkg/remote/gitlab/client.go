@@ -434,7 +434,7 @@ func (c *Client) GetPullRequestByBranch(ctx context.Context, branch string) (num
 }
 
 // MergePullRequest merges a merge request
-func (c *Client) MergePullRequest(ctx context.Context, prNumber int, method string) error {
+func (c *Client) MergePullRequest(ctx context.Context, prNumber int, method string) (*remote.MergeResult, error) {
 	opts := &gitlab.AcceptMergeRequestOptions{}
 
 	// Map merge methods
@@ -445,12 +445,16 @@ func (c *Client) MergePullRequest(ctx context.Context, prNumber int, method stri
 		// GitLab handles rebase differently - no specific option needed for manual merge
 	}
 
-	_, _, err := c.client.MergeRequests.AcceptMergeRequest(c.projectID, int64(prNumber), opts)
+	result, _, err := c.client.MergeRequests.AcceptMergeRequest(c.projectID, int64(prNumber), opts)
 	if err != nil {
-		return fmt.Errorf("failed to merge merge request: %w", err)
+		return nil, fmt.Errorf("failed to merge merge request: %w", err)
 	}
 
-	return nil
+	sha := result.MergeCommitSHA
+	if sha == "" {
+		sha = result.SquashCommitSHA
+	}
+	return &remote.MergeResult{Branch: result.TargetBranch, SHA: sha}, nil
 }
 
 // GetPullRequestTitle returns the title of a merge request.

@@ -163,7 +163,7 @@ func (f *fakeProvider) MarkPullRequestReady(_ context.Context, _ int) error {
 func (f *fakeProvider) GetPullRequestByBranch(_ context.Context, _ string) (int, string, error) {
 	panic("not implemented in fake")
 }
-func (f *fakeProvider) MergePullRequest(_ context.Context, _ int, _ string) error {
+func (f *fakeProvider) MergePullRequest(_ context.Context, _ int, _ string) (*remote.MergeResult, error) {
 	panic("not implemented in fake")
 }
 func (f *fakeProvider) UpdatePullRequest(_ context.Context, _ int, _, _ string) error {

@@ -536,7 +536,8 @@ func (a *PRAction) mergePR(ctx context.Context) error {
 
 	// Merge the PR
 	log.Infof("🔀 Merging PR #%d with method '%s'...", prNumber, a.mergeMethod)
-	if err := a.provider.MergePullRequest(ctx, prNumber, a.mergeMethod); err != nil {
+	merged, err := a.provider.MergePullRequest(ctx, prNumber, a.mergeMethod)
+	if err != nil {
 		return fmt.Errorf("failed to merge PR: %w", err)
 	}
 
@@ -557,83 +558,14 @@ func (a *PRAction) mergePR(ctx context.Context) error {
 
 	log.Info("⏳ Waiting for post-merge workflow to start...")
 
-	// Get latest workflow for main branch
-	workflow, err := a.provider.GetLatestWorkflow(ctx, "main")
+	waitCtx, cancel := context.WithTimeout(ctx, defaultCIStartTimeout)
+	defer cancel()
+	workflow, err := WaitForPostMergeWorkflow(waitCtx, a.provider, merged, 2*time.Second)
 	if err != nil {
-		log.Warnf("⚠️  Could not get workflow for main branch: %v", err)
-		return nil
+		return fmt.Errorf("PR merged, but post-merge verification failed: %w", err)
 	}
-
-	log.Infof("👀 Watching post-merge workflow %s...", workflow.ID)
-	log.Infof("🔗 %s", workflow.URL)
-
-	// Watch workflow
-	updates, err := a.provider.WatchWorkflow(ctx, workflow.ID)
-	if err != nil {
-		log.Warnf("⚠️  Could not watch workflow: %v", err)
-		log.Infof("🔗 Check workflow status at: %s", workflow.URL)
-		return nil
-	}
-
-	// Display updates
-	for update := range updates {
-		if update.Error != nil {
-			return update.Error
-		}
-
-		displayWorkflowProgress(update.Workflow)
-
-		if update.Workflow.Status == "completed" {
-			fmt.Println() // New line after progress
-			switch update.Workflow.Conclusion {
-			case "success", "skipped", "neutral":
-				log.Info("🎉 Post-merge workflow completed successfully!")
-			default:
-				log.Errorf("❌ Post-merge workflow failed: %s", update.Workflow.Conclusion)
-				return fmt.Errorf("post-merge workflow failed with conclusion: %s", update.Workflow.Conclusion)
-			}
-			break
-		}
-	}
-
-	return nil
-}
-
-// displayWorkflowProgress displays workflow progress
-func displayWorkflowProgress(workflow *remote.Workflow) {
-	status := "⏳"
-	switch workflow.Status {
-	case "queued":
-		status = "⏳"
-	case "in_progress":
-		status = "🔄"
-	case "completed":
-		switch workflow.Conclusion {
-		case "success", "skipped", "neutral":
-			status = "✅"
-		default:
-			status = "❌"
-		}
-	}
-
-	fmt.Printf("\r%s Workflow: %s", status, workflow.Status)
-	for _, job := range workflow.Jobs {
-		jobStatus := "⏳"
-		switch job.Status {
-		case "queued":
-			jobStatus = "⏳"
-		case "in_progress":
-			jobStatus = "🔄"
-		case "completed":
-			switch job.Conclusion {
-			case "success", "skipped", "neutral":
-				jobStatus = "✅"
-			default:
-				jobStatus = "❌"
-			}
-		}
-		fmt.Printf(" | %s %s", jobStatus, job.Name)
-	}
+	log.Infof("📍 Watching merged commit %s on %s", shortSHA(merged.SHA), merged.Branch)
+	return NewWorkflowWatch(a.provider, "", "", workflow.ID, false).Execute(ctx)
 }
 
 // displayChecksStatus displays PR checks status
