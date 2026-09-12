@@ -1,3 +1,15 @@
+## v3.4.2 (2026-09-12)
+
+### Fix
+
+- watch the actual merged commit (#478)
+- include curl in the CIDX runtime image (#477)
+- exercise real pipelines and clarify local release previews (#472)
+
+### Refactor
+
+- reuse catalogue summary in security audit reports (#473)
+
 ## v3.4.1 (2026-09-04)
 
 ### Fix
