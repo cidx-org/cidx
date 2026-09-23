@@ -525,7 +525,10 @@ volumes = [
 # merged commit and pushed automatically.
 watch_workflow = true  # Watch GitHub Actions workflow execution after the tag push
 
-# Git configuration: Allow container to access git repository
+# Git configuration: Allow container to access git repository.
+# No identity is needed here: cidx passes your host `git config user.name` /
+# `user.email` as GIT_AUTHOR_* / GIT_COMMITTER_*. Declare those keys below only
+# to author the bump as someone else (a release bot).
 [actions.release-create.env]
 GIT_CONFIG_GLOBAL = "/tmp/.gitconfig"  # Custom git config location
 GIT_CONFIG_COUNT = "1"                 # Number of git config entries

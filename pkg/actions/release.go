@@ -178,7 +178,16 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 		return err
 	}
 
-	// 7. Execute action container (version bump)
+	// 7. Resolve who authors the bump before anything runs: the container has
+	// no git identity of its own, and finding that out inside it is too late
+	// to say anything useful (#484). A dry-run answers the same question.
+	name, email := hostGitIdentity(workDir)
+	bumpEnv, err := BumpAuthorEnv(action.Env, name, email)
+	if err != nil {
+		return err
+	}
+
+	// 8. Execute action container (version bump)
 	log.Info("🔍 Analyzing commits and determining version bump...")
 
 	if a.dryRun {
@@ -188,10 +197,12 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 			log.Infof("   Entrypoint: %v", action.Entrypoint)
 		}
 		log.Infof("   Command: %s", action.Command)
+		log.Infof("   Authored by: %s <%s>", bumpEnv["GIT_AUTHOR_NAME"], bumpEnv["GIT_AUTHOR_EMAIL"])
 		log.Info("   This would:")
 		log.Info("   1. Run the bump container: analyze conventional commits since the last")
-		log.Info("      tag, pick the semantic bump, update VERSION/.cz.toml/CHANGELOG.md,")
-		log.Info("      commit, and create a local tag")
+		log.Info("      tag, pick the semantic bump, update the version files commitizen")
+		log.Info("      declares, commit, and create a local tag (the new version is read")
+		log.Info("      from that tag; a failed bump is undone)")
 		log.Infof("   2. Move that commit onto '%s<version>' and restore '%s'", releaseBranchPrefix, branch)
 		log.Info("   3. Delete the local tag (the squash-merge rewrites the commit)")
 		log.Info("   4. Push the branch and open the release pull request")
@@ -237,7 +248,7 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 		Entrypoint: action.Entrypoint,
 		Workdir:    action.Workdir,
 		Volumes:    volumes,
-		Env:        action.Env,
+		Env:        bumpEnv,
 		Workspace:  workDir,
 	}
 
@@ -248,23 +259,25 @@ func (a *ReleaseAction) Execute(ctx context.Context) error {
 	}
 
 	if err := dockerExec.Run(ctx, containerConfig); err != nil {
+		a.undoBump(workDir, branch, baseSHA)
 		return fmt.Errorf("action execution failed: %w", err)
 	}
 
-	// 8. Read new version from VERSION file
-	newVersion, err := readVersionFile(workDir)
+	// 9. Read the new version from the tag the bump created
+	newVersion, err := BumpedVersion(workDir, baseSHA)
 	if err != nil {
+		a.undoBump(workDir, branch, baseSHA)
 		return fmt.Errorf("failed to read new version: %w", err)
 	}
 
 	log.Infof("✓ Version bumped to v%s", newVersion)
 
-	// 9. Carry the bump to the base branch through a PR, then tag the merged commit
+	// 10. Carry the bump to the base branch through a PR, then tag the merged commit
 	if err := a.releaseViaPR(ctx, workDir, branch, baseSHA, newVersion); err != nil {
 		return err
 	}
 
-	// 10. Watch workflow if configured
+	// 11. Watch workflow if configured
 	if !action.WatchWorkflow {
 		log.Info("✅ Release action completed")
 		// Cleanup prepared files when not watching workflow
@@ -472,6 +485,19 @@ func (a *ReleaseAction) releaseViaPR(ctx context.Context, workDir, baseBranch, b
 	log.Infof("✓ Tag %s pushed", tagName)
 
 	return nil
+}
+
+// undoBump puts the base branch back where the release found it, and says so:
+// until #484 a bump that failed after the container had committed left the
+// commit and its tag on the base branch, with nothing telling the user either
+// existed.
+func (a *ReleaseAction) undoBump(workDir, branch, baseSHA string) {
+	if err := UndoBump(workDir, baseSHA); err != nil {
+		log.Errorf("❌ Could not undo the failed bump: %v", err)
+		log.Infof("   Restore by hand: git reset --hard %s, and delete any tag the bump created", shortSHA(baseSHA))
+		return
+	}
+	log.Infof("↩️  Restored '%s' to %s: the failed bump left no commit or tag behind", branch, shortSHA(baseSHA))
 }
 
 // getRepoPath returns owner/repo from the repository
