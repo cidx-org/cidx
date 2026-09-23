@@ -232,7 +232,9 @@ This command:
 
 1. Analyzes conventional commits since last release
 2. Calculates version bump (MAJOR.MINOR.PATCH)
-3. Updates VERSION, .cz.toml and CHANGELOG.md, and commits the bump
+3. Updates the version files commitizen declares (`version_files` — here VERSION
+   and .cz.toml) and CHANGELOG.md, commits the bump and tags it; the new version
+   is read back from that tag, so no particular version file is required
 4. Moves that commit onto a `chore/release-vX.Y.Z` branch (main stays untouched)
 5. Opens the release pull request, waits for CI, and squash-merges it
 6. Creates the annotated Git tag (e.g., `v1.2.0`) on the **merged** commit and pushes it
@@ -241,6 +243,16 @@ This command:
 The bump always travels through a PR, so it behaves identically with or without
 branch protection on main. Tag pushes are not covered by branch rulesets, which
 is why the tag can be pushed directly after the merge.
+
+**The bump is authored by whoever releases.** The container runs as your uid
+with no git config of its own, so cidx passes your `git config user.name` and
+`user.email` as `GIT_AUTHOR_*` / `GIT_COMMITTER_*`. An identity declared in
+`[actions.release-create.env]` wins (a release bot, say); with neither, the
+release is refused before the container runs — `--dry-run` says so too.
+
+**If the bump itself fails** — the container errors, or its commit carries no
+version tag — the base branch is put back exactly where it was: the bump commit,
+its tag and any file a failed commit left modified are undone (#484).
 
 **If the release PR's CI fails**, nothing is tagged. The bump stays on the PR
 branch: fix the failure, `cidx cpw -m "fix: ..."`, `cidx pr merge`, then
