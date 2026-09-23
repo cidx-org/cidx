@@ -13,6 +13,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// InitCommitPrefix opens the empty commit `pr create` makes so a PR can exist
+// before any work lands. It is cidx's plumbing, squashed away on merge, and
+// ParseCommitLog drops it by this same prefix so the notes never list it (#488).
+const InitCommitPrefix = "chore: initialize PR branch for "
+
 // Default timeout for waiting for CI to start
 const defaultCIStartTimeout = 60 * time.Second
 
@@ -184,7 +189,7 @@ func (a *PRAction) createPR(ctx context.Context) error {
 
 	// 7. Create initial empty commit to allow PR creation
 	log.Info("📝 Creating initial commit...")
-	commitMsg := fmt.Sprintf("chore: initialize PR branch for %s", a.title)
+	commitMsg := InitCommitPrefix + a.title
 	commitCmd := vcs.Git(workDir, "commit", "--allow-empty", "-m", commitMsg)
 	if output, err := commitCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to create initial commit: %w\n%s", err, output)
@@ -260,7 +265,7 @@ func (a *PRAction) createPRForExistingBranch(ctx context.Context, branchName str
 	// If no commits ahead of main, create an initial commit
 	if !hasCommits {
 		log.Info("📝 Creating initial commit...")
-		commitMsg := fmt.Sprintf("chore: initialize PR branch for %s", a.title)
+		commitMsg := InitCommitPrefix + a.title
 		commitCmd := vcs.Git(workDir, "commit", "--allow-empty", "-m", commitMsg)
 		if output, err := commitCmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("failed to create initial commit: %w\n%s", err, output)

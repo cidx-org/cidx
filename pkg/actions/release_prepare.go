@@ -114,7 +114,8 @@ func ParseCommit(subject, body string) CommitInfo {
 	return commit
 }
 
-// ParseCommitLog parses `git log CommitLogFormat` output into commits.
+// ParseCommitLog parses `git log CommitLogFormat` output into commits, leaving
+// out the empty commit `pr create` opens a branch with (#488).
 func ParseCommitLog(output string) []CommitInfo {
 	var commits []CommitInfo
 
@@ -132,6 +133,11 @@ func ParseCommitLog(output string) []CommitInfo {
 		body := ""
 		if len(parts) > 2 {
 			body = parts[2]
+		}
+
+		// The commit `pr create` opens a branch with is plumbing, not a change.
+		if strings.HasPrefix(parts[1], InitCommitPrefix) {
+			continue
 		}
 
 		commit := ParseCommit(parts[1], body)
@@ -488,9 +494,20 @@ func HasPreparedNotes(workDir, version string) bool {
 }
 
 // CleanupPreparedNotes removes the release notes file after successful release
-func CleanupPreparedNotes(workDir, version string) error {
-	path := filepath.Join(workDir, GetReleaseNotesFile(version))
-	return os.Remove(path)
+//
+// It reports whether it removed anything: notes committed through the prepare
+// PR are the release's record, kept in the repository like every previous
+// version's, and deleting them left main with an unstaged deletion right after
+// a successful release (#489). Only notes git does not track are scratch.
+func CleanupPreparedNotes(workDir, version string) (bool, error) {
+	file := GetReleaseNotesFile(version)
+	if err := vcs.Git(workDir, "ls-files", "--error-unmatch", file).Run(); err == nil {
+		return false, nil
+	}
+	if err := os.Remove(filepath.Join(workDir, file)); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // SavePreparedVersion saves the target version to a file
