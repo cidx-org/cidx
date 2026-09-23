@@ -517,9 +517,9 @@ func (a *ReleaseAction) cleanupPreparedFiles(workDir, version string, hasNotes, 
 	}
 
 	if hasNotes && version != "" {
-		if err := CleanupPreparedNotes(workDir, version); err != nil {
+		if removed, err := CleanupPreparedNotes(workDir, version); err != nil {
 			log.Warnf("⚠️  Could not cleanup release notes: %v", err)
-		} else {
+		} else if removed {
 			log.Infof("🧹 Cleaned up %s", GetReleaseNotesFile(version))
 		}
 	}
