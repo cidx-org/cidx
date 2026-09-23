@@ -1,3 +1,9 @@
+## v3.4.3 (2026-09-23)
+
+### Fix
+
+- **release**: read the bumped version from its tag, author it as the releaser, and undo a failed bump (#485)
+
 ## v3.4.2 (2026-09-12)
 
 ### Fix
