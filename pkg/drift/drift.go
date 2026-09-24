@@ -6,9 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cidx-org/cidx/v3/pkg/config"
+	"github.com/cidx-org/cidx/v3/pkg/generate"
 	"gopkg.in/yaml.v3"
 )
 
@@ -43,6 +45,26 @@ type Result struct {
 	Pipeline string // pipeline the workflow implements ("" = every pipeline)
 	Phases   []PhaseDiff
 	Triggers []TriggerDiff
+
+	// Actions lists the generated actions the workflow runs at a major behind
+	// the one this cidx generates (#424). Only those: an action at the
+	// current major, pinned by SHA, or never generated is not drift.
+	Actions []ActionDiff
+}
+
+// MajorOf reads the major version of an action ref: "v6", "v6.1" and "v6.1.0"
+// all answer 6. Anything else — a SHA, a branch — is not a version.
+func MajorOf(ref string) (int, bool) {
+	digits, _, _ := strings.Cut(strings.TrimPrefix(ref, "v"), ".")
+	major, err := strconv.Atoi(digits)
+	return major, err == nil && strings.HasPrefix(ref, "v")
+}
+
+// ActionDiff is a generated action the workflow runs behind what cidx writes.
+type ActionDiff struct {
+	Action    string // "actions/checkout"
+	InCI      string // the ref the workflow uses, "v6"
+	Generated string // the version `cidx generate` writes today, "v7"
 }
 
 // HasDrift returns true if any differences were found.
@@ -57,7 +79,7 @@ func (r *Result) HasDrift() bool {
 			return true
 		}
 	}
-	return false
+	return len(r.Actions) > 0
 }
 
 // DiffCount returns the number of differences found.
@@ -73,7 +95,7 @@ func (r *Result) DiffCount() int {
 			n++
 		}
 	}
-	return n
+	return n + len(r.Actions)
 }
 
 // Compare analyzes drift between cidx.toml config and a GitHub Actions workflow file.
@@ -100,7 +122,34 @@ func CompareFromData(cfg *config.Config, workflowPath string, workflowData []byt
 		Pipeline: pipeline,
 		Phases:   comparePhases(expectedPhases(cfg, pipeline), workflow),
 		Triggers: compareTriggers(cfg, workflow),
+		Actions:  compareActions(workflow),
 	}, nil
+}
+
+// compareActions reports every generated action the workflow runs at an older
+// major than the generator writes. A ref that is not a version tag — a SHA a
+// project pinned on purpose, a branch — says nothing comparable and is left
+// alone; so is any action the generator does not write.
+func compareActions(workflow *githubWorkflow) []ActionDiff {
+	seen := map[string]bool{}
+	var behind []ActionDiff
+	for _, job := range workflow.Jobs {
+		for _, step := range job.Steps {
+			action, ref, ok := strings.Cut(step.Uses, "@")
+			generated, known := generate.ActionVersions[action]
+			if !ok || !known || seen[step.Uses] {
+				continue
+			}
+			seen[step.Uses] = true
+			current, isVersion := MajorOf(ref)
+			target, _ := MajorOf(generated)
+			if isVersion && current < target {
+				behind = append(behind, ActionDiff{Action: action, InCI: ref, Generated: generated})
+			}
+		}
+	}
+	sort.Slice(behind, func(i, j int) bool { return behind[i].Action+behind[i].InCI < behind[j].Action+behind[j].InCI })
+	return behind
 }
 
 // pipelineFor returns the name of the pipeline a workflow file implements, or
@@ -160,8 +209,13 @@ type triggerConfig struct {
 }
 
 type workflowJob struct {
-	Name  string   `yaml:"name"`
-	Needs []string `yaml:"needs"`
+	Name  string         `yaml:"name"`
+	Needs []string       `yaml:"needs"`
+	Steps []workflowStep `yaml:"steps"`
+}
+
+type workflowStep struct {
+	Uses string `yaml:"uses"`
 }
 
 // Custom unmarshaler for workflowTriggers to handle both map and string forms.
@@ -327,6 +381,16 @@ func Format(result *Result) string {
 		ci := icon(t.CI)
 		status := formatStatus(Status(t.Status))
 		fmt.Fprintf(&b, "  %-18s %-10s %-10s %s\n", t.Event, cidx, ci, status)
+	}
+
+	// Only when something has aged: a table of matches for every action
+	// would be noise on every run.
+	if len(result.Actions) > 0 {
+		b.WriteString("\nActions behind what cidx generates:\n")
+		for _, a := range result.Actions {
+			fmt.Fprintf(&b, "  \033[33m⚠ %s@%s\033[0m → %s@%s\n", a.Action, a.InCI, a.Action, a.Generated)
+		}
+		fmt.Fprintf(&b, "  Regenerate the workflow to update them: cidx generate github --force -o %s\n", result.Workflow)
 	}
 
 	return b.String()

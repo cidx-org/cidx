@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/cidx-org/cidx/v3/pkg/drift"
+	"github.com/cidx-org/cidx/v3/pkg/generate"
 	"github.com/cidx-org/cidx/v3/pkg/remote"
 	"github.com/cucumber/godog"
 )
@@ -21,6 +22,8 @@ func RegisterDriftSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Given(`^the GitHub Actions workflow triggers on "([^"]*)"$`, tc.ciWorkflowTriggersOn)
 	ctx.Given(`^the GitHub Actions workflow does NOT trigger on "([^"]*)"$`, tc.ciWorkflowDoesNotTriggerOn)
 	ctx.Given(`^cidx\.toml and CI workflow are in sync$`, tc.cidxAndCIInSync)
+	ctx.Given(`^the GitHub Actions workflow uses "([^"]*)" one major behind what cidx generates$`, tc.ciWorkflowUsesActionBehind)
+	ctx.Given(`^the GitHub Actions workflow uses "([^"]*)" at the version cidx generates$`, tc.ciWorkflowUsesActionCurrent)
 	ctx.Given(`^cidx\.toml and CI workflow have differences$`, tc.cidxAndCIHaveDifferences)
 
 	ctx.Then(`^I should see a phases table$`, tc.shouldSeePhasesTable)
@@ -139,6 +142,12 @@ func (tc *TestContext) writeStagedWorkflow() error {
 
 	b.WriteString("\njobs:\n")
 	b.WriteString("  bootstrap:\n    name: Bootstrap\n    runs-on: ubuntu-latest\n")
+	if steps, _ := tc.Config["ci_steps"].([]string); len(steps) > 0 {
+		b.WriteString("    steps:\n")
+		for _, step := range steps {
+			fmt.Fprintf(&b, "      - uses: %s\n", step)
+		}
+	}
 	jobs, _ := tc.Config["ci_jobs"].([]string)
 	for _, job := range jobs {
 		fmt.Fprintf(&b, "  %s:\n    name: %s\n    runs-on: ubuntu-latest\n    needs: [bootstrap]\n", job, job)
@@ -288,4 +297,26 @@ func triggerEvents(result *drift.Result) string {
 		events = append(events, trigger.Event)
 	}
 	return strings.Join(events, ", ")
+}
+
+// ciWorkflowUsesActionBehind stages a step on the given action one major below
+// the version the generator writes, read from the generator's own table so the
+// scenario does not need editing every time that table moves (#424).
+func (tc *TestContext) ciWorkflowUsesActionBehind(action string) error {
+	return tc.stageActionStep(action, -1)
+}
+
+func (tc *TestContext) ciWorkflowUsesActionCurrent(action string) error {
+	return tc.stageActionStep(action, 0)
+}
+
+func (tc *TestContext) stageActionStep(action string, offset int) error {
+	generated, known := generate.ActionVersions[action]
+	if !known {
+		return fmt.Errorf("the generator writes no %s", action)
+	}
+	major, _ := drift.MajorOf(generated)
+	steps, _ := tc.Config["ci_steps"].([]string)
+	tc.Config["ci_steps"] = append(steps, fmt.Sprintf("%s@v%d", action, major+offset))
+	return nil
 }

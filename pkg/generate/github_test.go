@@ -537,7 +537,7 @@ func TestGitHub_Hardening(t *testing.T) {
 	}
 
 	// Every checkout (bootstrap + one per phase) drops the token.
-	checkouts := strings.Count(output, "uses: actions/checkout@v6")
+	checkouts := strings.Count(output, "uses: "+uses("actions/checkout"))
 	if checkouts != 5 {
 		t.Fatalf("expected 5 checkout steps (bootstrap + 4 phases), got %d", checkouts)
 	}
