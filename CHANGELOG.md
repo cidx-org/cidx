@@ -1,3 +1,9 @@
+## v3.4.5 (2026-09-24)
+
+### Fix
+
+- **drift**: report a project's own jobs instead of counting them as drift (#494)
+
 ## v3.4.4 (2026-09-24)
 
 ### Fix
