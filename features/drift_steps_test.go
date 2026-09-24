@@ -22,6 +22,7 @@ func RegisterDriftSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Given(`^the GitHub Actions workflow triggers on "([^"]*)"$`, tc.ciWorkflowTriggersOn)
 	ctx.Given(`^the GitHub Actions workflow does NOT trigger on "([^"]*)"$`, tc.ciWorkflowDoesNotTriggerOn)
 	ctx.Given(`^cidx\.toml and CI workflow are in sync$`, tc.cidxAndCIInSync)
+	ctx.Given(`^the GitHub Actions workflow also has the job "([^"]*)"$`, tc.ciWorkflowAlsoHasJob)
 	ctx.Given(`^the GitHub Actions workflow uses "([^"]*)" one major behind what cidx generates$`, tc.ciWorkflowUsesActionBehind)
 	ctx.Given(`^the GitHub Actions workflow uses "([^"]*)" at the version cidx generates$`, tc.ciWorkflowUsesActionCurrent)
 	ctx.Given(`^cidx\.toml and CI workflow have differences$`, tc.cidxAndCIHaveDifferences)
@@ -318,5 +319,11 @@ func (tc *TestContext) stageActionStep(action string, offset int) error {
 	major, _ := drift.MajorOf(generated)
 	steps, _ := tc.Config["ci_steps"].([]string)
 	tc.Config["ci_steps"] = append(steps, fmt.Sprintf("%s@v%d", action, major+offset))
+	return nil
+}
+
+func (tc *TestContext) ciWorkflowAlsoHasJob(job string) error {
+	jobs, _ := tc.Config["ci_jobs"].([]string)
+	tc.Config["ci_jobs"] = append(jobs, job)
 	return nil
 }

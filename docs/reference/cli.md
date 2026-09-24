@@ -381,8 +381,8 @@ cidx check drift
 
 It reports, and exits 1 on any of them:
 
-- **Phases** declared in the pipeline but missing from the workflow, or jobs in
-  the workflow no phase declares;
+- **Phases** declared in the pipeline but missing from the workflow, or a job
+  named like a phase the pipeline does not declare;
 - **Triggers** the pipeline name implies (`ci` → push, `pr` → pull_request)
   that the workflow does not have;
 - **Actions behind what cidx generates**: a generated action (`actions/checkout`,
@@ -392,6 +392,10 @@ It reports, and exits 1 on any of them:
   Dependabot bump to it is reverted by the next `cidx generate --force` — so the
   fix is to regenerate it, and the report names the command (issue #424). A ref
   that is not a version tag (a SHA pinned on purpose, a branch) is left alone.
+
+A job whose name is no phase at all — a scan or check the project runs on its
+own — is listed under **Jobs not managed by cidx** and never counted: cidx
+adapts to the project, and such a job drifts from nothing.
 
 ### `cidx check workflow`
 
