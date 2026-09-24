@@ -64,3 +64,25 @@ Feature: CI Drift Detection
       When I run "cidx check drift"
       Then I should see the number of differences
       And the exit code should be 1
+
+  Rule: Drift detection reports generated actions that have aged (#424)
+
+    # The generated workflow is the one file a project cannot fix itself: a
+    # Dependabot bump to it is reverted by the next `cidx generate --force`,
+    # and Dependabot reopens it. So cidx says when the actions it wrote are a
+    # major behind the ones it writes today — the fix is one regeneration away.
+
+    Scenario: A generated action a major behind is reported
+      Given cidx.toml and CI workflow are in sync
+      And the GitHub Actions workflow uses "actions/checkout" one major behind what cidx generates
+      When I run "cidx check drift"
+      Then I should see "actions/checkout"
+      And I should see "cidx generate"
+      And the exit code should be 1
+
+    Scenario: A generated action at the version cidx generates is not drift
+      Given cidx.toml and CI workflow are in sync
+      And the GitHub Actions workflow uses "actions/checkout" at the version cidx generates
+      When I run "cidx check drift"
+      Then I should see "No drift detected"
+      And the exit code should be 0

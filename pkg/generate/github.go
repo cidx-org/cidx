@@ -199,11 +199,11 @@ func writeBootstrapJob(b *strings.Builder, selfBuild bool) {
 	b.WriteString("    name: Bootstrap\n")
 	b.WriteString("    runs-on: ubuntu-latest\n")
 	b.WriteString("    steps:\n")
-	b.WriteString("      - uses: actions/checkout@v6\n")
+	b.WriteString("      - uses: " + uses("actions/checkout") + "\n")
 	b.WriteString("        with:\n")
 	b.WriteString("          fetch-depth: 0\n")
 	b.WriteString("          persist-credentials: false\n")
-	b.WriteString("      - uses: actions/setup-go@v6\n")
+	b.WriteString("      - uses: " + uses("actions/setup-go") + "\n")
 	b.WriteString("        with:\n")
 	fmt.Fprintf(b, "          go-version: %q\n", bootstrapGoVersion)
 	b.WriteString("          cache: true\n")
@@ -217,11 +217,31 @@ func writeBootstrapJob(b *strings.Builder, selfBuild bool) {
 		fmt.Fprintf(b, "          go install %s/cmd/cidx@%s\n", cidxModulePath, BootstrapVersion())
 		b.WriteString("          cp \"$(go env GOPATH)/bin/cidx\" bin/cidx\n")
 	}
-	b.WriteString("      - uses: actions/upload-artifact@v7\n")
+	b.WriteString("      - uses: " + uses("actions/upload-artifact") + "\n")
 	b.WriteString("        with:\n")
 	b.WriteString("          name: cidx-binary\n")
 	b.WriteString("          path: bin/cidx\n")
 	b.WriteString("          retention-days: 1\n\n")
+}
+
+// ActionVersions is the major version of every action the generated workflow
+// uses — one table, because two readers need it: the generator writes these,
+// and `cidx check drift` reports a project workflow whose actions have fallen
+// behind them (#424). The generated file is the one a project cannot keep
+// current itself: a Dependabot bump to it is reverted by the next
+// `cidx generate --force`. TestGeneratedActionsTrackThisRepositorysWorkflows
+// keeps the table level with this repository's own workflows, which
+// Dependabot does keep current.
+var ActionVersions = map[string]string{
+	"actions/checkout":          "v7",
+	"actions/setup-go":          "v7",
+	"actions/upload-artifact":   "v7",
+	"actions/download-artifact": "v8",
+}
+
+// uses renders an action reference at the version the generator emits.
+func uses(action string) string {
+	return action + "@" + ActionVersions[action]
 }
 
 // IsCidxRepo reports whether dir is the cidx repository itself.
@@ -260,7 +280,7 @@ func writePhaseJob(b *strings.Builder, phase string) {
 	b.WriteString("    runs-on: ubuntu-latest\n")
 	b.WriteString("    needs: [bootstrap]\n")
 	b.WriteString("    steps:\n")
-	b.WriteString("      - uses: actions/checkout@v6\n")
+	b.WriteString("      - uses: " + uses("actions/checkout") + "\n")
 	b.WriteString("        with:\n")
 
 	// Some phases need full history
@@ -272,7 +292,7 @@ func writePhaseJob(b *strings.Builder, phase string) {
 	// images against the workspace — don't leave the token in .git/config (#207).
 	b.WriteString("          persist-credentials: false\n")
 
-	b.WriteString("      - uses: actions/download-artifact@v8\n")
+	b.WriteString("      - uses: " + uses("actions/download-artifact") + "\n")
 	b.WriteString("        with:\n")
 	b.WriteString("          name: cidx-binary\n")
 	b.WriteString("          path: bin\n")

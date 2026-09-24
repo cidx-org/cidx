@@ -371,6 +371,28 @@ The `id` column is the identifier `workflow watch`, `workflow rerun` and `artifa
 
 ---
 
+### `cidx check drift`
+
+Compare `cidx.toml` with the GitHub Actions workflow that implements it.
+
+```bash
+cidx check drift
+```
+
+It reports, and exits 1 on any of them:
+
+- **Phases** declared in the pipeline but missing from the workflow, or jobs in
+  the workflow no phase declares;
+- **Triggers** the pipeline name implies (`ci` → push, `pr` → pull_request)
+  that the workflow does not have;
+- **Actions behind what cidx generates**: a generated action (`actions/checkout`,
+  `actions/setup-go`, `actions/upload-artifact`, `actions/download-artifact`)
+  pinned at an older major than the one `cidx generate` writes today. The
+  generated workflow is the one file a project cannot keep current itself — a
+  Dependabot bump to it is reverted by the next `cidx generate --force` — so the
+  fix is to regenerate it, and the report names the command (issue #424). A ref
+  that is not a version tag (a SHA pinned on purpose, a branch) is left alone.
+
 ### `cidx check workflow`
 
 Validate that cidx.toml pipelines match GitHub Actions workflows.
