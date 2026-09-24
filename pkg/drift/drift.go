@@ -11,6 +11,7 @@ import (
 
 	"github.com/cidx-org/cidx/v3/pkg/config"
 	"github.com/cidx-org/cidx/v3/pkg/generate"
+	"github.com/cidx-org/cidx/v3/pkg/presets"
 	"gopkg.in/yaml.v3"
 )
 
@@ -50,6 +51,11 @@ type Result struct {
 	// the one this cidx generates (#424). Only those: an action at the
 	// current major, pinned by SHA, or never generated is not drift.
 	Actions []ActionDiff
+
+	// Unmanaged names the workflow's jobs that are no phase at all — the
+	// project's own work. They are reported so they are seen, and never
+	// counted as drift: cidx adapts to the project (guardrail 1).
+	Unmanaged []string
 }
 
 // MajorOf reads the major version of an action ref: "v6", "v6.1" and "v6.1.0"
@@ -117,12 +123,14 @@ func CompareFromData(cfg *config.Config, workflowPath string, workflowData []byt
 	}
 
 	pipeline := pipelineFor(cfg, workflowPath)
+	phases, unmanaged := comparePhases(expectedPhases(cfg, pipeline), knownPhases(cfg), workflow)
 	return &Result{
-		Workflow: workflowPath,
-		Pipeline: pipeline,
-		Phases:   comparePhases(expectedPhases(cfg, pipeline), workflow),
-		Triggers: compareTriggers(cfg, workflow),
-		Actions:  compareActions(workflow),
+		Workflow:  workflowPath,
+		Pipeline:  pipeline,
+		Unmanaged: unmanaged,
+		Phases:    phases,
+		Triggers:  compareTriggers(cfg, workflow),
+		Actions:   compareActions(workflow),
 	}, nil
 }
 
@@ -237,15 +245,44 @@ func parseGitHubWorkflowData(data []byte) (*githubWorkflow, error) {
 }
 
 // comparePhases compares the phases expected from cidx.toml with workflow jobs.
-func comparePhases(cidxPhases map[string]bool, workflow *githubWorkflow) []PhaseDiff {
-	// Collect CI job names (exclude infrastructure jobs like bootstrap)
-	ciJobs := make(map[string]bool)
-	infraJobs := map[string]bool{"bootstrap": true}
-	for name := range workflow.Jobs {
-		if !infraJobs[name] {
-			ciJobs[name] = true
+// knownPhases is every name that denotes a phase: the phases the built-in and
+// project presets run in, and every phase cidx.toml declares or a pipeline
+// lists. A job named like one of these and not expected is drift; any other
+// job is the project's own.
+func knownPhases(cfg *config.Config) map[string]bool {
+	known := map[string]bool{}
+	for _, name := range presets.List() {
+		if p, err := presets.Get(name); err == nil {
+			known[p.Phase] = true
 		}
 	}
+	for name := range cfg.Phases {
+		known[name] = true
+	}
+	for _, p := range cfg.Pipelines {
+		for _, phase := range p.Phases {
+			known[phase] = true
+		}
+	}
+	return known
+}
+
+func comparePhases(cidxPhases, known map[string]bool, workflow *githubWorkflow) ([]PhaseDiff, []string) {
+	// Collect CI job names (exclude infrastructure jobs like bootstrap). A job
+	// that names no phase is the project's own and set aside, not compared.
+	ciJobs := make(map[string]bool)
+	infraJobs := map[string]bool{"bootstrap": true}
+	var unmanaged []string
+	for name := range workflow.Jobs {
+		switch {
+		case infraJobs[name]:
+		case known[name] || cidxPhases[name]:
+			ciJobs[name] = true
+		default:
+			unmanaged = append(unmanaged, name)
+		}
+	}
+	sort.Strings(unmanaged)
 
 	// Build diff list
 	allNames := make(map[string]bool)
@@ -281,7 +318,7 @@ func comparePhases(cidxPhases map[string]bool, workflow *githubWorkflow) []Phase
 		diffs = append(diffs, diff)
 	}
 
-	return diffs
+	return diffs, unmanaged
 }
 
 // compareTriggers compares expected triggers from pipeline names with actual workflow triggers.
@@ -381,6 +418,13 @@ func Format(result *Result) string {
 		ci := icon(t.CI)
 		status := formatStatus(Status(t.Status))
 		fmt.Fprintf(&b, "  %-18s %-10s %-10s %s\n", t.Event, cidx, ci, status)
+	}
+
+	if len(result.Unmanaged) > 0 {
+		b.WriteString("\nJobs not managed by cidx (not compared):\n")
+		for _, job := range result.Unmanaged {
+			fmt.Fprintf(&b, "  %s\n", job)
+		}
 	}
 
 	// Only when something has aged: a table of matches for every action

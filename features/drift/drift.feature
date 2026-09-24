@@ -37,6 +37,20 @@ Feature: CI Drift Detection
       Then all phases should show "match"
       And the exit code should be 0
 
+    # A job whose name is no phase is the project's own work — a scan the
+    # repository runs, a promotion check — and cidx adapts to the project
+    # (guardrail 1). It drifts from nothing, so it is named, not counted. A job
+    # named like a phase the pipeline does not declare is still drift: that is
+    # the "extra in CI" above.
+
+    Scenario: A job that is not a phase is the project's own
+      Given cidx.toml and CI workflow are in sync
+      And the GitHub Actions workflow also has the job "container-promotion"
+      When I run "cidx check drift"
+      Then I should see "container-promotion"
+      And I should see "No drift detected"
+      And the exit code should be 0
+
   Rule: Drift detection compares triggers
 
     Scenario: Triggers match
