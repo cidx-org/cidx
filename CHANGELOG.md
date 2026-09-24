@@ -1,3 +1,10 @@
+## v3.4.4 (2026-09-24)
+
+### Fix
+
+- **generate**: keep emitted action versions current, and report ageing ones as drift (#491)
+- **release**: keep cidx plumbing out of the notes and the committed notes in the tree (#490)
+
 ## v3.4.3 (2026-09-23)
 
 ### Fix
