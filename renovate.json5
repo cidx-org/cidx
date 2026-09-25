@@ -21,13 +21,19 @@
   prCreation: "not-pending",
   internalChecksFilter: "strict",
 
-  // presets.toml is a cidx catalogue, not a Docker-native manifest. Capturing
+  // presets.toml is a cidx catalogue, not a Docker-native manifest; cidx.toml
+  // and the complete example carry the release action's commitizen image in the
+  // same `image = "repo:tag@sha256:..."` form, so one pattern covers all three. Capturing
   // both fields lets Renovate update the readable tag and its immutable digest
   // together; CI rejects a candidate if either one disappears.
   customManagers: [
     {
       customType: "regex",
-      managerFilePatterns: ["/^pkg\\/presets\\/presets\\.toml$/"],
+      managerFilePatterns: [
+        "/^pkg\\/presets\\/presets\\.toml$/",
+        "/^cidx\\.toml$/",
+        "/^examples\\/cidx-complete\\.toml$/",
+      ],
       matchStrings: [
         'image\\s*=\\s*"(?<depName>[^"\\s]+):(?<currentValue>[^@"\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})"',
       ],
@@ -40,7 +46,11 @@
     {
       description: "Let every container release age before proposing it",
       matchDatasources: ["docker"],
-      matchFileNames: ["pkg/presets/presets.toml"],
+      matchFileNames: [
+        "pkg/presets/presets.toml",
+        "cidx.toml",
+        "examples/cidx-complete.toml",
+      ],
       minimumReleaseAge: "14 days",
       minimumReleaseAgeBehaviour: "timestamp-required",
       pinDigests: true,

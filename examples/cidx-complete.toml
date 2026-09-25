@@ -509,7 +509,9 @@ description = "Local validation before pushing"
 description = "Create new release with version bump"  # Action description
 
 # Container configuration for commitizen
-image = "commitizen/commitizen:latest"  # Docker image with commitizen tool
+# Pin by digest (image:tag@sha256:...), like the catalogue does: a mutable tag
+# runs whatever was last pushed to it, with your repository mounted.
+image = "commitizen/commitizen:4.16.5@sha256:451d0150ed7804c51cf201b2e9bd3f351867badbb7dc98f195cad740fdeaabaa"
 command = "bump --yes --no-verify"      # Auto-approve bump, skip git hooks
 workdir = "/app"                        # Working directory in container
 
@@ -530,7 +532,6 @@ watch_workflow = true  # Watch GitHub Actions workflow execution after the tag p
 # `user.email` as GIT_AUTHOR_* / GIT_COMMITTER_*. Declare those keys below only
 # to author the bump as someone else (a release bot).
 [actions.release-create.env]
-GIT_CONFIG_GLOBAL = "/tmp/.gitconfig"  # Custom git config location
 GIT_CONFIG_COUNT = "1"                 # Number of git config entries
 GIT_CONFIG_KEY_0 = "safe.directory"    # Config key: mark directory as safe
 GIT_CONFIG_VALUE_0 = "/app"            # Config value: allow access to /app

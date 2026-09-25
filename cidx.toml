@@ -110,7 +110,9 @@ workflow = "none"
 # ─── release-create action (commitizen version bump, routed through a PR) ───
 [actions.release-create]
 description = "Create new release with version bump"
-image = "commitizen/commitizen:latest"
+# Pinned by digest like every catalogue image (rule 1); Renovate moves it
+# together with the commitizen preset, under the same cooldown.
+image = "commitizen/commitizen:4.16.5@sha256:451d0150ed7804c51cf201b2e9bd3f351867badbb7dc98f195cad740fdeaabaa"
 command = "bump --yes --no-verify"
 workdir = "/app"
 volumes = [
@@ -120,7 +122,6 @@ volumes = [
 watch_workflow = true
 
 [actions.release-create.env]
-GIT_CONFIG_GLOBAL = "/tmp/.gitconfig"
 GIT_CONFIG_COUNT = "1"
 GIT_CONFIG_KEY_0 = "safe.directory"
 GIT_CONFIG_VALUE_0 = "/app"
