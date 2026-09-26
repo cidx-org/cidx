@@ -9,6 +9,7 @@ import (
 	"github.com/cidx-org/cidx/v3/pkg/config"
 	"github.com/cidx-org/cidx/v3/pkg/executor"
 	"github.com/cidx-org/cidx/v3/pkg/remote"
+	"github.com/cidx-org/cidx/v3/pkg/semver"
 	"github.com/cidx-org/cidx/v3/pkg/vcs"
 	log "github.com/sirupsen/logrus"
 )
@@ -403,15 +404,25 @@ func releaseBranchInFlight(workDir string) string {
 		log.Debugf("could not list remote release branches: %v", err)
 		return ""
 	}
+	return ReleaseBranchInFlight(string(output))
+}
 
+// ReleaseBranchInFlight picks the release branch out of `git ls-remote --heads`
+// output: releaseBranchPrefix followed by a version tag, the only shape
+// release create names its branches. `pr create "chore(release): …"` shares
+// the prefix — chore/release-<slug> — and such an ordinary PR must not read as
+// a release in flight and block the next one (#498).
+func ReleaseBranchInFlight(lsRemote string) string {
 	const refPrefix = "refs/heads/"
-	for _, line := range strings.Split(string(output), "\n") {
+	for _, line := range strings.Split(lsRemote, "\n") {
 		_, ref, found := strings.Cut(strings.TrimSpace(line), refPrefix)
-		if found && ref != "" {
+		if !found {
+			continue
+		}
+		if tag := strings.TrimPrefix(ref, releaseBranchPrefix); strings.HasPrefix(tag, "v") && semver.IsValid(semver.Trim(tag)) {
 			return ref
 		}
 	}
-
 	return ""
 }
 
