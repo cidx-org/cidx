@@ -14,7 +14,10 @@
     "dhi.io/trivy",
   ],
   dependencyDashboard: true,
-  schedule: ["before 9am on Monday"],
+  // The whole day, not a morning window: the hosted app does not run on a
+  // clock, and an update whose branch was ready at 05:39 waited from 14 to
+  // 26 September for a run to land in a nine-hour slot to open its PR.
+  schedule: ["on Monday"],
   timezone: "Europe/Paris",
   labels: ["dependencies", "containers"],
   prConcurrentLimit: 5,
