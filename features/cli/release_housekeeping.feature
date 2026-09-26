@@ -34,3 +34,19 @@ Feature: Release housekeeping
       Given a repository whose release notes for "3.4.3" were prepared but not committed
       When the prepared release files are cleaned up
       Then the release notes for "3.4.3" no longer exist
+
+  Rule: Only a branch release create made is a release in flight (#498)
+
+    # `pr create "chore(release): …"` names its branch chore/release-<slug>,
+    # the same prefix release create uses for chore/release-v<version>. An
+    # ordinary PR like that must not block the next release.
+
+    Scenario: A release branch on the remote is a release in flight
+      Given the remote has the branch "chore/release-v3.4.6"
+      When the release in flight is looked up
+      Then the release in flight is "chore/release-v3.4.6"
+
+    Scenario: A chore(release) PR branch is not a release in flight
+      Given the remote has the branch "chore/release-pin-the-commitizen-action-image"
+      When the release in flight is looked up
+      Then no release is in flight

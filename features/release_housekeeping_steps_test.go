@@ -24,6 +24,11 @@ func RegisterReleaseHousekeepingSteps(ctx *godog.ScenarioContext, tc *TestContex
 	ctx.When(`^the prepared release files are cleaned up$`, tc.preparedReleaseFilesCleanedUp)
 	ctx.Then(`^the release notes for "([^"]*)" still exist$`, tc.releaseNotesStillExist)
 	ctx.Then(`^the release notes for "([^"]*)" no longer exist$`, tc.releaseNotesNoLongerExist)
+
+	ctx.Given(`^the remote has the branch "([^"]*)"$`, tc.remoteHasBranch)
+	ctx.When(`^the release in flight is looked up$`, tc.releaseInFlightLookedUp)
+	ctx.Then(`^the release in flight is "([^"]*)"$`, tc.releaseInFlightIs)
+	ctx.Then(`^no release is in flight$`, tc.noReleaseInFlight)
 }
 
 func (tc *TestContext) commitLogWithInitCommit(subject string) error {
@@ -113,6 +118,31 @@ func (tc *TestContext) releaseNotesStillExist(version string) error {
 func (tc *TestContext) releaseNotesNoLongerExist(version string) error {
 	if tc.notesExist(version) {
 		return fmt.Errorf("the release notes for %s are still there", version)
+	}
+	return nil
+}
+
+// remoteHasBranch stages one line of `git ls-remote --heads origin` output.
+func (tc *TestContext) remoteHasBranch(branch string) error {
+	tc.Output += "0123456789abcdef0123456789abcdef01234567\trefs/heads/" + branch + "\n"
+	return nil
+}
+
+func (tc *TestContext) releaseInFlightLookedUp() error {
+	tc.Config["in_flight"] = actions.ReleaseBranchInFlight(tc.Output)
+	return nil
+}
+
+func (tc *TestContext) releaseInFlightIs(want string) error {
+	if got, _ := tc.Config["in_flight"].(string); got != want {
+		return fmt.Errorf("release in flight %q, want %q", got, want)
+	}
+	return nil
+}
+
+func (tc *TestContext) noReleaseInFlight() error {
+	if got, _ := tc.Config["in_flight"].(string); got != "" {
+		return fmt.Errorf("%q was taken for a release in flight", got)
 	}
 	return nil
 }
