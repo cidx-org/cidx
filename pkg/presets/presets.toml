@@ -46,7 +46,7 @@
 [presets.prettier]
 name = "prettier"
 phase = "code"
-image = "jauderho/prettier:3.9.4@sha256:b233d9c847048561850a1a107e35318b28361cd9a850eac7edcd5d8bfd82cea2"
+image = "jauderho/prettier:3.9.6@sha256:1f229f6fa4ea9397b19bb8a4809232c76b6e9e7b99ad04ebc712aee8081f6906"
 image_entrypoint = ["prettier"]
 command = "--check ."
 workdir = "/work"
