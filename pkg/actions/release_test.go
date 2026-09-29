@@ -51,7 +51,7 @@ func (f *releaseFakeProvider) GetPullRequestByBranch(_ context.Context, branch s
 // gitRecorder replaces the runGit seam and records the plumbing issued.
 type gitRecorder struct {
 	calls  [][]string
-	output map[string]string // first arg -> canned stdout
+	output map[string]string // "full command line", else first arg -> canned stdout
 	fail   map[string]error  // first arg -> canned failure
 }
 
@@ -62,6 +62,9 @@ func (g *gitRecorder) install(t *testing.T) {
 		g.calls = append(g.calls, args)
 		if err, ok := g.fail[args[0]]; ok {
 			return nil, err
+		}
+		if out, ok := g.output[strings.Join(args, " ")]; ok {
+			return []byte(out), nil
 		}
 		return []byte(g.output[args[0]]), nil
 	}
@@ -101,8 +104,17 @@ func stubMerge(t *testing.T, err error) *bool {
 	return &called
 }
 
+// mergedCheckout is what the post-merge checkout looks like when `pr merge`
+// did its job: on the base branch, on a commit other than where it started.
+func mergedCheckout() map[string]string {
+	return map[string]string{
+		"rev-parse --abbrev-ref HEAD": "main\n",
+		"rev-parse HEAD":              "merged111sha\n",
+	}
+}
+
 func TestReleaseViaPR_HappyPath(t *testing.T) {
-	git := &gitRecorder{}
+	git := &gitRecorder{output: mergedCheckout()}
 	git.install(t)
 	merged := stubMerge(t, nil)
 
@@ -163,6 +175,33 @@ func TestReleaseViaPR_HappyPath(t *testing.T) {
 	}
 	if !strings.HasPrefix(pr.title, "chore(release): bump version to v2.1.4") {
 		t.Errorf("expected a conventional release PR title, got %q", pr.title)
+	}
+}
+
+// TestReleaseViaPR_UnpulledMergeIsNotTagged is v3.5.0 (#510): the merge went
+// through, the post-merge pull failed, and HEAD was still the commit the release
+// started from. The old flow tagged it — the notes commit, one before the bump.
+func TestReleaseViaPR_UnpulledMergeIsNotTagged(t *testing.T) {
+	git := &gitRecorder{output: map[string]string{
+		"rev-parse --abbrev-ref HEAD": "main\n",
+		"rev-parse HEAD":              "base000sha\n", // the pull never happened
+	}}
+	git.install(t)
+	stubMerge(t, nil)
+
+	action := &ReleaseAction{provider: &releaseFakeProvider{}}
+	err := action.releaseViaPR(context.Background(), "/repo", "main", "base000sha", "2.1.4")
+	if err == nil {
+		t.Fatal("expected a refusal to tag a commit that is not the merged one")
+	}
+	if !strings.Contains(err.Error(), "nothing was tagged") {
+		t.Errorf("the error should say nothing was tagged, got %q", err)
+	}
+	if git.ran("tag", "-a", "v2.1.4") {
+		t.Error("a tag was created on a commit that is not the merged one")
+	}
+	if git.ran("push", "origin", "v2.1.4") {
+		t.Error("a tag was pushed")
 	}
 }
 

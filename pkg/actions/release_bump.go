@@ -119,3 +119,43 @@ func UndoBump(workDir, baseSHA string) error {
 	}
 	return nil
 }
+
+// VerifyTaggable refuses to tag unless HEAD is the merged release commit (#510).
+//
+// releaseViaPR tags HEAD after the squash-merge, on the assumption that
+// `pr merge` left the checkout on the base branch with the merge pulled. When
+// the pull failed on a network blip that was false: HEAD was still the commit
+// the release started from, and the tag went onto the notes commit, one before
+// the bump. Only the tag push failing for the same reason kept it from shipping.
+//
+// The check needs no network. After a pulled merge, HEAD is on the base
+// branch, has moved off baseSHA, and descends from it — a checkout left on the
+// release branch also descends, so the branch is checked too (that tag would sit
+// on the pre-squash commit, the mistake #184 fixed).
+func VerifyTaggable(workDir, baseBranch, baseSHA string) error {
+	branch, err := runGit(workDir, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return fmt.Errorf("failed to read the current branch: %w\n%s", err, branch)
+	}
+	if got := strings.TrimSpace(string(branch)); got != baseBranch {
+		return fmt.Errorf("HEAD is on '%s', not '%s': the merged release commit is on '%s'.\n"+
+			"   Nothing was tagged. To finish: git checkout %s && git pull, then cidx release tag prepare && cidx release tag create",
+			got, baseBranch, baseBranch, baseBranch)
+	}
+
+	head, err := runGit(workDir, "rev-parse", "HEAD")
+	if err != nil {
+		return fmt.Errorf("failed to read HEAD: %w\n%s", err, head)
+	}
+	if strings.TrimSpace(string(head)) == baseSHA {
+		return fmt.Errorf("the release PR was merged, but '%s' has not pulled it: HEAD is still %s, where the release started.\n"+
+			"   Nothing was tagged. To finish: git pull, then cidx release tag prepare && cidx release tag create",
+			baseBranch, shortSHA(baseSHA))
+	}
+	if out, err := runGit(workDir, "merge-base", "--is-ancestor", baseSHA, "HEAD"); err != nil {
+		return fmt.Errorf("HEAD does not descend from %s, where the release started: it is not the merged release commit.\n%s\n"+
+			"   Nothing was tagged. To finish: git checkout %s && git pull, then cidx release tag prepare && cidx release tag create",
+			shortSHA(baseSHA), strings.TrimSpace(string(out)), baseBranch)
+	}
+	return nil
+}
