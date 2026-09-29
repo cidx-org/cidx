@@ -115,6 +115,40 @@ The GitHub workflow has a `bootstrap` job that installs cidx once, then one job
 per phase that runs `cidx run <phase>` in parallel. Pipeline names pick the
 triggers: `ci`/`main` → push to main, `pr` → pull requests, `release` → `v*` tags.
 
+**Caching a phase's build output** is opt-in and per phase. A Rust build
+compiled every dependency from scratch on every job and every push (21 minutes
+cold, 6 warm), because `target/` lands in the workspace on the runner and was
+discarded with it. Declare what a phase should keep, and which files decide when
+that is stale:
+
+```toml
+[build]
+containers = ["cargo-build"]
+cache = ["target"]              # paths relative to the workspace
+cache_key = ["**/Cargo.lock"]   # files whose content keys the cache
+```
+
+The phase job then gets an `actions/cache` step before it runs, keyed on the OS,
+the phase and the hash of those files, with the previous cache of that phase as
+fallback — so a dependency bump recompiles what changed, not everything. The key
+is per phase because debug artefacts (`test`, `clippy`) and release ones
+(`build`) differ and would keep evicting each other. `cache_key` is required:
+cidx does not guess a language's lockfile, and a cache keyed on nothing is never
+invalidated. Paths must stay inside the workspace, and `cidx validate` and
+`cidx generate` both refuse a declaration that does not.
+
+The cargo registry lives in the image (`/usr/local/cargo`), not the workspace. It
+is seconds of download against minutes of compilation, so it is left alone; to
+cache it too, point cargo into the workspace and list the directory:
+
+```toml
+[containers.cargo-build.env]
+CARGO_HOME = "/work/.cargo-home"
+```
+
+That writes `.cargo-home/` into the workspace on local runs as well, which is why
+no preset does it for you.
+
 **Superseded pull request runs are cancelled.** The workflow's `concurrency`
 group is the pull request number, so pushing twice to a PR branch cancels the
 older run instead of running two pipelines side by side. A run that is not a

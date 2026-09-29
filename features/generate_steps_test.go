@@ -28,6 +28,14 @@ func RegisterGenerateSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Then(`^jobs (.+) should NOT depend on each other$`, tc.jobsShouldNotDependOnEachOther)
 	ctx.Then(`^"([^"]*)" pipeline should trigger on "([^"]*)"$`, tc.pipelineShouldTriggerOn)
 	ctx.Then(`^"([^"]*)" pipeline should trigger on "([^"]*)" to "([^"]*)" branch$`, tc.pipelineShouldTriggerOnBranch)
+	ctx.Given(`^the "([^"]*)" phase caches "([^"]*)" keyed on "([^"]*)"$`, tc.phaseCachesKeyedOn)
+	ctx.Given(`^the "([^"]*)" phase caches "([^"]*)" keyed on nothing$`, tc.phaseCachesKeyedOnNothing)
+	ctx.Then(`^the "([^"]*)" job should cache "([^"]*)"$`, tc.jobShouldCache)
+	ctx.Then(`^the cache key of the "([^"]*)" job should hash "([^"]*)"$`, tc.cacheKeyShouldHash)
+	ctx.Then(`^the cache of the "([^"]*)" job should fall back to an older cache of that phase$`, tc.cacheShouldFallBack)
+	ctx.Then(`^the cache keys of the "([^"]*)" and "([^"]*)" jobs should differ$`, tc.cacheKeysShouldDiffer)
+	ctx.Then(`^the "([^"]*)" job should have no cache step$`, tc.jobShouldHaveNoCacheStep)
+	ctx.Then(`^generating should fail mentioning "([^"]*)"$`, tc.generatingShouldFailMentioning)
 	ctx.Then(`^the workflow should group runs by pull request number$`, tc.workflowGroupsByPullRequest)
 	ctx.Then(`^the workflow should cancel a run its group supersedes$`, tc.workflowCancelsSuperseded)
 	ctx.Then(`^the workflow should give a run that is not a pull request a group of its own$`, tc.workflowGivesOtherRunsOwnGroup)
@@ -54,6 +62,11 @@ type generatedWorkflow struct {
 			Name string `yaml:"name"`
 			Uses string `yaml:"uses"`
 			Run  string `yaml:"run"`
+			With struct {
+				Path        string `yaml:"path"`
+				Key         string `yaml:"key"`
+				RestoreKeys string `yaml:"restore-keys"`
+			} `yaml:"with"`
 		} `yaml:"steps"`
 	} `yaml:"jobs"`
 }
@@ -442,6 +455,117 @@ func (tc *TestContext) workflowGivesOtherRunsOwnGroup() error {
 	}
 	if g := parsed.Concurrency.Group; !strings.Contains(g, "github.event.pull_request.number || github.run_id") {
 		return fmt.Errorf("the concurrency group %q falls back to a value runs share, so a push could be cancelled or queued behind another", g)
+	}
+	return nil
+}
+
+type phaseCache struct{ path, key string }
+
+// phaseCaches is what the scenario said each phase caches; writeStagedConfig
+// writes it into the phase's table.
+func (tc *TestContext) phaseCaches() map[string]phaseCache {
+	caches, _ := tc.Config["phase_caches"].(map[string]phaseCache)
+	return caches
+}
+
+func (tc *TestContext) phaseCachesKeyedOn(phase, path, key string) error {
+	caches := tc.phaseCaches()
+	if caches == nil {
+		caches = map[string]phaseCache{}
+		tc.Config["phase_caches"] = caches
+	}
+	caches[phase] = phaseCache{path: path, key: key}
+	return nil
+}
+
+func (tc *TestContext) phaseCachesKeyedOnNothing(phase, path string) error {
+	return tc.phaseCachesKeyedOn(phase, path, "")
+}
+
+// cacheStep finds the actions/cache step of a job.
+func (tc *TestContext) cacheStep(job string) (path, key, restore string, found bool, err error) {
+	parsed, err := tc.workflow()
+	if err != nil {
+		return "", "", "", false, err
+	}
+	j, ok := parsed.Jobs[job]
+	if !ok {
+		return "", "", "", false, fmt.Errorf("no %q job (jobs: %s)", job, jobNames(parsed))
+	}
+	for _, step := range j.Steps {
+		if strings.HasPrefix(step.Uses, "actions/cache@") {
+			return step.With.Path, step.With.Key, step.With.RestoreKeys, true, nil
+		}
+	}
+	return "", "", "", false, nil
+}
+
+func (tc *TestContext) jobShouldCache(job, path string) error {
+	got, _, _, found, err := tc.cacheStep(job)
+	if err != nil {
+		return err
+	}
+	if !found || !strings.Contains(got, path) {
+		return fmt.Errorf("the %q job does not cache %q (cache step found: %v, path: %q)", job, path, found, got)
+	}
+	return nil
+}
+
+func (tc *TestContext) cacheKeyShouldHash(job, file string) error {
+	_, key, _, found, err := tc.cacheStep(job)
+	if err != nil {
+		return err
+	}
+	if !found || !strings.Contains(key, "hashFiles(") || !strings.Contains(key, file) {
+		return fmt.Errorf("the cache key %q of %q does not hash %q", key, job, file)
+	}
+	return nil
+}
+
+func (tc *TestContext) cacheShouldFallBack(job string) error {
+	_, key, restore, found, err := tc.cacheStep(job)
+	if err != nil {
+		return err
+	}
+	prefix := strings.TrimSpace(restore)
+	if !found || prefix == "" || !strings.HasPrefix(key, prefix) || !strings.Contains(prefix, "-"+job+"-") {
+		return fmt.Errorf("restore-keys %q is not a prefix of the key %q that names the %q phase", restore, key, job)
+	}
+	return nil
+}
+
+func (tc *TestContext) cacheKeysShouldDiffer(a, b string) error {
+	_, keyA, _, foundA, err := tc.cacheStep(a)
+	if err != nil {
+		return err
+	}
+	_, keyB, _, foundB, err := tc.cacheStep(b)
+	if err != nil {
+		return err
+	}
+	if !foundA || !foundB || keyA == keyB {
+		return fmt.Errorf("the %q and %q jobs share a cache key (%q): debug and release artefacts would evict each other", a, b, keyA)
+	}
+	return nil
+}
+
+func (tc *TestContext) jobShouldHaveNoCacheStep(job string) error {
+	_, _, _, found, err := tc.cacheStep(job)
+	if err != nil {
+		return err
+	}
+	if found {
+		return fmt.Errorf("the %q job has a cache step it never declared", job)
+	}
+	return nil
+}
+
+func (tc *TestContext) generatingShouldFailMentioning(fragment string) error {
+	if tc.ExitCode == 0 {
+		return fmt.Errorf("generating succeeded, expected a failure mentioning %q:\n%s", fragment, tc.Output)
+	}
+	if !strings.Contains(tc.Output, fragment) {
+		return fmt.Errorf("the failure %q does not mention %q", tc.Output, fragment)
 	}
 	return nil
 }

@@ -30,6 +30,11 @@ import (
 //   - a [containers.<name>] section: the structural override keys plus the
 //     options the named preset declares, which pkg/presets answers so the
 //     list lives next to the code that reads it.
+//
+// phaseKeys are the keys a phase table may carry. Each one is read by Phase:
+// a key that parsed and did nothing would be worse than an absent one (#322).
+var phaseKeys = map[string]bool{"containers": true, "cache": true, "cache_key": true}
+
 func unknownKeys(md toml.MetaData, raw map[string]any) []string {
 	var unknown []string
 
@@ -70,7 +75,7 @@ func unknownKeys(md toml.MetaData, raw map[string]any) []string {
 		// top-level container override in the legacy spelling.
 		if _, isPhase := section["containers"]; isPhase {
 			for key := range section {
-				if key != "containers" {
+				if !phaseKeys[key] {
 					unknown = append(unknown, name+"."+key)
 				}
 			}

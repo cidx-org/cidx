@@ -149,7 +149,10 @@ func GitHubWithOptions(cfg *config.Config, opts GitHubOptions) (string, error) {
 
 	// One job per phase, all depending on bootstrap
 	for _, phase := range phases {
-		writePhaseJob(&b, phase)
+		if err := cfg.Phases[phase].CacheError(); err != nil {
+			return "", fmt.Errorf("phase '%s' %w", phase, err)
+		}
+		writePhaseJob(&b, phase, cfg.Phases[phase])
 	}
 
 	return b.String(), nil
@@ -248,11 +251,45 @@ var ActionVersions = map[string]string{
 	"actions/setup-go":          "v7",
 	"actions/upload-artifact":   "v7",
 	"actions/download-artifact": "v8",
+	"actions/cache":             "v6",
 }
 
 // uses renders an action reference at the version the generator emits.
 func uses(action string) string {
 	return action + "@" + ActionVersions[action]
+}
+
+// writeCacheStep restores and saves the workspace paths a phase declared (#503).
+//
+// The key is per phase — debug (test, clippy) and release (build) artefacts
+// differ, and one shared cache would keep evicting the other — and per runner
+// OS, plus the hash of the files the project named. When those files change
+// the key misses and the prefix fallback restores the previous cache, so a
+// dependency bump recompiles what changed instead of everything. No toolchain
+// in the key: the toolchain is pinned by the preset's image digest, and
+// compilers embed their version in what they cache, so a stale entry is a
+// rebuild, never a wrong result. Nothing is written when the phase declares no
+// cache. The entries were checked by Phase.CacheError: nothing here can leave
+// the YAML scalar or the hashFiles expression.
+func writeCacheStep(b *strings.Builder, phase string, p config.Phase) {
+	if len(p.Cache) == 0 {
+		return
+	}
+	hashed := make([]string, len(p.CacheKey))
+	for i, file := range p.CacheKey {
+		hashed[i] = "'" + file + "'"
+	}
+	prefix := "${{ runner.os }}-cidx-" + phase + "-"
+
+	fmt.Fprintf(b, "      - uses: %s\n", uses("actions/cache"))
+	b.WriteString("        with:\n")
+	b.WriteString("          path: |\n")
+	for _, path := range p.Cache {
+		fmt.Fprintf(b, "            %s\n", path)
+	}
+	fmt.Fprintf(b, "          key: %s${{ hashFiles(%s) }}\n", prefix, strings.Join(hashed, ", "))
+	b.WriteString("          restore-keys: |\n")
+	fmt.Fprintf(b, "            %s\n", prefix)
 }
 
 // IsCidxRepo reports whether dir is the cidx repository itself.
@@ -282,7 +319,7 @@ func IsCidxRepo(dir string) bool {
 }
 
 // writePhaseJob writes a single phase job that downloads the binary and runs the phase.
-func writePhaseJob(b *strings.Builder, phase string) {
+func writePhaseJob(b *strings.Builder, phase string, p config.Phase) {
 	// Capitalize first letter for display name
 	displayName := strings.ToUpper(phase[:1]) + phase[1:]
 
@@ -308,6 +345,7 @@ func writePhaseJob(b *strings.Builder, phase string) {
 	b.WriteString("          name: cidx-binary\n")
 	b.WriteString("          path: bin\n")
 	b.WriteString("      - run: chmod +x bin/cidx\n")
+	writeCacheStep(b, phase, p)
 	fmt.Fprintf(b, "      - name: Run %s\n", phase)
 	fmt.Fprintf(b, "        run: ./bin/cidx run %s\n\n", phase)
 }

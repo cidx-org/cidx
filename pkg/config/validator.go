@@ -34,6 +34,10 @@ func Validate(cfg *Config) ValidationResult {
 		if len(phase.Containers) == 0 {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("phase '%s' has no containers", phaseName))
 		}
+		if err := phase.CacheError(); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("phase '%s' %v", phaseName, err))
+			result.Valid = false
+		}
 
 		// Validate each container exists. A container is valid if it is either:
 		//   (a) a built-in preset name (presets.Exists), or
