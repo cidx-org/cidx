@@ -125,6 +125,7 @@ func Load(path string) (*Config, error) {
 				Containers: toStringSlice(containersRaw),
 				Cache:      toStringSlice(section["cache"]),
 				CacheKey:   toStringSlice(section["cache_key"]),
+				Artifacts:  toArtifacts(section["artifacts"]),
 			}
 		} else {
 			cfg.Overrides[name] = section
@@ -132,6 +133,24 @@ func Load(path string) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// toArtifacts reads a phase's `artifacts` table, nil when there is none.
+func toArtifacts(v any) *PhaseArtifacts {
+	table, ok := v.(map[string]any)
+	if !ok {
+		return nil
+	}
+	a := &PhaseArtifacts{Paths: toStringSlice(table["paths"])}
+	a.Name, _ = table["name"].(string)
+	switch days := table["retention_days"].(type) {
+	case nil:
+	case int64:
+		a.RetentionDays = int(days)
+	default:
+		a.RetentionDays = -1
+	}
+	return a
 }
 
 // toStringSlice converts an any (typically []any from TOML) to []string

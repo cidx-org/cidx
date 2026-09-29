@@ -30,6 +30,11 @@ func RegisterGenerateSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Then(`^"([^"]*)" pipeline should trigger on "([^"]*)" to "([^"]*)" branch$`, tc.pipelineShouldTriggerOnBranch)
 	ctx.Given(`^the "([^"]*)" phase caches "([^"]*)" keyed on "([^"]*)"$`, tc.phaseCachesKeyedOn)
 	ctx.Given(`^the "([^"]*)" phase caches "([^"]*)" keyed on nothing$`, tc.phaseCachesKeyedOnNothing)
+	ctx.Given(`^the "([^"]*)" phase uploads "([^"]*)" from "([^"]*)" for (\d+) days$`, tc.phaseUploads)
+	ctx.Then(`^the "([^"]*)" job should upload "([^"]*)" after the phase runs, even when it fails$`, tc.jobShouldUploadAfterPhase)
+	ctx.Then(`^that upload should keep hidden files and only warn when nothing matches$`, tc.uploadShouldKeepHiddenAndWarn)
+	ctx.Then(`^that upload should keep the artifact for (\d+) days$`, tc.uploadShouldKeepDays)
+	ctx.Then(`^the "([^"]*)" job should have no upload step$`, tc.jobShouldHaveNoUploadStep)
 	ctx.Then(`^the "([^"]*)" job should cache "([^"]*)"$`, tc.jobShouldCache)
 	ctx.Then(`^the cache key of the "([^"]*)" job should hash "([^"]*)"$`, tc.cacheKeyShouldHash)
 	ctx.Then(`^the cache of the "([^"]*)" job should fall back to an older cache of that phase$`, tc.cacheShouldFallBack)
@@ -60,12 +65,17 @@ type generatedWorkflow struct {
 		Needs []string `yaml:"needs"`
 		Steps []struct {
 			Name string `yaml:"name"`
+			If   string `yaml:"if"`
 			Uses string `yaml:"uses"`
 			Run  string `yaml:"run"`
 			With struct {
-				Path        string `yaml:"path"`
-				Key         string `yaml:"key"`
-				RestoreKeys string `yaml:"restore-keys"`
+				Name          string `yaml:"name"`
+				Path          string `yaml:"path"`
+				Key           string `yaml:"key"`
+				RestoreKeys   string `yaml:"restore-keys"`
+				IncludeHidden string `yaml:"include-hidden-files"`
+				IfNoFiles     string `yaml:"if-no-files-found"`
+				Retention     string `yaml:"retention-days"`
 			} `yaml:"with"`
 		} `yaml:"steps"`
 	} `yaml:"jobs"`
@@ -566,6 +576,117 @@ func (tc *TestContext) generatingShouldFailMentioning(fragment string) error {
 	}
 	if !strings.Contains(tc.Output, fragment) {
 		return fmt.Errorf("the failure %q does not mention %q", tc.Output, fragment)
+	}
+	return nil
+}
+
+type phaseArtifact struct {
+	name, path string
+	days       int
+}
+
+// phaseArtifacts is what the scenario said each phase uploads; writeStagedConfig
+// writes it into the phase's table.
+func (tc *TestContext) phaseArtifacts() map[string]phaseArtifact {
+	artifacts, _ := tc.Config["phase_artifacts"].(map[string]phaseArtifact)
+	return artifacts
+}
+
+func (tc *TestContext) phaseUploads(phase, name, path string, days int) error {
+	artifacts := tc.phaseArtifacts()
+	if artifacts == nil {
+		artifacts = map[string]phaseArtifact{}
+		tc.Config["phase_artifacts"] = artifacts
+	}
+	artifacts[phase] = phaseArtifact{name: name, path: path, days: days}
+	return nil
+}
+
+// uploadStep finds the actions/upload-artifact step of a job that is not the
+// bootstrap hand-off, and where it sits relative to the step that runs the phase.
+func (tc *TestContext) uploadStep(job string) (idx, runIdx int, found bool, err error) {
+	parsed, err := tc.workflow()
+	if err != nil {
+		return 0, 0, false, err
+	}
+	j, ok := parsed.Jobs[job]
+	if !ok {
+		return 0, 0, false, fmt.Errorf("no %q job (jobs: %s)", job, jobNames(parsed))
+	}
+	idx, runIdx = -1, -1
+	for i, step := range j.Steps {
+		if strings.HasPrefix(step.Uses, "actions/upload-artifact@") {
+			idx = i
+		}
+		if strings.HasPrefix(step.Run, "./bin/cidx run ") {
+			runIdx = i
+		}
+	}
+	tc.Config["upload_job"] = job
+	return idx, runIdx, idx >= 0, nil
+}
+
+func (tc *TestContext) jobShouldUploadAfterPhase(job, name string) error {
+	idx, runIdx, found, err := tc.uploadStep(job)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("the %q job uploads nothing", job)
+	}
+	parsed, _ := tc.workflow()
+	step := parsed.Jobs[job].Steps[idx]
+	switch {
+	case step.With.Name != name:
+		return fmt.Errorf("the %q job uploads %q, not %q", job, step.With.Name, name)
+	case idx < runIdx:
+		return fmt.Errorf("the upload comes before the step that runs the phase")
+	case step.If != "always()":
+		return fmt.Errorf("the upload runs `if: %s`, so a failed phase would upload nothing", step.If)
+	}
+	return nil
+}
+
+func (tc *TestContext) uploadWith() (hidden, ifNone, retention string, err error) {
+	job, _ := tc.Config["upload_job"].(string)
+	idx, _, found, err := tc.uploadStep(job)
+	if err != nil || !found {
+		return "", "", "", fmt.Errorf("no upload step to check (job %q): %v", job, err)
+	}
+	parsed, _ := tc.workflow()
+	with := parsed.Jobs[job].Steps[idx].With
+	return with.IncludeHidden, with.IfNoFiles, with.Retention, nil
+}
+
+func (tc *TestContext) uploadShouldKeepHiddenAndWarn() error {
+	hidden, ifNone, _, err := tc.uploadWith()
+	if err != nil {
+		return err
+	}
+	if hidden != "true" || ifNone != "warn" {
+		return fmt.Errorf("include-hidden-files=%q if-no-files-found=%q, want true and warn", hidden, ifNone)
+	}
+	return nil
+}
+
+func (tc *TestContext) uploadShouldKeepDays(days int) error {
+	_, _, retention, err := tc.uploadWith()
+	if err != nil {
+		return err
+	}
+	if retention != fmt.Sprint(days) {
+		return fmt.Errorf("retention-days=%q, want %d", retention, days)
+	}
+	return nil
+}
+
+func (tc *TestContext) jobShouldHaveNoUploadStep(job string) error {
+	_, _, found, err := tc.uploadStep(job)
+	if err != nil {
+		return err
+	}
+	if found {
+		return fmt.Errorf("the %q job uploads something it never declared", job)
 	}
 	return nil
 }

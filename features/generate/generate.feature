@@ -93,6 +93,47 @@ Feature: CI Workflow Generation
       When I run "cidx generate github"
       Then generating should fail mentioning "workspace"
 
+  Rule: A phase can declare the evidence it uploads, so regeneration keeps it (#509)
+
+    # A cluster phase uploads what it recorded after it runs, including when it
+    # fails -- that is when the evidence matters. Such a step could only be added
+    # to the generated workflow by hand, and the next `cidx generate` removed it:
+    # upgrading cidx meant regenerating and re-adding it, and the evidence of a
+    # failed run was lost the day someone forgot. A phase declares it instead.
+
+    Scenario: A declared artifact is uploaded after the phase, whatever its outcome
+      Given cidx.toml defines pipeline "ci" with phases "test"
+      And the "test" phase uploads "test-evidence" from ".probatum/runs/*/" for 7 days
+      When I run "cidx generate github"
+      Then the "test" job should upload "test-evidence" after the phase runs, even when it fails
+      And that upload should keep hidden files and only warn when nothing matches
+      And that upload should keep the artifact for 7 days
+
+    Scenario: A phase that declares no artifact uploads nothing
+      Given cidx.toml defines pipeline "ci" with phases "security, test"
+      And the "test" phase uploads "test-evidence" from ".probatum/runs/*/" for 7 days
+      When I run "cidx generate github"
+      Then the "security" job should have no upload step
+
+    Scenario: An artifact path that leaves the workspace is refused
+      Given cidx.toml defines pipeline "ci" with phases "test"
+      And the "test" phase uploads "test-evidence" from "../outside" for 7 days
+      When I run "cidx generate github"
+      Then generating should fail mentioning "workspace"
+
+    Scenario: Two phases cannot upload under the same artifact name
+      Given cidx.toml defines pipeline "ci" with phases "test, build"
+      And the "test" phase uploads "evidence" from "out-a/" for 7 days
+      And the "build" phase uploads "evidence" from "out-b/" for 7 days
+      When I run "cidx generate github"
+      Then generating should fail mentioning "evidence"
+
+    Scenario: The bootstrap artifact's name is not available
+      Given cidx.toml defines pipeline "ci" with phases "test"
+      And the "test" phase uploads "cidx-binary" from "out/" for 7 days
+      When I run "cidx generate github"
+      Then generating should fail mentioning "cidx-binary"
+
   Rule: Generate respects output options
 
     Scenario: Output to stdout by default

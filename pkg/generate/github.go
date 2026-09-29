@@ -148,9 +148,17 @@ func GitHubWithOptions(cfg *config.Config, opts GitHubOptions) (string, error) {
 	phases := collectPhases(cfg.Pipelines)
 
 	// One job per phase, all depending on bootstrap
+	uploaded := map[string]string{} // artifact name -> the phase that owns it
 	for _, phase := range phases {
-		if err := cfg.Phases[phase].CacheError(); err != nil {
+		if err := cfg.Phases[phase].Problem(); err != nil {
 			return "", fmt.Errorf("phase '%s' %w", phase, err)
+		}
+		// upload-artifact v4+ refuses a second upload under one name in a run.
+		if a := cfg.Phases[phase].Artifacts; a != nil {
+			if owner, taken := uploaded[a.Name]; taken {
+				return "", fmt.Errorf("phase '%s' uploads artifact %q, which phase '%s' already uploads: a run cannot hold two artifacts of one name", phase, a.Name, owner)
+			}
+			uploaded[a.Name] = phase
 		}
 		writePhaseJob(&b, phase, cfg.Phases[phase])
 	}
@@ -347,7 +355,35 @@ func writePhaseJob(b *strings.Builder, phase string, p config.Phase) {
 	b.WriteString("      - run: chmod +x bin/cidx\n")
 	writeCacheStep(b, phase, p)
 	fmt.Fprintf(b, "      - name: Run %s\n", phase)
-	fmt.Fprintf(b, "        run: ./bin/cidx run %s\n\n", phase)
+	fmt.Fprintf(b, "        run: ./bin/cidx run %s\n", phase)
+	writeArtifactStep(b, p)
+	b.WriteString("\n")
+}
+
+// writeArtifactStep uploads the evidence a phase declared, after it runs and
+// whatever its outcome — the evidence of a failed run is the evidence that
+// matters (#509). Hidden files are kept, a phase that failed early may leave
+// nothing so a missing path only warns, and the paths were checked by
+// Phase.Problem: nothing here can leave the YAML scalar.
+func writeArtifactStep(b *strings.Builder, p config.Phase) {
+	a := p.Artifacts
+	if a == nil {
+		return
+	}
+	fmt.Fprintf(b, "      - name: Upload %s\n", a.Name)
+	b.WriteString("        if: always()\n")
+	fmt.Fprintf(b, "        uses: %s\n", uses("actions/upload-artifact"))
+	b.WriteString("        with:\n")
+	fmt.Fprintf(b, "          name: %s\n", a.Name)
+	b.WriteString("          path: |\n")
+	for _, path := range a.Paths {
+		fmt.Fprintf(b, "            %s\n", path)
+	}
+	b.WriteString("          include-hidden-files: true\n")
+	b.WriteString("          if-no-files-found: warn\n")
+	if a.RetentionDays > 0 {
+		fmt.Fprintf(b, "          retention-days: %d\n", a.RetentionDays)
+	}
 }
 
 // collectPhases returns deduplicated phases in order of first appearance.

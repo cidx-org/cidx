@@ -149,6 +149,25 @@ CARGO_HOME = "/work/.cargo-home"
 That writes `.cargo-home/` into the workspace on local runs as well, which is why
 no preset does it for you.
 
+**Uploading a phase's evidence** — what it recorded, including when it fails —
+is declared on the phase, so regenerating the workflow keeps it instead of
+dropping a step someone added by hand:
+
+```toml
+[cluster]
+containers = ["cluster-build", "cluster-probatum"]
+artifacts = { name = "cluster-evidence", paths = [".probatum/runs/*/"], retention_days = 7 }
+```
+
+The phase job gets an `actions/upload-artifact` step after the phase, with
+`if: always()` so a failed run uploads too, hidden files included, and a path
+with nothing behind it only warns (a phase that failed early may leave
+nothing). `retention_days` is optional (1 to 90, the repository default when
+absent). Paths must stay inside the workspace, the name may not be
+`cidx-binary` (the artifact that hands cidx to every phase job), and two phases
+cannot use one name: GitHub refuses a second upload under a name in a run.
+`cidx validate` and `cidx generate` both refuse a declaration that breaks these.
+
 **Superseded pull request runs are cancelled.** The workflow's `concurrency`
 group is the pull request number, so pushing twice to a PR branch cancels the
 older run instead of running two pipelines side by side. A run that is not a

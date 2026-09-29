@@ -34,7 +34,7 @@ func Validate(cfg *Config) ValidationResult {
 		if len(phase.Containers) == 0 {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("phase '%s' has no containers", phaseName))
 		}
-		if err := phase.CacheError(); err != nil {
+		if err := phase.Problem(); err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("phase '%s' %v", phaseName, err))
 			result.Valid = false
 		}
