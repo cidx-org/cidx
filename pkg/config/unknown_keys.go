@@ -33,7 +33,10 @@ import (
 //
 // phaseKeys are the keys a phase table may carry. Each one is read by Phase:
 // a key that parsed and did nothing would be worse than an absent one (#322).
-var phaseKeys = map[string]bool{"containers": true, "cache": true, "cache_key": true}
+var phaseKeys = map[string]bool{"containers": true, "cache": true, "cache_key": true, "artifacts": true}
+
+// artifactKeys are the keys of a phase's `artifacts` table.
+var artifactKeys = map[string]bool{"name": true, "paths": true, "retention_days": true}
 
 func unknownKeys(md toml.MetaData, raw map[string]any) []string {
 	var unknown []string
@@ -74,9 +77,16 @@ func unknownKeys(md toml.MetaData, raw map[string]any) []string {
 		// A section carrying `containers` is a phase; anything else is a
 		// top-level container override in the legacy spelling.
 		if _, isPhase := section["containers"]; isPhase {
-			for key := range section {
+			for key, value := range section {
 				if !phaseKeys[key] {
 					unknown = append(unknown, name+"."+key)
+				}
+				if table, isTable := value.(map[string]any); isTable && key == "artifacts" {
+					for inner := range table {
+						if !artifactKeys[inner] {
+							unknown = append(unknown, name+".artifacts."+inner)
+						}
+					}
 				}
 			}
 			continue

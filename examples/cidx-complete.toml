@@ -299,6 +299,10 @@ containers = ["go-build"]  # Compile Go binary
 # cache = ["target"]
 # cache_key = ["**/Cargo.lock"]
 
+# Optional: upload evidence after the phase, even when it fails. Declared here so
+# regenerating the workflow keeps the step. retention_days is optional (1-90).
+# artifacts = { name = "build-evidence", paths = ["target/reports/"], retention_days = 7 }
+
 # Go Build: Compile binary with version injection
 # Automatically injects version from VERSION file via -ldflags
 # Output: bin/cidx

@@ -222,6 +222,76 @@ type Phase struct {
 	// release artefacts differ, and cidx does not guess a language's lockfile.
 	Cache    []string `toml:"cache"`
 	CacheKey []string `toml:"cache_key"`
+
+	// Artifacts declares evidence the generated workflow uploads after the
+	// phase, whatever its outcome (#509). A step of that kind could only be added
+	// to the generated file by hand, and regeneration removed it.
+	Artifacts *PhaseArtifacts `toml:"artifacts"`
+}
+
+// PhaseArtifacts is one artifact a phase uploads after it runs.
+type PhaseArtifacts struct {
+	Name  string   `toml:"name"`
+	Paths []string `toml:"paths"`
+
+	// RetentionDays is 0 for the repository's default. A value the file spelled
+	// as anything but a whole number reads as -1, which Error refuses.
+	RetentionDays int `toml:"retention_days"`
+}
+
+// artifactName is what an artifact name may contain: it is written into a step
+// name and a `with:` scalar, and it is the download key.
+var artifactName = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
+
+// BootstrapArtifact is the name of the artifact that hands the cidx binary from
+// the bootstrap job to every phase job. A phase cannot take it.
+const BootstrapArtifact = "cidx-binary"
+
+// Error says what is wrong with an artifact declaration, or returns nil.
+func (a PhaseArtifacts) Error() error {
+	if !artifactName.MatchString(a.Name) {
+		return fmt.Errorf("artifacts name %q: only letters, digits and _ . - are allowed", a.Name)
+	}
+	if a.Name == BootstrapArtifact {
+		return fmt.Errorf("artifacts name %q is the artifact that hands the cidx binary to the phase jobs", a.Name)
+	}
+	if len(a.Paths) == 0 {
+		return fmt.Errorf("artifacts %q declares no paths", a.Name)
+	}
+	for _, path := range a.Paths {
+		if err := workspacePathError("artifacts path", path); err != nil {
+			return err
+		}
+	}
+	if a.RetentionDays < 0 || a.RetentionDays > 90 {
+		return fmt.Errorf("artifacts retention_days must be a whole number of days from 1 to 90 (or absent for the repository default)")
+	}
+	return nil
+}
+
+// Problem is the one judgement a phase's declarations get: what `cidx validate`
+// reports and `cidx generate`, which does not validate, refuses to write.
+func (p Phase) Problem() error {
+	if err := p.CacheError(); err != nil {
+		return err
+	}
+	if p.Artifacts != nil {
+		return p.Artifacts.Error()
+	}
+	return nil
+}
+
+// workspacePathError checks a glob that names workspace paths: only characters
+// that cannot leave the YAML scalar or expression it is written into, and
+// nothing that reaches outside the workspace.
+func workspacePathError(what, path string) error {
+	if !cacheEntry.MatchString(path) {
+		return fmt.Errorf("%s %q: only letters, digits and _ . / * @ + - are allowed", what, path)
+	}
+	if strings.HasPrefix(path, "/") || slices.Contains(strings.Split(path, "/"), "..") {
+		return fmt.Errorf("%s %q leaves the workspace: paths are relative to it", what, path)
+	}
+	return nil
 }
 
 // cacheEntry is what a cache path or key file may contain: a glob over
@@ -243,11 +313,8 @@ func (p Phase) CacheError() error {
 		return fmt.Errorf("declares cache but no cache_key: a cache keyed on nothing is never invalidated (name the files whose content decides, e.g. cache_key = [\"**/Cargo.lock\"])")
 	}
 	for _, path := range p.Cache {
-		if !cacheEntry.MatchString(path) {
-			return fmt.Errorf("cache path %q: only letters, digits and _ . / * @ + - are allowed", path)
-		}
-		if strings.HasPrefix(path, "/") || slices.Contains(strings.Split(path, "/"), "..") {
-			return fmt.Errorf("cache path %q leaves the workspace: paths are relative to it", path)
+		if err := workspacePathError("cache path", path); err != nil {
+			return err
 		}
 	}
 	for _, file := range p.CacheKey {
