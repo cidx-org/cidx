@@ -93,6 +93,25 @@ Feature: CI Workflow Generation
       When I run "cidx generate github"
       Then generating should fail mentioning "workspace"
 
+  Rule: A cache can refuse to grow on every key change (#515)
+
+    # The fallback restores the previous cache in full when the key misses, and
+    # the build adds its new artefacts next to the old ones before saving under
+    # the new key. A directory that never prunes itself -- cargo's target/ -- then
+    # stacks a generation per key change: 3.33 GiB, then 5.44 GiB after one
+    # version bump, toward GitHub's 10 GB repository quota. Turning the fallback
+    # off makes the first run after a key change cold, and the cache it saves
+    # holds only current artefacts, so its size stays flat. It stays on by
+    # default: a project that prefers speed to size keeps it.
+
+    Scenario: A phase can turn the fallback off
+      Given cidx.toml defines pipeline "ci" with phases "test"
+      And the "test" phase caches "target" keyed on "**/Cargo.lock" without falling back to an older cache
+      When I run "cidx generate github"
+      Then the "test" job should cache "target"
+      And the cache key of the "test" job should hash "**/Cargo.lock"
+      And the cache of the "test" job should not fall back to an older cache
+
   Rule: A phase can declare the evidence it uploads, so regeneration keeps it (#509)
 
     # A cluster phase uploads what it recorded after it runs, including when it
