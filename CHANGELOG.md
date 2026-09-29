@@ -1,3 +1,13 @@
+## v3.6.0 (2026-09-29)
+
+### Feat
+
+- **generate**: declare a phase's evidence upload so regeneration keeps it (#512)
+
+### Fix
+
+- **release**: tag only once the merged commit is what HEAD points at (#511)
+
 ## v3.5.0 (2026-09-29)
 
 ### Feat
