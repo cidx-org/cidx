@@ -137,6 +137,29 @@ cidx does not guess a language's lockfile, and a cache keyed on nothing is never
 invalidated. Paths must stay inside the workspace, and `cidx validate` and
 `cidx generate` both refuse a declaration that does not.
 
+**The fallback can be turned off, and for cargo's `target/` it should be.** When
+the key misses, the fallback restores the previous cache in full, the build adds
+its new artefacts next to the old ones, and the result is saved under the new
+key. A directory that never prunes itself then stacks a generation per key
+change: one project's test cache went from 3.33 GiB to 5.44 GiB after a single
+version bump, toward GitHub's 10 GB repository quota, and evicted other caches on
+the way. `cache_restore_fallback = false` omits `restore-keys`:
+
+```toml
+[test]
+containers = ["cargo-test"]
+cache = ["target"]
+cache_key = ["**/Cargo.toml", "rust-toolchain.toml"]
+cache_restore_fallback = false   # default true
+```
+
+The first run after a key change then compiles cold, and the cache it saves
+holds only current artefacts, so its size stays flat. The trade is speed against
+size, so it is a choice per phase: keep the default where a cold build is cheap
+or the cache is small, turn it off where the directory only grows. Key the cache
+on the files that really decide staleness (a lockfile) so the cold run happens
+only when it must. The key needs a `cache` to apply to.
+
 The cargo registry lives in the image (`/usr/local/cargo`), not the workspace. It
 is seconds of download against minutes of compilation, so it is left alone; to
 cache it too, point cargo into the workspace and list the directory:

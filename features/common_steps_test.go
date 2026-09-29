@@ -219,6 +219,9 @@ func (tc *TestContext) writeStagedConfig() (string, error) {
 			if c.key != "" {
 				fmt.Fprintf(&b, "cache_key = [%q]\n", c.key)
 			}
+			if c.noFallback {
+				b.WriteString("cache_restore_fallback = false\n")
+			}
 		}
 		b.WriteString("\n")
 	}

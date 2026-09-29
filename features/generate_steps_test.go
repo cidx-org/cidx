@@ -30,6 +30,8 @@ func RegisterGenerateSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Then(`^"([^"]*)" pipeline should trigger on "([^"]*)" to "([^"]*)" branch$`, tc.pipelineShouldTriggerOnBranch)
 	ctx.Given(`^the "([^"]*)" phase caches "([^"]*)" keyed on "([^"]*)"$`, tc.phaseCachesKeyedOn)
 	ctx.Given(`^the "([^"]*)" phase caches "([^"]*)" keyed on nothing$`, tc.phaseCachesKeyedOnNothing)
+	ctx.Given(`^the "([^"]*)" phase caches "([^"]*)" keyed on "([^"]*)" without falling back to an older cache$`, tc.phaseCachesWithoutFallback)
+	ctx.Then(`^the cache of the "([^"]*)" job should not fall back to an older cache$`, tc.cacheShouldNotFallBack)
 	ctx.Given(`^the "([^"]*)" phase uploads "([^"]*)" from "([^"]*)" for (\d+) days$`, tc.phaseUploads)
 	ctx.Then(`^the "([^"]*)" job should upload "([^"]*)" after the phase runs, even when it fails$`, tc.jobShouldUploadAfterPhase)
 	ctx.Then(`^that upload should keep hidden files and only warn when nothing matches$`, tc.uploadShouldKeepHiddenAndWarn)
@@ -469,7 +471,10 @@ func (tc *TestContext) workflowGivesOtherRunsOwnGroup() error {
 	return nil
 }
 
-type phaseCache struct{ path, key string }
+type phaseCache struct {
+	path, key  string
+	noFallback bool
+}
 
 // phaseCaches is what the scenario said each phase caches; writeStagedConfig
 // writes it into the phase's table.
@@ -687,6 +692,30 @@ func (tc *TestContext) jobShouldHaveNoUploadStep(job string) error {
 	}
 	if found {
 		return fmt.Errorf("the %q job uploads something it never declared", job)
+	}
+	return nil
+}
+
+func (tc *TestContext) phaseCachesWithoutFallback(phase, path, key string) error {
+	if err := tc.phaseCachesKeyedOn(phase, path, key); err != nil {
+		return err
+	}
+	c := tc.phaseCaches()[phase]
+	c.noFallback = true
+	tc.phaseCaches()[phase] = c
+	return nil
+}
+
+func (tc *TestContext) cacheShouldNotFallBack(job string) error {
+	_, _, restore, found, err := tc.cacheStep(job)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("the %q job has no cache step", job)
+	}
+	if strings.TrimSpace(restore) != "" {
+		return fmt.Errorf("the %q job still restores an older cache (restore-keys %q): it would stack a generation per key change", job, restore)
 	}
 	return nil
 }

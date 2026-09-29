@@ -223,6 +223,17 @@ type Phase struct {
 	Cache    []string `toml:"cache"`
 	CacheKey []string `toml:"cache_key"`
 
+	// CacheRestoreFallback is nil for the default (restore the previous cache
+	// when the key misses), false to omit `restore-keys` (#515). The fallback
+	// restores the previous directory in full and the build adds next to it, so
+	// a directory that never prunes itself — cargo's target/ — stacks a
+	// generation per key change: 3.33 GiB, then 5.44 GiB after one version bump.
+	// Off, the first run after a key change is cold and the saved cache holds
+	// only current artefacts. A value that is not a boolean reads as
+	// cacheFallbackInvalid and is refused, never taken for the default.
+	CacheRestoreFallback *bool `toml:"cache_restore_fallback"`
+	cacheFallbackInvalid bool
+
 	// Artifacts declares evidence the generated workflow uploads after the
 	// phase, whatever its outcome (#509). A step of that kind could only be added
 	// to the generated file by hand, and regeneration removed it.
@@ -303,6 +314,12 @@ var cacheEntry = regexp.MustCompile(`^[A-Za-z0-9_./*@+-]+$`)
 // nil. One judgement for `cidx validate` and for `cidx generate`, which does
 // not validate and must not write a cache it cannot key or contain.
 func (p Phase) CacheError() error {
+	if p.cacheFallbackInvalid {
+		return fmt.Errorf("cache_restore_fallback must be true or false")
+	}
+	if p.CacheRestoreFallback != nil && len(p.Cache) == 0 {
+		return fmt.Errorf("declares cache_restore_fallback but no cache: it would change nothing")
+	}
 	if len(p.Cache) == 0 && len(p.CacheKey) == 0 {
 		return nil
 	}

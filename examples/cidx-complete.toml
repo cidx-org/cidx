@@ -298,6 +298,9 @@ containers = ["go-build"]  # Compile Go binary
 # the workspace. Useful where a cold build is slow (a Rust `target/` is minutes).
 # cache = ["target"]
 # cache_key = ["**/Cargo.lock"]
+# cache_restore_fallback = false  # default true: reuse the previous cache when the
+#   key misses. Turn it off for a directory that only grows (cargo's target/): the
+#   next run after a key change is cold, but the saved cache stays the same size.
 
 # Optional: upload evidence after the phase, even when it fails. Declared here so
 # regenerating the workflow keeps the step. retention_days is optional (1-90).

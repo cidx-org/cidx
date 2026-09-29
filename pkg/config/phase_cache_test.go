@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -32,5 +34,40 @@ func TestPhaseCacheError(t *testing.T) {
 		case c.want != "" && (err == nil || !strings.Contains(err.Error(), c.want)):
 			t.Errorf("%s: error %v, want one mentioning %q", c.name, err, c.want)
 		}
+	}
+}
+
+// TestCacheRestoreFallbackDeclarations pins the opt-out of the restore-keys
+// fallback (#515): absent is the default, false is honoured, a value that is not
+// a boolean is refused rather than taken for the default, and the key without a
+// cache to apply to is refused like cache_key without one.
+func TestCacheRestoreFallbackDeclarations(t *testing.T) {
+	parse := func(toml string) (Phase, error) {
+		path := filepath.Join(t.TempDir(), "cidx.toml")
+		if err := os.WriteFile(path, []byte(toml+"\n[pipelines.ci]\nphases = [\"test\"]\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := Load(path)
+		if err != nil {
+			return Phase{}, err
+		}
+		return cfg.Phases["test"], nil
+	}
+	base := "[test]\ncontainers = [\"go-test\"]\ncache = [\"target\"]\ncache_key = [\"Cargo.lock\"]\n"
+
+	absent, err := parse(base)
+	if err != nil || absent.CacheRestoreFallback != nil || absent.CacheError() != nil {
+		t.Fatalf("absent: %+v, %v", absent, err)
+	}
+	off, err := parse(base + "cache_restore_fallback = false\n")
+	if err != nil || off.CacheRestoreFallback == nil || *off.CacheRestoreFallback || off.CacheError() != nil {
+		t.Fatalf("false: %+v, %v", off, err)
+	}
+	if bad, err := parse(base + "cache_restore_fallback = \"false\"\n"); err != nil || bad.CacheError() == nil {
+		t.Errorf(`the string "false" must be refused, not read as the default: %+v, %v`, bad, err)
+	}
+	orphan, err := parse("[test]\ncontainers = [\"go-test\"]\ncache_restore_fallback = false\n")
+	if err != nil || orphan.CacheError() == nil || !strings.Contains(orphan.CacheError().Error(), "no cache") {
+		t.Errorf("a fallback with no cache must be refused: %+v, %v", orphan, err)
 	}
 }

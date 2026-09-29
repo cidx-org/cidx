@@ -296,6 +296,12 @@ func writeCacheStep(b *strings.Builder, phase string, p config.Phase) {
 		fmt.Fprintf(b, "            %s\n", path)
 	}
 	fmt.Fprintf(b, "          key: %s${{ hashFiles(%s) }}\n", prefix, strings.Join(hashed, ", "))
+	// A phase can refuse the fallback (#515): restoring the previous directory
+	// in full and adding next to it stacks a generation per key change in a
+	// directory that never prunes itself.
+	if p.CacheRestoreFallback != nil && !*p.CacheRestoreFallback {
+		return
+	}
 	b.WriteString("          restore-keys: |\n")
 	fmt.Fprintf(b, "            %s\n", prefix)
 }

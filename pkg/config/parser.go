@@ -127,6 +127,15 @@ func Load(path string) (*Config, error) {
 				CacheKey:   toStringSlice(section["cache_key"]),
 				Artifacts:  toArtifacts(section["artifacts"]),
 			}
+			if v, declared := section["cache_restore_fallback"]; declared {
+				phase := cfg.Phases[name]
+				if b, isBool := v.(bool); isBool {
+					phase.CacheRestoreFallback = &b
+				} else {
+					phase.cacheFallbackInvalid = true
+				}
+				cfg.Phases[name] = phase
+			}
 		} else {
 			cfg.Overrides[name] = section
 		}
