@@ -1,5 +1,12 @@
 package config
 
+import (
+	"fmt"
+	"regexp"
+	"slices"
+	"strings"
+)
+
 // ProviderConfig defines git remote provider settings (GitHub, GitLab)
 type ProviderConfig struct {
 	// Type is the provider type: "github", "gitlab", or "" (auto-detect)
@@ -208,6 +215,47 @@ func (t *TagConfig) FormatTag(version string) string {
 // Phase defines containers for a specific phase
 type Phase struct {
 	Containers []string `toml:"containers"`
+
+	// Cache lists workspace-relative paths the generated CI workflow restores
+	// before the phase and saves after it, and CacheKey the files whose content
+	// decides when that cache is stale (#503). Opt-in and per phase: debug and
+	// release artefacts differ, and cidx does not guess a language's lockfile.
+	Cache    []string `toml:"cache"`
+	CacheKey []string `toml:"cache_key"`
+}
+
+// cacheEntry is what a cache path or key file may contain: a glob over
+// workspace paths, and nothing that could leave the YAML scalar or the
+// `hashFiles('...')` expression it is written into.
+var cacheEntry = regexp.MustCompile(`^[A-Za-z0-9_./*@+-]+$`)
+
+// CacheError says what is wrong with a phase's cache declaration, or returns
+// nil. One judgement for `cidx validate` and for `cidx generate`, which does
+// not validate and must not write a cache it cannot key or contain.
+func (p Phase) CacheError() error {
+	if len(p.Cache) == 0 && len(p.CacheKey) == 0 {
+		return nil
+	}
+	if len(p.Cache) == 0 {
+		return fmt.Errorf("declares cache_key but no cache: the key would cache nothing")
+	}
+	if len(p.CacheKey) == 0 {
+		return fmt.Errorf("declares cache but no cache_key: a cache keyed on nothing is never invalidated (name the files whose content decides, e.g. cache_key = [\"**/Cargo.lock\"])")
+	}
+	for _, path := range p.Cache {
+		if !cacheEntry.MatchString(path) {
+			return fmt.Errorf("cache path %q: only letters, digits and _ . / * @ + - are allowed", path)
+		}
+		if strings.HasPrefix(path, "/") || slices.Contains(strings.Split(path, "/"), "..") {
+			return fmt.Errorf("cache path %q leaves the workspace: paths are relative to it", path)
+		}
+	}
+	for _, file := range p.CacheKey {
+		if !cacheEntry.MatchString(file) {
+			return fmt.Errorf("cache_key entry %q: only letters, digits and _ . / * @ + - are allowed", file)
+		}
+	}
+	return nil
 }
 
 // NoWorkflow is the value `[pipelines.<name>] workflow` takes when no CI

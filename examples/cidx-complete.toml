@@ -292,6 +292,13 @@ containers = ["go-test"]  # Run Go unit tests with coverage
 [build]
 containers = ["go-build"]  # Compile Go binary
 
+# Optional: keep a phase's build output between CI runs. `cidx generate github`
+# adds an actions/cache step to this phase's job, keyed on the OS, the phase and
+# the hash of the cache_key files. Both keys are needed; paths are relative to
+# the workspace. Useful where a cold build is slow (a Rust `target/` is minutes).
+# cache = ["target"]
+# cache_key = ["**/Cargo.lock"]
+
 # Go Build: Compile binary with version injection
 # Automatically injects version from VERSION file via -ldflags
 # Output: bin/cidx

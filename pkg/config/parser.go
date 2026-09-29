@@ -121,7 +121,11 @@ func Load(path string) (*Config, error) {
 		}
 
 		if containersRaw, hasContainers := section["containers"]; hasContainers {
-			cfg.Phases[name] = Phase{Containers: toStringSlice(containersRaw)}
+			cfg.Phases[name] = Phase{
+				Containers: toStringSlice(containersRaw),
+				Cache:      toStringSlice(section["cache"]),
+				CacheKey:   toStringSlice(section["cache_key"]),
+			}
 		} else {
 			cfg.Overrides[name] = section
 		}

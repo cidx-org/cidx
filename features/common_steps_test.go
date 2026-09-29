@@ -206,7 +206,14 @@ func (tc *TestContext) writeStagedConfig() (string, error) {
 		if !ok {
 			return "", fmt.Errorf("no preset known for phase %q — extend phaseContainer", phase)
 		}
-		fmt.Fprintf(&b, "[%s]\ncontainers = [%q]\n\n", phase, container)
+		fmt.Fprintf(&b, "[%s]\ncontainers = [%q]\n", phase, container)
+		if c, cached := tc.phaseCaches()[phase]; cached {
+			fmt.Fprintf(&b, "cache = [%q]\n", c.path)
+			if c.key != "" {
+				fmt.Fprintf(&b, "cache_key = [%q]\n", c.key)
+			}
+		}
+		b.WriteString("\n")
 	}
 	for _, name := range sortedPipelines(pipelines) {
 		fmt.Fprintf(&b, "[pipelines.%s]\nphases = [", name)
