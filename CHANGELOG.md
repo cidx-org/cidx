@@ -1,3 +1,14 @@
+## v3.5.0 (2026-09-29)
+
+### Feat
+
+- **generate**: opt-in per-phase cache for the workspace paths a phase rebuilds (#506)
+- **generate**: cancel a pull request's superseded runs (#505)
+
+### Fix
+
+- **release**: count only chore/release-v<version> branches as a release in flight (#499)
+
 ## v3.4.5 (2026-09-24)
 
 ### Fix
