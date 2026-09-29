@@ -100,6 +100,30 @@ silent on what it cannot read with certainty: invocations through a variable
 bodies, comments, quoted command names, and arguments of a command that handles
 its own arguments. It reports nothing rather than accuse wrongly.
 
+### `cidx generate`
+
+Generate the CI platform file for the pipelines `cidx.toml` declares.
+
+```bash
+cidx generate github -o .github/workflows/cidx.yml
+cidx generate gitlab -o .gitlab-ci.yml
+```
+
+**Flags:** `--output`/`-o` (default: stdout), `--force` (overwrite without asking).
+
+The GitHub workflow has a `bootstrap` job that installs cidx once, then one job
+per phase that runs `cidx run <phase>` in parallel. Pipeline names pick the
+triggers: `ci`/`main` → push to main, `pr` → pull requests, `release` → `v*` tags.
+
+**Superseded pull request runs are cancelled.** The workflow's `concurrency`
+group is the pull request number, so pushing twice to a PR branch cancels the
+older run instead of running two pipelines side by side. A run that is not a
+pull request — a push to main, a tag — falls back to its own run id: it shares
+a group with nothing, so it is never cancelled. (A shared group would not be
+enough even with `cancel-in-progress` off: GitHub keeps one running and one
+pending run per group and cancels the older pending ones, so three quick merges
+to main would lose the middle commit's run.)
+
 ### `cidx release tag`
 
 Tag management commands with prepare/preview/create workflow.

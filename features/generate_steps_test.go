@@ -28,6 +28,9 @@ func RegisterGenerateSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Then(`^jobs (.+) should NOT depend on each other$`, tc.jobsShouldNotDependOnEachOther)
 	ctx.Then(`^"([^"]*)" pipeline should trigger on "([^"]*)"$`, tc.pipelineShouldTriggerOn)
 	ctx.Then(`^"([^"]*)" pipeline should trigger on "([^"]*)" to "([^"]*)" branch$`, tc.pipelineShouldTriggerOnBranch)
+	ctx.Then(`^the workflow should group runs by pull request number$`, tc.workflowGroupsByPullRequest)
+	ctx.Then(`^the workflow should cancel a run its group supersedes$`, tc.workflowCancelsSuperseded)
+	ctx.Then(`^the workflow should give a run that is not a pull request a group of its own$`, tc.workflowGivesOtherRunsOwnGroup)
 	ctx.Then(`^the output should be printed to stdout$`, tc.outputShouldBePrintedToStdout)
 	ctx.Then(`^the file "([^"]*)" should be created$`, tc.fileShouldBeCreated)
 }
@@ -40,6 +43,10 @@ type generatedWorkflow struct {
 		Push        *triggerYAML `yaml:"push"`
 		PullRequest *triggerYAML `yaml:"pull_request"`
 	} `yaml:"on"`
+	Concurrency struct {
+		Group            string `yaml:"group"`
+		CancelInProgress bool   `yaml:"cancel-in-progress"`
+	} `yaml:"concurrency"`
 	Jobs map[string]struct {
 		Name  string   `yaml:"name"`
 		Needs []string `yaml:"needs"`
@@ -402,4 +409,39 @@ func jobNames(parsed *generatedWorkflow) string {
 		names = append(names, name)
 	}
 	return strings.Join(names, ", ")
+}
+
+func (tc *TestContext) workflowGroupsByPullRequest() error {
+	parsed, err := tc.workflow()
+	if err != nil {
+		return err
+	}
+	if g := parsed.Concurrency.Group; !strings.Contains(g, "github.workflow") || !strings.Contains(g, "github.event.pull_request.number") {
+		return fmt.Errorf("the concurrency group %q does not key on the workflow and the pull request number", g)
+	}
+	return nil
+}
+
+func (tc *TestContext) workflowCancelsSuperseded() error {
+	parsed, err := tc.workflow()
+	if err != nil {
+		return err
+	}
+	if !parsed.Concurrency.CancelInProgress {
+		return fmt.Errorf("the workflow does not cancel a run its group supersedes")
+	}
+	return nil
+}
+
+// workflowGivesOtherRunsOwnGroup: a push or a tag has no pull request number,
+// so the group must fall back to something unique to the run.
+func (tc *TestContext) workflowGivesOtherRunsOwnGroup() error {
+	parsed, err := tc.workflow()
+	if err != nil {
+		return err
+	}
+	if g := parsed.Concurrency.Group; !strings.Contains(g, "github.event.pull_request.number || github.run_id") {
+		return fmt.Errorf("the concurrency group %q falls back to a value runs share, so a push could be cancelled or queued behind another", g)
+	}
+	return nil
 }

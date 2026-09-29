@@ -128,6 +128,17 @@ func GitHubWithOptions(cfg *config.Config, opts GitHubOptions) (string, error) {
 	b.WriteString("\npermissions:\n")
 	b.WriteString("  contents: read\n")
 
+	// A pull request's superseded runs are cancelled (#504). The group is the
+	// pull request number, and a run that is not a pull request -- a push to
+	// main, a tag -- falls back to its own run id, so it shares a group with
+	// nothing and is never cancelled. Sharing one would not be safe even with
+	// cancel-in-progress off: GitHub keeps one running and one pending run per
+	// group and cancels the older pending ones, so quick merges would lose the
+	// middle commit's run.
+	b.WriteString("\nconcurrency:\n")
+	b.WriteString("  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}\n")
+	b.WriteString("  cancel-in-progress: true\n")
+
 	b.WriteString("\njobs:\n")
 
 	// Bootstrap job -- build once, share binary
