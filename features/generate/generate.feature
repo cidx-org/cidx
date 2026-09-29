@@ -28,6 +28,27 @@ Feature: CI Workflow Generation
       Then "pr" pipeline should trigger on "pull_request"
       And "main" pipeline should trigger on "push" to "main" branch
 
+  Rule: A superseded pull request run is cancelled, and nothing else (#504)
+
+    # Pushing twice to a PR branch -- `pr create`'s initialization commit then
+    # `cpw` -- ran two complete pipelines side by side, the older one useless.
+    # Only runs of the same pull request share a group: every other run gets a
+    # group of its own, so a push to main or a tag is never cancelled. A shared
+    # group would not do even with cancel-in-progress off: GitHub keeps one
+    # running and one pending run per group and cancels the older pending ones,
+    # so three quick merges to main would lose the middle commit's run.
+
+    Scenario: Runs of the same pull request cancel each other
+      Given cidx.toml defines pipeline "pr" with phases "security, code"
+      When I run "cidx generate github"
+      Then the workflow should group runs by pull request number
+      And the workflow should cancel a run its group supersedes
+
+    Scenario: A run that is not a pull request never shares a group
+      Given cidx.toml defines pipeline "main" with phases "security, code"
+      When I run "cidx generate github"
+      Then the workflow should give a run that is not a pull request a group of its own
+
   Rule: Generate respects output options
 
     Scenario: Output to stdout by default
