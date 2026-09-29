@@ -484,8 +484,14 @@ func (a *ReleaseAction) releaseViaPR(ctx context.Context, workDir, baseBranch, b
 		return fmt.Errorf("release PR %s was not merged: %w", prURL, err)
 	}
 
-	// `pr merge` left us back on the base branch with the merge pulled, so
-	// HEAD is the squashed bump commit: that is what gets tagged.
+	// `pr merge` should have left us back on the base branch with the merge
+	// pulled, so that HEAD is the squashed bump commit — but its cleanup is
+	// advisory, and a failed pull left HEAD on the pre-bump commit (#510).
+	// Tag only what is verified to be the merged commit.
+	if err := VerifyTaggable(workDir, baseBranch, baseSHA); err != nil {
+		log.Errorf("❌ The release PR is merged but cannot be tagged yet: %v", err)
+		return fmt.Errorf("release PR %s was merged, nothing was tagged: %w", prURL, err)
+	}
 	log.Infof("🏷️  Tagging the merged commit as %s...", tagName)
 	if output, err := runGit(workDir, "tag", "-a", tagName, "-m", "Release "+tagName); err != nil {
 		return fmt.Errorf("failed to create tag %s: %w\n%s", tagName, err, output)

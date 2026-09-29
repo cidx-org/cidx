@@ -20,11 +20,13 @@ type bumpState struct {
 	env                 map[string]string
 	envErr              error
 
-	repo    string
-	baseSHA string
-	version string
-	readErr error
-	undoErr error
+	repo       string
+	baseSHA    string
+	baseBranch string
+	verifyErr  error
+	version    string
+	readErr    error
+	undoErr    error
 }
 
 // RegisterReleaseBumpSteps registers the release bump steps (#484).
@@ -50,6 +52,12 @@ func RegisterReleaseBumpSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Then(`^the tag "([^"]*)" no longer exists$`, tc.tagNoLongerExists)
 	ctx.Then(`^the tag "([^"]*)" still exists$`, tc.tagStillExists)
 	ctx.Then(`^the working tree is clean$`, tc.workingTreeIsClean)
+
+	ctx.Given(`^the checkout is on a release branch holding the bump commit$`, tc.checkoutOnReleaseBranch)
+	ctx.Given(`^the base branch holds the squashed bump commit$`, tc.baseBranchHoldsSquashedBump)
+	ctx.When(`^the release checks that it can tag the merged commit$`, tc.releaseChecksItCanTag)
+	ctx.Then(`^the release refuses to tag, mentioning "([^"]*)"$`, tc.releaseRefusesToTag)
+	ctx.Then(`^the release may tag$`, tc.releaseMayTag)
 }
 
 func (tc *TestContext) bump() *bumpState {
@@ -139,6 +147,10 @@ func (tc *TestContext) repositoryWithNoVersionFile() error {
 		return err
 	}
 	b.baseSHA, err = tc.bumpGit("rev-parse", "HEAD")
+	if err != nil {
+		return err
+	}
+	b.baseBranch, err = tc.bumpGit("rev-parse", "--abbrev-ref", "HEAD")
 	return err
 }
 
@@ -236,4 +248,45 @@ func (tc *TestContext) workingTreeIsClean() error {
 		return fmt.Errorf("working tree is not clean:\n%s", out)
 	}
 	return err
+}
+
+func (tc *TestContext) checkoutOnReleaseBranch() error {
+	if _, err := tc.bumpGit("checkout", "-q", "-b", "chore/release-v1.4.0"); err != nil {
+		return err
+	}
+	return tc.bumpCommitTagged("v1.4.0-local")
+}
+
+func (tc *TestContext) baseBranchHoldsSquashedBump() error {
+	// What `pr merge` leaves after a pulled squash-merge: the base branch has
+	// moved on by the bump commit, and the tag cz made is nowhere near it.
+	if err := os.WriteFile(filepath.Join(tc.bump().repo, "Cargo.toml"), []byte("version = \"1.4.0\"\n"), 0o644); err != nil {
+		return err
+	}
+	_, err := tc.bumpGit("commit", "-q", "-am", "bump: version 1.3.0 → 1.4.0 (#1)")
+	return err
+}
+
+func (tc *TestContext) releaseChecksItCanTag() error {
+	b := tc.bump()
+	b.verifyErr = actions.VerifyTaggable(b.repo, b.baseBranch, b.baseSHA)
+	return nil
+}
+
+func (tc *TestContext) releaseRefusesToTag(fragment string) error {
+	b := tc.bump()
+	if b.verifyErr == nil {
+		return fmt.Errorf("the release would tag, expected a refusal mentioning %q", fragment)
+	}
+	if !strings.Contains(b.verifyErr.Error(), fragment) {
+		return fmt.Errorf("refusal %q does not mention %q", b.verifyErr, fragment)
+	}
+	return nil
+}
+
+func (tc *TestContext) releaseMayTag() error {
+	if err := tc.bump().verifyErr; err != nil {
+		return fmt.Errorf("the release refuses to tag: %w", err)
+	}
+	return nil
 }

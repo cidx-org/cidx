@@ -80,3 +80,30 @@ Feature: Release version bump
       And the bump created no commit
       When the bump is undone
       Then the tag "v1.3.0" still exists
+
+  Rule: Nothing is tagged until HEAD is the merged commit (#510)
+
+    # After the squash-merge, release create tags "the merged commit" by tagging
+    # HEAD -- which is the merged commit only if the post-merge pull happened.
+    # v3.5.0: the pull failed on a network blip, HEAD was still the commit the
+    # release started from, and the tag went onto the notes commit one before the
+    # bump. Only the push failing for the same reason kept it from shipping.
+    # The check needs no network: after a pulled merge HEAD sits on the base
+    # branch, has moved, and descends from where the release started.
+
+    Scenario: A merge that was not pulled is not tagged
+      Given a repository with no VERSION file
+      When the release checks that it can tag the merged commit
+      Then the release refuses to tag, mentioning "git pull"
+
+    Scenario: A checkout left on the release branch is not tagged
+      Given a repository with no VERSION file
+      And the checkout is on a release branch holding the bump commit
+      When the release checks that it can tag the merged commit
+      Then the release refuses to tag, mentioning "chore/release-v1.4.0"
+
+    Scenario: A pulled merge is tagged
+      Given a repository with no VERSION file
+      And the base branch holds the squashed bump commit
+      When the release checks that it can tag the merged commit
+      Then the release may tag
