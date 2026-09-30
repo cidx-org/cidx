@@ -75,7 +75,7 @@
   treatment = "accepted-risk"
   reviewed = "2026-09-30"
   review_by = "2026-12-16"
-  reason = "The vulnerable code sits in the Debian base layer of black's image and is not exercised by what its preset runs. util-linux (bsdutils; CVE-2026-76642, -78408, -78409, -78410): local privilege escalations against mount(8)'s fstab hooks and nsenter, which need an unprivileged local attacker and a privileged (SUID) helper with an authorized fstab entry. A container has no fstab, runs as an unprivileged uid, and no preset here runs mount or nsenter. libsystemd0 (CVE-2026-16742): a systemd-homed local privilege escalation; no systemd runs in a container and nothing here talks to it. perl-base (CVE-2026-82560): CPU exhaustion formatting a crafted POD document; nothing here runs pod2text or Pod::Text. glibc (CVE-2026-19499): needs an application calling strfmon or strfmon_l with right-justified width padding into a small buffer; no tool here does. zlib (CVE-2026-85091): a heap overflow in the gzFile write path (gzprintf or gzwrite after a stalled non-blocking write); the tools here reach zlib through inflate and deflate, and none writes through gzFile on a non-blocking descriptor. All are HIGH or CRITICAL with no fix at any version, EPSS at most 0.007, none in KEV (audit run 36565600041, 2026-09-29). Checked against the commands these presets run; re-argue if they start running the affected tool."
+  reason = "The vulnerable code sits in the Debian base layer of black's image and is not exercised by what its preset runs. util-linux (bsdutils; CVE-2026-76642, -78408, -78409, -78410): local privilege escalations against mount(8)'s fstab hooks and nsenter, which need an unprivileged local attacker and a privileged (SUID) helper with an authorized fstab entry. A container has no fstab, runs as an unprivileged uid, and no preset here runs mount or nsenter. libsystemd0 (CVE-2026-16742): a systemd-homed local privilege escalation; no systemd runs in a container and nothing here talks to it. perl-base (CVE-2026-82560): CPU exhaustion formatting a crafted POD document; nothing here runs pod2text or Pod::Text. glibc (CVE-2026-19499): needs an application calling strfmon or strfmon_l with right-justified width padding into a small buffer; no tool here does. zlib (CVE-2026-85091): a heap overflow in the gzFile write path (gzprintf or gzwrite after a stalled non-blocking write); the tools here reach zlib through inflate and deflate, and none writes through gzFile on a non-blocking descriptor. All are HIGH or CRITICAL with no fix at any version, EPSS at most 0.007, none in KEV (audit run 36565600041, 2026-09-29). Checked against the commands these presets run; re-argue if they start running the affected tool. Added 2026-09-30 (second audit of the day): libssl3t64 (CVE-2026-84782): an out-of-bounds read in OpenSSL's DTLS retransmission, so datagram TLS over UDP; the tools here speak TLS over TCP, a different code path, and none opens a DTLS connection. HIGH, no fix at any version, EPSS 0, not in KEV (audit run 36682383284, 2026-09-30)."
   references = []
 
 [[decisions]]
@@ -97,7 +97,7 @@
   treatment = "accepted-risk"
   reviewed = "2026-09-30"
   review_by = "2026-12-16"
-  reason = "The vulnerable code sits in the Debian base layer of the cargo-audit image and is not exercised by what the preset runs (sh, curl on one fixed URL, tar, cargo-audit). util-linux (bsdutils; CVE-2026-76642, -78408, -78409, -78410): local privilege escalations against mount(8)'s fstab hooks and nsenter, which need an unprivileged local attacker and a privileged (SUID) helper with an authorized fstab entry. A container has no fstab, runs as an unprivileged uid, and no preset here runs mount or nsenter. libsystemd0 (CVE-2026-16742): a systemd-homed local privilege escalation; no systemd runs in a container and nothing here talks to it. perl-base (CVE-2026-82560): CPU exhaustion formatting a crafted POD document; nothing here runs pod2text or Pod::Text. glibc (CVE-2026-19499): needs an application calling strfmon or strfmon_l with right-justified width padding into a small buffer; no tool here does. zlib (CVE-2026-85091): a heap overflow in the gzFile write path (gzprintf or gzwrite after a stalled non-blocking write); the tools here reach zlib through inflate and deflate, and none writes through gzFile on a non-blocking descriptor. All are HIGH or CRITICAL with no fix at any version, EPSS at most 0.007, none in KEV (audit run 36565600041, 2026-09-29). Checked against the commands these presets run; re-argue if they start running the affected tool."
+  reason = "The vulnerable code sits in the Debian base layer of the cargo-audit image and is not exercised by what the preset runs (sh, curl on one fixed URL, tar, cargo-audit). util-linux (bsdutils; CVE-2026-76642, -78408, -78409, -78410): local privilege escalations against mount(8)'s fstab hooks and nsenter, which need an unprivileged local attacker and a privileged (SUID) helper with an authorized fstab entry. A container has no fstab, runs as an unprivileged uid, and no preset here runs mount or nsenter. libsystemd0 (CVE-2026-16742): a systemd-homed local privilege escalation; no systemd runs in a container and nothing here talks to it. perl-base (CVE-2026-82560): CPU exhaustion formatting a crafted POD document; nothing here runs pod2text or Pod::Text. glibc (CVE-2026-19499): needs an application calling strfmon or strfmon_l with right-justified width padding into a small buffer; no tool here does. zlib (CVE-2026-85091): a heap overflow in the gzFile write path (gzprintf or gzwrite after a stalled non-blocking write); the tools here reach zlib through inflate and deflate, and none writes through gzFile on a non-blocking descriptor. All are HIGH or CRITICAL with no fix at any version, EPSS at most 0.007, none in KEV (audit run 36565600041, 2026-09-29). Checked against the commands these presets run; re-argue if they start running the affected tool. Added 2026-09-30 (second audit of the day): libssl3t64 (CVE-2026-84782): an out-of-bounds read in OpenSSL's DTLS retransmission, so datagram TLS over UDP; the tools here speak TLS over TCP, a different code path, and none opens a DTLS connection. HIGH, no fix at any version, EPSS 0, not in KEV (audit run 36682383284, 2026-09-30)."
   references = []
 
 [[decisions]]
@@ -130,7 +130,7 @@
   treatment = "accepted-risk"
   reviewed = "2026-09-30"
   review_by = "2026-11-18"
-  reason = "The preset runs docker buildx build; the buildx plugin is static and the compose plugin is never invoked. The docker/docker CVEs are daemon-side handlers absent from both client plugins; the daemon is the host's. glibc is linked by the Go CLI, and the flagged paths are not the Go runtime's; the image's OpenSSL is linked by nothing the preset runs. No fix at any version. Added 2026-09-30, on the same footing: glibc (CVE-2026-19499): needs an application calling strfmon or strfmon_l with right-justified width padding into a small buffer; no tool here does. zlib (CVE-2026-85091): a heap overflow in the gzFile write path (gzprintf or gzwrite after a stalled non-blocking write); the tools here reach zlib through inflate and deflate, and none writes through gzFile on a non-blocking descriptor. docker/docker (GO-2026-4887): an AuthZ-plugin bypass on oversized request bodies, daemon-side code in the client library vendored here; the daemon is the host's. All are HIGH or CRITICAL with no fix at any version, EPSS at most 0.007, none in KEV (audit run 36565600041, 2026-09-29). Checked against the commands these presets run; re-argue if they start running the affected tool."
+  reason = "The preset runs docker buildx build; the buildx plugin is static and the compose plugin is never invoked. The docker/docker CVEs are daemon-side handlers absent from both client plugins; the daemon is the host's. glibc is linked by the Go CLI, and the flagged paths are not the Go runtime's; the image's OpenSSL is linked by nothing the preset runs. No fix at any version. Added 2026-09-30, on the same footing: glibc (CVE-2026-19499): needs an application calling strfmon or strfmon_l with right-justified width padding into a small buffer; no tool here does. zlib (CVE-2026-85091): a heap overflow in the gzFile write path (gzprintf or gzwrite after a stalled non-blocking write); the tools here reach zlib through inflate and deflate, and none writes through gzFile on a non-blocking descriptor. docker/docker (GO-2026-4887): an AuthZ-plugin bypass on oversized request bodies, daemon-side code in the client library vendored here; the daemon is the host's. All are HIGH or CRITICAL with no fix at any version, EPSS at most 0.007, none in KEV (audit run 36565600041, 2026-09-29). Checked against the commands these presets run; re-argue if they start running the affected tool. Added 2026-09-30 (second audit of the day): libssl3t64 (CVE-2026-84782): an out-of-bounds read in OpenSSL's DTLS retransmission, so datagram TLS over UDP; the tools here speak TLS over TCP, a different code path, and none opens a DTLS connection. HIGH, no fix at any version, EPSS 0, not in KEV (audit run 36682383284, 2026-09-30)."
   references = []
 
 [[decisions]]
@@ -252,7 +252,7 @@
   treatment = "accepted-risk"
   reviewed = "2026-09-30"
   review_by = "2026-11-18"
-  reason = "perl, gzip, sqlite, tinfo, acl and the image's OpenSSL are neither linked by cargo/rustc nor invoked by any preset command (probed on the pinned digest, audit run 32557245489); glibc is linked, and the flagged paths (ns_printrr, scanf %mc, ungetwc) are not ones Rust std uses. cargo-publish's token travels through cargo's own TLS. No fix at any version. Added 2026-09-30, on the same footing: util-linux (bsdutils; CVE-2026-76642, -78408, -78409, -78410): local privilege escalations against mount(8)'s fstab hooks and nsenter, which need an unprivileged local attacker and a privileged (SUID) helper with an authorized fstab entry. A container has no fstab, runs as an unprivileged uid, and no preset here runs mount or nsenter. libsystemd0 (CVE-2026-16742): a systemd-homed local privilege escalation; no systemd runs in a container and nothing here talks to it. perl-base (CVE-2026-82560): CPU exhaustion formatting a crafted POD document; nothing here runs pod2text or Pod::Text. glibc (CVE-2026-19499): needs an application calling strfmon or strfmon_l with right-justified width padding into a small buffer; no tool here does. zlib (CVE-2026-85091): a heap overflow in the gzFile write path (gzprintf or gzwrite after a stalled non-blocking write); the tools here reach zlib through inflate and deflate, and none writes through gzFile on a non-blocking descriptor. All are HIGH or CRITICAL with no fix at any version, EPSS at most 0.007, none in KEV (audit run 36565600041, 2026-09-29). Checked against the commands these presets run; re-argue if they start running the affected tool."
+  reason = "perl, gzip, sqlite, tinfo, acl and the image's OpenSSL are neither linked by cargo/rustc nor invoked by any preset command (probed on the pinned digest, audit run 32557245489); glibc is linked, and the flagged paths (ns_printrr, scanf %mc, ungetwc) are not ones Rust std uses. cargo-publish's token travels through cargo's own TLS. No fix at any version. Added 2026-09-30, on the same footing: util-linux (bsdutils; CVE-2026-76642, -78408, -78409, -78410): local privilege escalations against mount(8)'s fstab hooks and nsenter, which need an unprivileged local attacker and a privileged (SUID) helper with an authorized fstab entry. A container has no fstab, runs as an unprivileged uid, and no preset here runs mount or nsenter. libsystemd0 (CVE-2026-16742): a systemd-homed local privilege escalation; no systemd runs in a container and nothing here talks to it. perl-base (CVE-2026-82560): CPU exhaustion formatting a crafted POD document; nothing here runs pod2text or Pod::Text. glibc (CVE-2026-19499): needs an application calling strfmon or strfmon_l with right-justified width padding into a small buffer; no tool here does. zlib (CVE-2026-85091): a heap overflow in the gzFile write path (gzprintf or gzwrite after a stalled non-blocking write); the tools here reach zlib through inflate and deflate, and none writes through gzFile on a non-blocking descriptor. All are HIGH or CRITICAL with no fix at any version, EPSS at most 0.007, none in KEV (audit run 36565600041, 2026-09-29). Checked against the commands these presets run; re-argue if they start running the affected tool. Added 2026-09-30 (second audit of the day): libssl3t64 (CVE-2026-84782): an out-of-bounds read in OpenSSL's DTLS retransmission, so datagram TLS over UDP; the tools here speak TLS over TCP, a different code path, and none opens a DTLS connection. HIGH, no fix at any version, EPSS 0, not in KEV (audit run 36682383284, 2026-09-30)."
   references = []
 
 [[vulnerabilities]]
@@ -778,6 +778,15 @@
   references = []
 
 [[vulnerabilities]]
+  cve = "CVE-2026-84782"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-09-30"
+  references = []
+  decision = "buildpack-deps-system-libraries-not-reached"
+
+[[vulnerabilities]]
   cve = "CVE-2026-85091"
   repository = "buildpack-deps"
   first_seen = "buildpack-deps:trixie-curl"
@@ -1085,6 +1094,15 @@
   first_seen = "dhi.io/docker:29-cli"
   severity = "HIGH"
   added = "2026-08-20"
+  references = []
+  decision = "dhi-docker-cli-client-plugins"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-84782"
+  repository = "dhi.io/docker"
+  first_seen = "dhi.io/docker:29-cli"
+  severity = "HIGH"
+  added = "2026-09-30"
   references = []
   decision = "dhi-docker-cli-client-plugins"
 
@@ -2182,6 +2200,15 @@
   references = []
 
 [[vulnerabilities]]
+  cve = "CVE-2026-84782"
+  repository = "pyfound/black"
+  first_seen = "pyfound/black:26.5.1"
+  severity = "HIGH"
+  added = "2026-09-30"
+  references = []
+  decision = "black-system-libraries-not-reached"
+
+[[vulnerabilities]]
   cve = "CVE-2026-85091"
   repository = "pyfound/black"
   first_seen = "pyfound/black:26.5.1"
@@ -2450,6 +2477,15 @@
   first_seen = "rust:1.97.1-slim"
   severity = "HIGH"
   added = "2026-08-20"
+  references = []
+  decision = "rust-debian-libraries-not-reached"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-84782"
+  repository = "rust"
+  first_seen = "rust:1.97.1-slim"
+  severity = "HIGH"
+  added = "2026-09-30"
   references = []
   decision = "rust-debian-libraries-not-reached"
 
