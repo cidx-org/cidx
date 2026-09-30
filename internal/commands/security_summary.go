@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
@@ -55,6 +56,14 @@ func securitySummaryCommand() *cli.Command {
 				Name:  "fail-if-waiting",
 				Usage: "Exit non-zero when anything on the page needs a human (for the audit gate)",
 			},
+			&cli.IntFlag{
+				Name:  "grace-days",
+				Usage: "Give an unanswered finding this many days, from the audit that first reported it, before it fails the gate (needs --first-seen)",
+			},
+			&cli.StringFlag{
+				Name:  "first-seen",
+				Usage: "JSON file mapping \"<repository>/<ID>\" to the day the audit first reported it (needs --grace-days)",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			imagePresets, err := catalogueImages()
@@ -67,7 +76,13 @@ func securitySummaryCommand() *cli.Command {
 				return err
 			}
 
+			grace, err := graceFromFlags(c)
+			if err != nil {
+				return err
+			}
+
 			summary := buildCatalogueSummary(imagePresets, c.String("results"), record, time.Now())
+			summary.Grace = grace
 			page := presets.RenderSummary(summary)
 
 			out := c.String("output")
@@ -119,8 +134,11 @@ func buildCatalogueSummary(
 
 	exceptions := ExceptionsFor(record, now, presets.ExceptionsFile)
 
+	left := unaccepted(carried, accepted)
+
 	return presets.CatalogueSummary{
-		Unanswered:   triageCatalogue(unaccepted(carried, accepted)).Actionable,
+		Unanswered:   triageCatalogue(left).Actionable,
+		Findings:     unansweredFindings(left),
 		Images:       len(imagePresets),
 		Unscanned:    unscanned,
 		CarriedFloor: !accounted,
@@ -188,8 +206,28 @@ func summaryLinks() presets.SummaryLinks {
 // Waiting() is what the Security tab already publishes, so the gate, the tab and
 // SECURITY-BASELINE.md cannot disagree about what needs a human.
 func gateOn(c *cli.Context, summary presets.CatalogueSummary) error {
-	if !c.Bool("fail-if-waiting") || !summary.Waiting() {
+	if !c.Bool("fail-if-waiting") || !summary.Failing() {
 		return nil
+	}
+
+	// With a window the gate fails on a subset of what the page lists, and says
+	// which: a red that names nothing is the one nobody can act on.
+	if summary.Grace != nil {
+		past := summary.PastGrace()
+		named := make([]string, 0, len(past))
+		for _, f := range past {
+			label := f.Repository + " " + f.ID
+			if f.KEV {
+				label += " (known exploited: no window)"
+			}
+			named = append(named, label)
+		}
+		if len(named) > 10 {
+			named = append(named[:10], fmt.Sprintf("… and %d more", len(past)-10))
+		}
+		return fmt.Errorf("the catalogue is waiting on a human: %d finding(s) past their %d-day window (%d more are inside it and listed on the page), "+
+			"%d acceptance(s) past their date, plus any base named on the page above.\n  %s",
+			len(past), summary.Grace.Days, summary.Unanswered-len(past), len(summary.Expired), strings.Join(named, "\n  "))
 	}
 
 	return fmt.Errorf("the catalogue is waiting on a human: %d finding(s) with no fix at any version, "+
@@ -228,4 +266,87 @@ func unaccepted(carried map[string][]presets.Finding, accepted []Vulnerability) 
 		left[image] = kept
 	}
 	return left
+}
+
+// unansweredFindings names what unaccepted left, one per image and identifier:
+// the same population triageCatalogue counts as Actionable, in a fixed order.
+func unansweredFindings(left map[string][]presets.Finding) []presets.UnansweredFinding {
+	images := make([]string, 0, len(left))
+	for image := range left {
+		images = append(images, image)
+	}
+	sort.Strings(images)
+
+	var out []presets.UnansweredFinding
+	for _, image := range images {
+		for _, group := range presets.Actionable(left[image]) {
+			kev := false
+			for _, f := range group {
+				kev = kev || f.KEV
+			}
+			out = append(out, presets.UnansweredFinding{Repository: imageRepository(image), ID: group[0].ID, KEV: kev})
+		}
+	}
+	return out
+}
+
+// graceFromFlags reads the window and where its ages come from.
+//
+// The two go together: a window with no source of ages cannot be applied, and a
+// source with no window would do nothing — a setting that parses and does
+// nothing is worse than an absent one (#322). Either alone is refused rather
+// than quietly ignored. Neither is the gate as it always was.
+func graceFromFlags(c *cli.Context) (*presets.Grace, error) {
+	file := c.String("first-seen")
+	windowSet := c.IsSet("grace-days")
+	switch {
+	case !windowSet && file == "":
+		return nil, nil
+	case windowSet && file == "":
+		return nil, fmt.Errorf("--grace-days needs --first-seen: a finding's age cannot be judged without knowing when the audit first reported it")
+	case !windowSet:
+		return nil, fmt.Errorf("--first-seen needs --grace-days: the dates would change nothing without a window")
+	}
+	days := c.Int("grace-days")
+	if days < 0 {
+		return nil, fmt.Errorf("--grace-days must not be negative, got %d", days)
+	}
+	seen, err := readFirstSeen(file)
+	if err != nil {
+		return nil, err
+	}
+	return &presets.Grace{Days: days, FirstSeen: seen}, nil
+}
+
+// readFirstSeen loads the day the audit first reported each finding. An
+// unreadable or malformed file is an error, not an empty map: an empty map means
+// "the source answered and has seen nothing", which reads every finding as new
+// today, and an audit that cannot read its own clock must not grant that.
+func readFirstSeen(path string) (map[string]time.Time, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read the first-seen dates: %w", err)
+	}
+	var raw map[string]string
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("%s is not a JSON object of \"<repository>/<ID>\" to a date: %w", path, err)
+	}
+	seen := make(map[string]time.Time, len(raw))
+	for key, value := range raw {
+		day, err := time.Parse(time.RFC3339, value)
+		if err != nil {
+			day, err = time.Parse(time.DateOnly, value)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%s: %q for %s is not a date (RFC 3339 or YYYY-MM-DD)", path, value, key)
+		}
+		// The repository may itself hold slashes (ghcr.io/ansible/...): the ID is
+		// what follows the last one.
+		i := strings.LastIndex(key, "/")
+		if i <= 0 {
+			return nil, fmt.Errorf("%s: key %q is not <repository>/<ID>", path, key)
+		}
+		seen[presets.AlertKey(key[:i], key[i+1:])] = day
+	}
+	return seen, nil
 }
