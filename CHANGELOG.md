@@ -1,3 +1,13 @@
+## v3.7.0 (2026-09-30)
+
+### Feat
+
+- **generate**: let a phase's cache opt out of the restore-keys fallback (#516)
+
+### Fix
+
+- **security**: re-argue the Ansible kubectl decision on a fresh scan of the newest image (#517)
+
 ## v3.6.0 (2026-09-29)
 
 ### Feat
