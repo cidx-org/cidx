@@ -1,6 +1,7 @@
 package features
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -34,6 +35,7 @@ func RegisterSarifSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Then(`^the alert for "([^"]*)" should point at "([^"]*)"$`, tc.alertShouldPointAt)
 	ctx.Then(`^the alert for "([^"]*)" should have kept its identity$`, tc.alertShouldHaveKeptItsIdentity)
 	ctx.Then(`^no alert should be published$`, tc.noAlertPublished)
+	ctx.Then(`^the published document should hold its results and rules as empty arrays$`, tc.documentHoldsEmptyArrays)
 	ctx.Then(`^"([^"]*)" should be reported as unscanned$`, tc.shouldBeReportedUnscanned)
 }
 
@@ -313,4 +315,42 @@ func (tc *TestContext) shouldBeReportedUnscanned(image string) error {
 		}
 	}
 	return fmt.Errorf("%s was not reported as unscanned; unscanned: %v", image, unscanned)
+}
+
+// documentHoldsEmptyArrays encodes the log as it is uploaded and reads it back:
+// code scanning validates the JSON, in which a nil slice is null and null is not
+// an array.
+func (tc *TestContext) documentHoldsEmptyArrays() error {
+	log, err := tc.publishedLog()
+	if err != nil {
+		return err
+	}
+	encoded, err := json.Marshal(log)
+	if err != nil {
+		return err
+	}
+	var doc struct {
+		Runs []struct {
+			Tool struct {
+				Driver struct {
+					Rules any `json:"rules"`
+				} `json:"driver"`
+			} `json:"tool"`
+			Results any `json:"results"`
+		} `json:"runs"`
+	}
+	if err := json.Unmarshal(encoded, &doc); err != nil {
+		return err
+	}
+	if len(doc.Runs) == 0 {
+		return fmt.Errorf("the document has no run: %s", encoded)
+	}
+	run := doc.Runs[0]
+	if arr, ok := run.Results.([]any); !ok || len(arr) != 0 {
+		return fmt.Errorf("results is %#v in %s, want an empty array", run.Results, encoded)
+	}
+	if arr, ok := run.Tool.Driver.Rules.([]any); !ok || len(arr) != 0 {
+		return fmt.Errorf("rules is %#v in %s, want an empty array", run.Tool.Driver.Rules, encoded)
+	}
+	return nil
 }
