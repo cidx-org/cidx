@@ -457,3 +457,34 @@ func TestTheIgnoreFileAndTheTabAgreeOnTheBoundary(t *testing.T) {
 		}
 	}
 }
+
+// TestIgnoreFilesCarryAGHSAInEveryCase pins the fix for four accepted GHSA
+// findings that stayed in the scan results: Grype reports GitHub's canonical
+// spelling (GHSA- upper, body lower), the entries were recorded in full upper
+// case, and both scanners match a rule exactly. A CVE has one spelling and is
+// written once.
+func TestIgnoreFilesCarryAGHSAInEveryCase(t *testing.T) {
+	entries := []Vulnerability{
+		{CVE: "GHSA-X86F-5XW2-FM2R"},
+		{CVE: "CVE-2026-0001", Aliases: []string{"ghsa-abcd-efgh-ijkl"}},
+	}
+
+	// Trivy's file names the identifier of the entry; only Grype's also lists the
+	// aliases, which is how it has always worked.
+	wants := map[string][]string{
+		"grype": {"GHSA-X86F-5XW2-FM2R", "GHSA-x86f-5xw2-fm2r", "ghsa-x86f-5xw2-fm2r", "ghsa-abcd-efgh-ijkl", "GHSA-abcd-efgh-ijkl", "GHSA-ABCD-EFGH-IJKL"},
+		"trivy": {"GHSA-X86F-5XW2-FM2R", "GHSA-x86f-5xw2-fm2r", "ghsa-x86f-5xw2-fm2r"},
+	}
+	for name, out := range map[string]string{"grype": generateGrypeIgnore(entries), "trivy": generateTrivyIgnore(entries)} {
+		// GHSA-x86f-5xw2-fm2r is the canonical form Grype reports; the entry was
+		// recorded in full upper case.
+		for _, want := range wants[name] {
+			if !strings.Contains(out, want) {
+				t.Errorf("%s ignore file does not carry %s:\n%s", name, want, out)
+			}
+		}
+		if n := strings.Count(out, "CVE-2026-0001"); n != 1 {
+			t.Errorf("%s ignore file writes a CVE %d times, want once:\n%s", name, n, out)
+		}
+	}
+}

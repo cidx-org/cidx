@@ -857,10 +857,40 @@ func generateTrivyIgnore(vulns []Vulnerability) string {
 	sb.WriteString("# Known vulnerability exceptions - do not scan these CVEs\n\n")
 	for _, v := range vulns {
 		// Trivy uses CVE identifiers
-		sb.WriteString(v.CVE)
-		sb.WriteString("\n")
+		for _, id := range ignoreSpellings(v.CVE) {
+			sb.WriteString(id)
+			sb.WriteString("\n")
+		}
 	}
 	return sb.String()
+}
+
+// ignoreSpellings lists the spellings an ignore rule has to carry for a scanner
+// to match it.
+//
+// Both scanners match an identifier exactly, and a GHSA has more than one
+// spelling in circulation: GitHub's canonical form keeps `GHSA-` upper-case and
+// the body lower-case (`GHSA-x86f-5xw2-fm2r`, what Grype reports), while an entry
+// may have been recorded in full upper case. An entry in the wrong one
+// suppressed nothing — four accepted GHSA findings stayed in the audit's scan
+// results and kept four alerts open in the Security tab for weeks, while the
+// status page, which compares case-insensitively, counted them answered.
+//
+// A CVE has one spelling. A GHSA gets the one the file holds, the canonical
+// form, and both full cases: a superset costs a few lines, and the alternative
+// is a finding that reappears because of a capital letter.
+func ignoreSpellings(id string) []string {
+	spellings := []string{id}
+	if !strings.HasPrefix(strings.ToUpper(id), "GHSA-") {
+		return spellings
+	}
+	canonical := "GHSA-" + strings.ToLower(id[len("GHSA-"):])
+	for _, other := range []string{canonical, strings.ToUpper(id), strings.ToLower(id)} {
+		if !slices.Contains(spellings, other) {
+			spellings = append(spellings, other)
+		}
+	}
+	return spellings
 }
 
 func generateGrypeIgnore(vulns []Vulnerability) string {
@@ -874,9 +904,10 @@ func generateGrypeIgnore(vulns []Vulnerability) string {
 	sb.WriteString("ignore:\n")
 	for _, v := range vulns {
 		// Grype can use CVE or GHSA identifiers - add all aliases
-		fmt.Fprintf(&sb, "  - vulnerability: %s\n", v.CVE)
-		for _, alias := range v.Aliases {
-			fmt.Fprintf(&sb, "  - vulnerability: %s\n", alias)
+		for _, id := range append([]string{v.CVE}, v.Aliases...) {
+			for _, spelling := range ignoreSpellings(id) {
+				fmt.Fprintf(&sb, "  - vulnerability: %s\n", spelling)
+			}
 		}
 	}
 	return sb.String()
