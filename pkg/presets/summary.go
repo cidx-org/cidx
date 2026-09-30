@@ -74,6 +74,14 @@ type CatalogueSummary struct {
 	// (#439).
 	Unanswered int
 
+	// Findings names the unanswered findings, one per image and identifier, the
+	// same population Unanswered counts. It is what an age can be read against.
+	Findings []UnansweredFinding
+
+	// Grace, when set, gives each unanswered finding a window before it fails
+	// the audit gate (#524). Nil is the gate as it was: presence fails.
+	Grace *Grace
+
 	// Accepted is how many HIGH/CRITICAL acceptances cover a repository the
 	// catalogue runs today, and Expired the subset past its date.
 	Accepted int
@@ -116,9 +124,7 @@ func (s CatalogueSummary) basesIn(state string) []BaseNote {
 func (s CatalogueSummary) Waiting() bool {
 	return s.Unanswered > 0 ||
 		len(s.Expired) > 0 ||
-		len(s.basesIn(BaseEnded)) > 0 ||
-		len(s.basesIn(BaseEndingSoon)) > 0 ||
-		len(s.basesIn(BaseUnknown)) > 0
+		s.basesWaiting()
 }
 
 // SummaryDigest is the same page in flat keys.
@@ -263,6 +269,12 @@ func writeSummaryWaiting(sb *strings.Builder, s CatalogueSummary) {
 	sb.WriteString("| ---- | -------- | ------------ |\n")
 	fmt.Fprintf(sb, "| Findings with no fix at any version | %d | %s |\n",
 		s.Unanswered, link("the Security tab", securityTab(s.Links.Repo)))
+	// The audit fails on the subset past its window, so the page says how big
+	// that subset is: a reader must not have to infer why the audit is red.
+	if s.Grace != nil {
+		fmt.Fprintf(sb, "| Findings past the %d-day window (the audit fails on these) | %d | %s |\n",
+			s.Grace.Days, len(s.PastGrace()), link("the Security tab", securityTab(s.Links.Repo)))
+	}
 	fmt.Fprintf(sb, "| Acceptances past their expiry date | %d | %s |\n",
 		len(s.Expired), link("`"+ExceptionsFile+"`", blob(s.Links.Repo, ExceptionsFile)))
 	fmt.Fprintf(sb, "| Bases no longer supported | %d | %s |\n",

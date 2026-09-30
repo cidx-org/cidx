@@ -130,6 +130,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	RegisterGroupedDecisionSteps(ctx, testCtx)
 	RegisterReleaseBumpSteps(ctx, testCtx)
 	RegisterReleaseHousekeepingSteps(ctx, testCtx)
+	RegisterAuditGateSteps(ctx, testCtx)
 
 	// Hooks
 	ctx.Before(func(ctx context.Context, sc *godog.Scenario) (context.Context, error) {
