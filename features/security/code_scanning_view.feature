@@ -35,6 +35,17 @@ Feature: The catalogue's state, published to code scanning
       When the catalogue findings are published to code scanning
       Then "CVE-2026-0002" should not be published as an alert
 
+    # The document is encoded, not only built: a Go nil slice is JSON null, and
+    # code scanning refuses a run whose results is not an array. It never
+    # mattered while four accepted findings kept an alert open; the day the
+    # catalogue had nothing to publish the audit went red on the upload.
+
+    Scenario: A catalogue with nothing to publish is still a document code scanning accepts
+      Given the catalogue runs "rust"
+      And the scanners report "CVE-2026-0002" on "rust", fixed in "1.2.3"
+      When the catalogue findings are published to code scanning
+      Then the published document should hold its results and rules as empty arrays
+
     Scenario: The Go standard library in a CLI binary is not published
       Given the catalogue runs "rust"
       And the scanners report "CVE-2026-0003" on "rust" in package "stdlib" of type "gobinary"

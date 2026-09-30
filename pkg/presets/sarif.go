@@ -309,9 +309,13 @@ func MergeAlerts(triage, expired []Alert) []Alert {
 //     rule identifier names the repository, and its location is the line pinning
 //     that image. Both work just as well inside one run.
 func SARIF(alerts []Alert) SarifLog {
+	// Empty, not nil: a Go nil slice encodes as JSON null, and code scanning
+	// refuses a run whose results is not an array. The catalogue having nothing
+	// to publish is a state it can now reach (the audit went red on the upload
+	// the day it did).
 	var (
-		rules   []SarifRule
-		results []SarifResult
+		rules   = []SarifRule{}
+		results = []SarifResult{}
 		seen    = map[string]bool{}
 	)
 
