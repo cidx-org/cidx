@@ -49,10 +49,10 @@
   repository = "ghcr.io/ansible/community-ansible-dev-tools"
   model = "inert-package"
   capabilities = ["docker-socket", "publishing-credential"]
-  treatment = "awaiting-upstream"
-  reviewed = "2026-08-22"
-  review_by = "2026-09-06"
-  reason = "runc, containerd, docker/docker and selinux are vendored into /usr/local/bin/kubectl, which no preset invokes; the vulnerable paths need a container to be run by that binary, and kubectl runs none. Fixed versions exist at module level and reach us only when the image ships a rebuilt kubectl (v26.7.1, the current latest, does not). Decided 2026-08-22: if the review date passes with no such image, this becomes accepted-risk under the same model -- the blast radius, if inertness is wrong, includes the Docker socket and the Galaxy token -- rather than disabling seven presets over an uninvoked library."
+  treatment = "accepted-risk"
+  reviewed = "2026-09-30"
+  review_by = "2026-10-30"
+  reason = "runc, containerd, docker/docker and selinux are vendored into /usr/local/bin/kubectl, which no preset invokes; the vulnerable paths need a container to be run by that binary, and kubectl runs none (docker/docker's flaws are daemon-side handlers -- container archive API, docker cp, the AuthZ plugin -- absent from a client binary). Fixed versions exist at module level and reach us only when the image ships a rebuilt kubectl. Re-argued 2026-09-30 against audit run 36565600041 and a fresh scan of v26.9.0, the newest upstream tag: its kubectl still vendors runc 1.1.13, containerd 1.7.11, docker/docker 27.1.1 and selinux 1.12.0, so no image ships the fix. As decided 2026-08-22 for exactly this case, the treatment is now accepted-risk under the inert model rather than awaiting-upstream -- the blast radius, if inertness is wrong, includes the Docker socket and the Galaxy token -- rather than disabling seven presets over an uninvoked library. The review is a month out on purpose: at each one, scan the newest tag, and if an image has rebuilt kubectl, repin instead of renewing."
   references = ["https://github.com/opencontainers/runc/releases/tag/v1.2.8", "https://github.com/containerd/containerd/releases/tag/v1.7.29"]
 
 [[decisions]]
@@ -952,6 +952,15 @@
   first_seen = "ghcr.io/ansible/community-ansible-dev-tools:v25.11.0"
   severity = "HIGH"
   added = "2026-08-06"
+  references = []
+  decision = "ansible-dev-tools-kubectl-vendored-libraries"
+
+[[vulnerabilities]]
+  cve = "GO-2026-4887"
+  repository = "ghcr.io/ansible/community-ansible-dev-tools"
+  first_seen = "ghcr.io/ansible/community-ansible-dev-tools:v26.7.1"
+  severity = "HIGH"
+  added = "2026-09-30"
   references = []
   decision = "ansible-dev-tools-kubectl-vendored-libraries"
 
