@@ -82,10 +82,16 @@ func (tc *TestContext) writeAuditJobSummary() error {
 		"job.md":  "",
 		"bin/cidx": `#!/bin/sh
 set -eu
-test "$#" -eq 6
-test "$1 $2 $3 $4 $5" = 'security summary --results artifacts -o'
+# The page is judged by the same window as the gate (#524): the step must
+# forward the job's GRACE_DAYS and the first-seen file the step before it wrote.
+test "$#" -eq 10
+test "$1 $2 $3 $4 $5" = 'security summary --results artifacts --grace-days'
+test "$6" = "$GRACE_DAYS"
+test "$7" = '--first-seen'
+test "$8" = "$RUNNER_TEMP/first-seen.json"
+test "$9" = '-o'
 test "$AUDIT_RENDER_FAILURE" != true
-cp "$AUDIT_PAGE" "$6"
+cp "$AUDIT_PAGE" "${10}"
 `,
 		"bin/gh": `#!/bin/sh
 set -eu
@@ -132,6 +138,8 @@ func (tc *TestContext) executeAuditStep(step auditWorkflowStep, rendererFails bo
 		"GITHUB_SERVER_URL=https://github.com", "GITHUB_REPOSITORY=cidx-org/cidx", "GITHUB_RUN_ID=42",
 		"AUDIT_PAGE="+filepath.Join(dir, "page.md"), "AUDIT_PUBLISHED="+filepath.Join(dir, "published.md"),
 		"AUDIT_GH_CALLS="+filepath.Join(dir, "gh-calls"), fmt.Sprintf("AUDIT_RENDER_FAILURE=%t", rendererFails),
+		// Job-level env of the Report job, which a step's own env does not carry.
+		"GRACE_DAYS=7",
 	)
 	for key, value := range step.Env {
 		if resolved, ok := values[value]; ok {
