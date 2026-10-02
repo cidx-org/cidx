@@ -563,6 +563,17 @@ jobs:
       security-events: write
       issues: write
 
+    env:
+      # How long a finding with no fix may wait for an answer before it fails the
+      # audit, counted from the first audit that reported it (#524). The audit was
+      # red on findings published that very morning: three scans in one day found
+      # 70, then 4, then 8, each batch a set of CVE that did not exist at the
+      # previous scan. Seven is one weekly cycle of the container monitor — time
+      # to argue a decision — and well under the 14-day cooldown. The page lists
+      # every waiting finding either way; the window delays the failure, not the
+      # visibility.
+      GRACE_DAYS: "7"
+
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -574,6 +585,35 @@ jobs:
 
       - name: Build CIDX
         run: go build -o bin/cidx ./cmd/cidx
+
+      # The age of a finding is the date the audit first reported it, and code
+      # scanning already holds that date: the Security tab dates every alert and
+      # closes it by itself (#301), so the clock is a read, not new state to keep.
+      # Trivy dates a third of the findings and Grype none, so the advisory's own
+      # publication date could not have been the source.
+      #
+      # Read before this run uploads, so a finding first reported today has no
+      # alert yet and counts as new, which is what it is. An alert exists only for
+      # a finding with no answer, exactly the population the window applies to.
+      #
+      # **The file exists only if the read succeeded.** It is written aside and
+      # renamed: an empty file means "the source answered and has seen nothing",
+      # which reads every finding as new today and would open the gate. A failed
+      # read must leave no file, so the next step fails closed and says why.
+      - name: Read when each finding was first reported
+        id: first-seen
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eo pipefail
+          gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/code-scanning/alerts?tool_name=CIDX%20catalogue%20audit&state=open&per_page=100" \
+            --jq '.[] | select(.rule.id | startswith("expired/") | not) | "\(.rule.id)\t\(.created_at)"' \
+            | jq -R -s 'split("\n") | map(select(length > 0) | split("\t") | {(.[0]): .[1]}) | add // {}' \
+            > "$RUNNER_TEMP/first-seen.tmp"
+          mv "$RUNNER_TEMP/first-seen.tmp" "$RUNNER_TEMP/first-seen.json"
+          echo "Alerts dated: $(jq length "$RUNNER_TEMP/first-seen.json")"
 
       - name: Download all scan results
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -602,7 +642,11 @@ jobs:
               "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          ./bin/cidx security summary --results artifacts -o "$RUNNER_TEMP/status.md"
+          # The same window as the gate below: the page must say what the audit
+          # fails on, or a red run names nothing (#436).
+          ./bin/cidx security summary --results artifacts \
+            --grace-days "$GRACE_DAYS" --first-seen "$RUNNER_TEMP/first-seen.json" \
+            -o "$RUNNER_TEMP/status.md"
           cat "$RUNNER_TEMP/status.md" >> "$GITHUB_STEP_SUMMARY"
 
       # A CVE scan says what is broken today; it never says whether anything
@@ -725,10 +769,18 @@ jobs:
 
       # The verdict, once, after the findings are published. It asks the page's
       # own question -- is anything waiting on a human -- so the gate, the
-      # Security tab and SECURITY-BASELINE.md cannot disagree (#436).
+      # Security tab and SECURITY-BASELINE.md cannot disagree (#436). With the
+      # window it fails on the subset past it, which the page names in its own
+      # table: everything waiting is listed, only what is overdue is red.
+      #
+      # A failure to read the first-seen dates leaves no file, and the command
+      # refuses a file it cannot read: an age nobody can establish fails closed.
       - name: Fail if the catalogue is waiting on a human
         if: always()
-        run: ./bin/cidx security summary --results artifacts --fail-if-waiting -o /dev/null
+        run: |
+          ./bin/cidx security summary --results artifacts \
+            --grace-days "$GRACE_DAYS" --first-seen "$RUNNER_TEMP/first-seen.json" \
+            --fail-if-waiting -o /dev/null
 
       # Everything above is detail: one alert per finding in the Security tab,
       # one annotation per base on the run, one artifact per scanner. None of it
