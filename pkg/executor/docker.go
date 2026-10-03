@@ -451,7 +451,7 @@ func (e *DockerExecutor) getOrCreateContainer(ctx context.Context, containerConf
 
 	// If container exists, decide reuse vs recreate
 	if existingContainer != nil {
-		newHash := configHash(containerConfig.Image, command, containerConfig.Workdir, containerConfig.Entrypoint, volumes, containerConfig.Env)
+		newHash := ReuseKey(containerConfig, command, volumes, e.hostIdentity())
 		existingHash := existingContainer.Labels["cidx.config_hash"]
 
 		recreateReason := decideRecreate(existingHash, newHash, os.Getenv(noReuseEnv), containerConfig.Ephemeral)
@@ -562,7 +562,7 @@ func (e *DockerExecutor) createContainer(ctx context.Context, containerConfig *c
 			"cidx.phase":       containerConfig.Phase,
 			"cidx.image":       containerConfig.Image,
 			"cidx.version":     Version,
-			"cidx.config_hash": configHash(containerConfig.Image, command, containerConfig.Workdir, containerConfig.Entrypoint, volumes, containerConfig.Env),
+			"cidx.config_hash": ReuseKey(containerConfig, command, volumes, e.hostIdentity()),
 		},
 	}
 
@@ -571,9 +571,11 @@ func (e *DockerExecutor) createContainer(ctx context.Context, containerConfig *c
 		dockerConfig.Entrypoint = containerConfig.Entrypoint
 	}
 
-	// Only set user for non-privileged containers
-	if !containerConfig.Privileged {
-		dockerConfig.User = fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid())
+	// Who the container runs as. The same call feeds ReuseKey, so a container is
+	// reused only while it would be created as the same user (#531).
+	user, userns := e.hostIdentity().runAs(containerConfig.Privileged)
+	if user != "" {
+		dockerConfig.User = user
 	}
 
 	hostConfig := &container.HostConfig{
@@ -582,8 +584,8 @@ func (e *DockerExecutor) createContainer(ctx context.Context, containerConfig *c
 	}
 
 	// Podman rootless: map host UID into container to fix volume permissions
-	if e.rootless {
-		hostConfig.UsernsMode = "keep-id"
+	if userns != "" {
+		hostConfig.UsernsMode = container.UsernsMode(userns)
 	}
 
 	resp, err := e.client.ContainerCreate(ctx, dockerConfig, hostConfig, nil, nil, containerName)
@@ -767,14 +769,21 @@ func decideRecreate(existingHash, newHash, noReuseValue string, ephemeral bool) 
 //   - Cheap: SHA-256 truncated to 16 hex chars (64 bits) — collision-resistant
 //     enough for "did the user's config change" detection.
 //
+// The identity the container runs as is part of the hash (#531): the user, and
+// the user-namespace mode rootless Podman needs. `privileged` used to be left
+// out as "execution behaviour", but cidx never passes --privileged to Docker —
+// the field decides the user the container is created with, so switching it
+// kept running a container created as the host user, which a root-only tool
+// cannot use.
+//
 // Fields intentionally excluded from the hash:
-//   - PullPolicy, Privileged, Timeout — these affect execution behavior but
-//     not container state; a change should not force a recreate (the next Run
-//     just uses the new policy).
+//   - PullPolicy, Timeout — these affect execution behavior but not container
+//     state; a change should not force a recreate (the next Run just uses the
+//     new policy).
 //   - Phase, Name — identity, not config.
 //   - Comments / whitespace in cidx.toml — by design, only behavior-affecting
 //     fields are hashed.
-func configHash(image, command, workdir string, entrypoint, volumes []string, env map[string]string) string {
+func configHash(image, command, workdir string, entrypoint, volumes []string, env map[string]string, runAs string) string {
 	h := sha256.New()
 	h.Write([]byte(image))
 	h.Write([]byte("\x00"))
@@ -803,7 +812,44 @@ func configHash(image, command, workdir string, entrypoint, volumes []string, en
 		h.Write([]byte(env[k]))
 		h.Write([]byte("\x00"))
 	}
+	h.Write([]byte(runAs))
+	h.Write([]byte("\x00"))
 	return fmt.Sprintf("%x", h.Sum(nil))[:16]
+}
+
+// HostIdentity is who cidx runs as on the host. It decides the user a
+// non-privileged container is created with, and whether rootless Podman needs
+// its user-namespace mode.
+type HostIdentity struct {
+	UID, GID int
+	Rootless bool
+}
+
+// runAs is what a container is created to run as: the user (empty for a
+// privileged tool, which keeps the image's own — usually root) and the
+// user-namespace mode. createContainer applies it and ReuseKey hashes it, so the
+// two cannot disagree about which container a configuration describes.
+func (h HostIdentity) runAs(privileged bool) (user, userns string) {
+	if !privileged {
+		user = fmt.Sprintf("%d:%d", h.UID, h.GID)
+	}
+	if h.Rootless {
+		userns = "keep-id"
+	}
+	return user, userns
+}
+
+func (e *DockerExecutor) hostIdentity() HostIdentity {
+	return HostIdentity{UID: os.Getuid(), GID: os.Getgid(), Rootless: e.rootless}
+}
+
+// ReuseKey is the label a container is created with and the one the next run
+// compares against: everything that shapes the container, and nothing that only
+// shapes how it is run. A container is reused only while its key still matches
+// (#144), so a field missing here is a stale container the user cannot explain.
+func ReuseKey(c *config.ContainerConfig, command string, volumes []string, host HostIdentity) string {
+	user, userns := host.runAs(c.Privileged)
+	return configHash(c.Image, command, c.Workdir, c.Entrypoint, volumes, c.Env, user+"\x00"+userns)
 }
 
 // Close closes the Docker client
