@@ -20,8 +20,8 @@ func TestConfigHash_Deterministic(t *testing.T) {
 	volumes := []string{"/src:/app"}
 	env := map[string]string{"FOO": "bar", "BAZ": "qux"}
 
-	h1 := configHash(image, command, workdir, entrypoint, volumes, env)
-	h2 := configHash(image, command, workdir, entrypoint, volumes, env)
+	h1 := configHash(image, command, workdir, entrypoint, volumes, env, "")
+	h2 := configHash(image, command, workdir, entrypoint, volumes, env, "")
 
 	if h1 != h2 {
 		t.Errorf("configHash not deterministic: %s != %s", h1, h2)
@@ -29,7 +29,7 @@ func TestConfigHash_Deterministic(t *testing.T) {
 }
 
 func TestConfigHash_DifferentInputs(t *testing.T) {
-	base := configHash("alpine:latest", "echo", "", nil, nil, nil)
+	base := configHash("alpine:latest", "echo", "", nil, nil, nil, "")
 
 	tests := []struct {
 		name       string
@@ -50,7 +50,7 @@ func TestConfigHash_DifferentInputs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := configHash(tt.image, tt.command, tt.workdir, tt.entrypoint, tt.volumes, tt.env)
+			h := configHash(tt.image, tt.command, tt.workdir, tt.entrypoint, tt.volumes, tt.env, "")
 			if h == base {
 				t.Errorf("expected different hash for %s, got same: %s", tt.name, h)
 			}
@@ -62,8 +62,8 @@ func TestConfigHash_EnvSorting(t *testing.T) {
 	env1 := map[string]string{"A": "1", "B": "2", "C": "3"}
 	env2 := map[string]string{"C": "3", "A": "1", "B": "2"}
 
-	h1 := configHash("img", "cmd", "", nil, nil, env1)
-	h2 := configHash("img", "cmd", "", nil, nil, env2)
+	h1 := configHash("img", "cmd", "", nil, nil, env1, "")
+	h2 := configHash("img", "cmd", "", nil, nil, env2, "")
 
 	if h1 != h2 {
 		t.Errorf("configHash should be order-independent for env: %s != %s", h1, h2)
@@ -72,8 +72,8 @@ func TestConfigHash_EnvSorting(t *testing.T) {
 
 func TestConfigHash_VolumeOrderMatters(t *testing.T) {
 	// Volume order changes Docker's mount precedence — treat as a config change.
-	h1 := configHash("img", "cmd", "", nil, []string{"/a:/x", "/b:/y"}, nil)
-	h2 := configHash("img", "cmd", "", nil, []string{"/b:/y", "/a:/x"}, nil)
+	h1 := configHash("img", "cmd", "", nil, []string{"/a:/x", "/b:/y"}, nil, "")
+	h2 := configHash("img", "cmd", "", nil, []string{"/b:/y", "/a:/x"}, nil, "")
 
 	if h1 == h2 {
 		t.Errorf("configHash should differ when volume order changes: %s == %s", h1, h2)
@@ -82,8 +82,8 @@ func TestConfigHash_VolumeOrderMatters(t *testing.T) {
 
 func TestConfigHash_VolumeWhitespaceNormalized(t *testing.T) {
 	// Cosmetic whitespace in cidx.toml volume strings shouldn't trigger a recreate.
-	h1 := configHash("img", "cmd", "", nil, []string{"/a:/x"}, nil)
-	h2 := configHash("img", "cmd", "", nil, []string{"  /a:/x  "}, nil)
+	h1 := configHash("img", "cmd", "", nil, []string{"/a:/x"}, nil, "")
+	h2 := configHash("img", "cmd", "", nil, []string{"  /a:/x  "}, nil, "")
 
 	if h1 != h2 {
 		t.Errorf("configHash should ignore surrounding whitespace on volumes: %s != %s", h1, h2)
@@ -91,7 +91,7 @@ func TestConfigHash_VolumeWhitespaceNormalized(t *testing.T) {
 }
 
 func TestConfigHash_Length(t *testing.T) {
-	h := configHash("img", "cmd", "", nil, nil, nil)
+	h := configHash("img", "cmd", "", nil, nil, nil, "")
 	if len(h) != 16 {
 		t.Errorf("expected hash length 16, got %d", len(h))
 	}

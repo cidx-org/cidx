@@ -152,8 +152,15 @@ Containers are **recreated** (not reused) when:
 
 1. **Manually removed** with `docker rm`
 2. **The config changed** — cidx stores a `cidx.config_hash` label over the
-   behavior-affecting fields (image, command, workdir, entrypoint, volumes, env)
-   and recreates the container when it no longer matches
+   fields that shape the container (image, command, workdir, entrypoint,
+   volumes, env, and the identity it runs as) and recreates the container when it
+   no longer matches. The identity is the user — the host user's uid:gid, or none
+   for a `privileged = true` tool, which keeps the image's own — plus the
+   user-namespace mode rootless Podman needs. Switching a tool to `privileged`
+   therefore recreates its container: it used to keep running the one created as
+   the host user, and a root-only tool failed as if the flag were ignored (#531).
+   `pull_policy` and `timeout` are not part of it: they change how the tool is
+   run, not the container, and a recreate would cost the cache for nothing
 3. **The container predates the hash label** — it can't be proven current
 4. **`CIDX_NO_REUSE` is set** — escape hatch that forces a recreate every run
 
