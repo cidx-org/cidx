@@ -52,3 +52,32 @@ Feature: A reused container is the container the configuration describes
       Given a tool "trivy" that runs as the host user
       When the tool's pull policy and timeout change
       Then the container created before is reused
+
+  Rule: What is compared is the environment the container is created with
+
+    # An env value can be declared as ${GITHUB_TOKEN}: the container receives the
+    # host's value at creation. The key was computed from the declaration, which
+    # does not change when the host's value does, so a renewed token or a new tag
+    # reused a container still holding the old one -- found while fixing #531.
+    #
+    # Hashing the resolved value puts nothing new in reach: the container's own
+    # configuration already holds that value in clear, which `docker inspect`
+    # shows to anyone who can reach the daemon. What the label may never do is
+    # carry the value itself: it is a 16-character digest.
+
+    Scenario: A renewed token recreates the container
+      Given the environment sets "REUSE_PROBE_TOKEN" to "token-before"
+      And a tool "gh-release" whose "GH_TOKEN" comes from the host variable "REUSE_PROBE_TOKEN"
+      When the environment sets "REUSE_PROBE_TOKEN" to "token-after"
+      Then the container created before must not be reused
+
+    Scenario: An unchanged token keeps the container
+      Given the environment sets "REUSE_PROBE_TOKEN" to "token-before"
+      And a tool "gh-release" whose "GH_TOKEN" comes from the host variable "REUSE_PROBE_TOKEN"
+      When the same tool is run again
+      Then the container created before is reused
+
+    Scenario: The key never carries the secret
+      Given the environment sets "REUSE_PROBE_TOKEN" to "s3cr3t-value-0123456789"
+      And a tool "gh-release" whose "GH_TOKEN" comes from the host variable "REUSE_PROBE_TOKEN"
+      Then the reuse key should be a 16-character digest that does not contain the secret

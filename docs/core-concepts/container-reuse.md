@@ -160,7 +160,13 @@ Containers are **recreated** (not reused) when:
    therefore recreates its container: it used to keep running the one created as
    the host user, and a root-only tool failed as if the flag were ignored (#531).
    `pull_policy` and `timeout` are not part of it: they change how the tool is
-   run, not the container, and a recreate would cost the cache for nothing
+   run, not the container, and a recreate would cost the cache for nothing.
+   The env compared is the one the container **receives**, resolved from the
+   host, not the `${TOKEN}` that declares it: a renewed token or a new `GIT_TAG`
+   recreates the container instead of leaving the old value inside it. This adds
+   no exposure — those values already sit in the container's config — and only a
+   16-character digest reaches the label. Containers created before this change
+   are recreated once
 3. **The container predates the hash label** — it can't be proven current
 4. **`CIDX_NO_REUSE` is set** — escape hatch that forces a recreate every run
 

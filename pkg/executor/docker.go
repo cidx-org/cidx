@@ -847,9 +847,14 @@ func (e *DockerExecutor) hostIdentity() HostIdentity {
 // compares against: everything that shapes the container, and nothing that only
 // shapes how it is run. A container is reused only while its key still matches
 // (#144), so a field missing here is a stale container the user cannot explain.
+//
+// The environment hashed is the one the container receives, resolved from the
+// host, not the ${TOKEN} that declares it: a rotated token or a new GIT_TAG
+// changes the container, never the declaration. The values are already in the
+// container's Config; only their digest reaches the label, truncated.
 func ReuseKey(c *config.ContainerConfig, command string, volumes []string, host HostIdentity) string {
 	user, userns := host.runAs(c.Privileged)
-	return configHash(c.Image, command, c.Workdir, c.Entrypoint, volumes, c.Env, user+"\x00"+userns)
+	return configHash(c.Image, command, c.Workdir, c.Entrypoint, volumes, presets.ResolveContainerEnv(c.Command, c.Env), user+"\x00"+userns)
 }
 
 // Close closes the Docker client
