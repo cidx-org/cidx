@@ -1,3 +1,20 @@
+## v3.8.0 (2026-10-03)
+
+### Feat
+
+- **security**: give a finding a window before it fails the audit gate (#526)
+
+### Fix
+
+- **executor**: compare the environment a container is created with, not the one declared (#533)
+- **executor**: recreate a container when the user it runs as changes (#532)
+- **security**: answer CVE-2026-102010, the libstdc++ flaw reported yesterday (#530)
+- **security**: render a SARIF with no alert as an empty array, not null (#528)
+- **security**: write a GHSA to the ignore file in every case a scanner spells it (#527)
+- **security**: answer the two OpenSSL CVE published this morning (#523)
+- **security**: answer CVE-2026-84782, the DTLS flaw published today (#522)
+- **security**: triage the 69 findings the audit was waiting on, as grouped decisions (#521)
+
 ## v3.7.0 (2026-09-30)
 
 ### Feat
