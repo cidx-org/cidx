@@ -1,6 +1,7 @@
 package presets
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -244,6 +245,31 @@ func TestCargoAuditUsesPrebuiltBinary(t *testing.T) {
 	if !strings.Contains(preset.Command, "HOME=/tmp") || !strings.Contains(preset.Command, "CARGO_HOME=/tmp/cargo") {
 		t.Errorf("preset %q Command = %q, expected HOME and CARGO_HOME pointed at writable dirs so the advisory DB fetch works non-root",
 			"cargo-audit", preset.Command)
+	}
+}
+
+// TestCargoAuditVerifiesWhatItDownloads pins #442: the archive is checked against
+// a SHA-256 before it is extracted, for every architecture the command can run
+// on, and an architecture without a checksum fails instead of running unchecked.
+func TestCargoAuditVerifiesWhatItDownloads(t *testing.T) {
+	preset, err := Get("cargo-audit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := preset.Command
+	if strings.Contains(cmd, "| tar") {
+		t.Errorf("the archive is piped into tar unchecked: %q", cmd)
+	}
+	if !strings.Contains(cmd, "sha256sum -c") || strings.Index(cmd, "sha256sum -c") > strings.Index(cmd, "tar xz") {
+		t.Errorf("sha256sum -c must run before tar extracts: %q", cmd)
+	}
+	for _, arch := range []string{"x86_64)", "aarch64)"} {
+		if !regexp.MustCompile(regexp.QuoteMeta(arch) + ` s=[0-9a-f]{64};;`).MatchString(cmd) {
+			t.Errorf("no pinned SHA-256 for %s in %q", arch, cmd)
+		}
+	}
+	if !strings.Contains(cmd, "*) echo") || !strings.Contains(cmd, "exit 1;; esac") {
+		t.Errorf("an unknown architecture must fail closed: %q", cmd)
 	}
 }
 

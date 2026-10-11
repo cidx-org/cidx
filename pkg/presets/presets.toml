@@ -1023,6 +1023,12 @@ command_flag = "-W clippy::pedantic"
 # musl base would trade every aarch64 user for the last 38 findings. That is
 # #195 with the arrow reversed, and glibc keeps both architectures on one line.
 #
+# The archive is checked against a SHA-256 pinned here, one per architecture
+# RustSec publishes for glibc, before anything is extracted or run (#442): the
+# image is pinned by digest, and the tool executed on the source is held to the
+# same standard. A new cargo-audit version moves its two checksums with the URL;
+# an unknown architecture fails closed instead of running an unchecked binary.
+#
 # --no-yanked because the yanked-crate check shells out to `cargo -V` to learn
 # the crates.io index protocol; with no toolchain in the image it fails with
 # `couldn't update crates.io index: registry: No such file or directory`.
@@ -1035,7 +1041,7 @@ name = "cargo-audit"
 phase = "security"
 image = "buildpack-deps:trixie-curl@sha256:ef554489e8f8b0245ef3cb2742b4c6b6e53c43bd64366b13f624982c854af2eb"
 image_entrypoint = []
-command = "sh -c 'curl -sSfL https://github.com/rustsec/rustsec/releases/download/cargo-audit/v0.22.2/cargo-audit-$(uname -m)-unknown-linux-gnu-v0.22.2.tgz | tar xz --strip-components=1 -C /tmp && HOME=/tmp CARGO_HOME=/tmp/cargo /tmp/cargo-audit audit --no-yanked'"
+command = "sh -c 'a=$(uname -m); case $a in x86_64) s=ab28a1bdb54db4d5d8ad5981cf1f959410370b3d28250dbd35f6a44248620e39;; aarch64) s=c6603814ddaa45e51263dafd31c0ac98808f688d26f7395804f9670b0fd599dd;; *) echo no pinned checksum for $a >&2; exit 1;; esac; f=/tmp/cargo-audit.tgz; curl -sSfL -o $f https://github.com/rustsec/rustsec/releases/download/cargo-audit/v0.22.2/cargo-audit-$a-unknown-linux-gnu-v0.22.2.tgz && echo \"$s  $f\" | sha256sum -c - && tar xz --strip-components=1 -C /tmp -f $f && HOME=/tmp CARGO_HOME=/tmp/cargo /tmp/cargo-audit audit --no-yanked'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
 
