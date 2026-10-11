@@ -19,6 +19,7 @@ import "sort"
 // actually reads the map, so it cannot drift into promising a key nothing
 // consumes or rejecting one that works.
 var overrideKeys = map[string]bool{
+	"preset":      true,
 	"image":       true,
 	"command":     true,
 	"entrypoint":  true,
@@ -41,6 +42,10 @@ var overrideKeys = map[string]bool{
 // section naming no catalogue preset is a custom declaration, and a custom
 // container has no options to set.
 func UnknownOverrideKeys(presetName string, section map[string]any) []string {
+	// An alias takes the options of the preset it names, not of its own name.
+	if base, ok := section["preset"].(string); ok && base != "" {
+		presetName = base
+	}
 	var options map[string]Option
 	if preset, err := Get(presetName); err == nil {
 		options = preset.Options

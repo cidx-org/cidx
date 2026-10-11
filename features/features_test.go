@@ -132,6 +132,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	RegisterReleaseHousekeepingSteps(ctx, testCtx)
 	RegisterAuditGateSteps(ctx, testCtx)
 	RegisterContainerReuseSteps(ctx, testCtx)
+	RegisterPresetAliasSteps(ctx, testCtx)
 
 	// Hooks
 	ctx.Before(func(ctx context.Context, sc *godog.Scenario) (context.Context, error) {

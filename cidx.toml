@@ -50,17 +50,15 @@ containers = ["prettier-write"]
 severity = "HIGH,CRITICAL"
 exit_code = 0
 
-# prettier in write mode, as a separate entry rather than `[containers.prettier]
-# write = true`: overrides are keyed by container name, not by phase, so a
-# `write` on `prettier` would follow it into the `code` phase — which is exactly
-# the bug this replaces (#272). Same image as the `prettier` preset; the
-# catalogue pin is what governs the checking side.
+# prettier in write mode, as an alias of the catalogue preset rather than as
+# `[containers.prettier] write = true`: overrides are keyed by container name,
+# not by phase, so a `write` on `prettier` would follow it into the `code` phase
+# (#272). The alias is the same preset under another name, so the image is the
+# catalogue's pin and no copy of it lives here (#292).
 [containers.prettier-write]
-phase = "format"
-image = "jauderho/prettier:3.9.4@sha256:b233d9c847048561850a1a107e35318b28361cd9a850eac7edcd5d8bfd82cea2"
+preset = "prettier"
 command = "--write ."
-workdir = "/work"
-volumes = ["${WORKSPACE}:/work"]
+phase = "format"
 
 # There is no `command` override here anymore, and that is the point of #357.
 # The catalogue used to run `go test -v ./pkg/... ./cmd/...`, which skipped the

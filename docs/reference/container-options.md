@@ -12,19 +12,20 @@ timeout = "10m"              # a structural key, from the table below
 
 ## Structural keys
 
-| key           | type            | what it does                                                        |
-| ------------- | --------------- | ------------------------------------------------------------------- |
-| `image`       | string          | Replace the image. Pin it by digest if you care what runs.          |
-| `command`     | string          | Replace the command the container runs.                             |
-| `entrypoint`  | list of strings | Replace the image entrypoint.                                       |
-| `workdir`     | string          | Working directory inside the container.                             |
-| `volumes`     | list of strings | Bind mounts, `host:container[:opts]`. Order matters to Docker.      |
-| `env`         | table           | Environment variables for the container.                            |
-| `phase`       | string          | Move the container to another phase.                                |
-| `privileged`  | bool            | Run as root, skipping user mapping. Needed by a few images, rarely. |
-| `ephemeral`   | bool            | Never reuse this container — see below.                             |
-| `pull_policy` | string          | `always`, `if-not-present` or `never`.                              |
-| `timeout`     | duration string | e.g. `"10m"`. Empty means the default 30m.                          |
+| key           | type            | what it does                                                            |
+| ------------- | --------------- | ----------------------------------------------------------------------- |
+| `preset`      | string          | Make this container an alias of a catalogue preset, under its own name. |
+| `image`       | string          | Replace the image. Pin it by digest if you care what runs.              |
+| `command`     | string          | Replace the command the container runs.                                 |
+| `entrypoint`  | list of strings | Replace the image entrypoint.                                           |
+| `workdir`     | string          | Working directory inside the container.                                 |
+| `volumes`     | list of strings | Bind mounts, `host:container[:opts]`. Order matters to Docker.          |
+| `env`         | table           | Environment variables for the container.                                |
+| `phase`       | string          | Move the container to another phase.                                    |
+| `privileged`  | bool            | Run as root, skipping user mapping. Needed by a few images, rarely.     |
+| `ephemeral`   | bool            | Never reuse this container — see below.                                 |
+| `pull_policy` | string          | `always`, `if-not-present` or `never`.                                  |
+| `timeout`     | duration string | e.g. `"10m"`. Empty means the default 30m.                              |
 
 A preset may declare **options of its own** on top of these — `severity` above
 is one of trivy's. `cidx preset show <name>` lists them.

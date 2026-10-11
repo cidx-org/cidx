@@ -282,6 +282,41 @@ func PresetFromOverrides(name string, overrides map[string]any) Preset {
 	return p
 }
 
+// Lookup resolves the preset a `[containers.NAME]` section runs, and says what
+// is left of the section to merge onto it.
+//
+// Three shapes, tried in this order:
+//   - an alias, `preset = "prettier"`: the catalogue preset it names, run under
+//     the section's own name (so it gets a container of its own) with the
+//     section's overrides on top. The image stays declared once, in the
+//     catalogue (#292);
+//   - a catalogue preset by name, the section being its overrides;
+//   - a custom container, a section with an `image` and no catalogue preset.
+//
+// The name an alias takes must not be a catalogue preset's: `[containers.trivy]
+// preset = "gitleaks"` would run one tool under another's name.
+func Lookup(name string, overrides map[string]any) (Preset, map[string]any, error) {
+	if base, ok := overrides["preset"].(string); ok && base != "" {
+		if Exists(name) {
+			return Preset{}, nil, fmt.Errorf("[containers.%s] sets preset = %q, but %q is itself a catalogue preset: an alias needs a name of its own", name, base, name)
+		}
+		preset, err := Get(base)
+		if err != nil {
+			return Preset{}, nil, fmt.Errorf("[containers.%s] sets preset = %q, which is not a catalogue preset (an alias names a preset, not another alias)", name, base)
+		}
+		preset.Name = name
+		return preset, overrides, nil
+	}
+	if preset, err := Get(name); err == nil {
+		return preset, overrides, nil
+	}
+	if !IsCustomDeclaration(overrides) {
+		return Preset{}, nil, fmt.Errorf("container %q is not a built-in preset and has no [containers.%s] declaration with an `image` field", name, name)
+	}
+	// A custom container is its declaration in full: nothing is left to merge.
+	return PresetFromOverrides(name, overrides), nil, nil
+}
+
 // IsCustomDeclaration reports whether the given override section declares a
 // brand-new container (image field present) rather than overriding an
 // existing preset. Used by validator and runner to decide between
