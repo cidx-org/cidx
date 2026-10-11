@@ -99,6 +99,21 @@ severity = "HIGH,CRITICAL"
 exit_code = 1
 ```
 
+#### Running a Preset Twice: Aliases
+
+An override follows the container **name**, into every phase that runs it. To run one tool two ways — prettier checking in `code`, writing in `format` — declare a second container that is an **alias**: `preset` names the catalogue preset, and the section's other keys override it.
+
+```toml
+[format]
+containers = ["prettier-write"]
+
+[containers.prettier-write]
+preset = "prettier"
+command = "--write ."
+```
+
+The alias runs the preset's image — the catalogue's pin, declared once and moved by the catalogue, not copied into your `cidx.toml` — under its own name, so it gets a container of its own and `[containers.prettier]` is left alone. An alias names a catalogue preset, not another alias, and cannot take a catalogue preset's name; `cidx validate` refuses both, and a `preset` that does not exist, wherever it is declared.
+
 #### Setting a Severity Floor
 
 Security presets ship **no severity or confidence floor**: each reports whatever its tool reports by default. That is deliberate — a floor is a policy about a codebase, and it belongs to that codebase rather than to the catalogue. It is also the safer direction to be wrong in: a default that reports too much is noisy and visible, while one that reports too little is invisible, because the phase goes green and nothing says what was skipped (issue #341).

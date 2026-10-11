@@ -140,7 +140,7 @@ func (r *Runner) Run(ctx context.Context, target string) error {
 	// Check if target is a tool: a built-in preset, or a container declared
 	// only through [containers.NAME] with an `image` field (#216). Both are
 	// resolved by RunTool, which already knows the custom-declaration path.
-	if presets.Exists(target) || presets.IsCustomDeclaration(r.config.Overrides[target]) {
+	if _, _, err := presets.Lookup(target, r.config.Overrides[target]); err == nil {
 		return r.RunTool(ctx, target)
 	}
 
@@ -374,25 +374,12 @@ func (r *Runner) runPhaseParallel(ctx context.Context, phaseName string, phase c
 
 // RunTool executes a single tool
 func (r *Runner) RunTool(ctx context.Context, toolName string) error {
-	// Resolve the override section once — we need it for both code paths
-	// below (custom declaration vs. preset override).
-	var overrides map[string]any
-	if r.config.Overrides != nil {
-		overrides = r.config.Overrides[toolName]
-	}
-
-	// Get preset. If no built-in preset matches, fall back to a custom
-	// container declaration from [containers.NAME] (must have an `image`
-	// field). See #142.
-	preset, err := presets.Get(toolName)
+	// A built-in preset, an alias of one (#292), or a custom container declared
+	// through [containers.NAME] with an `image` (#142): Lookup knows the three,
+	// and hands back the overrides left to merge.
+	preset, overrides, err := presets.Lookup(toolName, r.config.Overrides[toolName])
 	if err != nil {
-		if !presets.IsCustomDeclaration(overrides) {
-			return fmt.Errorf("container %q is not a built-in preset and has no [containers.%s] declaration with an `image` field", toolName, toolName)
-		}
-		preset = presets.PresetFromOverrides(toolName, overrides)
-		// Custom containers skip the preset-merge step below — the declaration
-		// IS the full definition. Clear `overrides` so MergeWith is a no-op.
-		overrides = nil
+		return err
 	}
 
 	// Validate preset against environment and get execution mode

@@ -44,13 +44,26 @@ func Validate(cfg *Config) ValidationResult {
 		//   (b) a custom declaration in [containers.NAME] that has an `image` field
 		//       — see #142 and examples/cidx-complete.toml.
 		for _, containerName := range phase.Containers {
-			if presets.Exists(containerName) {
+			_, _, err := presets.Lookup(containerName, cfg.Overrides[containerName])
+			if err == nil {
 				continue
 			}
-			if presets.IsCustomDeclaration(cfg.Overrides[containerName]) {
-				continue
+			if _, aliased := cfg.Overrides[containerName]["preset"]; aliased {
+				// The alias is spelled wrong; saying "unknown container" would hide how.
+				continue // reported once, below, for every alias
 			}
 			result.Errors = append(result.Errors, fmt.Sprintf("unknown container: %s in phase '%s' (no matching preset and no [containers.%s] declaration with an `image` field)", containerName, phaseName, containerName))
+			result.Valid = false
+		}
+	}
+
+	// An alias is checked wherever it is declared, in a phase or not.
+	for name, section := range cfg.Overrides {
+		if _, aliased := section["preset"]; !aliased {
+			continue
+		}
+		if _, _, err := presets.Lookup(name, section); err != nil {
+			result.Errors = append(result.Errors, err.Error())
 			result.Valid = false
 		}
 	}
