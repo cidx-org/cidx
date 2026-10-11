@@ -1,3 +1,10 @@
+## v3.8.1 (2026-10-11)
+
+### Fix
+
+- **presets**: verify the cargo-audit archive against a pinned checksum (#540)
+- **run**: stop the container when the run is interrupted (#538)
+
 ## v3.8.0 (2026-10-03)
 
 ### Feat
