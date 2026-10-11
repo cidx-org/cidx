@@ -3,6 +3,9 @@ package commands
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/cidx-org/cidx/v3/pkg/config"
 	"github.com/cidx-org/cidx/v3/pkg/environment"
@@ -135,7 +138,10 @@ Examples:
 			// Create runner with selector
 			runner := pipeline.NewRunnerWithOptions(cfg, selector, opts)
 
-			ctx := context.Background()
+			// Ctrl-C and SIGTERM end the run through the context, so the executor
+			// can stop the container it started instead of orphaning it (#535).
+			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
 
 			// Run target (phase, tool, or all)
 			return runner.Run(ctx, target)

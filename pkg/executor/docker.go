@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -237,6 +238,16 @@ func (e *DockerExecutor) Run(ctx context.Context, containerConfig *config.Contai
 		return fmt.Errorf("failed to start container: %w", err)
 	}
 
+	// The container outlives cidx unless told otherwise: when the context ends
+	// before the container does (Ctrl-C, SIGTERM, timeout) stop it, or it keeps
+	// running and writing into the workspace after the CLI reported the end
+	// (#535). Stopped, not removed: the next run reuses it.
+	defer func() {
+		if ctx.Err() != nil {
+			e.stopContainer(containerID, containerName)
+		}
+	}()
+
 	// Stream logs
 	// If quiet, capture logs to buffer. If not, stream to stdout/stderr.
 	var logBuffer strings.Builder
@@ -251,6 +262,9 @@ func (e *DockerExecutor) Run(ctx context.Context, containerConfig *config.Contai
 	}
 
 	if err := e.streamLogsTo(ctx, containerID, stdout, stderr, logsSince); err != nil {
+		if ctx.Err() != nil {
+			return e.endedEarly(ctx, containerConfig.Name, timeout)
+		}
 		return fmt.Errorf("failed to stream logs: %w", err)
 	}
 
@@ -259,8 +273,8 @@ func (e *DockerExecutor) Run(ctx context.Context, containerConfig *config.Contai
 	select {
 	case err := <-errCh:
 		if err != nil {
-			if ctx.Err() == context.DeadlineExceeded {
-				return fmt.Errorf("container %s timed out after %v", containerConfig.Name, timeout)
+			if ctx.Err() != nil {
+				return e.endedEarly(ctx, containerConfig.Name, timeout)
 			}
 			return fmt.Errorf("error waiting for container: %w", err)
 		}
@@ -273,11 +287,32 @@ func (e *DockerExecutor) Run(ctx context.Context, containerConfig *config.Contai
 			return fmt.Errorf("container exited with code %d", status.StatusCode)
 		}
 	case <-ctx.Done():
-		return fmt.Errorf("container %s timed out after %v", containerConfig.Name, timeout)
+		return e.endedEarly(ctx, containerConfig.Name, timeout)
 	}
 
 	e.logger.Infof("  ✓ %s completed", containerConfig.Name)
 	return nil
+}
+
+// endedEarly names why the context ended before the container did.
+func (e *DockerExecutor) endedEarly(ctx context.Context, name string, timeout time.Duration) error {
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return fmt.Errorf("container %s timed out after %v", name, timeout)
+	}
+	return fmt.Errorf("container %s interrupted", name)
+}
+
+// stopContainer stops a container on a context of its own: the run's is the one
+// that just ended.
+func (e *DockerExecutor) stopContainer(id, name string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	grace := 10
+	if err := e.client.ContainerStop(ctx, id, container.StopOptions{Timeout: &grace}); err != nil {
+		e.logger.Warnf("Failed to stop container %s: %v", name, err)
+		return
+	}
+	e.logger.Infof("  ■ Stopped %s", name)
 }
 
 // streamLogsTo streams container logs to provided writers, starting from the
