@@ -424,6 +424,7 @@ func (r *Runner) RunTool(ctx context.Context, toolName string) error {
 		Ephemeral:   mergedPreset.Ephemeral,
 		PullPolicy:  r.resolvePullPolicy(mergedPreset.PullPolicy),
 		Timeout:     mergedPreset.Timeout,
+		DNS:         mergedPreset.DNS,
 		Workspace:   r.config.Workspace,
 	}
 

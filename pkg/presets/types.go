@@ -3,6 +3,7 @@ package presets
 import (
 	"fmt"
 	"log"
+	"net"
 	"strconv"
 	"strings"
 )
@@ -44,6 +45,7 @@ type Preset struct {
 	Ephemeral       bool              `yaml:"ephemeral,omitempty" toml:"ephemeral,omitempty"`     // Never reuse: this container writes to disk (#434)
 	PullPolicy      string            `yaml:"pull_policy,omitempty" toml:"pull_policy,omitempty"` // always, if-not-present, never (default: env-based)
 	Timeout         string            `yaml:"timeout,omitempty" toml:"timeout,omitempty"`         // duration string (e.g., "5m", "45m"), default: 30m
+	DNS             []string          `yaml:"dns,omitempty" toml:"dns,omitempty"`                 // DNS servers (IP addresses); empty keeps the runtime default (#543)
 }
 
 // Option defines a configurable parameter for a preset.
@@ -117,6 +119,11 @@ func (p *Preset) MergeWith(overrides map[string]any) *Preset {
 	}
 	if timeout, ok := overrides["timeout"].(string); ok {
 		merged.Timeout = timeout
+	}
+	if dnsRaw, has := overrides["dns"]; has {
+		if dns, ok := normalizeStringSliceOverride(dnsRaw); ok {
+			merged.DNS = dns
+		}
 	}
 
 	// Merge options with preset options
@@ -278,6 +285,11 @@ func PresetFromOverrides(name string, overrides map[string]any) Preset {
 	if timeout, ok := overrides["timeout"].(string); ok {
 		p.Timeout = timeout
 	}
+	if dnsRaw, has := overrides["dns"]; has {
+		if dns, ok := normalizeStringSliceOverride(dnsRaw); ok {
+			p.DNS = dns
+		}
+	}
 
 	return p
 }
@@ -315,6 +327,26 @@ func Lookup(name string, overrides map[string]any) (Preset, map[string]any, erro
 	}
 	// A custom container is its declaration in full: nothing is left to merge.
 	return PresetFromOverrides(name, overrides), nil, nil
+}
+
+// DNSProblem reports why the `dns` key of a `[containers.NAME]` section cannot
+// be used, or nil. Docker takes IP addresses only: a hostname here would fail at
+// container creation, after the pull, so it is refused when the file is read.
+func DNSProblem(name string, overrides map[string]any) error {
+	raw, has := overrides["dns"]
+	if !has {
+		return nil
+	}
+	servers, ok := normalizeStringSliceOverride(raw)
+	if !ok {
+		return fmt.Errorf("[containers.%s] dns must be a list of IP addresses, e.g. dns = [\"1.1.1.1\"]", name)
+	}
+	for _, server := range servers {
+		if net.ParseIP(server) == nil {
+			return fmt.Errorf("[containers.%s] dns: %q is not an IP address", name, server)
+		}
+	}
+	return nil
 }
 
 // IsCustomDeclaration reports whether the given override section declares a

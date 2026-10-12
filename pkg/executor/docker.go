@@ -616,6 +616,7 @@ func (e *DockerExecutor) createContainer(ctx context.Context, containerConfig *c
 	hostConfig := &container.HostConfig{
 		Binds:      binds,
 		AutoRemove: false, // We'll remove manually
+		DNS:        containerConfig.DNS,
 	}
 
 	// Podman rootless: map host UID into container to fix volume permissions
@@ -889,7 +890,15 @@ func (e *DockerExecutor) hostIdentity() HostIdentity {
 // container's Config; only their digest reaches the label, truncated.
 func ReuseKey(c *config.ContainerConfig, command string, volumes []string, host HostIdentity) string {
 	user, userns := host.runAs(c.Privileged)
-	return configHash(c.Image, command, c.Workdir, c.Entrypoint, volumes, presets.ResolveContainerEnv(c.Command, c.Env), user+"\x00"+userns)
+	shaped := user + "\x00" + userns
+	// DNS servers shape the container's resolver (#543). Added only when set, so
+	// a container that configures none keeps the key it already has instead of
+	// being recreated once for a feature it does not use. Order is kept: it is
+	// the order the resolver tries them in.
+	if len(c.DNS) > 0 {
+		shaped += "\x00dns=" + strings.Join(c.DNS, ",")
+	}
+	return configHash(c.Image, command, c.Workdir, c.Entrypoint, volumes, presets.ResolveContainerEnv(c.Command, c.Env), shaped)
 }
 
 // Close closes the Docker client

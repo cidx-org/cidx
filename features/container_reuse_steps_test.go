@@ -23,6 +23,8 @@ func RegisterContainerReuseSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Given(`^a privileged tool "([^"]*)"$`, tc.privilegedTool)
 	ctx.Given(`^a tool "([^"]*)" whose "([^"]*)" comes from the host variable "([^"]*)"$`, tc.toolWithHostEnv)
 	ctx.When(`^the environment sets "([^"]*)" to "([^"]*)"$`, tc.environmentSets)
+	ctx.Given(`^a tool "([^"]*)" with the DNS servers "([^"]*)"$`, tc.toolWithDNS)
+	ctx.When(`^the tool is given the DNS servers "([^"]*)"$`, tc.giveToolDNS)
 	ctx.When(`^the tool is switched to privileged$`, tc.switchToPrivileged)
 	ctx.When(`^the tool is switched to run as the host user$`, tc.switchToHostUser)
 	ctx.When(`^the same tool is run by the host user (\d+):(\d+)$`, tc.runByHostUser)
@@ -90,6 +92,19 @@ func (tc *TestContext) toolWithHostEnv(name, key, hostVar string) error {
 		Env: map[string]string{key: "${" + hostVar + "}"},
 	}
 	w.created = w.key()
+	return nil
+}
+
+func (tc *TestContext) toolWithDNS(name, servers string) error {
+	w := tc.reuse()
+	w.createContainer(name, false)
+	w.cfg.DNS = strings.Split(servers, ",")
+	w.created = w.key()
+	return nil
+}
+
+func (tc *TestContext) giveToolDNS(servers string) error {
+	tc.reuse().cfg.DNS = strings.Split(servers, ",")
 	return nil
 }
 

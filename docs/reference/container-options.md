@@ -25,6 +25,7 @@ timeout = "10m"              # a structural key, from the table below
 | `privileged`  | bool            | Run as root, skipping user mapping. Needed by a few images, rarely.     |
 | `ephemeral`   | bool            | Never reuse this container — see below.                                 |
 | `pull_policy` | string          | `always`, `if-not-present` or `never`.                                  |
+| `dns`         | list of strings | DNS servers (IP addresses) for the container. Default: the runtime's.   |
 | `timeout`     | duration string | e.g. `"10m"`. Empty means the default 30m.                              |
 
 A preset may declare **options of its own** on top of these — `severity` above
@@ -51,3 +52,27 @@ hash, so it holds on the run where nothing changed — the case that bites.
 A preset can ship it, and `probatum` does. See
 [Container Reuse](../core-concepts/container-reuse.md) for the reuse rules
 themselves (issue #434).
+
+## `dns`
+
+```toml
+[containers.cargo-build]
+dns = ["1.1.1.1", "9.9.9.9"]
+```
+
+For a host whose containers cannot reach the resolver they inherit — the bridge
+network cannot see the host's, and a tool dies on `Temporary failure in name
+resolution` while the same image resolves with `docker run --dns 1.1.1.1` (#543).
+Each entry must be an IP address, not a hostname; anything else is refused when
+`cidx.toml` is read, before a container is pulled. The list is passed to the
+container as `HostConfig.DNS`, in order, and absent by default, which leaves the
+runtime's own resolver in place.
+
+The servers are part of what a container is reused for: adding, changing or
+reordering them recreates it, and a container that sets none keeps the container
+it already has. The setting is per container: a project that needs it on several repeats it..."`) does not inherit the DNS of the
+preset it names.
+
+Limits: this is the Docker API's field, so it follows Docker's own rules (it does
+not apply to a container on the `host` network). Podman receives it through its
+Docker-compatible API; that path is not covered by a test here.
