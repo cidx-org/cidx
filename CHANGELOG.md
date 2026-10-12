@@ -1,3 +1,10 @@
+## v3.9.0 (2026-10-12)
+
+### Feat
+
+- **config**: give a container DNS servers with dns = [...] (#544)
+- **config**: alias a preset with preset = "name" instead of copying its image (#542)
+
 ## v3.8.1 (2026-10-11)
 
 ### Fix
