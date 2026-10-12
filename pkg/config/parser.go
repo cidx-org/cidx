@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"github.com/cidx-org/cidx/v3/pkg/presets"
 )
 
 // knownSections lists top-level TOML sections that are decoded into typed fields.
@@ -138,6 +139,13 @@ func Load(path string) (*Config, error) {
 			}
 		} else {
 			cfg.Overrides[name] = section
+		}
+	}
+
+	// An unusable value is refused here, before a container is pulled for it (#543).
+	for name, section := range cfg.Overrides {
+		if err := presets.DNSProblem(name, section); err != nil {
+			return nil, fmt.Errorf("%s: %w", path, err)
 		}
 	}
 

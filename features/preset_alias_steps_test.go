@@ -32,6 +32,8 @@ func RegisterPresetAliasSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Then(`^"([^"]*)" should run the image "([^"]*)"$`, tc.shouldRunImage)
 	ctx.Then(`^"([^"]*)" should have a command containing "([^"]*)"$`, tc.aliasCommandShouldContain)
 	ctx.Then(`^the preset "([^"]*)" should keep a command without "([^"]*)"$`, tc.presetCommandShouldLack)
+	ctx.Then(`^"([^"]*)" should resolve the DNS servers "([^"]*)"$`, tc.shouldResolveDNS)
+	ctx.Then(`^"([^"]*)" should resolve no DNS servers$`, tc.shouldResolveNoDNS)
 	ctx.Then(`^"([^"]*)" should be resolved under the name "([^"]*)"$`, tc.shouldBeResolvedUnder)
 }
 
@@ -135,6 +137,20 @@ func (tc *TestContext) presetCommandShouldLack(presetName, fragment string) erro
 func (tc *TestContext) shouldBeResolvedUnder(_, name string) error {
 	if got := tc.alias().resolved.Name; got != name {
 		return fmt.Errorf("resolved name = %q, want %q", got, name)
+	}
+	return nil
+}
+
+func (tc *TestContext) shouldResolveDNS(_, want string) error {
+	if got := strings.Join(tc.alias().resolved.DNS, ", "); got != want {
+		return fmt.Errorf("resolved DNS servers = %q, want %q", got, want)
+	}
+	return nil
+}
+
+func (tc *TestContext) shouldResolveNoDNS(_ string) error {
+	if got := tc.alias().resolved.DNS; len(got) != 0 {
+		return fmt.Errorf("resolved DNS servers = %v, want none", got)
 	}
 	return nil
 }

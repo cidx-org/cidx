@@ -395,11 +395,12 @@ type ContainerConfig struct {
 	Volumes     []string
 	Env         map[string]string
 	ConfigFiles []string
-	Privileged  bool   // Requires root privileges
-	Ephemeral   bool   // Never reuse the container: this one writes to disk (#434)
-	PullPolicy  string // always, if-not-present, never
-	Timeout     string // duration string (e.g., "5m", "45m"), empty = default 30m
-	Workspace   string // Absolute project path; scopes the container name (#197)
+	Privileged  bool     // Requires root privileges
+	Ephemeral   bool     // Never reuse the container: this one writes to disk (#434)
+	PullPolicy  string   // always, if-not-present, never
+	Timeout     string   // duration string (e.g., "5m", "45m"), empty = default 30m
+	DNS         []string // DNS servers for the container; empty = the runtime default
+	Workspace   string   // Absolute project path; scopes the container name (#197)
 }
 
 // Action represents an automated workflow configuration

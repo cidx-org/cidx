@@ -31,6 +31,7 @@ var overrideKeys = map[string]bool{
 	"ephemeral":   true,
 	"pull_policy": true,
 	"timeout":     true,
+	"dns":         true,
 }
 
 // UnknownOverrideKeys returns the keys of a `[containers.<name>]` section that
