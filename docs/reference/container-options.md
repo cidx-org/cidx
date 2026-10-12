@@ -76,3 +76,21 @@ preset it names.
 Limits: this is the Docker API's field, so it follows Docker's own rules (it does
 not apply to a container on the `host` network). Podman receives it through its
 Docker-compatible API; that path is not covered by a test here.
+
+### DNS for a whole host: the operator's side
+
+There is no `CIDX_DNS` variable, deliberately: a setting that reaches every
+container at once changes tools that never had a problem, and it would live
+outside the repository where nobody reads it. Two places hold the setting
+instead, and which one depends on whose problem it is:
+
+- **The project's, per container** — `dns = [...]` in `cidx.toml`, above. It is
+  committed, it is visible in review, and it travels with the repository to
+  every runner. Right when the project knows its tool needs a resolver.
+- **The host's, for every container on it** — Docker's own daemon setting, in
+  `/etc/docker/daemon.json`: `{ "dns": ["1.1.1.1", "9.9.9.9"] }`, then restart
+  the daemon. Right when one self-hosted runner cannot resolve names and the
+  repository should not carry that runner's network. It needs root on the host,
+  and it is what the `dns` key exists to avoid when you do not have it.
+
+A container's `dns` wins over the daemon's, as `docker run --dns` does.
