@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -153,12 +154,23 @@ func (r *Runner) Run(ctx context.Context, target string) error {
 }
 
 // RunPipeline executes a named pipeline
+// containerResult is what happened to one container of a phase. A container is
+// only reported as passed when it ran and succeeded: the summary used to tick
+// every name in a failed phase, the one that failed and the ones never reached
+// (#547).
+type containerResult struct {
+	Name string
+	Ran  bool  // false: never started, an earlier container failed first
+	Err  error // nil with Ran: passed
+}
+
 // phaseResult tracks the outcome of a single phase execution.
 type phaseResult struct {
 	Name       string
 	Duration   time.Duration
-	Containers []string
+	Containers []containerResult
 	Passed     bool
+	NotRun     bool // the pipeline stopped before this phase
 	Error      string
 }
 
@@ -179,13 +191,13 @@ func (r *Runner) RunPipeline(ctx context.Context, name string, pipeline config.P
 		}
 
 		phaseStart := time.Now()
-		err := r.RunPhase(ctx, phaseName, phase)
+		containers, err := r.runPhase(ctx, phaseName, phase)
 		elapsed := time.Since(phaseStart)
 
 		result := phaseResult{
 			Name:       phaseName,
 			Duration:   elapsed,
-			Containers: phase.Containers,
+			Containers: containers,
 			Passed:     err == nil,
 		}
 		if err != nil {
@@ -194,6 +206,14 @@ func (r *Runner) RunPipeline(ctx context.Context, name string, pipeline config.P
 		results = append(results, result)
 
 		if err != nil {
+			// The phases after the failure did not run; say so rather than omit them.
+			for _, later := range pipeline.Phases[len(results):] {
+				notRun := phaseResult{Name: later, Passed: false, NotRun: true}
+				for _, c := range r.config.Phases[later].Containers {
+					notRun.Containers = append(notRun.Containers, containerResult{Name: c})
+				}
+				results = append(results, notRun)
+			}
 			r.printPipelineSummary(name, results, time.Since(pipelineStart))
 			return fmt.Errorf("pipeline %s failed at phase %s: %w", name, phaseName, err)
 		}
@@ -211,19 +231,43 @@ func (r *Runner) printPipelineSummary(name string, results []phaseResult, total 
 
 	for _, res := range results {
 		icon := "✓"
-		if !res.Passed {
+		switch {
+		case res.NotRun:
+			icon = "–"
+		case !res.Passed:
 			icon = "✗"
 		}
 
-		containers := strings.Join(res.Containers, " ✓, ")
-		if res.Passed && len(res.Containers) > 0 {
-			containers += " ✓"
+		names := make([]string, 0, len(res.Containers))
+		for _, c := range res.Containers {
+			names = append(names, c.summary())
 		}
 
-		r.logger.Infof("  %s %s (%s) — %s", icon, res.Name, formatDuration(res.Duration), containers)
+		if res.NotRun {
+			r.logger.Infof("  %s %s (not run) — %s", icon, res.Name, strings.Join(names, ", "))
+			continue
+		}
+		r.logger.Infof("  %s %s (%s) — %s", icon, res.Name, formatDuration(res.Duration), strings.Join(names, ", "))
 	}
 
 	r.logger.Infof("")
+}
+
+// summary renders one container for the pipeline summary: ✓ only when it ran
+// and passed, ✗ (with its exit code when it has one) when it failed, "not run"
+// when it was never started.
+func (c containerResult) summary() string {
+	switch {
+	case !c.Ran:
+		return c.Name + " (not run)"
+	case c.Err == nil:
+		return c.Name + " ✓"
+	}
+	var exit *executor.ExitError
+	if errors.As(c.Err, &exit) {
+		return fmt.Sprintf("%s ✗ (exit %d)", c.Name, exit.Code)
+	}
+	return c.Name + " ✗"
 }
 
 // formatDuration formats a duration as human-readable (e.g., "1m32s", "42s").
@@ -277,34 +321,48 @@ func (r *Runner) RunAll(ctx context.Context) error {
 
 // RunPhase executes all containers in a phase
 func (r *Runner) RunPhase(ctx context.Context, phaseName string, phase config.Phase) error {
+	_, err := r.runPhase(ctx, phaseName, phase)
+	return err
+}
+
+// runPhase runs a phase and reports what happened to each of its containers,
+// in the phase's order.
+func (r *Runner) runPhase(ctx context.Context, phaseName string, phase config.Phase) ([]containerResult, error) {
 	r.logger.Infof("========================================")
 	r.logger.Infof("▶ PHASE: %s", strings.ToUpper(phaseName))
 	r.logger.Infof("========================================")
 
 	if len(phase.Containers) == 0 {
 		r.logger.Warnf("No containers in phase: %s", phaseName)
-		return nil
+		return nil, nil
+	}
+
+	results := make([]containerResult, len(phase.Containers))
+	for i, name := range phase.Containers {
+		results[i].Name = name
 	}
 
 	// Use parallel execution if enabled and multiple containers
 	if r.parallel && len(phase.Containers) > 1 {
-		return r.runPhaseParallel(ctx, phaseName, phase)
+		return results, r.runPhaseParallel(ctx, phaseName, phase, results)
 	}
 
 	// Sequential execution (default)
-	for _, containerName := range phase.Containers {
+	for i, containerName := range phase.Containers {
+		results[i].Ran = true
 		if err := r.RunTool(ctx, containerName); err != nil {
-			return fmt.Errorf("container %s failed: %w", containerName, err)
+			results[i].Err = err
+			return results, fmt.Errorf("container %s failed: %w", containerName, err)
 		}
 	}
 
 	r.logger.Infof("✓ Phase %s completed successfully", phaseName)
 	r.logger.Infof("")
-	return nil
+	return results, nil
 }
 
 // runPhaseParallel executes containers in parallel with concurrency limit
-func (r *Runner) runPhaseParallel(ctx context.Context, phaseName string, phase config.Phase) error {
+func (r *Runner) runPhaseParallel(ctx context.Context, phaseName string, phase config.Phase, results []containerResult) error {
 	r.logger.Infof("⚡ Running %d containers in parallel (max %d concurrent)", len(phase.Containers), r.concurrency)
 
 	// Create semaphore for concurrency limit
@@ -321,9 +379,9 @@ func (r *Runner) runPhaseParallel(ctx context.Context, phaseName string, phase c
 	completed := 0
 	failed := 0
 
-	for _, containerName := range phase.Containers {
+	for i, containerName := range phase.Containers {
 		wg.Add(1)
-		go func(name string) {
+		go func(i int, name string) {
 			defer wg.Done()
 
 			// Acquire semaphore
@@ -340,6 +398,8 @@ func (r *Runner) runPhaseParallel(ctx context.Context, phaseName string, phase c
 			err := r.RunTool(ctx, name)
 
 			mu.Lock()
+			results[i].Ran = true
+			results[i].Err = err
 			if err != nil {
 				failed++
 				r.logger.Errorf("  ✗ %s failed: %v", name, err)
@@ -348,7 +408,7 @@ func (r *Runner) runPhaseParallel(ctx context.Context, phaseName string, phase c
 				completed++
 			}
 			mu.Unlock()
-		}(containerName)
+		}(i, containerName)
 	}
 
 	// Wait for all to complete
@@ -356,15 +416,15 @@ func (r *Runner) runPhaseParallel(ctx context.Context, phaseName string, phase c
 	close(errChan)
 
 	// Collect errors
-	var errors []error
+	var failures []error
 	for err := range errChan {
-		errors = append(errors, err)
+		failures = append(failures, err)
 	}
 
 	// Report results
-	if len(errors) > 0 {
+	if len(failures) > 0 {
 		r.logger.Errorf("✗ Phase %s: %d/%d failed", phaseName, failed, len(phase.Containers))
-		return fmt.Errorf("phase %s had %d failures", phaseName, len(errors))
+		return fmt.Errorf("phase %s had %d failures", phaseName, len(failures))
 	}
 
 	r.logger.Infof("✓ Phase %s completed successfully (%d containers)", phaseName, completed)
