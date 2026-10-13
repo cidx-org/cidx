@@ -1,3 +1,9 @@
+## v3.9.1 (2026-10-13)
+
+### Fix
+
+- **pipeline**: mark only the containers that passed in the summary (#548)
+
 ## v3.9.0 (2026-10-12)
 
 ### Feat
