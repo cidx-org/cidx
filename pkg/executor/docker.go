@@ -284,7 +284,7 @@ func (e *DockerExecutor) Run(ctx context.Context, containerConfig *config.Contai
 			if e.quiet {
 				fmt.Print(logBuffer.String())
 			}
-			return fmt.Errorf("container exited with code %d", status.StatusCode)
+			return &ExitError{Code: status.StatusCode}
 		}
 	case <-ctx.Done():
 		return e.endedEarly(ctx, containerConfig.Name, timeout)
@@ -878,6 +878,12 @@ func (h HostIdentity) runAs(privileged bool) (user, userns string) {
 func (e *DockerExecutor) hostIdentity() HostIdentity {
 	return HostIdentity{UID: os.Getuid(), GID: os.Getgid(), Rootless: e.rootless}
 }
+
+// ExitError is a container that ran and exited nonzero. It is a type so a
+// caller can show the code without parsing the message (#547).
+type ExitError struct{ Code int64 }
+
+func (e *ExitError) Error() string { return fmt.Sprintf("container exited with code %d", e.Code) }
 
 // ReuseKey is the label a container is created with and the one the next run
 // compares against: everything that shapes the container, and nothing that only
