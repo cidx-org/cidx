@@ -64,3 +64,5 @@ scan-results/
 #AI
 .serena
 .claude
+# Output of quiet runs (cidx run in CI)
+.cidx/

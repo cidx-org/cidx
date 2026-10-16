@@ -103,3 +103,12 @@ whether the suite ran every test or none of them. Add `--stream` to those:
 prints the raw JSON of every image pull with it, so the choice used to be
 "show nothing" or "show everything, noise included" (issue #273). `--stream`
 asks for the container output and nothing else.
+
+### The output of a quiet run is kept
+
+A quiet container's output is not lost when it passes: the last run of each
+container is written to `.cidx/logs/<container>.log` in the workspace (issue
+\#429). A green `cargo-audit` can then be audited after the fact — how many
+advisories it loaded, from which advisory-db commit. Upload the folder as a
+build artifact if you want it on the run page, and add `.cidx/` to
+`.gitignore`. The file holds the last run only, not a history.

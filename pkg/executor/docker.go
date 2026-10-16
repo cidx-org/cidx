@@ -10,6 +10,7 @@ import (
 	"io"
 	"maps"
 	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -279,6 +280,9 @@ func (e *DockerExecutor) Run(ctx context.Context, containerConfig *config.Contai
 			return fmt.Errorf("error waiting for container: %w", err)
 		}
 	case status := <-statusCh:
+		if e.quiet {
+			e.keepLog(containerConfig, logBuffer.String())
+		}
 		if status.StatusCode != 0 {
 			// If quiet and failed, print the buffered logs
 			if e.quiet {
@@ -292,6 +296,40 @@ func (e *DockerExecutor) Run(ctx context.Context, containerConfig *config.Contai
 
 	e.logger.Infof("  ✓ %s completed", containerConfig.Name)
 	return nil
+}
+
+// LogDir is where a quiet run keeps what its containers printed, relative to
+// the workspace. A green run that dropped its output cannot be audited after the
+// fact: four identical cargo-audit runs gave two passes and two failures, and
+// nothing said which advisory-db the passes had read (#429).
+const LogDir = ".cidx/logs"
+
+// keepLog writes the last run's output of a container to LogDir/<name>.log.
+// Best effort: a read-only workspace must not turn a green container red.
+func (e *DockerExecutor) keepLog(c *config.ContainerConfig, output string) {
+	dir := c.Workspace
+	if dir == "" {
+		dir, _ = os.Getwd()
+	}
+	path, err := WriteLog(dir, c.Name, output)
+	if err != nil {
+		e.logger.Warnf("  Could not keep the output of %s: %v", c.Name, err)
+		return
+	}
+	e.logger.Infof("  output kept in %s", path)
+}
+
+// WriteLog stores output under dir/LogDir and returns the file's path.
+func WriteLog(dir, name, output string) (string, error) {
+	logs := filepath.Join(dir, LogDir)
+	if err := os.MkdirAll(logs, 0o755); err != nil {
+		return "", fmt.Errorf("create %s: %w", logs, err)
+	}
+	path := filepath.Join(logs, strings.ReplaceAll(name, string(filepath.Separator), "_")+".log")
+	if err := os.WriteFile(path, []byte(output), 0o644); err != nil {
+		return "", fmt.Errorf("write %s: %w", path, err)
+	}
+	return path, nil
 }
 
 // endedEarly names why the context ended before the container did.
