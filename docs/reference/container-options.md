@@ -94,3 +94,37 @@ instead, and which one depends on whose problem it is:
   and it is what the `dns` key exists to avoid when you do not have it.
 
 A container's `dns` wins over the daemon's, as `docker run --dns` does.
+
+## `cargo_cache`: a Rust gate without the network
+
+The Rust presets (`cargo-test`, `cargo-build`, `clippy`, `rustfmt`) take
+`cargo_cache`, the path of a **prepared cargo home** on the host (issue #553):
+
+```toml
+[containers.cargo-test]
+cargo_cache = "/srv/cargo-seed"
+```
+
+What it does, and why it is built that way:
+
+- the directory is mounted **read-only**, so no execution ever writes into a
+  cache another one reads;
+- cargo cannot work from a read-only home (it locks files in the registry even
+  when nothing is fetched), so the container first **copies** the seed into a
+  `CARGO_HOME` of its own (`/tmp/cargo-home`). Every write lands in that copy,
+  which is per container, and a container is named from its workspace: a run
+  with its own checkout has its own cache;
+- `CARGO_NET_OFFLINE=true`: a dependency missing from the seed fails the run
+  (`no matching package named ...`) instead of being fetched.
+
+Prepare the seed once, with the network, from the project's `Cargo.lock`:
+
+```bash
+docker run --rm -v "$PWD":/work -v /srv/cargo-seed:/c -e CARGO_HOME=/c -w /work \
+  rust:1.97.1-slim cargo fetch --locked
+```
+
+`clippy` and `rustfmt` now run `rustup component add` only when the component
+is missing, so an image that already carries it (`image = "..."`) needs no
+network for it either. The toolchain components of the stock `rust` image are
+not part of the seed: with the stock image they are downloaded at each run.

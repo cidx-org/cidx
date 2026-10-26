@@ -974,10 +974,14 @@ name = "rustfmt"
 phase = "code"
 image = "rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd"
 image_entrypoint = []
-command = "sh -c 'rustup component add rustfmt && cargo fmt -- --check'"
+command = "sh -c '{ cargo fmt --version >/dev/null 2>&1 || rustup component add rustfmt; } && cargo fmt -- --check'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
 config_files = ["rustfmt.toml", ".rustfmt.toml"]
+
+[presets.rustfmt.options.cargo_cache]
+type = "cargo_home"
+description = "Host directory holding a prepared cargo home (registry and git dependencies): mounted read-only, copied into a CARGO_HOME of the run's own, and cargo runs offline"
 
 # Clippy: Official Rust linter
 # The most comprehensive Rust linter
@@ -986,10 +990,14 @@ name = "clippy"
 phase = "code"
 image = "rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd"
 image_entrypoint = []
-command = "sh -c 'rustup component add clippy && cargo clippy -- -D warnings'"
+command = "sh -c '{ cargo clippy --version >/dev/null 2>&1 || rustup component add clippy; } && cargo clippy -- -D warnings'"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
 config_files = ["clippy.toml", ".clippy.toml"]
+
+[presets.clippy.options.cargo_cache]
+type = "cargo_home"
+description = "Host directory holding a prepared cargo home (registry and git dependencies): mounted read-only, copied into a CARGO_HOME of the run's own, and cargo runs offline"
 
 [presets.clippy.options.pedantic]
 type = "bool"
@@ -1076,6 +1084,10 @@ type = "bool"
 description = "Run tests in release mode"
 command_flag = "--release"
 
+[presets.cargo-test.options.cargo_cache]
+type = "cargo_home"
+description = "Host directory holding a prepared cargo home (registry and git dependencies): mounted read-only, copied into a CARGO_HOME of the run's own, and cargo runs offline"
+
 [presets.cargo-test.options.all_features]
 type = "bool"
 description = "Enable all features"
@@ -1094,6 +1106,10 @@ description = "Produces a glibc-linked binary: the image is Debian, so the artif
 command = "cargo build --release"
 workdir = "/work"
 volumes = ["${WORKSPACE}:/work"]
+
+[presets.cargo-build.options.cargo_cache]
+type = "cargo_home"
+description = "Host directory holding a prepared cargo home (registry and git dependencies): mounted read-only, copied into a CARGO_HOME of the run's own, and cargo runs offline"
 
 [presets.cargo-build.options.target]
 type = "string"

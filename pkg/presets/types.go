@@ -157,6 +157,10 @@ func applyOption(preset *Preset, name string, opt Option, value any) Preset {
 		enabled = parsed
 	}
 
+	if opt.Type == cargoHomeType {
+		return withCargoSeed(p, toString(value))
+	}
+
 	// Apply to environment variable if specified
 	if opt.EnvVar != "" {
 		if p.Env == nil {
@@ -175,6 +179,42 @@ func applyOption(preset *Preset, name string, opt Option, value any) Preset {
 		p.Command = appendCommandFlag(p.Command, opt.CommandFlag, flagValue)
 	}
 
+	return p
+}
+
+// cargoHomeType is the option type that points a Rust preset at a prepared
+// cargo home (#553).
+const cargoHomeType = "cargo_home"
+
+// cargoSeedMount is where a prepared cargo home appears inside the container.
+const cargoSeedMount = "/cidx/cargo-seed"
+
+// withCargoSeed lets a Rust preset run offline from a prepared cargo home.
+//
+// The directory is mounted read-only, so no execution writes into a cache
+// another one reads. Cargo cannot work from a read-only home though -- it locks
+// files in the registry even when nothing is fetched -- so the container starts
+// by copying the seed into a CARGO_HOME of its own, and every write lands in
+// that copy. Which is what makes the result per execution: containers are named
+// from the workspace, and a run has its own checkout.
+func withCargoSeed(p Preset, dir string) Preset {
+	p.Volumes = append(append([]string(nil), p.Volumes...), dir+":"+cargoSeedMount+":ro")
+	env := make(map[string]string, len(p.Env)+2)
+	for k, v := range p.Env {
+		env[k] = v
+	}
+	env["CARGO_HOME"] = "/tmp/cargo-home"
+	env["CARGO_NET_OFFLINE"] = "true"
+	p.Env = env
+
+	const seed = `mkdir -p "$CARGO_HOME" && cp -a ` + cargoSeedMount + `/. "$CARGO_HOME"/ && `
+	if rest, ok := strings.CutPrefix(p.Command, shellCommandPrefix); ok && len(rest) >= 2 {
+		if quote := rest[0]; (quote == '\'' || quote == '"') && rest[len(rest)-1] == quote {
+			p.Command = shellCommandPrefix + string(quote) + seed + rest[1:]
+			return p
+		}
+	}
+	p.Command = shellCommandPrefix + "'" + seed + p.Command + "'"
 	return p
 }
 

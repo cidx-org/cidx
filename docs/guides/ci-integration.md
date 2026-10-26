@@ -109,6 +109,6 @@ asks for the container output and nothing else.
 A quiet container's output is not lost when it passes: the last run of each
 container is written to `.cidx/logs/<container>.log` in the workspace (issue
 \#429). A green `cargo-audit` can then be audited after the fact — how many
-advisories it loaded, from which advisory-db commit. Upload the folder as a
-build artifact if you want it on the run page, and add `.cidx/` to
-`.gitignore`. The file holds the last run only, not a history.
+advisories it loaded, from which advisory-db commit. Declare it in a phase's
+`artifacts` (`paths = [".cidx/logs"]`) to have the generated workflow upload it
+to the run page. `cidx init` adds `.cidx/` to `.gitignore`. The file holds the last run only, not a history.
