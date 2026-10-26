@@ -110,7 +110,7 @@ workflow = "none"
 description = "Create new release with version bump"
 # Pinned by digest like every catalogue image (rule 1); Renovate moves it
 # together with the commitizen preset, under the same cooldown.
-image = "commitizen/commitizen:4.16.5@sha256:451d0150ed7804c51cf201b2e9bd3f351867badbb7dc98f195cad740fdeaabaa"
+image = "commitizen/commitizen:4.19.2@sha256:8806c758eb24b6cd4e94e08d779e1161af186b8467b99ed59636630c3c20083c"
 command = "bump --yes --no-verify"
 workdir = "/app"
 volumes = [
