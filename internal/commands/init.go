@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/cidx-org/cidx/v3/pkg/config"
 	"github.com/cidx-org/cidx/v3/pkg/generate"
@@ -66,6 +67,12 @@ func initCreate(filename string, force, noCi bool) error {
 	}
 
 	fmt.Printf("  ✓ Created %s\n", filename)
+
+	if added, err := ensureGitignored(".", ".cidx/"); err != nil {
+		fmt.Printf("  ⚠ .gitignore: %v\n", err)
+	} else if added {
+		fmt.Println("  ✓ Added .cidx/ to .gitignore (the output of quiet runs lands in .cidx/logs)")
+	}
 
 	if !noCi && detection.Remote != "" {
 		ciPath, err := generateCIWorkflow(detection, force)
@@ -220,4 +227,39 @@ func generateCIWorkflow(detection *scaffold.Detection, force bool) (string, erro
 	}
 
 	return ciPath, nil
+}
+
+// ensureGitignored appends entry to dir/.gitignore unless a line already says
+// it, and reports whether it wrote. Outside a git work tree it does nothing: a
+// .gitignore in a directory git does not track is clutter, not a safeguard.
+func ensureGitignored(dir, entry string) (bool, error) {
+	if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
+		return false, nil
+	}
+	path := filepath.Join(dir, ".gitignore")
+	current, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return false, fmt.Errorf("read %s: %w", path, err)
+	}
+	bare := strings.TrimSuffix(entry, "/")
+	for _, line := range strings.Split(string(current), "\n") {
+		if l := strings.TrimSpace(line); l == entry || l == bare || l == "/"+entry || l == "/"+bare {
+			return false, nil
+		}
+	}
+	if len(current) > 0 && !strings.HasSuffix(string(current), "\n") {
+		entry = "\n" + entry
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return false, fmt.Errorf("open %s: %w", path, err)
+	}
+	if _, err := f.WriteString(entry + "\n"); err != nil {
+		_ = f.Close()
+		return false, fmt.Errorf("write %s: %w", path, err)
+	}
+	if err := f.Close(); err != nil {
+		return false, fmt.Errorf("close %s: %w", path, err)
+	}
+	return true, nil
 }
