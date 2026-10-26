@@ -1,3 +1,10 @@
+## v3.10.0 (2026-10-26)
+
+### Feat
+
+- **presets**: run a Rust gate offline from a prepared cargo home (#559)
+- **executor**: keep the output of a quiet run in .cidx/logs (#551)
+
 ## v3.9.1 (2026-10-13)
 
 ### Fix
