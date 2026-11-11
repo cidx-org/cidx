@@ -38,6 +38,7 @@ Welcome to the CIDX (CI with Declarative eXecution) documentation.
 
 - [Container Options](reference/container-options.md) - Every key a `[containers.<name>]` section may carry
 - [CLI Reference](reference/cli.md) - Command line interface documentation
+- [Execution events](reference/events.md) - NATS events published by `cidx run`
 - [Preset Catalogue](reference/catalogue.md) - Every preset, its pinned image, derived capabilities and update policy (generated)
 - [Git Operations](architecture-git-operations.md) - Why git runs as a binary and providers as libraries
 

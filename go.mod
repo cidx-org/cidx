@@ -14,6 +14,7 @@ require (
 	github.com/go-git/go-git/v5 v5.19.2
 	github.com/google/go-cmp v0.7.0
 	github.com/google/go-github/v76 v76.0.0
+	github.com/nats-io/nats.go v1.43.0
 	github.com/sirupsen/logrus v1.10.2
 	github.com/urfave/cli/v2 v2.27.7
 	gitlab.com/gitlab-org/api/client-go v1.46.0

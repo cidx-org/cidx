@@ -153,6 +153,7 @@ pkg/
   branch/        Branch listing, formatting, git operations
   config/        TOML parsing, validation, types
   environment/   CI provider detection, local safety modes
+  events/        Structured run events published on NATS (opt-in, best-effort)
   executor/      Docker/Podman abstraction layer
   pipeline/      Phase-based orchestration (sequential/parallel)
   presets/       Built-in container configurations (40+ presets)
@@ -267,7 +268,7 @@ severity = "HIGH,CRITICAL"
 
 ## Dependencies
 
-Core: `BurntSushi/toml`, `docker/docker`, `urfave/cli/v2`, `charmbracelet/bubbletea`, `sirupsen/logrus`
+Core: `BurntSushi/toml`, `docker/docker`, `urfave/cli/v2`, `charmbracelet/bubbletea`, `sirupsen/logrus`, `nats-io/nats.go` (execution events, only when an address is given)
 Test only: `cucumber/godog`
 
 Every dependency must justify its presence. No utility libraries, no "just in case" imports.

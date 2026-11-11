@@ -12,6 +12,7 @@ import (
 
 	"github.com/cidx-org/cidx/v3/pkg/config"
 	"github.com/cidx-org/cidx/v3/pkg/environment"
+	"github.com/cidx-org/cidx/v3/pkg/events"
 	"github.com/cidx-org/cidx/v3/pkg/executor"
 	"github.com/cidx-org/cidx/v3/pkg/presets"
 	"github.com/sirupsen/logrus"
@@ -22,6 +23,8 @@ type RunnerOptions struct {
 	Backend     executor.BackendType
 	Parallel    bool
 	Concurrency int
+	// Events receives the structured events of the run. Nil publishes nothing.
+	Events events.Emitter
 }
 
 // ExecutorSelector supplies the container backend. The runner owns phase
@@ -41,6 +44,7 @@ type Runner struct {
 	env         *environment.Environment
 	parallel    bool
 	concurrency int
+	events      events.Emitter
 }
 
 // NewRunner creates a new pipeline runner
@@ -65,6 +69,7 @@ func NewRunner(cfg *config.Config, exec *executor.DockerExecutor) *Runner {
 		backend:  executor.BackendDocker,
 		logger:   logger,
 		env:      env,
+		events:   events.Nop{},
 	}
 }
 
@@ -115,6 +120,11 @@ func NewRunnerWithOptions(cfg *config.Config, selector ExecutorSelector, opts Ru
 		logger.Infof("⚡ Parallel: enabled (concurrency: %d)", opts.Concurrency)
 	}
 
+	emitter := opts.Events
+	if emitter == nil {
+		emitter = events.Nop{}
+	}
+
 	return &Runner{
 		config:      cfg,
 		selector:    selector,
@@ -123,11 +133,40 @@ func NewRunnerWithOptions(cfg *config.Config, selector ExecutorSelector, opts Ru
 		env:         env,
 		parallel:    parallel,
 		concurrency: opts.Concurrency,
+		events:      emitter,
 	}
 }
 
 // Run executes a phase, tool, or pipeline
 func (r *Runner) Run(ctx context.Context, target string) error {
+	start := time.Now()
+	r.events.Emit(events.Event{Type: events.RunStarted, Target: target})
+	err := r.dispatch(ctx, target)
+	r.events.Emit(finishedEvent(events.RunFinished, events.Event{Target: target}, start, err))
+	return err
+}
+
+// finishedEvent completes e into the "finished" event of a run or a phase.
+func finishedEvent(eventType string, e events.Event, start time.Time, err error) events.Event {
+	e.Type = eventType
+	e.DurationMS = events.Millis(time.Since(start))
+	if err == nil {
+		e.Status = events.StatusPassed
+		e.ExitCode = events.Code(0)
+		return e
+	}
+	e.Status = events.StatusFailed
+	code := 1
+	var exit *executor.ExitError
+	if errors.As(err, &exit) {
+		code = int(exit.Code)
+	}
+	e.ExitCode = events.Code(code)
+	return e
+}
+
+// dispatch resolves target to a pipeline, phase or tool and runs it.
+func (r *Runner) dispatch(ctx context.Context, target string) error {
 	// Check if target is a named pipeline
 	if pipeline, isPipeline := r.config.Pipelines[target]; isPipeline {
 		return r.RunPipeline(ctx, target, pipeline)
@@ -326,8 +365,16 @@ func (r *Runner) RunPhase(ctx context.Context, phaseName string, phase config.Ph
 }
 
 // runPhase runs a phase and reports what happened to each of its containers,
-// in the phase's order.
+// in the phase's order. It brackets the phase with its events.
 func (r *Runner) runPhase(ctx context.Context, phaseName string, phase config.Phase) ([]containerResult, error) {
+	start := time.Now()
+	r.events.Emit(events.Event{Type: events.PhaseStarted, Phase: phaseName})
+	results, err := r.execPhase(ctx, phaseName, phase)
+	r.events.Emit(finishedEvent(events.PhaseFinished, events.Event{Phase: phaseName}, start, err))
+	return results, err
+}
+
+func (r *Runner) execPhase(ctx context.Context, phaseName string, phase config.Phase) ([]containerResult, error) {
 	r.logger.Infof("========================================")
 	r.logger.Infof("▶ PHASE: %s", strings.ToUpper(phaseName))
 	r.logger.Infof("========================================")
@@ -350,7 +397,7 @@ func (r *Runner) runPhase(ctx context.Context, phaseName string, phase config.Ph
 	// Sequential execution (default)
 	for i, containerName := range phase.Containers {
 		results[i].Ran = true
-		if err := r.RunTool(ctx, containerName); err != nil {
+		if err := r.runTool(ctx, phaseName, containerName); err != nil {
 			results[i].Err = err
 			return results, fmt.Errorf("container %s failed: %w", containerName, err)
 		}
@@ -395,7 +442,7 @@ func (r *Runner) runPhaseParallel(ctx context.Context, phaseName string, phase c
 			}
 
 			// Run the container
-			err := r.RunTool(ctx, name)
+			err := r.runTool(ctx, phaseName, name)
 
 			mu.Lock()
 			results[i].Ran = true
@@ -434,6 +481,12 @@ func (r *Runner) runPhaseParallel(ctx context.Context, phaseName string, phase c
 
 // RunTool executes a single tool
 func (r *Runner) RunTool(ctx context.Context, toolName string) error {
+	return r.runTool(ctx, "", toolName)
+}
+
+// runTool executes a tool on behalf of phaseName ("" when run on its own); the
+// phase only labels the events.
+func (r *Runner) runTool(ctx context.Context, phaseName, toolName string) error {
 	// A built-in preset, an alias of one (#292), or a custom container declared
 	// through [containers.NAME] with an `image` (#142): Lookup knows the three,
 	// and hands back the overrides left to merge.
@@ -488,20 +541,47 @@ func (r *Runner) RunTool(ctx context.Context, toolName string) error {
 		Workspace:   r.config.Workspace,
 	}
 
+	// The container is resolved: from here on it has a name and an image to report.
+	start := time.Now()
+	started := events.Event{Type: events.ContainerStarted, Phase: phaseName, Container: toolName, Image: containerConfig.Image}
+	r.events.Emit(started)
+
+	finished := func(status string, err error) {
+		e := started
+		e.Type = events.ContainerFinished
+		e.Status = status
+		e.DurationMS = events.Millis(time.Since(start))
+		var exit *executor.ExitError
+		switch {
+		case err == nil && status == events.StatusPassed:
+			e.ExitCode = events.Code(0)
+		case errors.As(err, &exit):
+			e.ExitCode = events.Code(int(exit.Code))
+		}
+		r.events.Emit(e)
+	}
+
 	// If execution mode forces dry-run (local safety), show what would be done
 	if execMode.IsDryRun {
 		r.printLocalSafetyDryRun(containerConfig)
+		finished(events.StatusSkipped, nil)
 		return nil
 	}
 
 	// Select executor based on backend preference
 	exec, err := r.selector.Select(toolName, r.backend)
 	if err != nil {
+		finished(events.StatusFailed, err)
 		return fmt.Errorf("executor selection failed: %w", err)
 	}
 
 	// Execute
-	return exec.Run(ctx, containerConfig)
+	if err := exec.Run(ctx, containerConfig); err != nil {
+		finished(events.StatusFailed, err)
+		return err
+	}
+	finished(events.StatusPassed, nil)
+	return nil
 }
 
 // resolvePullPolicy determines the effective pull policy.

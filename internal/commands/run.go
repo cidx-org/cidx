@@ -9,8 +9,10 @@ import (
 
 	"github.com/cidx-org/cidx/v3/pkg/config"
 	"github.com/cidx-org/cidx/v3/pkg/environment"
+	"github.com/cidx-org/cidx/v3/pkg/events"
 	"github.com/cidx-org/cidx/v3/pkg/executor"
 	"github.com/cidx-org/cidx/v3/pkg/pipeline"
+	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 )
 
@@ -82,6 +84,21 @@ Examples:
 				Name:  "stream",
 				Usage: "Stream container output live, at the normal log level (CI runs are quiet by default)",
 			},
+			&cli.StringFlag{
+				Name:    "nats-url",
+				Usage:   "Publish execution events to this NATS server (nothing is published without it)",
+				EnvVars: []string{"CIDX_NATS_URL"},
+			},
+			&cli.StringFlag{
+				Name:    "nats-subject",
+				Usage:   "Subject prefix of the published events (default: cidx.run)",
+				EnvVars: []string{"CIDX_NATS_SUBJECT"},
+			},
+			&cli.StringFlag{
+				Name:    "run-id",
+				Usage:   "Identifier carried by every event of this run (default: random)",
+				EnvVars: []string{"CIDX_RUN_ID"},
+			},
 		},
 		Action: func(c *cli.Context) error {
 			if c.NArg() != 1 {
@@ -129,10 +146,21 @@ Examples:
 			}()
 
 			// Create runner options
+			// Events go out only when a NATS address was given; the token is
+			// read from the environment alone so it never appears in argv.
+			emitter, _ := events.Open(events.Settings{
+				URL:           c.String("nats-url"),
+				Token:         os.Getenv("CIDX_NATS_TOKEN"),
+				SubjectPrefix: c.String("nats-subject"),
+				RunID:         c.String("run-id"),
+			}, logrus.New())
+			defer emitter.Close()
+
 			opts := pipeline.RunnerOptions{
 				Backend:     backend,
 				Parallel:    parallel,
 				Concurrency: concurrency,
+				Events:      emitter,
 			}
 
 			// Create runner with selector
