@@ -130,7 +130,7 @@ If a command is missing, broken, or has bad UX -- **that becomes the next priori
 - Step definitions in `features/*_steps_test.go`, beside the `.feature` files they implement
 - Simulation engine (no real Docker needed to run specs)
 - `Strict: true` for unit scenarios, `Strict: false` only for `@docker-required` scenarios
-- `TestFeatures` (strict, 349 scenarios) and `TestFeaturesDocker` (best-effort, 19 scenarios, skipped when no container runtime answers)
+- `TestFeatures` (strict, 356 scenarios) and `TestFeaturesDocker` (best-effort, 19 scenarios, skipped when no container runtime answers)
 - The suites live in **`features/`**, the package that also holds the `.feature` files: a scenario and the step that implements it are one `ls` apart. They used to sit in a root `package main` with no source file in it, which the `go-test` preset then skipped — along with `internal/commands`, where every CLI test has lived since #317. `cidx.toml` carried an override to put them back until #357 moved the fix into the catalogue: the preset says `go test -v ./...` now and this repository states no command at all. Two guards keep it that way — `TestNoTestPresetRunsOnlyPartOfTheProject` (in `pkg/presets`) fails on a catalogue test preset that names a subtree, and `TestTheTestPhaseRunsEveryPackageThatHasTests` (in `pkg/config`) fails when the resolved command stops covering a package that holds tests (#344)
 - Scenarios that describe the CLI import `internal/commands` and resolve against `commands.NewApp()` — the real tree, never a copy of it (#317)
 

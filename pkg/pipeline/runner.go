@@ -12,6 +12,7 @@ import (
 
 	"github.com/cidx-org/cidx/v3/pkg/config"
 	"github.com/cidx-org/cidx/v3/pkg/environment"
+	"github.com/cidx-org/cidx/v3/pkg/events"
 	"github.com/cidx-org/cidx/v3/pkg/executor"
 	"github.com/cidx-org/cidx/v3/pkg/presets"
 	"github.com/sirupsen/logrus"
@@ -22,6 +23,9 @@ type RunnerOptions struct {
 	Backend     executor.BackendType
 	Parallel    bool
 	Concurrency int
+
+	// Events receives the structured events of the run. Nil publishes nothing.
+	Events events.Emitter
 }
 
 // ExecutorSelector supplies the container backend. The runner owns phase
@@ -41,6 +45,7 @@ type Runner struct {
 	env         *environment.Environment
 	parallel    bool
 	concurrency int
+	events      events.Emitter
 }
 
 // NewRunner creates a new pipeline runner
@@ -65,6 +70,7 @@ func NewRunner(cfg *config.Config, exec *executor.DockerExecutor) *Runner {
 		backend:  executor.BackendDocker,
 		logger:   logger,
 		env:      env,
+		events:   events.Nop{},
 	}
 }
 
@@ -115,6 +121,11 @@ func NewRunnerWithOptions(cfg *config.Config, selector ExecutorSelector, opts Ru
 		logger.Infof("⚡ Parallel: enabled (concurrency: %d)", opts.Concurrency)
 	}
 
+	emitter := opts.Events
+	if emitter == nil {
+		emitter = events.Nop{}
+	}
+
 	return &Runner{
 		config:      cfg,
 		selector:    selector,
@@ -123,11 +134,27 @@ func NewRunnerWithOptions(cfg *config.Config, selector ExecutorSelector, opts Ru
 		env:         env,
 		parallel:    parallel,
 		concurrency: opts.Concurrency,
+		events:      emitter,
 	}
 }
 
-// Run executes a phase, tool, or pipeline
+// emit publishes an event; a runner built without an emitter publishes nothing.
+func (r *Runner) emit(e events.Event) {
+	if r.events != nil {
+		r.events.Emit(e)
+	}
+}
+
+// Run executes a phase, tool, or pipeline, announcing its start and end.
 func (r *Runner) Run(ctx context.Context, target string) error {
+	start := time.Now()
+	r.emit(events.Event{Type: events.RunStarted, Target: target})
+	err := r.run(ctx, target)
+	r.emit(events.Finish(events.Event{Type: events.RunFinished, Target: target}, start, err))
+	return err
+}
+
+func (r *Runner) run(ctx context.Context, target string) error {
 	// Check if target is a named pipeline
 	if pipeline, isPipeline := r.config.Pipelines[target]; isPipeline {
 		return r.RunPipeline(ctx, target, pipeline)
@@ -328,6 +355,14 @@ func (r *Runner) RunPhase(ctx context.Context, phaseName string, phase config.Ph
 // runPhase runs a phase and reports what happened to each of its containers,
 // in the phase's order.
 func (r *Runner) runPhase(ctx context.Context, phaseName string, phase config.Phase) ([]containerResult, error) {
+	start := time.Now()
+	r.emit(events.Event{Type: events.PhaseStarted, Phase: phaseName})
+	results, err := r.runPhaseContainers(ctx, phaseName, phase)
+	r.emit(events.Finish(events.Event{Type: events.PhaseFinished, Phase: phaseName}, start, err))
+	return results, err
+}
+
+func (r *Runner) runPhaseContainers(ctx context.Context, phaseName string, phase config.Phase) ([]containerResult, error) {
 	r.logger.Infof("========================================")
 	r.logger.Infof("▶ PHASE: %s", strings.ToUpper(phaseName))
 	r.logger.Infof("========================================")
@@ -350,7 +385,7 @@ func (r *Runner) runPhase(ctx context.Context, phaseName string, phase config.Ph
 	// Sequential execution (default)
 	for i, containerName := range phase.Containers {
 		results[i].Ran = true
-		if err := r.RunTool(ctx, containerName); err != nil {
+		if err := r.runTool(ctx, containerName, phaseName); err != nil {
 			results[i].Err = err
 			return results, fmt.Errorf("container %s failed: %w", containerName, err)
 		}
@@ -395,7 +430,7 @@ func (r *Runner) runPhaseParallel(ctx context.Context, phaseName string, phase c
 			}
 
 			// Run the container
-			err := r.RunTool(ctx, name)
+			err := r.runTool(ctx, name, phaseName)
 
 			mu.Lock()
 			results[i].Ran = true
@@ -434,6 +469,12 @@ func (r *Runner) runPhaseParallel(ctx context.Context, phaseName string, phase c
 
 // RunTool executes a single tool
 func (r *Runner) RunTool(ctx context.Context, toolName string) error {
+	return r.runTool(ctx, toolName, "")
+}
+
+// runTool executes a single tool on behalf of phaseName ("" when it is the
+// target of the run itself).
+func (r *Runner) runTool(ctx context.Context, toolName, phaseName string) error {
 	// A built-in preset, an alias of one (#292), or a custom container declared
 	// through [containers.NAME] with an `image` (#142): Lookup knows the three,
 	// and hands back the overrides left to merge.
@@ -489,19 +530,39 @@ func (r *Runner) RunTool(ctx context.Context, toolName string) error {
 	}
 
 	// If execution mode forces dry-run (local safety), show what would be done
+	// Only names, image and outcome leave through the events: the container's
+	// output, command and environment never do.
+	announced := events.Event{
+		Phase:     phaseName,
+		Container: toolName,
+		Image:     containerConfig.Image,
+	}
+	start := time.Now()
+	announced.Type = events.ContainerStarted
+	r.emit(announced)
+	announced.Type = events.ContainerFinished
+
 	if execMode.IsDryRun {
 		r.printLocalSafetyDryRun(containerConfig)
+		finished := events.Finish(announced, start, nil)
+		finished.Status = events.StatusSkipped
+		finished.ExitCode = nil
+		r.emit(finished)
 		return nil
 	}
 
 	// Select executor based on backend preference
 	exec, err := r.selector.Select(toolName, r.backend)
 	if err != nil {
-		return fmt.Errorf("executor selection failed: %w", err)
+		err = fmt.Errorf("executor selection failed: %w", err)
+		r.emit(events.Finish(announced, start, err))
+		return err
 	}
 
 	// Execute
-	return exec.Run(ctx, containerConfig)
+	err = exec.Run(ctx, containerConfig)
+	r.emit(events.Finish(announced, start, err))
+	return err
 }
 
 // resolvePullPolicy determines the effective pull policy.

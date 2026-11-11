@@ -29,6 +29,11 @@ cidx run <name> [flags]
 - `--stream`: Stream container output live, at the normal log level.
 - `--parallel, -p`: Run containers in parallel (local only).
 - `--concurrency, -j`: Max concurrent containers (default: 2).
+- `--nats-url` (env `CIDX_NATS_URL`): Publish structured run events to this NATS server. Unset, nothing is published and no connection is tried.
+- `--nats-subject` (env `CIDX_NATS_SUBJECT`): Subject of the run events (default: `cidx.run.events`).
+- `--run-id` (env `CIDX_RUN_ID`): Run identifier carried by every event (default: generated).
+
+The events are described in [Run events](events.md).
 
 **Output on a CI runner.** `cidx run` turns `--quiet` on by itself when it
 detects CI: container output is buffered and dropped when the container

@@ -9,6 +9,7 @@ import (
 
 	"github.com/cidx-org/cidx/v3/pkg/config"
 	"github.com/cidx-org/cidx/v3/pkg/environment"
+	"github.com/cidx-org/cidx/v3/pkg/events"
 	"github.com/cidx-org/cidx/v3/pkg/executor"
 	"github.com/cidx-org/cidx/v3/pkg/pipeline"
 	"github.com/urfave/cli/v2"
@@ -82,6 +83,22 @@ Examples:
 				Name:  "stream",
 				Usage: "Stream container output live, at the normal log level (CI runs are quiet by default)",
 			},
+			&cli.StringFlag{
+				Name:    "nats-url",
+				EnvVars: []string{"CIDX_NATS_URL"},
+				Usage:   "Publish run events to this NATS server (nats://host:port); unset publishes nothing",
+			},
+			&cli.StringFlag{
+				Name:    "nats-subject",
+				EnvVars: []string{"CIDX_NATS_SUBJECT"},
+				Usage:   "NATS subject of the run events",
+				Value:   events.DefaultSubject,
+			},
+			&cli.StringFlag{
+				Name:    "run-id",
+				EnvVars: []string{"CIDX_RUN_ID"},
+				Usage:   "Identifier carried by every run event (default: generated)",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			if c.NArg() != 1 {
@@ -128,11 +145,26 @@ Examples:
 				}
 			}()
 
+			// Run events go out only when a NATS address was given, and never
+			// for a dry run: nothing executes, so there is nothing to report.
+			var emitter events.Emitter = events.Nop{}
+			if !dryRun {
+				emitter = events.Connect(events.Settings{
+					URL:     c.String("nats-url"),
+					Subject: c.String("nats-subject"),
+					RunID:   c.String("run-id"),
+				}, func(msg string) {
+					_, _ = fmt.Fprintf(c.App.ErrWriter, "Warning: %s\n", msg)
+				})
+			}
+			defer emitter.Close()
+
 			// Create runner options
 			opts := pipeline.RunnerOptions{
 				Backend:     backend,
 				Parallel:    parallel,
 				Concurrency: concurrency,
+				Events:      emitter,
 			}
 
 			// Create runner with selector

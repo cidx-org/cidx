@@ -133,6 +133,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	RegisterAuditGateSteps(ctx, testCtx)
 	RegisterContainerReuseSteps(ctx, testCtx)
 	RegisterPresetAliasSteps(ctx, testCtx)
+	RegisterRunEventsSteps(ctx, testCtx)
 
 	// Hooks
 	ctx.Before(func(ctx context.Context, sc *godog.Scenario) (context.Context, error) {
@@ -218,6 +219,10 @@ type TestContext struct {
 	// The release-bump world (#484): identities, environment, and the real
 	// repository the version and undo steps run against.
 	bumpScenario *bumpState
+
+	// The run-events world (NATS test server, pipeline, outcome), lazily
+	// created by tc.runEventsWorld() and closed by Cleanup.
+	runEvents *runEventsState
 }
 
 // stagedTool is a tool a scenario declares: what it writes to stdout and how it
@@ -279,6 +284,8 @@ func (tc *TestContext) Reset() {
 
 // Cleanup performs cleanup after scenario
 func (tc *TestContext) Cleanup() {
+	tc.closeRunEvents()
+
 	// Clean up test git repos, temp files, etc.
 	if tc.GitRepo != "" {
 		_ = os.RemoveAll(tc.GitRepo)
