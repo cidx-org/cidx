@@ -9,11 +9,11 @@ code, or whether it starts.
 
 ## Turning it on
 
-| Option           | Environment         | Default           | Meaning                                    |
-| ---------------- | ------------------- | ----------------- | ------------------------------------------ |
-| `--nats-url`     | `CIDX_NATS_URL`     | none              | NATS server, e.g. `nats://localhost:4222`  |
-| `--nats-subject` | `CIDX_NATS_SUBJECT` | `cidx.run.events` | Subject every event is published on        |
-| `--run-id`       | `CIDX_RUN_ID`       | generated         | Identifier shared by every event of a run  |
+| Option           | Environment         | Default           | Meaning                                   |
+| ---------------- | ------------------- | ----------------- | ----------------------------------------- |
+| `--nats-url`     | `CIDX_NATS_URL`     | none              | NATS server, e.g. `nats://localhost:4222` |
+| `--nats-subject` | `CIDX_NATS_SUBJECT` | `cidx.run.events` | Subject every event is published on       |
+| `--run-id`       | `CIDX_RUN_ID`       | generated         | Identifier shared by every event of a run |
 
 ```bash
 CIDX_NATS_URL=nats://localhost:4222 CIDX_RUN_ID=build-1842 cidx run ci
@@ -41,19 +41,19 @@ The warning names the failure, never the address.
 One JSON document per message, all on the same subject. Fields are only ever
 added within a version; the `format` field changes on a breaking change.
 
-| Field         | Present on          | Meaning                                                              |
-| ------------- | ------------------- | -------------------------------------------------------------------- |
-| `format`      | all                 | `cidx.run-event/v1`                                                  |
-| `type`        | all                 | `run.started`, `run.finished`, `phase.started`, `phase.finished`, `container.started`, `container.finished` |
-| `run_id`      | all                 | Shared by every event of the run (`--run-id`, or generated)          |
-| `time`        | all                 | RFC 3339, UTC                                                        |
-| `target`      | `run.*`             | What was passed to `cidx run`                                        |
-| `phase`       | `phase.*`, `container.*` | Phase name; absent on a container run directly as the target     |
-| `container`   | `container.*`       | Container name                                                       |
-| `image`       | `container.*`       | Resolved image reference                                             |
-| `status`      | `*.finished`        | `passed`, `failed`, or `skipped` (local safety previewed the container) |
-| `exit_code`   | `*.finished`        | 0 when passed; the container's own code when it exited non-zero. Absent when the step failed without one (image not pulled) |
-| `duration_ms` | `*.finished`        | Wall-clock duration in milliseconds                                  |
+| Field         | Present on               | Meaning                                                                                                                     |
+| ------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `format`      | all                      | `cidx.run-event/v1`                                                                                                         |
+| `type`        | all                      | `run.started`, `run.finished`, `phase.started`, `phase.finished`, `container.started`, `container.finished`                 |
+| `run_id`      | all                      | Shared by every event of the run (`--run-id`, or generated)                                                                 |
+| `time`        | all                      | RFC 3339, UTC                                                                                                               |
+| `target`      | `run.*`                  | What was passed to `cidx run`                                                                                               |
+| `phase`       | `phase.*`, `container.*` | Phase name; absent on a container run directly as the target                                                                |
+| `container`   | `container.*`            | Container name                                                                                                              |
+| `image`       | `container.*`            | Resolved image reference                                                                                                    |
+| `status`      | `*.finished`             | `passed`, `failed`, or `skipped` (local safety previewed the container)                                                     |
+| `exit_code`   | `*.finished`             | 0 when passed; the container's own code when it exited non-zero. Absent when the step failed without one (image not pulled) |
+| `duration_ms` | `*.finished`             | Wall-clock duration in milliseconds                                                                                         |
 
 Events never contain container output, commands, environment values, error
 text or connection details.
