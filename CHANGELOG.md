@@ -1,3 +1,9 @@
+## v3.11.0 (2026-11-13)
+
+### Feat
+
+- **run**: publish run events on NATS (#565)
+
 ## v3.10.0 (2026-10-26)
 
 ### Feat
