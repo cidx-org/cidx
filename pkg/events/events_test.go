@@ -164,6 +164,39 @@ func TestRefusedPublicationWarnsOnce(t *testing.T) {
 	}
 }
 
+func TestFinishNamesTheNatureOfAFailureOnly(t *testing.T) {
+	start := time.Now()
+	cases := []struct {
+		err  error
+		want string
+	}{
+		{&executor.ExitError{Code: 1}, FailureExitCode},
+		{fmt.Errorf("a: %w", executor.ErrImagePull), FailureImagePull},
+		{fmt.Errorf("a: %w", executor.ErrTimeout), FailureTimeout},
+		{fmt.Errorf("a: %w", executor.ErrInterrupted), FailureInterrupted},
+		{fmt.Errorf("a: %w", executor.ErrStart), FailureStart},
+		{errors.New("executor selection failed"), FailureOther},
+	}
+	for _, c := range cases {
+		err, want := c.err, c.want
+		e := Finish(Event{Type: ContainerFinished}, start, err)
+		if e.Failure != want {
+			t.Errorf("%v: failure = %q, want %q", err, e.Failure, want)
+		}
+		raw, _ := json.Marshal(e)
+		if strings.Contains(string(raw), err.Error()) {
+			t.Errorf("error text in payload: %s", raw)
+		}
+	}
+	if e := Finish(Event{Type: ContainerFinished}, start, nil); e.Failure != "" {
+		t.Errorf("a passed step has no failure, got %q", e.Failure)
+	}
+	raw, _ := json.Marshal(Finish(Event{Type: ContainerFinished}, start, nil))
+	if strings.Contains(string(raw), "failure") || strings.Contains(string(raw), "failed_container") {
+		t.Errorf("passed payload carries failure fields: %s", raw)
+	}
+}
+
 func TestFinish(t *testing.T) {
 	start := time.Now().Add(-1500 * time.Millisecond)
 

@@ -216,13 +216,13 @@ func (e *DockerExecutor) Run(ctx context.Context, containerConfig *config.Contai
 
 	// Pull image based on policy
 	if err := e.pullImageWithPolicy(ctx, containerConfig.Image, containerConfig.PullPolicy); err != nil {
-		return fmt.Errorf("failed to pull image: %w", err)
+		return fmt.Errorf("failed to pull image: %w", &kindError{ErrImagePull, err})
 	}
 
 	// Get or create container
 	containerID, containerName, err := e.getOrCreateContainer(ctx, containerConfig, volumes, command)
 	if err != nil {
-		return fmt.Errorf("failed to get or create container: %w", err)
+		return fmt.Errorf("failed to get or create container: %w", &kindError{ErrStart, err})
 	}
 
 	// Capture a "since" cutoff BEFORE starting the container so that
@@ -236,7 +236,7 @@ func (e *DockerExecutor) Run(ctx context.Context, containerConfig *config.Contai
 	// Start container
 	e.logger.Debugf("Starting container: %s", containerName)
 	if err := e.client.ContainerStart(ctx, containerID, container.StartOptions{}); err != nil {
-		return fmt.Errorf("failed to start container: %w", err)
+		return fmt.Errorf("failed to start container: %w", &kindError{ErrStart, err})
 	}
 
 	// The container outlives cidx unless told otherwise: when the context ends
@@ -335,10 +335,30 @@ func WriteLog(dir, name, output string) (string, error) {
 // endedEarly names why the context ended before the container did.
 func (e *DockerExecutor) endedEarly(ctx context.Context, name string, timeout time.Duration) error {
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		return fmt.Errorf("container %s timed out after %v", name, timeout)
+		return &kindError{ErrTimeout, fmt.Errorf("container %s timed out after %v", name, timeout)}
 	}
-	return fmt.Errorf("container %s interrupted", name)
+	return &kindError{ErrInterrupted, fmt.Errorf("container %s interrupted", name)}
 }
+
+// How a container run can end without an exit code. A caller tells them apart
+// with errors.Is; the message of the error is unchanged.
+var (
+	ErrImagePull   = errors.New("image not obtained")
+	ErrStart       = errors.New("container could not start")
+	ErrTimeout     = errors.New("container timed out")
+	ErrInterrupted = errors.New("container run interrupted")
+)
+
+// kindError tags an error with one of the sentinels above without altering its
+// message.
+type kindError struct {
+	kind error
+	err  error
+}
+
+func (k *kindError) Error() string { return k.err.Error() }
+
+func (k *kindError) Unwrap() []error { return []error{k.kind, k.err} }
 
 // stopContainer stops a container on a context of its own: the run's is the one
 // that just ended.

@@ -46,6 +46,40 @@ type Runner struct {
 	parallel    bool
 	concurrency int
 	events      events.Emitter
+
+	// failedMu guards failed: the first container to fail during the current run.
+	failedMu sync.Mutex
+	failed   *containerResult
+}
+
+// noteFailure remembers the first container that failed in the run.
+func (r *Runner) noteFailure(c containerResult) {
+	r.failedMu.Lock()
+	defer r.failedMu.Unlock()
+	if r.failed == nil {
+		r.failed = &c
+	}
+}
+
+// firstFailure is the first container of results, in order, that failed.
+func firstFailure(results []containerResult) *containerResult {
+	for i := range results {
+		if results[i].Err != nil {
+			return &results[i]
+		}
+	}
+	return nil
+}
+
+// finishFailed closes a phase or run event, naming the container behind a
+// failure and the nature of that container's failure.
+func finishFailed(e events.Event, start time.Time, err error, c *containerResult) events.Event {
+	e = events.Finish(e, start, err)
+	if err != nil && c != nil {
+		e.FailedContainer = c.Name
+		e.Failure = events.Classify(c.Err)
+	}
+	return e
 }
 
 // NewRunner creates a new pipeline runner
@@ -148,9 +182,15 @@ func (r *Runner) emit(e events.Event) {
 // Run executes a phase, tool, or pipeline, announcing its start and end.
 func (r *Runner) Run(ctx context.Context, target string) error {
 	start := time.Now()
+	r.failedMu.Lock()
+	r.failed = nil
+	r.failedMu.Unlock()
 	r.emit(events.Event{Type: events.RunStarted, Target: target})
 	err := r.run(ctx, target)
-	r.emit(events.Finish(events.Event{Type: events.RunFinished, Target: target}, start, err))
+	r.failedMu.Lock()
+	failed := r.failed
+	r.failedMu.Unlock()
+	r.emit(finishFailed(events.Event{Type: events.RunFinished, Target: target}, start, err, failed))
 	return err
 }
 
@@ -358,7 +398,11 @@ func (r *Runner) runPhase(ctx context.Context, phaseName string, phase config.Ph
 	start := time.Now()
 	r.emit(events.Event{Type: events.PhaseStarted, Phase: phaseName})
 	results, err := r.runPhaseContainers(ctx, phaseName, phase)
-	r.emit(events.Finish(events.Event{Type: events.PhaseFinished, Phase: phaseName}, start, err))
+	failed := firstFailure(results)
+	if err != nil && failed != nil {
+		r.noteFailure(*failed)
+	}
+	r.emit(finishFailed(events.Event{Type: events.PhaseFinished, Phase: phaseName}, start, err, failed))
 	return results, err
 }
 
@@ -469,7 +513,11 @@ func (r *Runner) runPhaseParallel(ctx context.Context, phaseName string, phase c
 
 // RunTool executes a single tool
 func (r *Runner) RunTool(ctx context.Context, toolName string) error {
-	return r.runTool(ctx, toolName, "")
+	err := r.runTool(ctx, toolName, "")
+	if err != nil {
+		r.noteFailure(containerResult{Name: toolName, Ran: true, Err: err})
+	}
+	return err
 }
 
 // runTool executes a single tool on behalf of phaseName ("" when it is the

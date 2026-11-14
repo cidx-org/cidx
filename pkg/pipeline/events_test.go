@@ -2,6 +2,8 @@ package pipeline
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"slices"
 	"sync"
 	"testing"
@@ -103,6 +105,80 @@ func TestFailedContainerIsReportedWithItsExitCode(t *testing.T) {
 		if e.Status != events.StatusFailed || e.ExitCode == nil || *e.ExitCode != 7 {
 			t.Errorf("%s = %+v, want failed with exit 7", e.Type, e)
 		}
+	}
+}
+
+func TestFailureNatureIsReportedForEachReachableCause(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"exit code", &executor.ExitError{Code: 2}, events.FailureExitCode},
+		{"image pull", fmt.Errorf("failed to pull image: %w", executor.ErrImagePull), events.FailureImagePull},
+		{"timeout", fmt.Errorf("x: %w", executor.ErrTimeout), events.FailureTimeout},
+		{"deadline", context.DeadlineExceeded, events.FailureTimeout},
+		{"interrupted", fmt.Errorf("x: %w", executor.ErrInterrupted), events.FailureInterrupted},
+		{"canceled", context.Canceled, events.FailureInterrupted},
+		{"start", fmt.Errorf("x: %w", executor.ErrStart), events.FailureStart},
+		{"other", errors.New("boom"), events.FailureOther},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			col, err := eventfulRun(t, map[string]error{"b": c.err}, "ci")
+			if err == nil {
+				t.Fatal("the run must fail")
+			}
+			var finished int
+			for _, e := range col.got {
+				if e.Type != events.ContainerFinished && e.Type != events.PhaseFinished && e.Type != events.RunFinished {
+					continue
+				}
+				switch {
+				case e.Type == events.ContainerFinished && e.Container == "a":
+					if e.Failure != "" || e.FailedContainer != "" {
+						t.Errorf("a passed, got %+v", e)
+					}
+				case e.Type == events.PhaseFinished && e.Phase == "first", e.Type == events.RunFinished, e.Container == "b":
+					finished++
+					if e.Failure != c.want {
+						t.Errorf("%s failure = %q, want %q", e.Type, e.Failure, c.want)
+					}
+					if e.Type != events.ContainerFinished && e.FailedContainer != "b" {
+						t.Errorf("%s failed_container = %q, want b", e.Type, e.FailedContainer)
+					}
+					if e.Type == events.ContainerFinished && e.FailedContainer != "" {
+						t.Errorf("container.finished must not carry failed_container: %+v", e)
+					}
+				}
+			}
+			if finished != 3 {
+				t.Errorf("checked %d failed events, want 3", finished)
+			}
+		})
+	}
+}
+
+func TestPassedAndSkippedEventsCarryNoFailure(t *testing.T) {
+	col, err := eventfulRun(t, nil, "ci")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range col.got {
+		if e.Failure != "" || e.FailedContainer != "" {
+			t.Errorf("%s of a passed run carries a failure: %+v", e.Type, e)
+		}
+	}
+}
+
+func TestAToolTargetNamesItselfAsFailedContainer(t *testing.T) {
+	col, err := eventfulRun(t, map[string]error{"a": fmt.Errorf("x: %w", executor.ErrImagePull)}, "a")
+	if err == nil {
+		t.Fatal("the run must fail")
+	}
+	last := col.got[len(col.got)-1]
+	if last.Type != events.RunFinished || last.FailedContainer != "a" || last.Failure != events.FailureImagePull {
+		t.Errorf("run.finished = %+v", last)
 	}
 }
 

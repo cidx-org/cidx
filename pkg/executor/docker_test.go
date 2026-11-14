@@ -12,6 +12,25 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+func TestEndedEarlyTagsItsCauseWithoutChangingTheMessage(t *testing.T) {
+	e := &DockerExecutor{}
+
+	expired, cancelExpired := context.WithTimeout(context.Background(), 0)
+	defer cancelExpired()
+	<-expired.Done()
+	err := e.endedEarly(expired, "trivy", 0)
+	if !errors.Is(err, ErrTimeout) || err.Error() != "container trivy timed out after 0s" {
+		t.Errorf("timeout: %v", err)
+	}
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	err = e.endedEarly(canceled, "trivy", 0)
+	if !errors.Is(err, ErrInterrupted) || err.Error() != "container trivy interrupted" {
+		t.Errorf("interrupted: %v", err)
+	}
+}
+
 func TestConfigHash_Deterministic(t *testing.T) {
 	image := "alpine:latest"
 	command := "echo hello"

@@ -7,6 +7,7 @@
 package events
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -41,6 +42,37 @@ const (
 	StatusSkipped = "skipped" // local safety previewed the container instead of running it
 )
 
+// Failure is the nature of a failed step: a closed set, so a consumer can branch
+// on it. It is never an error message.
+const (
+	FailureExitCode    = "exit_code"   // the container exited non-zero
+	FailureImagePull   = "image_pull"  // the image could not be obtained
+	FailureTimeout     = "timeout"     // the time limit was exceeded
+	FailureInterrupted = "interrupted" // the run was interrupted
+	FailureStart       = "start"       // the container could not start
+	FailureOther       = "other"       // any other cause
+)
+
+// Classify names the nature of a failure. It returns "" for a nil error.
+func Classify(err error) string {
+	var exit *executor.ExitError
+	switch {
+	case err == nil:
+		return ""
+	case errors.As(err, &exit):
+		return FailureExitCode
+	case errors.Is(err, executor.ErrTimeout), errors.Is(err, context.DeadlineExceeded):
+		return FailureTimeout
+	case errors.Is(err, executor.ErrInterrupted), errors.Is(err, context.Canceled):
+		return FailureInterrupted
+	case errors.Is(err, executor.ErrImagePull):
+		return FailureImagePull
+	case errors.Is(err, executor.ErrStart):
+		return FailureStart
+	}
+	return FailureOther
+}
+
 // Event is the JSON document published for each step of a run. It carries names,
 // images, exit codes and durations — never container output, error text,
 // environment values or connection details.
@@ -56,6 +88,13 @@ type Event struct {
 	Status     string    `json:"status,omitempty"`
 	ExitCode   *int      `json:"exit_code,omitempty"`
 	DurationMS *int64    `json:"duration_ms,omitempty"`
+
+	// Failure is the nature of a failure, on a failed *.finished only.
+	Failure string `json:"failure,omitempty"`
+
+	// FailedContainer is the first container that failed, on a failed
+	// phase.finished or run.finished when there is one.
+	FailedContainer string `json:"failed_container,omitempty"`
 }
 
 // Emitter receives the events of one run. Emit never fails and never blocks the
@@ -79,6 +118,7 @@ func Finish(e Event, start time.Time, err error) Event {
 	e.Status = StatusPassed
 	if err != nil {
 		e.Status = StatusFailed
+		e.Failure = Classify(err)
 	}
 	if code, ok := ExitCode(err); ok {
 		e.ExitCode = &code

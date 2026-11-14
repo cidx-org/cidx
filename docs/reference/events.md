@@ -54,6 +54,23 @@ added within a version; the `format` field changes on a breaking change.
 | `status`      | `*.finished`             | `passed`, `failed`, or `skipped` (local safety previewed the container)                                                     |
 | `exit_code`   | `*.finished`             | 0 when passed; the container's own code when it exited non-zero. Absent when the step failed without one (image not pulled) |
 | `duration_ms` | `*.finished`             | Wall-clock duration in milliseconds                                                                                         |
+| `failure`     | failed `*.finished`      | Nature of the failure, one of the values below. Absent when `status` is `passed` or `skipped`                               |
+| `failed_container` | failed `phase.finished`, `run.finished` | The first container that failed, when there is one                                                     |
+
+### Failure values
+
+`failure` is a closed set; a value is only ever added within a version, never
+renamed. On `phase.finished` and `run.finished` it is the nature of the failure
+of `failed_container`.
+
+| Value         | Meaning                                                       |
+| ------------- | ------------------------------------------------------------- |
+| `exit_code`   | The container ran and exited non-zero (see `exit_code`)       |
+| `image_pull`  | The image could not be obtained                               |
+| `timeout`     | The time limit was exceeded                                   |
+| `interrupted` | The run was interrupted (Ctrl-C, SIGTERM)                     |
+| `start`       | The container could not be created or started                 |
+| `other`       | Any other cause (no container runtime, for instance)          |
 
 Events never contain container output, commands, environment values, error
 text or connection details.
@@ -66,9 +83,9 @@ text or connection details.
 {"format":"cidx.run-event/v1","type":"run.started","run_id":"build-1842","time":"2026-11-11T10:00:00.000Z","target":"security"}
 {"format":"cidx.run-event/v1","type":"phase.started","run_id":"build-1842","time":"2026-11-11T10:00:00.001Z","phase":"security"}
 {"format":"cidx.run-event/v1","type":"container.started","run_id":"build-1842","time":"2026-11-11T10:00:00.002Z","phase":"security","container":"trivy","image":"aquasec/trivy:0.58.0"}
-{"format":"cidx.run-event/v1","type":"container.finished","run_id":"build-1842","time":"2026-11-11T10:00:12.410Z","phase":"security","container":"trivy","image":"aquasec/trivy:0.58.0","status":"failed","exit_code":1,"duration_ms":12408}
-{"format":"cidx.run-event/v1","type":"phase.finished","run_id":"build-1842","time":"2026-11-11T10:00:12.411Z","phase":"security","status":"failed","exit_code":1,"duration_ms":12410}
-{"format":"cidx.run-event/v1","type":"run.finished","run_id":"build-1842","time":"2026-11-11T10:00:12.411Z","target":"security","status":"failed","exit_code":1,"duration_ms":12411}
+{"format":"cidx.run-event/v1","type":"container.finished","run_id":"build-1842","time":"2026-11-11T10:00:12.410Z","phase":"security","container":"trivy","image":"aquasec/trivy:0.58.0","status":"failed","exit_code":1,"duration_ms":12408,"failure":"exit_code"}
+{"format":"cidx.run-event/v1","type":"phase.finished","run_id":"build-1842","time":"2026-11-11T10:00:12.411Z","phase":"security","status":"failed","exit_code":1,"duration_ms":12410,"failure":"exit_code","failed_container":"trivy"}
+{"format":"cidx.run-event/v1","type":"run.finished","run_id":"build-1842","time":"2026-11-11T10:00:12.411Z","target":"security","status":"failed","exit_code":1,"duration_ms":12411,"failure":"exit_code","failed_container":"trivy"}
 ```
 
 Events of containers running in parallel (`--parallel`) interleave; use
