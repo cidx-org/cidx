@@ -41,21 +41,21 @@ The warning names the failure, never the address.
 One JSON document per message, all on the same subject. Fields are only ever
 added within a version; the `format` field changes on a breaking change.
 
-| Field         | Present on               | Meaning                                                                                                                     |
-| ------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| `format`      | all                      | `cidx.run-event/v1`                                                                                                         |
-| `type`        | all                      | `run.started`, `run.finished`, `phase.started`, `phase.finished`, `container.started`, `container.finished`                 |
-| `run_id`      | all                      | Shared by every event of the run (`--run-id`, or generated)                                                                 |
-| `time`        | all                      | RFC 3339, UTC                                                                                                               |
-| `target`      | `run.*`                  | What was passed to `cidx run`                                                                                               |
-| `phase`       | `phase.*`, `container.*` | Phase name; absent on a container run directly as the target                                                                |
-| `container`   | `container.*`            | Container name                                                                                                              |
-| `image`       | `container.*`            | Resolved image reference                                                                                                    |
-| `status`      | `*.finished`             | `passed`, `failed`, or `skipped` (local safety previewed the container)                                                     |
-| `exit_code`   | `*.finished`             | 0 when passed; the container's own code when it exited non-zero. Absent when the step failed without one (image not pulled) |
-| `duration_ms` | `*.finished`             | Wall-clock duration in milliseconds                                                                                         |
-| `failure`     | failed `*.finished`      | Nature of the failure, one of the values below. Absent when `status` is `passed` or `skipped`                               |
-| `failed_container` | failed `phase.finished`, `run.finished` | The first container that failed, when there is one                                                     |
+| Field              | Present on                              | Meaning                                                                                                                     |
+| ------------------ | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `format`           | all                                     | `cidx.run-event/v1`                                                                                                         |
+| `type`             | all                                     | `run.started`, `run.finished`, `phase.started`, `phase.finished`, `container.started`, `container.finished`                 |
+| `run_id`           | all                                     | Shared by every event of the run (`--run-id`, or generated)                                                                 |
+| `time`             | all                                     | RFC 3339, UTC                                                                                                               |
+| `target`           | `run.*`                                 | What was passed to `cidx run`                                                                                               |
+| `phase`            | `phase.*`, `container.*`                | Phase name; absent on a container run directly as the target                                                                |
+| `container`        | `container.*`                           | Container name                                                                                                              |
+| `image`            | `container.*`                           | Resolved image reference                                                                                                    |
+| `status`           | `*.finished`                            | `passed`, `failed`, or `skipped` (local safety previewed the container)                                                     |
+| `exit_code`        | `*.finished`                            | 0 when passed; the container's own code when it exited non-zero. Absent when the step failed without one (image not pulled) |
+| `duration_ms`      | `*.finished`                            | Wall-clock duration in milliseconds                                                                                         |
+| `failure`          | failed `*.finished`                     | Nature of the failure, one of the values below. Absent when `status` is `passed` or `skipped`                               |
+| `failed_container` | failed `phase.finished`, `run.finished` | The first container that failed, when there is one                                                                          |
 
 ### Failure values
 
@@ -63,14 +63,14 @@ added within a version; the `format` field changes on a breaking change.
 renamed. On `phase.finished` and `run.finished` it is the nature of the failure
 of `failed_container`.
 
-| Value         | Meaning                                                       |
-| ------------- | ------------------------------------------------------------- |
-| `exit_code`   | The container ran and exited non-zero (see `exit_code`)       |
-| `image_pull`  | The image could not be obtained                               |
-| `timeout`     | The time limit was exceeded                                   |
-| `interrupted` | The run was interrupted (Ctrl-C, SIGTERM)                     |
-| `start`       | The container could not be created or started                 |
-| `other`       | Any other cause (no container runtime, for instance)          |
+| Value         | Meaning                                                 |
+| ------------- | ------------------------------------------------------- |
+| `exit_code`   | The container ran and exited non-zero (see `exit_code`) |
+| `image_pull`  | The image could not be obtained                         |
+| `timeout`     | The time limit was exceeded                             |
+| `interrupted` | The run was interrupted (Ctrl-C, SIGTERM)               |
+| `start`       | The container could not be created or started           |
+| `other`       | Any other cause (no container runtime, for instance)    |
 
 Events never contain container output, commands, environment values, error
 text or connection details.
