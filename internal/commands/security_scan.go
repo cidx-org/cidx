@@ -105,6 +105,7 @@ Normally run as 'cidx run catalogue-scan', from the repository root.`,
 // how long.
 type scanRig struct {
 	exec         executor.Executor
+	cache        string // the cache directory as this process sees it
 	workspace    string
 	hostCache    string
 	dockerConfig string
@@ -119,7 +120,11 @@ func securityScanAction(c *cli.Context) error {
 
 	cache := c.String("cache")
 	resultsDir := filepath.Join(cache, "results")
-	for _, dir := range []string{resultsDir, filepath.Join(cache, "trivy"), filepath.Join(cache, "grype")} {
+	for _, dir := range []string{
+		resultsDir,
+		filepath.Join(cache, "trivy", "tmp"),
+		filepath.Join(cache, "grype", "tmp"),
+	} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return fmt.Errorf("failed to create %s: %w", dir, err)
 		}
@@ -163,6 +168,7 @@ func securityScanAction(c *cli.Context) error {
 
 	rig := scanRig{
 		exec:         exec,
+		cache:        cache,
 		workspace:    workspace,
 		hostCache:    hostCache,
 		dockerConfig: c.String("docker-config"),
@@ -176,7 +182,12 @@ func securityScanAction(c *cli.Context) error {
 	sort.Strings(images)
 
 	fmt.Printf("Scanning %d catalogue image(s) with Trivy and Grype.\n", len(images))
-	rig.refreshDatabases(ctx)
+	if err := rig.refreshDatabases(ctx); err != nil {
+		if writeErr := writeUnscannedReport(c.String("output"), err); writeErr != nil {
+			_, _ = fmt.Fprintf(c.App.ErrWriter, "Warning: %v\n", writeErr)
+		}
+		return err
+	}
 
 	concurrency := c.Int("concurrency")
 	if concurrency < 1 {
@@ -326,36 +337,95 @@ func (s scanRig) container(name, image, command string, env map[string]string, m
 	}
 }
 
-func (s scanRig) trivyCache() string { return s.hostCache + "/trivy:/root/.cache/trivy" }
-func (s scanRig) grypeCache() string { return s.hostCache + "/grype:/root/.cache/grype" }
+// Where the cache directories are mounted in the scanners. The scanners run as
+// the invoking uid (see the executor), which owns neither the image's /tmp nor
+// its HOME; the mounted cache is the one place it can write, so everything the
+// tools write goes there (#530).
+const (
+	trivyMount = "/cache/trivy"
+	grypeMount = "/cache/grype"
+)
+
+func (s scanRig) trivyCache() string { return s.hostCache + "/trivy:" + trivyMount }
+func (s scanRig) grypeCache() string { return s.hostCache + "/grype:" + grypeMount }
 func (s scanRig) results() string    { return s.hostCache + "/results:/results" }
+
+// trivyEnv fixes every directory Trivy writes to inside its mounted cache,
+// whatever user it runs as: HOME, the cache and the temporary files.
+func trivyEnv(extra map[string]string) map[string]string {
+	env := map[string]string{
+		"HOME":                trivyMount,
+		"XDG_CACHE_HOME":      trivyMount,
+		"TRIVY_CACHE_DIR":     trivyMount,
+		"TMPDIR":              trivyMount + "/tmp",
+		"TRIVY_DB_REPOSITORY": scanDBRepository,
+	}
+	for k, v := range extra {
+		env[k] = v
+	}
+	return env
+}
+
+// grypeEnv is trivyEnv's counterpart for Grype.
+func grypeEnv(extra map[string]string) map[string]string {
+	env := map[string]string{
+		"HOME":               grypeMount,
+		"XDG_CACHE_HOME":     grypeMount,
+		"GRYPE_DB_CACHE_DIR": grypeMount + "/db",
+		"TMPDIR":             grypeMount + "/tmp",
+	}
+	for k, v := range extra {
+		env[k] = v
+	}
+	return env
+}
+
+// databasePresent tells whether an earlier run left a usable advisory database.
+func databasePresent(cache, scanner string) bool {
+	switch scanner {
+	case "trivy":
+		_, err := os.Stat(filepath.Join(cache, "trivy", "db", "trivy.db"))
+		return err == nil
+	default:
+		entries, err := os.ReadDir(filepath.Join(cache, "grype", "db"))
+		return err == nil && len(entries) > 0
+	}
+}
 
 // refreshDatabases brings both advisory databases up to date once, before the
 // scans, so that the scans can run side by side without racing to download them.
 //
-// A failed refresh is not fatal: the cache from an earlier run still answers,
-// and a cold cache fails every scan by itself, with a better message.
-func (s scanRig) refreshDatabases(ctx context.Context) {
+// A failed refresh is not fatal while the cache from an earlier run still holds
+// a database. On a cold cache nothing can be scanned, so the run stops there
+// with the cause instead of launching a scan per image that cannot succeed.
+func (s scanRig) refreshDatabases(ctx context.Context) error {
 	steps := []struct {
+		scanner   string
 		title     string
 		container *config.ContainerConfig
 	}{
-		{"Trivy", s.container("catalogue-scan-trivy-db", scanTrivyImage,
+		{"trivy", "Trivy", s.container("catalogue-scan-trivy-db", scanTrivyImage,
 			"image --download-db-only --quiet",
-			map[string]string{"TRIVY_DB_REPOSITORY": scanDBRepository},
+			trivyEnv(nil),
 			s.trivyCache())},
-		{"Grype", s.container("catalogue-scan-grype-db", scanGrypeImage,
+		{"grype", "Grype", s.container("catalogue-scan-grype-db", scanGrypeImage,
 			"db update",
-			map[string]string{"GRYPE_DB_CACHE_DIR": "/root/.cache/grype/db"},
+			grypeEnv(nil),
 			s.grypeCache())},
 	}
 
 	for _, step := range steps {
 		fmt.Printf("Refreshing the %s advisory database.\n", step.title)
-		if err := s.exec.Run(ctx, step.container); err != nil {
-			fmt.Printf("Warning: the %s database could not be refreshed (%v); the copy in the cache is used.\n", step.title, err)
+		err := s.exec.Run(ctx, step.container)
+		if err == nil {
+			continue
 		}
+		if !databasePresent(s.cache, step.scanner) {
+			return fmt.Errorf("the %s advisory database could not be downloaded and the cache holds none: %w", step.title, err)
+		}
+		fmt.Printf("Warning: the %s database could not be refreshed (%v); the copy in the cache is used.\n", step.title, err)
 	}
+	return nil
 }
 
 // scanImage runs both scanners on one image and returns what went wrong, one
@@ -375,14 +445,11 @@ func (s scanRig) scanImage(ctx context.Context, n int, image, resultsDir string)
 		{"trivy", "Trivy", s.container(fmt.Sprintf("catalogue-scan-trivy-%02d", n+1), scanTrivyImage,
 			fmt.Sprintf("image --severity HIGH,CRITICAL --skip-db-update --quiet --format json --output /results/%s %s",
 				scanFileName("trivy", image), image),
-			map[string]string{"TRIVY_DB_REPOSITORY": scanDBRepository},
+			trivyEnv(nil),
 			s.trivyCache(), s.results())},
 		{"grype", "Grype", s.container(fmt.Sprintf("catalogue-scan-grype-%02d", n+1), scanGrypeImage,
 			fmt.Sprintf("registry:%s -o json=/results/%s", image, scanFileName("grype", image)),
-			map[string]string{
-				"GRYPE_DB_AUTO_UPDATE": "false",
-				"GRYPE_DB_CACHE_DIR":   "/root/.cache/grype/db",
-			},
+			grypeEnv(map[string]string{"GRYPE_DB_AUTO_UPDATE": "false"}),
 			s.grypeCache(), s.results())},
 	}
 

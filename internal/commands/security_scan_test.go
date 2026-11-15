@@ -75,6 +75,73 @@ func TestScanImageRunsBothScannersWithoutAnIgnoreFile(t *testing.T) {
 	}
 }
 
+// TestScannersWriteOnlyInsideTheMountedCache: whatever user the scanners run as,
+// HOME, the cache and the temporary directory are all inside the directory
+// mounted from .cidx/scan, the one place that user can write.
+func TestScannersWriteOnlyInsideTheMountedCache(t *testing.T) {
+	exec := &recordingExecutor{}
+	rig := scanRig{exec: exec, cache: t.TempDir(), workspace: t.TempDir(), hostCache: "/host/cache", timeout: "5m"}
+	if err := rig.refreshDatabases(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	rig.scanImage(context.Background(), 0, scanTestImage, t.TempDir())
+
+	want := map[string]map[string]string{
+		"trivy": {"HOME": trivyMount, "XDG_CACHE_HOME": trivyMount, "TRIVY_CACHE_DIR": trivyMount, "TMPDIR": trivyMount + "/tmp"},
+		"grype": {"HOME": grypeMount, "XDG_CACHE_HOME": grypeMount, "GRYPE_DB_CACHE_DIR": grypeMount + "/db", "TMPDIR": grypeMount + "/tmp"},
+	}
+	mount := map[string]string{"trivy": "/host/cache/trivy:" + trivyMount, "grype": "/host/cache/grype:" + grypeMount}
+
+	if len(exec.ran) != 4 {
+		t.Fatalf("ran %d containers, want two refreshes and two scans", len(exec.ran))
+	}
+	for _, c := range exec.ran {
+		scanner := "trivy"
+		if strings.Contains(c.Name, "grype") {
+			scanner = "grype"
+		}
+		for k, v := range want[scanner] {
+			if c.Env[k] != v {
+				t.Errorf("%s: %s = %q, want %q", c.Name, k, c.Env[k], v)
+			}
+		}
+		found := false
+		for _, v := range c.Volumes {
+			found = found || v == mount[scanner]
+		}
+		if !found {
+			t.Errorf("%s does not mount the cache: %v", c.Name, c.Volumes)
+		}
+	}
+	if exec.ran[3].Env["GRYPE_DB_AUTO_UPDATE"] != "false" {
+		t.Errorf("Grype scan may update its database: %v", exec.ran[3].Env)
+	}
+}
+
+// TestAColdCacheWithoutADatabaseStopsTheScan: a failed download with nothing
+// cached ends the run with its cause instead of failing every scan.
+func TestAColdCacheWithoutADatabaseStopsTheScan(t *testing.T) {
+	exec := &recordingExecutor{fail: map[string]bool{"catalogue-scan-trivy-db": true}}
+	rig := scanRig{exec: exec, cache: t.TempDir(), workspace: t.TempDir(), hostCache: "/host/cache", timeout: "5m"}
+
+	err := rig.refreshDatabases(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "Trivy") || !strings.Contains(err.Error(), "registry refused") {
+		t.Fatalf("err = %v, want the Trivy download failure and its cause", err)
+	}
+
+	// With a database from an earlier run the refresh failure is only a warning.
+	db := filepath.Join(rig.cache, "trivy", "db")
+	if err := os.MkdirAll(db, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(db, "trivy.db"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := rig.refreshDatabases(context.Background()); err != nil {
+		t.Fatalf("a cached database should be used: %v", err)
+	}
+}
+
 // TestAScanThatCannotStartLeavesAReadableReport: when no executor can be
 // selected, security.sarif says nothing was scanned and why, instead of missing.
 func TestAScanThatCannotStartLeavesAReadableReport(t *testing.T) {

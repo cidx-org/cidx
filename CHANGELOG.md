@@ -1,3 +1,9 @@
+## v3.14.2 (2026-11-16)
+
+### Fix
+
+- **security**: give the catalogue scanners a writable HOME, cache and temporary directory inside the mounted .cidx/scan, and stop the scan when the advisory database cannot be downloaded
+
 ## v3.14.1 (2026-11-15)
 
 ### Fix
