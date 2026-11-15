@@ -22,8 +22,31 @@ CIDX_NATS_URL=nats://localhost:4222 CIDX_RUN_ID=build-1842 cidx run ci
 Without a NATS address nothing changes: same output, same exit codes, no
 connection attempted. `--dry-run` publishes nothing either, since nothing runs.
 
-The URL may carry credentials (`nats://user:pass@host:4222`). They are used to
-connect and written nowhere: not in the output, not in the events.
+## Credentials
+
+The account can be given apart from the address, so the secret does not travel
+in a URL:
+
+| Option         | Environment         | Meaning                                                                        |
+| -------------- | ------------------- | ------------------------------------------------------------------------------ |
+| none           | `CIDX_NATS_USER`    | NATS account name                                                              |
+| none           | `CIDX_NATS_PASSWORD`| Its password. Environment only: no option carries it, so it never shows in `ps` |
+| `--nats-creds` | `CIDX_NATS_CREDS`   | Path of a NATS credentials file (JWT and seed)                                 |
+
+```bash
+CIDX_NATS_URL=nats://localhost:4222 CIDX_NATS_USER=ci CIDX_NATS_PASSWORD=... cidx run ci
+```
+
+The address may still carry credentials (`nats://user:pass@host:4222`); without
+the variables above nothing changes. When both are given, the variables win and
+one warning says so, without naming the account or the secret:
+
+```text
+Warning: NATS credentials from the environment override those in the address
+```
+
+Credentials, from either source, are used to connect and written nowhere: not in
+the output, not in the events, not in an error message, not in `--dry-run`.
 
 ## When the bus is down
 

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -141,6 +143,117 @@ func TestUnreachableBusWarnsOnceWithoutLeakingCredentials(t *testing.T) {
 		if strings.Contains(got[0], secret) {
 			t.Errorf("warning leaks %q: %s", secret, got[0])
 		}
+	}
+}
+
+func startServer(t *testing.T) *natstest.Server {
+	t.Helper()
+	srv, err := natstest.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestSeparateCredentialsConnectTheRun(t *testing.T) {
+	srv := startServer(t)
+	w := &warnings{}
+	em := Connect(Settings{URL: srv.URL(), User: "ci-account", Password: "pw-from-env"}, w.add)
+	em.Emit(Event{Type: RunStarted})
+	em.Close()
+
+	got := srv.Connects()
+	if len(got) != 1 || got[0].User != "ci-account" || got[0].Password != "pw-from-env" {
+		t.Fatalf("CONNECT = %+v, want the separate account", got)
+	}
+	if len(srv.WaitFor(1, 2*time.Second)) != 1 {
+		t.Error("the event was not published")
+	}
+	if len(w.all()) != 0 {
+		t.Errorf("separate credentials alone warned: %v", w.all())
+	}
+}
+
+func TestSeparateCredentialsWinOverTheAddressAndSayWithoutRevealing(t *testing.T) {
+	srv := startServer(t)
+	url := "nats://addr-user:addr-secret@" + strings.TrimPrefix(srv.URL(), "nats://")
+	w := &warnings{}
+	em := Connect(Settings{URL: url, User: "env-user", Password: "env-secret"}, w.add)
+	em.Emit(Event{Type: RunStarted})
+	em.Close()
+
+	got := srv.Connects()
+	if len(got) != 1 || got[0].User != "env-user" || got[0].Password != "env-secret" {
+		t.Fatalf("CONNECT = %+v, want the environment account to win", got)
+	}
+	msgs := w.all()
+	if len(msgs) != 1 {
+		t.Fatalf("warnings = %v, want exactly one", msgs)
+	}
+	for _, secret := range []string{"addr-user", "addr-secret", "env-user", "env-secret"} {
+		if strings.Contains(msgs[0], secret) {
+			t.Errorf("warning leaks %q: %s", secret, msgs[0])
+		}
+	}
+}
+
+func TestAddressCredentialsStillWorkWithoutSeparateOnes(t *testing.T) {
+	srv := startServer(t)
+	url := "nats://addr-user:addr-secret@" + strings.TrimPrefix(srv.URL(), "nats://")
+	w := &warnings{}
+	em := Connect(Settings{URL: url}, w.add)
+	em.Emit(Event{Type: RunStarted})
+	em.Close()
+
+	got := srv.Connects()
+	if len(got) != 1 || got[0].User != "addr-user" || got[0].Password != "addr-secret" {
+		t.Fatalf("CONNECT = %+v, want the address account", got)
+	}
+	if len(w.all()) != 0 {
+		t.Errorf("an address with credentials warned: %v", w.all())
+	}
+}
+
+func TestSeparateCredentialsNeverLeakWhenTheBusIsDown(t *testing.T) {
+	srv := startServer(t)
+	addr := strings.TrimPrefix(srv.URL(), "nats://")
+	srv.Close()
+
+	w := &warnings{}
+	em := Connect(Settings{URL: "nats://" + addr, User: "env-user", Password: "env-secret"}, w.add)
+	em.Emit(Event{Type: PhaseStarted})
+	em.Close()
+
+	got := w.all()
+	if len(got) != 1 {
+		t.Fatalf("warnings = %v, want exactly one", got)
+	}
+	for _, secret := range []string{"env-user", "env-secret", addr} {
+		if strings.Contains(got[0], secret) {
+			t.Errorf("warning leaks %q: %s", secret, got[0])
+		}
+	}
+}
+
+func TestAnUnusableCredentialsFileWarnsWithoutItsContent(t *testing.T) {
+	srv := startServer(t)
+	path := filepath.Join(t.TempDir(), "user.creds")
+	if err := os.WriteFile(path, []byte("seed-that-must-not-leak"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	w := &warnings{}
+	em := Connect(Settings{URL: srv.URL(), CredsFile: path}, w.add)
+	em.Emit(Event{Type: RunStarted})
+	em.Close()
+
+	got := w.all()
+	if len(got) != 1 {
+		t.Fatalf("warnings = %v, want exactly one", got)
+	}
+	if strings.Contains(got[0], "seed-that-must-not-leak") {
+		t.Errorf("warning leaks the file content: %s", got[0])
 	}
 }
 

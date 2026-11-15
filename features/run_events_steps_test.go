@@ -66,6 +66,7 @@ func (tc *TestContext) runEventsWorld() *runEventsState {
 func RegisterRunEventsSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Given(`^a NATS server is listening$`, tc.natsServerListening)
 	ctx.Given(`^a NATS address with credentials where nothing is listening$`, tc.natsAddressNothingListening)
+	ctx.Given(`^a NATS server is listening with credentials in its address$`, tc.natsServerWithAddressCredentials)
 	ctx.Given(`^a run-events pipeline with the phases "([^"]*)"$`, tc.runEventsPipeline)
 	ctx.Given(`^the run-events container "([^"]*)" exits with code (\d+)$`, tc.runEventsContainerExits)
 	ctx.Given(`^the run-events container "([^"]*)" holds the secret "([^"]*)"$`, tc.runEventsContainerHoldsSecret)
@@ -76,6 +77,10 @@ func RegisterRunEventsSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.When(`^I run the pipeline with run events published as run "([^"]*)" on subject "([^"]*)"$`,
 		func(runID, subject string) error {
 			return tc.runWithEvents(true, events.Settings{RunID: runID, Subject: subject})
+		})
+	ctx.When(`^I run the pipeline with run events published with the account "([^"]*)" and the password "([^"]*)"$`,
+		func(user, password string) error {
+			return tc.runWithEvents(true, events.Settings{User: user, Password: password})
 		})
 	ctx.When(`^I run the pipeline without a NATS address$`, func() error {
 		return tc.runWithEvents(false, events.Settings{})
@@ -96,6 +101,8 @@ func RegisterRunEventsSteps(ctx *godog.ScenarioContext, tc *TestContext) {
 	ctx.Then(`^no run-events warning should be printed$`, func() error { return tc.runEventsWarningCount(0) })
 	ctx.Then(`^exactly one run-events warning should be printed$`, func() error { return tc.runEventsWarningCount(1) })
 	ctx.Then(`^the run-events warning should not contain the address or its credentials$`, tc.warningLeaksNothing)
+	ctx.Then(`^the NATS server should have been given the account "([^"]*)" and the password "([^"]*)"$`, tc.natsGivenAccount)
+	ctx.Then(`^the run-events warning should not contain "([^"]*)"$`, tc.warningDoesNotContain)
 	ctx.Then(`^no run event should contain "([^"]*)"$`, tc.noEventContains)
 	ctx.Then(`^no run event should have a field other than the documented ones$`, tc.onlyDocumentedFields)
 }
@@ -120,6 +127,37 @@ func (tc *TestContext) natsAddressNothingListening() error {
 	w.addr = strings.TrimPrefix(srv.URL(), "nats://")
 	srv.Close()
 	w.url = "nats://" + runEventsUser + ":" + runEventsToken + "@" + w.addr
+	return nil
+}
+
+func (tc *TestContext) natsServerWithAddressCredentials() error {
+	if err := tc.natsServerListening(); err != nil {
+		return err
+	}
+	w := tc.runEventsWorld()
+	w.addr = strings.TrimPrefix(w.url, "nats://")
+	w.url = "nats://" + runEventsUser + ":" + runEventsToken + "@" + w.addr
+	return nil
+}
+
+func (tc *TestContext) natsGivenAccount(user, password string) error {
+	w := tc.runEventsWorld()
+	if w.srv == nil {
+		return fmt.Errorf("no NATS server is listening in this scenario")
+	}
+	got := w.srv.Connects()
+	if len(got) != 1 || got[0].User != user || got[0].Password != password {
+		return fmt.Errorf("the server was given %d connection(s), want one as %q", len(got), user)
+	}
+	return nil
+}
+
+func (tc *TestContext) warningDoesNotContain(text string) error {
+	for _, msg := range tc.runEventsWorld().warnings {
+		if strings.Contains(msg, text) {
+			return fmt.Errorf("warning %q contains %q", msg, text)
+		}
+	}
 	return nil
 }
 

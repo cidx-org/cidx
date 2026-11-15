@@ -89,6 +89,11 @@ Examples:
 				Usage:   "Publish run events to this NATS server (nats://host:port); unset publishes nothing",
 			},
 			&cli.StringFlag{
+				Name:    "nats-creds",
+				EnvVars: []string{"CIDX_NATS_CREDS"},
+				Usage:   "NATS credentials file (CIDX_NATS_USER and CIDX_NATS_PASSWORD give an account; the password is read from the environment only)",
+			},
+			&cli.StringFlag{
 				Name:    "nats-subject",
 				EnvVars: []string{"CIDX_NATS_SUBJECT"},
 				Usage:   "NATS subject of the run events",
@@ -150,9 +155,12 @@ Examples:
 			var emitter events.Emitter = events.Nop{}
 			if !dryRun {
 				emitter = events.Connect(events.Settings{
-					URL:     c.String("nats-url"),
-					Subject: c.String("nats-subject"),
-					RunID:   c.String("run-id"),
+					URL:       c.String("nats-url"),
+					Subject:   c.String("nats-subject"),
+					RunID:     c.String("run-id"),
+					User:      os.Getenv("CIDX_NATS_USER"),
+					Password:  os.Getenv("CIDX_NATS_PASSWORD"),
+					CredsFile: c.String("nats-creds"),
 				}, func(msg string) {
 					_, _ = fmt.Fprintf(c.App.ErrWriter, "Warning: %s\n", msg)
 				})

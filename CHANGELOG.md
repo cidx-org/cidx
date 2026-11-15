@@ -1,3 +1,15 @@
+## v3.13.0 (2026-11-15)
+
+### Feat
+
+- **run**: give the NATS account apart from the address with CIDX_NATS_USER, CIDX_NATS_PASSWORD and --nats-creds
+
+## v3.12.0 (2026-11-14)
+
+### Feat
+
+- **events**: name the nature of a failure in the run events (#569)
+
 ## v3.11.0 (2026-11-13)
 
 ### Feat

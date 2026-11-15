@@ -2,6 +2,7 @@ package events
 
 import (
 	"encoding/json"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +15,46 @@ type Settings struct {
 	URL     string // nats://host:port; may carry credentials, which are never printed
 	Subject string // defaults to DefaultSubject
 	RunID   string // defaults to a generated identifier
+
+	// User and Password are given apart from the address. When set they win over
+	// any credentials the address carries. Neither is ever printed.
+	User     string
+	Password string
+	// CredsFile is the path of a NATS credentials file (JWT and seed).
+	CredsFile string
+}
+
+// overrideWarning is said when credentials given apart from the address replace
+// those the address carries. It names neither the account nor the secret.
+const overrideWarning = "NATS credentials from the environment override those in the address"
+
+// authOptions turns the credentials given apart from the address into
+// connection options, and returns the address to dial. The client library lets
+// the credentials of the address win over its options, so when separate
+// credentials exist the address is stripped of its own: that is what makes the
+// separate ones take precedence. The second result says whether anything was
+// overridden.
+func authOptions(s Settings) (string, []nats.Option, bool) {
+	var opts []nats.Option
+	separate := false
+	if s.User != "" || s.Password != "" {
+		opts = append(opts, nats.UserInfo(s.User, s.Password))
+		separate = true
+	}
+	if s.CredsFile != "" {
+		opts = append(opts, nats.UserCredentials(s.CredsFile))
+		separate = true
+	}
+	address := strings.TrimSpace(s.URL)
+	if !separate {
+		return address, opts, false
+	}
+	u, err := url.Parse(address)
+	if err != nil || u.User == nil {
+		return address, opts, false
+	}
+	u.User = nil
+	return u.String(), opts, true
 }
 
 const (
@@ -52,12 +93,18 @@ func Connect(s Settings, warn func(string)) Emitter {
 		p.runID = NewRunID()
 	}
 
-	conn, err := nats.Connect(s.URL,
+	address, auth, overridden := authOptions(s)
+	if overridden {
+		// Not warnOnce: that one is kept for the failures of the bus itself.
+		p.warn(overrideWarning)
+	}
+	opts := append([]nats.Option{
 		nats.Name("cidx"),
 		nats.Timeout(connectTimeout),
 		nats.NoReconnect(),
 		nats.ErrorHandler(func(*nats.Conn, *nats.Subscription, error) {}),
-	)
+	}, auth...)
+	conn, err := nats.Connect(address, opts...)
 	if err != nil {
 		// The warning names the failure class, not the error text and never the
 		// address: the URL is where credentials live.

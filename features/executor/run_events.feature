@@ -72,3 +72,27 @@ Feature: Run events on NATS
     When I run the pipeline with run events published
     Then no run event should contain "tok-9f8e7d6c"
     And no run event should have a field other than the documented ones
+
+  Scenario: The account is given apart from the address
+    Given a NATS server is listening
+    And a run-events pipeline with the phases "test"
+    When I run the pipeline with run events published with the account "ci-account" and the password "pw-9a8b7c"
+    Then the NATS server should have been given the account "ci-account" and the password "pw-9a8b7c"
+    And no run-events warning should be printed
+    And no run event should contain "pw-9a8b7c"
+
+  Scenario: The account given apart wins over the one in the address
+    Given a NATS server is listening with credentials in its address
+    And a run-events pipeline with the phases "test"
+    When I run the pipeline with run events published with the account "ci-account" and the password "pw-9a8b7c"
+    Then the NATS server should have been given the account "ci-account" and the password "pw-9a8b7c"
+    And exactly one run-events warning should be printed
+    And the run-events warning should not contain the address or its credentials
+    And the run-events warning should not contain "pw-9a8b7c"
+
+  Scenario: Without a separate account the address credentials still work
+    Given a NATS server is listening with credentials in its address
+    And a run-events pipeline with the phases "test"
+    When I run the pipeline with run events published
+    Then the NATS server should have been given the account "deploy" and the password "s3cr3t-token"
+    And no run-events warning should be printed

@@ -30,6 +30,7 @@ cidx run <name> [flags]
 - `--parallel, -p`: Run containers in parallel (local only).
 - `--concurrency, -j`: Max concurrent containers (default: 2).
 - `--nats-url` (env `CIDX_NATS_URL`): Publish structured run events to this NATS server. Unset, nothing is published and no connection is tried.
+- `--nats-creds` (env `CIDX_NATS_CREDS`): NATS credentials file. An account can also be given with `CIDX_NATS_USER` and `CIDX_NATS_PASSWORD` (environment only, see [run events](events.md)).
 - `--nats-subject` (env `CIDX_NATS_SUBJECT`): Subject of the run events (default: `cidx.run.events`).
 - `--run-id` (env `CIDX_RUN_ID`): Run identifier carried by every event (default: generated).
 

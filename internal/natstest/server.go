@@ -6,6 +6,7 @@ package natstest
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -21,11 +22,20 @@ type Message struct {
 	Payload []byte
 }
 
+// Connect is what a client declared in its CONNECT line: the account it
+// presented, so a test can tell which credentials reached the server.
+type Connect struct {
+	User     string `json:"user"`
+	Password string `json:"pass"`
+	JWT      string `json:"jwt"`
+}
+
 // Server is a running test server.
 type Server struct {
 	ln       net.Listener
 	mu       sync.Mutex
 	messages []Message
+	connects []Connect
 	conns    []net.Conn
 	// refuse makes the server answer every PUB with -ERR and drop the
 	// connection, the way a server does when permissions forbid the subject.
@@ -67,6 +77,13 @@ func (s *Server) Connections() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return len(s.conns)
+}
+
+// Connects is a copy of the CONNECT lines received so far.
+func (s *Server) Connects() []Connect {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]Connect(nil), s.connects...)
 }
 
 // Messages is a copy of what was published so far.
@@ -113,6 +130,13 @@ func (s *Server) serve(c net.Conn) {
 		}
 		line = strings.TrimRight(line, "\r\n")
 		switch {
+		case strings.HasPrefix(line, "CONNECT "):
+			var info Connect
+			if json.Unmarshal([]byte(strings.TrimPrefix(line, "CONNECT ")), &info) == nil {
+				s.mu.Lock()
+				s.connects = append(s.connects, info)
+				s.mu.Unlock()
+			}
 		case line == "PING":
 			_, _ = io.WriteString(c, "PONG\r\n")
 		case strings.HasPrefix(line, "PUB "):
