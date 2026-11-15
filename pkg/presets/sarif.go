@@ -80,6 +80,12 @@ type Alert struct {
 	// including for CVEs that never went away (#313). The reference travels in
 	// [Alert.Message], where it is informative rather than identifying.
 	Fingerprint string
+
+	// Properties travel with the result as its SARIF property bag. The audit's
+	// alerts carry none; the catalogue scan (see [ScanAlerts]) puts the image,
+	// the package and the fixed version there, which is what a reader that
+	// triages for itself needs and a code scanning tab does not.
+	Properties map[string]any
 }
 
 // Exception is an accepted finding, reduced to what an alert about it says.
@@ -353,6 +359,7 @@ func SARIF(alerts []Alert) SarifLog {
 				},
 			}},
 			PartialFingerprints: map[string]string{"primaryLocationLineHash": a.Fingerprint},
+			Properties:          a.Properties,
 		})
 	}
 
@@ -380,8 +387,22 @@ type SarifLog struct {
 }
 
 type SarifRun struct {
-	Tool    SarifTool     `json:"tool"`
-	Results []SarifResult `json:"results"`
+	Tool        SarifTool         `json:"tool"`
+	Invocations []SarifInvocation `json:"invocations,omitempty"`
+	Results     []SarifResult     `json:"results"`
+}
+
+// SarifInvocation says whether the tool ran to the end, and what it could not
+// do. An image nobody could scan has no results, which reads as clean unless the
+// file says otherwise.
+type SarifInvocation struct {
+	ExecutionSuccessful bool                `json:"executionSuccessful"`
+	Notifications       []SarifNotification `json:"toolExecutionNotifications,omitempty"`
+}
+
+type SarifNotification struct {
+	Level   string    `json:"level"`
+	Message SarifText `json:"message"`
 }
 
 type SarifTool struct {
@@ -428,6 +449,7 @@ type SarifResult struct {
 	Message             SarifText         `json:"message"`
 	Locations           []SarifLocation   `json:"locations"`
 	PartialFingerprints map[string]string `json:"partialFingerprints"`
+	Properties          map[string]any    `json:"properties,omitempty"`
 }
 
 type SarifLocation struct {

@@ -11,6 +11,7 @@ func securityCommand() *cli.Command {
 			registryCommand(),
 			securityBaselineCommand(),
 			securitySarifCommand(),
+			securityScanCommand(),
 			securitySummaryCommand(),
 		},
 	}

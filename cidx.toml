@@ -45,6 +45,14 @@ containers = ["gh-release"]
 [format]
 containers = ["prettier-write"]
 
+# The catalogue scan: `cidx run catalogue-scan` scans the images the built-in
+# catalogue ships with Trivy and Grype and writes every finding to security.sarif
+# (see the container below). Like `format`, no [pipelines.*] lists this phase, so
+# CI never runs it; the `security` phase above is the repository's own gate
+# (trivy and gitleaks on the source) and this one does not touch it.
+[catalogue-scan]
+containers = ["catalogue-scanner"]
+
 # ─── container overrides ───
 [containers.trivy]
 severity = "HIGH,CRITICAL"
@@ -59,6 +67,33 @@ exit_code = 0
 preset = "prettier"
 command = "--write ."
 phase = "format"
+
+# The catalogue scan, as an alias of go-build: the toolchain image is the
+# catalogue's pin, and the command builds and runs `cidx security scan` from the
+# source in the workspace. That command starts the scanners itself, as sibling
+# containers, through the Docker socket mounted below.
+#
+# Sibling containers mount host paths, so the scan cache lives under the working
+# directory and is named by its host path: run this from the repository root
+# (${PWD}). The registry credentials of the host are handed to the scanners, read
+# only, for the hardened images. The advisory databases and the raw scan results stay in .cidx/scan
+# (ignored), which is what makes the second run cheap.
+#
+# Acceptances in known-vulnerabilities.toml are not read: the scanners run with
+# no ignore file, so an accepted finding is in the report like any other.
+[containers.catalogue-scanner]
+preset = "go-build"
+command = "go run ./cmd/cidx security scan"
+phase = "catalogue-scan"
+timeout = "60m"
+volumes = [
+    "${WORKSPACE}:/work",
+    "/var/run/docker.sock:/var/run/docker.sock",
+]
+
+[containers.catalogue-scanner.env]
+CIDX_SCAN_HOST_CACHE = "${PWD}/.cidx/scan"
+CIDX_SCAN_DOCKER_CONFIG = "${HOME}/.docker"
 
 # There is no `command` override here anymore, and that is the point of #357.
 # The catalogue used to run `go test -v ./pkg/... ./cmd/...`, which skipped the

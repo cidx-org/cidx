@@ -46,6 +46,10 @@ Thumbs.db
 # every CI run in the repository on CVE text that pattern-matches an API token.
 scan-results/
 
+# The catalogue scan's report (`cidx run catalogue-scan`). It is measured evidence
+# of the day it was written, read by whoever collects it, and never a source file.
+security.sarif
+
 # Internal notes
 .cidx/ideas/
 

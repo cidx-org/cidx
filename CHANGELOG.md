@@ -1,3 +1,9 @@
+## v3.14.0 (2026-11-15)
+
+### Feat
+
+- **security**: scan the catalogue's images into security.sarif with `cidx run catalogue-scan`, every finding included
+
 ## v3.13.1 (2026-11-15)
 
 ### Fix
