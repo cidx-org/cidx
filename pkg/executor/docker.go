@@ -612,6 +612,10 @@ func findByExactName(containers []container.Summary, name string) *container.Sum
 
 // createContainer creates a Docker container and returns containerID and containerName
 func (e *DockerExecutor) createContainer(ctx context.Context, containerConfig *config.ContainerConfig, volumes []string, command string) (string, string, error) {
+	if err := ensureBindSources(volumes, containerConfig.Workspace); err != nil {
+		return "", "", err
+	}
+
 	// Parse volumes into binds
 	binds := make([]string, len(volumes))
 	copy(binds, volumes)
@@ -675,6 +679,10 @@ func (e *DockerExecutor) createContainer(ctx context.Context, containerConfig *c
 		Binds:      binds,
 		AutoRemove: false, // We'll remove manually
 		DNS:        containerConfig.DNS,
+		// The group of every mounted socket, so a tool that talks to the daemon
+		// is not refused for lack of a group the host user holds. Same call as
+		// ReuseKey's, so the two cannot disagree.
+		GroupAdd: socketGroups(volumes, e.hostIdentity()),
 	}
 
 	// Podman rootless: map host UID into container to fix volume permissions
@@ -961,6 +969,11 @@ func ReuseKey(c *config.ContainerConfig, command string, volumes []string, host 
 	// the order the resolver tries them in.
 	if len(c.DNS) > 0 {
 		shaped += "\x00dns=" + strings.Join(c.DNS, ",")
+	}
+	// The groups of mounted sockets shape the container's identity too. Added only
+	// when there are some, so a container without a socket keeps its key.
+	if groups := socketGroups(volumes, host); len(groups) > 0 {
+		shaped += "\x00groups=" + strings.Join(groups, ",")
 	}
 	return configHash(c.Image, command, c.Workdir, c.Entrypoint, volumes, presets.ResolveContainerEnv(c.Command, c.Env), shaped)
 }

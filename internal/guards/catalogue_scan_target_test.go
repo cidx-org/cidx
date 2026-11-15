@@ -61,6 +61,13 @@ func TestTheCatalogueScanTargetIsDeclared(t *testing.T) {
 	if merged.Env["CIDX_SCAN_HOST_CACHE"] == "" {
 		t.Error("the scanner does not say where its cache is on the host, so the scanners it starts would mount a path that does not exist there")
 	}
+	for _, cache := range []string{":/tmp/go-mod-cache", ":/tmp/go-build-cache"} {
+		if !slices.ContainsFunc(merged.Volumes, func(v string) bool {
+			return strings.HasPrefix(v, "${WORKSPACE}/.cidx/") && strings.HasSuffix(v, cache)
+		}) {
+			t.Errorf("no volume keeps %s between runs: every launch would download the Go modules again", cache[1:])
+		}
+	}
 	for _, volume := range merged.Volumes {
 		if strings.Contains(volume, "known-vulnerabilities") {
 			t.Errorf("volume %q hands the acceptances to the scan, which must report what they accept", volume)

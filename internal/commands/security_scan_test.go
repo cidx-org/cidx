@@ -75,6 +75,25 @@ func TestScanImageRunsBothScannersWithoutAnIgnoreFile(t *testing.T) {
 	}
 }
 
+// TestAScanThatCannotStartLeavesAReadableReport: when no executor can be
+// selected, security.sarif says nothing was scanned and why, instead of missing.
+func TestAScanThatCannotStartLeavesAReadableReport(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "security.sarif")
+	cause := errors.New("executor selection failed: Docker socket access was denied")
+	if err := writeUnscannedReport(out, cause); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Docker socket access was denied", "not scanned", `"executionSuccessful": false`} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("report lacks %q:\n%s", want, data)
+		}
+	}
+}
+
 // TestScanImageNamesTheScannerThatFailed is behaviour 4: the failure is kept,
 // attributed, and the result file it may have left is not read as an answer.
 func TestScanImageNamesTheScannerThatFailed(t *testing.T) {

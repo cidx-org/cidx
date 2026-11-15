@@ -161,7 +161,9 @@ func (s *Selector) buildUnavailableError() error {
 // the wrong remedy and hid the sandbox restriction found while dogfooding.
 func ExplainDockerUnavailable(err error) string {
 	if errors.Is(err, os.ErrPermission) {
-		return "Docker socket access was denied. Check the socket permissions and whether this process is allowed to access the container runtime."
+		return "Docker socket access was denied. Check the socket permissions and whether this process is allowed to access the container runtime.\n" +
+			"  On the host: add the user to the socket's group (ls -l /var/run/docker.sock; sudo usermod -aG docker $USER), then log in again.\n" +
+			"  Inside a container: mount the socket and let cidx start the container (it adds the socket's group itself), or pass --group-add <gid of the socket> yourself."
 	}
 	return "Docker daemon is not running."
 }

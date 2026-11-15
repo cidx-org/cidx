@@ -149,7 +149,13 @@ func securityScanAction(c *cli.Context) error {
 
 	exec, err := selector.Select(scanPhase, executor.ParseBackendType(c.String("backend")))
 	if err != nil {
-		return fmt.Errorf("executor selection failed: %w", err)
+		// No scanner can run, but the report must not be left absent without a
+		// reason: it says that nothing was scanned, and why.
+		selectErr := fmt.Errorf("executor selection failed: %w", err)
+		if writeErr := writeUnscannedReport(c.String("output"), selectErr); writeErr != nil {
+			_, _ = fmt.Fprintf(c.App.ErrWriter, "Warning: %v\n", writeErr)
+		}
+		return selectErr
 	}
 
 	ctx, stop := signal.NotifyContext(c.Context, os.Interrupt, syscall.SIGTERM)
@@ -240,6 +246,21 @@ func securityScanAction(c *cli.Context) error {
 
 	if len(scans) == 0 {
 		return fmt.Errorf("no catalogue image could be scanned")
+	}
+	return nil
+}
+
+// writeUnscannedReport writes a SARIF with no finding and one error
+// notification, for a run that could not start any scanner. It is the file a
+// reader finds instead of nothing: not a clean report, a stated failure.
+func writeUnscannedReport(out string, cause error) error {
+	gap := presets.ScanGap{Image: "the catalogue", Reason: cause.Error()}
+	encoded, err := jsonIndent(presets.ScanSARIF(nil, []presets.ScanGap{gap}))
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(out, append(encoded, '\n'), 0o644); err != nil {
+		return fmt.Errorf("failed to write %s: %w", out, err)
 	}
 	return nil
 }

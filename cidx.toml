@@ -89,6 +89,12 @@ timeout = "60m"
 volumes = [
     "${WORKSPACE}:/work",
     "/var/run/docker.sock:/var/run/docker.sock",
+    # The Go module and build caches, kept in .cidx/go (ignored) so that a new
+    # container does not download every module again. The executor creates them as
+    # the host user, and adds the socket's group to the container by itself: the
+    # user that runs cidx needs no `--group-add` here.
+    "${WORKSPACE}/.cidx/go/mod:/tmp/go-mod-cache",
+    "${WORKSPACE}/.cidx/go/build:/tmp/go-build-cache",
 ]
 
 [containers.catalogue-scanner.env]

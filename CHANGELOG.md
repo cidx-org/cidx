@@ -1,3 +1,9 @@
+## v3.14.1 (2026-11-15)
+
+### Fix
+
+- **executor**: give a container the group of the sockets it mounts, so `cidx run catalogue-scan` reaches Docker; keep the Go caches between runs and leave a readable security.sarif when no scanner can start
+
 ## v3.14.0 (2026-11-15)
 
 ### Feat
