@@ -1,3 +1,9 @@
+## v3.13.1 (2026-11-15)
+
+### Fix
+
+- **security**: renew the ansible-dev-tools kubectl decision after reviewing v26.11.0
+
 ## v3.13.0 (2026-11-15)
 
 ### Feat
