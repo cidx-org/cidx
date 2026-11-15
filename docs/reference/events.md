@@ -27,11 +27,11 @@ connection attempted. `--dry-run` publishes nothing either, since nothing runs.
 The account can be given apart from the address, so the secret does not travel
 in a URL:
 
-| Option         | Environment         | Meaning                                                                        |
-| -------------- | ------------------- | ------------------------------------------------------------------------------ |
-| none           | `CIDX_NATS_USER`    | NATS account name                                                              |
-| none           | `CIDX_NATS_PASSWORD`| Its password. Environment only: no option carries it, so it never shows in `ps` |
-| `--nats-creds` | `CIDX_NATS_CREDS`   | Path of a NATS credentials file (JWT and seed)                                 |
+| Option         | Environment          | Meaning                                                                         |
+| -------------- | -------------------- | ------------------------------------------------------------------------------- |
+| none           | `CIDX_NATS_USER`     | NATS account name                                                               |
+| none           | `CIDX_NATS_PASSWORD` | Its password. Environment only: no option carries it, so it never shows in `ps` |
+| `--nats-creds` | `CIDX_NATS_CREDS`    | Path of a NATS credentials file (JWT and seed)                                  |
 
 ```bash
 CIDX_NATS_URL=nats://localhost:4222 CIDX_NATS_USER=ci CIDX_NATS_PASSWORD=... cidx run ci
