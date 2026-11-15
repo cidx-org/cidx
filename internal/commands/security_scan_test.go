@@ -6,9 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/cidx-org/cidx/v3/pkg/config"
+	"github.com/cidx-org/cidx/v3/pkg/presets"
 )
 
 // recordingExecutor stands in for the container runtime: it records what it was
@@ -199,14 +202,109 @@ func TestCollectScansSeparatesScannedPartialAndUnscanned(t *testing.T) {
 	if len(scans[0].Findings) != 1 || scans[0].Findings[0].FixedIn != "3.5.1" {
 		t.Errorf("findings = %v, want the HIGH one with its fixed version", scans[0].Findings)
 	}
-	if len(partial) != 1 || !strings.Contains(partial[0], "Trivy") {
-		t.Errorf("partial = %v, want the image only Trivy answered for", partial)
+	if len(partial) != 1 || !strings.Contains(partial[0], "Grype did not answer") {
+		t.Errorf("partial = %v, want the image only Trivy answered for, naming Grype", partial)
+	}
+	if len(scans[0].Missing) != 1 || scans[0].Missing[0].Scanner != "Grype" {
+		t.Errorf("missing = %v, want Grype", scans[0].Missing)
 	}
 	if len(gaps) != 1 || gaps[0].Image != missing {
 		t.Fatalf("gaps = %v", gaps)
 	}
 	if !strings.Contains(gaps[0].Reason, "Trivy: exit 1") || !strings.Contains(gaps[0].Reason, "Grype: exit 1") {
 		t.Errorf("the reason loses what the scanners said: %q", gaps[0].Reason)
+	}
+}
+
+// TestAScannerFailingOnAnImageTheOtherScannedMakesItPartial: behaviour 4. Trivy
+// fails on the cache lock, Grype answers: the image is kept with Grype's
+// findings, marked partial with Trivy and the reason, in the SARIF as well.
+func TestAScannerFailingOnAnImageTheOtherScannedMakesItPartial(t *testing.T) {
+	results := t.TempDir()
+	grype := `{"matches":[{"vulnerability":{"id":"CVE-2026-2","severity":"High","fix":{"versions":["1.2"]}},"artifact":{"name":"zlib","type":"apk"}}]}`
+	if err := os.WriteFile(filepath.Join(results, scanFileName("grype", scanTestImage)), []byte(grype), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	failures := map[string][]string{scanTestImage: {"Trivy: cache may be in use by another process: timeout"}}
+	scans, gaps, partial := collectScans(map[string][]string{scanTestImage: {"go-build"}}, []string{scanTestImage}, results, failures)
+
+	if len(gaps) != 0 || len(scans) != 1 {
+		t.Fatalf("scans = %d, gaps = %v; an image one scanner answered for is not a gap", len(scans), gaps)
+	}
+	if len(partial) != 1 || !strings.Contains(partial[0], "Trivy") || !strings.Contains(partial[0], "cache may be in use") {
+		t.Errorf("partial = %v, want Trivy and its reason", partial)
+	}
+
+	encoded, err := jsonIndent(presets.ScanSARIF(scans, gaps))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"only partly scanned", "Trivy did not answer", "cache may be in use", `"executionSuccessful": false`} {
+		if !strings.Contains(string(encoded), want) {
+			t.Errorf("SARIF lacks %q:\n%s", want, encoded)
+		}
+	}
+}
+
+// concurrencyExecutor records how many containers of a scanner ran at once.
+type concurrencyExecutor struct {
+	mu      sync.Mutex
+	running map[string]int
+	peak    map[string]int
+	hold    time.Duration
+}
+
+func (e *concurrencyExecutor) Run(_ context.Context, c *config.ContainerConfig) error {
+	scanner := "grype"
+	if strings.Contains(c.Name, "trivy") {
+		scanner = "trivy"
+	}
+	e.mu.Lock()
+	e.running[scanner]++
+	if e.running[scanner] > e.peak[scanner] {
+		e.peak[scanner] = e.running[scanner]
+	}
+	e.mu.Unlock()
+	// Grype is held much longer than Trivy: Trivy is serialised, so Grype
+	// overlaps only if it outlasts the queue of Trivy runs ahead of it.
+	hold := e.hold
+	if scanner == "grype" {
+		hold *= 10
+	}
+	time.Sleep(hold)
+	e.mu.Lock()
+	e.running[scanner]--
+	e.mu.Unlock()
+	return nil
+}
+
+func (e *concurrencyExecutor) Available() bool { return true }
+func (e *concurrencyExecutor) Name() string    { return "concurrency" }
+func (e *concurrencyExecutor) Close() error    { return nil }
+
+// TestTrivyScansNeverShareTheCacheLock: behaviour 1. Scans run side by side, but
+// never two Trivy containers at once, since they share one locked cache.
+func TestTrivyScansNeverShareTheCacheLock(t *testing.T) {
+	exec := &concurrencyExecutor{running: map[string]int{}, peak: map[string]int{}, hold: 20 * time.Millisecond}
+	rig := scanRig{exec: exec, workspace: t.TempDir(), hostCache: "/host/cache", timeout: "5m", trivyLock: &sync.Mutex{}}
+	results := t.TempDir()
+
+	var wg sync.WaitGroup
+	for n := 0; n < 4; n++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			rig.scanImage(context.Background(), n, scanTestImage, results)
+		}(n)
+	}
+	wg.Wait()
+
+	if exec.peak["trivy"] != 1 {
+		t.Errorf("%d Trivy containers ran at once, want 1", exec.peak["trivy"])
+	}
+	if exec.peak["grype"] < 2 {
+		t.Errorf("Grype never ran side by side (peak %d): the scan lost its parallelism", exec.peak["grype"])
 	}
 }
 

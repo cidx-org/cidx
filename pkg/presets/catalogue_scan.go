@@ -37,6 +37,16 @@ type ImageScan struct {
 
 	// Findings are the HIGH and CRITICAL findings of both scanners, unfiltered.
 	Findings []Finding
+
+	// Missing names the scanners that did not answer for this image while the
+	// other did. Their findings are absent from Findings: the image is partial.
+	Missing []MissingScanner
+}
+
+// MissingScanner is a scanner that failed on an image the other one scanned.
+type MissingScanner struct {
+	Scanner string
+	Reason  string
 }
 
 // ScanGap is an image the scan could not answer for, and why. It carries no
@@ -156,6 +166,15 @@ func ScanSARIF(scans []ImageScan, gaps []ScanGap) SarifLog {
 	log.Runs[0].Tool.Driver.Name = "CIDX catalogue scan"
 
 	invocation := SarifInvocation{ExecutionSuccessful: len(gaps) == 0}
+	for _, scan := range scans {
+		for _, missing := range scan.Missing {
+			invocation.ExecutionSuccessful = false
+			invocation.Notifications = append(invocation.Notifications, SarifNotification{
+				Level:   "warning",
+				Message: SarifText{Text: fmt.Sprintf("%s was only partly scanned: %s did not answer (%s). Its findings are missing from this image's results.", scan.Image, missing.Scanner, missing.Reason)},
+			})
+		}
+	}
 	for _, gap := range gaps {
 		invocation.Notifications = append(invocation.Notifications, SarifNotification{
 			Level:   "error",

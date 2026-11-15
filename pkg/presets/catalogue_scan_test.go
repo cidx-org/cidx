@@ -116,6 +116,17 @@ func TestScanKeepsTheFindingsTheTriageLeavesOut(t *testing.T) {
 // TestScanNamesTheImagesItCouldNotScan is behaviour 4: no result is not a clean
 // image, and the file says so where a reader of the file will see it.
 func TestScanNamesTheImagesItCouldNotScan(t *testing.T) {
+	partial := scanTestLog(t, []ImageScan{{Image: scanTestImage, Missing: []MissingScanner{{Scanner: "Trivy", Reason: "cache locked"}}}}, nil)
+	partialRun := partial["runs"].([]any)[0].(map[string]any)
+	partialInvocation := partialRun["invocations"].([]any)[0].(map[string]any)
+	if partialInvocation["executionSuccessful"] != false {
+		t.Error("a partly scanned image leaves executionSuccessful true")
+	}
+	notes := partialInvocation["toolExecutionNotifications"].([]any)
+	if len(notes) != 1 || !strings.Contains(notes[0].(map[string]any)["message"].(map[string]any)["text"].(string), "Trivy did not answer (cache locked)") {
+		t.Errorf("notifications = %v, want one naming Trivy and its reason", notes)
+	}
+
 	log := scanTestLog(t, nil, []ScanGap{{Image: "dhi.io/missing:1@sha256:abc", Reason: "Trivy: exit 1"}})
 
 	run := log["runs"].([]any)[0].(map[string]any)
@@ -123,11 +134,11 @@ func TestScanNamesTheImagesItCouldNotScan(t *testing.T) {
 	if invocation["executionSuccessful"] != false {
 		t.Errorf("a scan that missed an image reports success: %v", invocation)
 	}
-	notes := invocation["toolExecutionNotifications"].([]any)
-	if len(notes) != 1 {
-		t.Fatalf("got %d notifications, want 1", len(notes))
+	gapNotes := invocation["toolExecutionNotifications"].([]any)
+	if len(gapNotes) != 1 {
+		t.Fatalf("got %d notifications, want 1", len(gapNotes))
 	}
-	text := notes[0].(map[string]any)["message"].(map[string]any)["text"].(string)
+	text := gapNotes[0].(map[string]any)["message"].(map[string]any)["text"].(string)
 	if !strings.Contains(text, "dhi.io/missing:1@sha256:abc") || !strings.Contains(text, "Trivy: exit 1") {
 		t.Errorf("the notification names neither the image nor the reason: %s", text)
 	}

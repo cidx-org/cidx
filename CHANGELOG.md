@@ -1,3 +1,9 @@
+## v3.14.3 (2026-11-16)
+
+### Fix
+
+- **security**: run the catalogue scan's Trivy containers one at a time so they stop failing on the shared cache lock, and report an image only one scanner answered for as partial, with the missing scanner and its reason, on the console and in the SARIF
+
 ## v3.14.2 (2026-11-16)
 
 ### Fix

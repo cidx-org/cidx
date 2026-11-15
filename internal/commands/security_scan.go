@@ -110,6 +110,13 @@ type scanRig struct {
 	hostCache    string
 	dockerConfig string
 	timeout      string
+
+	// trivyLock keeps Trivy to one container at a time. Every Trivy shares one
+	// cache directory, and its scan cache is locked by a single process: three
+	// scans side by side made the others fail with "cache may be in use by
+	// another process". Grype has no such lock and still runs in parallel.
+	// A nil lock (a rig built by hand) serialises nothing.
+	trivyLock *sync.Mutex
 }
 
 func securityScanAction(c *cli.Context) error {
@@ -173,6 +180,7 @@ func securityScanAction(c *cli.Context) error {
 		hostCache:    hostCache,
 		dockerConfig: c.String("docker-config"),
 		timeout:      c.String("timeout"),
+		trivyLock:    &sync.Mutex{},
 	}
 
 	images := make([]string, 0, len(imagePresets))
@@ -242,11 +250,14 @@ func securityScanAction(c *cli.Context) error {
 			fixable++
 		}
 	}
-	fmt.Printf("Wrote %s: %d finding(s) across %d scanned image(s), %d of them with a fix upstream.\n",
-		out, len(alerts), len(scans), fixable)
+	fmt.Printf("Wrote %s: %d finding(s) across %d image(s) scanned by both scanners and %d only partly, %d of them with a fix upstream.\n",
+		out, len(alerts), len(scans)-len(partial), len(partial), fixable)
 
-	for _, line := range partial {
-		fmt.Printf("Only one scanner answered: %s\n", line)
+	if len(partial) > 0 {
+		fmt.Printf("%d scanner run(s) missing on an image the other scanner answered for; those images are partial:\n", len(partial))
+		for _, line := range partial {
+			fmt.Printf("  %s\n", line)
+		}
 	}
 	if len(gaps) > 0 {
 		fmt.Printf("%d image(s) could not be scanned. They have no result in %s, which is not the same as clean:\n", len(gaps), out)
@@ -298,17 +309,43 @@ func collectScans(
 			gaps = append(gaps, presets.ScanGap{Image: image, Reason: reason})
 			continue
 		}
-		if len(answered) < 2 {
-			partial = append(partial, fmt.Sprintf("%s (%s)", image, strings.Join(answered, ", ")))
+		missing := missingScanners(answered, failures[image])
+		for _, m := range missing {
+			partial = append(partial, fmt.Sprintf("%s — %s did not answer: %s", image, m.Scanner, m.Reason))
 		}
 		scans = append(scans, presets.ImageScan{
 			Image:    image,
 			UsedBy:   imagePresets[image],
 			Line:     lines[image],
 			Findings: found,
+			Missing:  missing,
 		})
 	}
 	return scans, gaps, partial
+}
+
+// missingScanners lists the scanners absent from answered, each with the reason
+// its run gave ("Title: cause" in failed) or, when it gave none, that it left no
+// result.
+func missingScanners(answered, failed []string) []presets.MissingScanner {
+	var missing []presets.MissingScanner
+	for _, title := range []string{"Trivy", "Grype"} {
+		done := false
+		for _, a := range answered {
+			done = done || a == title
+		}
+		if done {
+			continue
+		}
+		reason := "it left no result"
+		for _, f := range failed {
+			if cause, ok := strings.CutPrefix(f, title+": "); ok {
+				reason = cause
+			}
+		}
+		missing = append(missing, presets.MissingScanner{Scanner: title, Reason: reason})
+	}
+	return missing
 }
 
 // container describes one scanner run. Ephemeral, because every run writes its
@@ -457,7 +494,14 @@ func (s scanRig) scanImage(ctx context.Context, n int, image, resultsDir string)
 		// A result left by an earlier run must not answer for this one.
 		removeScanResults(resultsDir, run.scanner, image)
 
-		if err := s.exec.Run(ctx, run.container); err != nil {
+		if run.scanner == "trivy" && s.trivyLock != nil {
+			s.trivyLock.Lock()
+		}
+		err := s.exec.Run(ctx, run.container)
+		if run.scanner == "trivy" && s.trivyLock != nil {
+			s.trivyLock.Unlock()
+		}
+		if err != nil {
 			removeScanResults(resultsDir, run.scanner, image)
 			failed = append(failed, fmt.Sprintf("%s: %v", run.title, err))
 		}
