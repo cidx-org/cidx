@@ -6,6 +6,22 @@ import (
 	"strings"
 )
 
+// ExpandEnv is os.ExpandEnv with one difference: ${PWD} is the working
+// directory of the process, as os.Getwd reports it, whether or not PWD is in
+// the environment. A process started by a program rather than by a shell has no
+// PWD; the reference then resolved to "" and `${PWD}/.cidx/scan` named a
+// directory at the root of the host.
+func ExpandEnv(s string) string {
+	return os.Expand(s, func(key string) string {
+		if key == "PWD" {
+			if wd, err := os.Getwd(); err == nil {
+				return wd
+			}
+		}
+		return os.Getenv(key)
+	})
+}
+
 // ResolveEnvValue returns the value a preset's env entry takes at run time.
 //
 // A preset's declared value is a default. `IMAGE_TAG = "latest"`,
@@ -29,7 +45,7 @@ func ResolveEnvValue(key, declared string) string {
 		return fromEnv
 	}
 
-	return os.ExpandEnv(declared)
+	return ExpandEnv(declared)
 }
 
 // ResolveContainerEnv returns the environment a container is handed.
@@ -53,7 +69,7 @@ func ResolveContainerEnv(command string, env map[string]string) map[string]strin
 			resolved[key] = ResolveEnvValue(key, declared)
 			continue
 		}
-		resolved[key] = os.ExpandEnv(declared)
+		resolved[key] = ExpandEnv(declared)
 	}
 
 	return resolved
@@ -81,5 +97,5 @@ func ExpandCommand(command string, env map[string]string) string {
 		return expanded
 	}
 
-	return os.ExpandEnv(expanded)
+	return ExpandEnv(expanded)
 }

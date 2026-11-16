@@ -6,6 +6,39 @@ import (
 	"testing"
 )
 
+// TestExpandEnvResolvesPWDWithoutTheVariable is the runner's situation: a
+// process started by a program has the right working directory and no PWD.
+func TestExpandEnvResolvesPWDWithoutTheVariable(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PWD", "") // restored by the test; unset just below
+	if err := os.Unsetenv("PWD"); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := ExpandEnv("${PWD}/.cidx/scan"), wd+"/.cidx/scan"; got != want {
+		t.Errorf("ExpandEnv without PWD = %q, want %q", got, want)
+	}
+
+	env := map[string]string{"CIDX_SCAN_HOST_CACHE": "${PWD}/.cidx/scan"}
+	if got := ResolveContainerEnv("go run .", env)["CIDX_SCAN_HOST_CACHE"]; got != wd+"/.cidx/scan" {
+		t.Errorf("ResolveContainerEnv without PWD = %q, want %q", got, wd+"/.cidx/scan")
+	}
+	if got := ExpandCommand("echo $PWD", nil); got != "echo "+wd {
+		t.Errorf("ExpandCommand without PWD = %q", got)
+	}
+}
+
+// TestExpandEnvKeepsOtherVariables guards the rest of os.ExpandEnv's behaviour.
+func TestExpandEnvKeepsOtherVariables(t *testing.T) {
+	t.Setenv("CIDX_TEST_EXPAND", "x")
+	if got := ExpandEnv("${CIDX_TEST_EXPAND}/$CIDX_TEST_EXPAND/${CIDX_TEST_UNSET_VAR}"); got != "x/x/" {
+		t.Errorf("ExpandEnv = %q", got)
+	}
+}
+
 // TestExpandCommand covers the substitution the executor performs on a
 // preset's command. Moved here with the function in #384: it belongs beside
 // the presets whose placeholders it resolves.

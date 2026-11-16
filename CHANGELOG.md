@@ -1,3 +1,9 @@
+## v3.14.4 (2026-11-16)
+
+### Fix
+
+- **security**: resolve ${PWD} to the real working directory when the process has no PWD variable, so the catalogue scan no longer mounts its cache from the root of the host, and refuse an empty, relative or root cache path before any container starts
+
 ## v3.14.3 (2026-11-16)
 
 ### Fix

@@ -126,6 +126,11 @@ func securityScanAction(c *cli.Context) error {
 	}
 
 	cache := c.String("cache")
+	hostCache := c.String("host-cache")
+	if err := checkScanCache(cache, hostCache, c.IsSet("host-cache") || hostCache != ""); err != nil {
+		return err
+	}
+
 	resultsDir := filepath.Join(cache, "results")
 	for _, dir := range []string{
 		resultsDir,
@@ -137,7 +142,6 @@ func securityScanAction(c *cli.Context) error {
 		}
 	}
 
-	hostCache := c.String("host-cache")
 	if hostCache == "" {
 		if hostCache, err = filepath.Abs(cache); err != nil {
 			return fmt.Errorf("failed to resolve %s: %w", cache, err)
@@ -270,6 +274,39 @@ func securityScanAction(c *cli.Context) error {
 		return fmt.Errorf("no catalogue image could be scanned")
 	}
 	return nil
+}
+
+// checkScanCache refuses, before any directory or container exists, a cache
+// path that would put the scan at the root of the host. hostCache is what the
+// daemon mounts; "" is only acceptable when it was never given, and then the
+// absolute form of cache stands in for it. A host cache that is set but blank,
+// relative or the filesystem root is what an unresolved ${PWD} produces
+// ("/.cidx/scan" or ".cidx/scan"), and the daemon would create it as root.
+func checkScanCache(cache, hostCache string, hostCacheGiven bool) error {
+	if strings.TrimSpace(cache) == "" {
+		return fmt.Errorf("the scan cache directory is empty: set --cache or CIDX_SCAN_CACHE to a directory")
+	}
+	if isFilesystemRoot(cache) {
+		return fmt.Errorf("the scan cache directory %q is the root of the filesystem: set --cache to a directory of the project", cache)
+	}
+	if !hostCacheGiven {
+		return nil
+	}
+	if strings.TrimSpace(hostCache) == "" {
+		return fmt.Errorf("the host cache path is empty (CIDX_SCAN_HOST_CACHE): a variable it names is probably unset")
+	}
+	if !filepath.IsAbs(hostCache) {
+		return fmt.Errorf("the host cache path %q is not absolute: the container daemon resolves it from the host root, not from the working directory", hostCache)
+	}
+	if isFilesystemRoot(hostCache) {
+		return fmt.Errorf("the host cache path %q is the root of the filesystem: nothing is mounted from or created there", hostCache)
+	}
+	return nil
+}
+
+func isFilesystemRoot(path string) bool {
+	clean := filepath.Clean(path)
+	return filepath.IsAbs(clean) && filepath.Dir(clean) == clean
 }
 
 // writeUnscannedReport writes a SARIF with no finding and one error

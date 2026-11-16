@@ -14,6 +14,40 @@ import (
 	"github.com/cidx-org/cidx/v3/pkg/presets"
 )
 
+func TestCheckScanCacheRefusesPathsAtTheHostRoot(t *testing.T) {
+	tests := []struct {
+		name      string
+		cache     string
+		hostCache string
+		given     bool
+		wantErr   string
+	}{
+		{"default, host cache not given", ".cidx/scan", "", false, ""},
+		{"absolute host cache", ".cidx/scan", "/home/u/p/.cidx/scan", true, ""},
+		{"empty host cache", ".cidx/scan", "", true, "empty"},
+		{"blank host cache", ".cidx/scan", "  ", true, "empty"},
+		{"relative host cache", ".cidx/scan", ".cidx/scan", true, "not absolute"},
+		{"root host cache", ".cidx/scan", "/", true, "root of the filesystem"},
+		{"unclean root host cache", ".cidx/scan", "/a/..", true, "root of the filesystem"},
+		{"empty cache", "", "", false, "empty"},
+		{"root cache", "/", "", false, "root of the filesystem"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := checkScanCache(tt.cache, tt.hostCache, tt.given)
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("error = %v, want one containing %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 // recordingExecutor stands in for the container runtime: it records what it was
 // asked to run and fails the containers whose name it was told to.
 type recordingExecutor struct {

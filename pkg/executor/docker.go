@@ -813,7 +813,7 @@ func parseCommand(command string) []string {
 func expandVolumes(volumes []string) []string {
 	expanded := make([]string, len(volumes))
 	for i, vol := range volumes {
-		expanded[i] = os.ExpandEnv(vol)
+		expanded[i] = presets.ExpandEnv(vol)
 	}
 	return expanded
 }
