@@ -357,6 +357,34 @@ func TestScanScannersAreTheAuditsScanners(t *testing.T) {
 	}
 }
 
+// An image the scan could not answer for, or answered for only in part, must
+// fail the scan instead of passing in silence (#579: goreleaser pinned on a
+// digest that does not exist).
+func TestAnIncompleteCatalogueScanFails(t *testing.T) {
+	cases := []struct {
+		name           string
+		scanned, gaps  int
+		partial        int
+		wantErr        bool
+		wantMessageSay bool
+	}{
+		{"complete", 5, 0, 0, false, false},
+		{"an image not scanned", 4, 1, 0, true, true},
+		{"an image only partly scanned", 5, 0, 1, true, true},
+		{"nothing scanned", 0, 3, 0, true, false},
+	}
+	for _, tc := range cases {
+		err := scanCompleteness(tc.scanned, tc.gaps, tc.partial)
+		if (err != nil) != tc.wantErr {
+			t.Errorf("%s: got error %v, want error %v", tc.name, err, tc.wantErr)
+			continue
+		}
+		if tc.wantMessageSay && !strings.Contains(err.Error(), "incomplete") {
+			t.Errorf("%s: the error should say the scan is incomplete: %v", tc.name, err)
+		}
+	}
+}
+
 func TestScanIsPartOfTheSecurityNamespace(t *testing.T) {
 	app := NewApp()
 	var found bool

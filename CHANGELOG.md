@@ -1,3 +1,9 @@
+## v3.14.6 (2026-11-18)
+
+### Fix
+
+- **security**: repin goreleaser on its real digest (the one 3.14.5 shipped does not exist) and buildpack-deps:trixie-curl and dhi.io/docker:29-cli on clean ones, and fail the catalogue scan when an image is not scanned or only partly scanned, instead of passing in silence
+
 ## v3.14.5 (2026-11-18)
 
 ### Fix

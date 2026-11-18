@@ -642,7 +642,7 @@ command_flag = "--cache"
 [presets.docker-buildx]
 name = "docker-buildx"
 phase = "docker"
-image = "dhi.io/docker:29-cli@sha256:b20e9ecc2dfb63c505d4442dc82b93fa36ccfb568a607d70ce0528f64ff678ca"
+image = "dhi.io/docker:29-cli@sha256:6c9080e61a53d7b5a1588a695fdb9e0cec24c8ced3e0c7d4070c3fdf62242b1a"
 image_entrypoint = ["docker"]
 hardened = true
 command = "buildx build --platform linux/amd64,linux/arm64 -t ${IMAGE_NAME}:${IMAGE_TAG} --push ."
@@ -704,7 +704,7 @@ command_flag = "--notes-file"
 [presets.goreleaser]
 name = "goreleaser"
 phase = "release"
-image = "goreleaser/goreleaser:v2.20.2@sha256:5d30bb36091b1a6d275efe0c8d5dc7e5f4e24cd6a7a3a8c6a0f4a1a1c3b6d6d5"
+image = "goreleaser/goreleaser:v2.20.2@sha256:5d30bb36091b1a6d275ef450be05ee9c0d8c8b22955efe53dfe0974dd583cdc2"
 image_entrypoint = ["/sbin/tini", "--", "/entrypoint.sh"]
 command = "release --clean"
 workdir = "/work"
@@ -1047,7 +1047,7 @@ command_flag = "-W clippy::pedantic"
 [presets.cargo-audit]
 name = "cargo-audit"
 phase = "security"
-image = "buildpack-deps:trixie-curl@sha256:ef554489e8f8b0245ef3cb2742b4c6b6e53c43bd64366b13f624982c854af2eb"
+image = "buildpack-deps:trixie-curl@sha256:9e486725325568707dbd794ca9b53cffb7ddee2b8ac1b94941ca4d3d8c6e9df9"
 image_entrypoint = []
 command = "sh -c 'a=$(uname -m); case $a in x86_64) s=ab28a1bdb54db4d5d8ad5981cf1f959410370b3d28250dbd35f6a44248620e39;; aarch64) s=c6603814ddaa45e51263dafd31c0ac98808f688d26f7395804f9670b0fd599dd;; *) echo no pinned checksum for $a >&2; exit 1;; esac; f=/tmp/cargo-audit.tgz; curl -sSfL -o $f https://github.com/rustsec/rustsec/releases/download/cargo-audit/v0.22.2/cargo-audit-$a-unknown-linux-gnu-v0.22.2.tgz && echo \"$s  $f\" | sha256sum -c - && tar xz --strip-components=1 -C /tmp -f $f && HOME=/tmp CARGO_HOME=/tmp/cargo /tmp/cargo-audit audit --no-yanked'"
 workdir = "/work"

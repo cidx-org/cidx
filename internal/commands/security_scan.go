@@ -270,8 +270,19 @@ func securityScanAction(c *cli.Context) error {
 		}
 	}
 
-	if len(scans) == 0 {
+	return scanCompleteness(len(scans), len(gaps), len(partial))
+}
+
+// scanCompleteness is the verdict on a finished scan. A catalogue image that
+// no scanner answered for, or that only one did, is a scan that did not look:
+// it fails here, after the report is written, instead of passing in silence
+// (an unresolvable digest went through a release that way, #579).
+func scanCompleteness(scanned, gaps, partial int) error {
+	if scanned == 0 {
 		return fmt.Errorf("no catalogue image could be scanned")
+	}
+	if gaps > 0 || partial > 0 {
+		return fmt.Errorf("the catalogue scan is incomplete: %d image(s) not scanned, %d only partly scanned", gaps, partial)
 	}
 	return nil
 }
