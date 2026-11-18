@@ -599,7 +599,7 @@ jobs:
           # unpinned resolve here is mutable code with write access to the
           # thing the whole policy protects. The version tracks the
           # `commitizen` preset in the catalogue — promote both together.
-          pip install commitizen==4.16.5
+          pip install commitizen==4.19.3
           CURRENT=$(cz version --project 2>/dev/null || echo "0.0.0")
           cz bump --yes --increment PATCH --changelog 2>&1 || true
           NEW=$(cz version --project 2>/dev/null || echo "unknown")

@@ -7,13 +7,17 @@
 #
 # A vulnerability that is fixed upstream never belongs here: that is a question
 # about the image's age, not a decision. "cidx security vuln add" refuses one.
+# The single exception is status "fix-unreleased": the fix exists in the
+# distribution or module but in no released image of the pinned tool, so there is
+# nothing to repin to. It expires within 30 days and its notes say what it waits
+# for ("not yet in any released image"); at expiry a newer image means repin.
 #
 # Fields:
 #   cve        - CVE (or GHSA) identifier
 #   repository - Affected repository, without tag or digest
 #   first_seen - The reference it was first recorded against (context only)
 #   severity   - HIGH or CRITICAL
-#   status     - awaiting-upstream | accepted-risk | mitigated | third-party
+#   status     - awaiting-upstream | accepted-risk | mitigated | third-party | fix-unreleased
 #   added      - Date when this exception was added (YYYY-MM-DD)
 #   expires    - Date to re-check (YYYY-MM-DD), typically 30-90 days
 #   notes      - Explanation of why this is accepted
@@ -2652,3 +2656,69 @@
   added = "2026-09-30"
   references = []
   decision = "gitleaks-alpine-libraries-not-reached"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-123158"
+  repository = "ghcr.io/securego/gosec"
+  first_seen = "ghcr.io/securego/gosec:2.30.0"
+  severity = "HIGH"
+  status = "fix-unreleased"
+  added = "2026-11-18"
+  expires = "2026-12-18"
+  notes = "CVE-2026-123158 in the openssh packages (openssh, openssh-client-common, openssh-client-default, openssh-keygen, openssh-server, openssh-server-common, openssh-sftp-server) of ghcr.io/securego/gosec:2.30.0, installed 10.3_p1-r1. The fix, 10.3_p1-r2, exists in the Alpine distribution but is not yet in any released image of gosec: 2.30.0 is the newest release. Judged again at expiry; if a newer image exists by then, repin instead of renewing."
+  references = []
+
+[[vulnerabilities]]
+  cve = "GO-2026-6888"
+  repository = "goreleaser/goreleaser"
+  first_seen = "goreleaser/goreleaser:v2.20.2"
+  severity = "HIGH"
+  status = "fix-unreleased"
+  added = "2026-11-18"
+  expires = "2026-12-18"
+  notes = "GO-2026-6888 in github.com/andybalholm/brotli embedded in goreleaser/goreleaser:v2.20.2 (through syft), installed v1.2.0. The fix, 1.2.7, exists at module level but is not yet in any released image of goreleaser: v2.20.2 is the newest release and only nightlies are newer. Judged again at expiry; if a newer release exists by then, repin instead of renewing."
+  references = []
+
+[[vulnerabilities]]
+  cve = "CVE-2026-111497"
+  repository = "golangci/golangci-lint"
+  first_seen = "golangci/golangci-lint:v2.15.0-alpine"
+  severity = "HIGH"
+  status = "fix-unreleased"
+  added = "2026-11-18"
+  expires = "2026-12-18"
+  notes = "CVE-2026-111497 in brotli-libs of golangci/golangci-lint:v2.15.0-alpine, installed 1.2.0-r1. The fix, 1.2.1-r0, exists in the Alpine distribution but is not yet in any released image of golangci-lint: v2.15.0-alpine is the newest release. Judged again at expiry; if a newer image exists by then, repin instead of renewing."
+  references = []
+
+[[vulnerabilities]]
+  cve = "CVE-2026-111497"
+  repository = "commitlint/commitlint"
+  first_seen = "commitlint/commitlint:21.2.3"
+  severity = "HIGH"
+  status = "fix-unreleased"
+  added = "2026-11-18"
+  expires = "2026-12-18"
+  notes = "CVE-2026-111497 in brotli-libs of commitlint/commitlint:21.2.3, installed 1.2.0-r1. The fix, 1.2.1-r0, exists in the Alpine distribution but is not yet in any released image of commitlint: 21.2.3 is the newest release. Judged again at expiry; if a newer image exists by then, repin instead of renewing."
+  references = []
+
+[[vulnerabilities]]
+  cve = "CVE-2026-123158"
+  repository = "zricethezav/gitleaks"
+  first_seen = "zricethezav/gitleaks:v8.30.1"
+  severity = "HIGH"
+  status = "fix-unreleased"
+  added = "2026-11-18"
+  expires = "2026-12-18"
+  notes = "CVE-2026-123158 in openssh-client-common, openssh-client-default and openssh-keygen of zricethezav/gitleaks:v8.30.1, installed 10.0_p1-r10. The fix, 10.0_p1-r11, exists in the Alpine distribution but is not yet in any released image of gitleaks: v8.30.1 is the newest release and its digest has not changed since 2026-03-21. Judged again at expiry; if a newer image exists by then, repin instead of renewing."
+  references = []
+
+[[vulnerabilities]]
+  cve = "GO-2026-6888"
+  repository = "zricethezav/gitleaks"
+  first_seen = "zricethezav/gitleaks:v8.30.1"
+  severity = "HIGH"
+  status = "fix-unreleased"
+  added = "2026-11-18"
+  expires = "2026-12-18"
+  notes = "GO-2026-6888 in github.com/andybalholm/brotli embedded in zricethezav/gitleaks:v8.30.1, installed v1.1.2-0.20250424. The fix, 1.2.7, exists at module level but is not yet in any released image of gitleaks: v8.30.1 is the newest release and its digest has not changed since 2026-03-21. Judged again at expiry; if a newer image exists by then, repin instead of renewing."
+  references = []

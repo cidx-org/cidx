@@ -371,7 +371,9 @@ func carryingRepository(e prunedEntry) string {
 func entriesFixedUpstream(entries []prunedEntry) []prunedEntry {
 	var fixable []prunedEntry
 	for _, e := range entries {
-		if e.FixedIn != "" {
+		// A fix-unreleased entry has a fix by definition and nothing to repin to:
+		// naming it here would send the reader to a repin that does not exist.
+		if e.FixedIn != "" && e.Status != StatusFixUnreleased {
 			fixable = append(fixable, e)
 		}
 	}

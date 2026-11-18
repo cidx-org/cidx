@@ -1,3 +1,9 @@
+## v3.14.5 (2026-11-18)
+
+### Fix
+
+- **security**: re-pin eleven of the twelve tool images that carried blocking findings (prettier, ansible-dev-tools, commitizen, gh, buildpack-deps, docker, golang, gosec, goreleaser, golangci-lint, commitlint) to current releases, and record the findings no released image fixes yet (those four plus gitleaks, which has no newer release) as dated `fix-unreleased` exceptions, a narrow category that expires within 30 days and never excuses a fix a newer image carries
+
 ## v3.14.4 (2026-11-16)
 
 ### Fix

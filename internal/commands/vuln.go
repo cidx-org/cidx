@@ -615,12 +615,12 @@ func vulnAddCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:  "status",
 				Value: "awaiting-upstream",
-				Usage: "Status (awaiting-upstream, accepted-risk, mitigated)",
+				Usage: "Status (awaiting-upstream, accepted-risk, mitigated, fix-unreleased)",
 			},
 			&cli.IntFlag{
 				Name:  "expires",
 				Value: 30,
-				Usage: "Days until expiry (for re-review)",
+				Usage: "Days until expiry (for re-review; at most 30 for fix-unreleased)",
 			},
 			&cli.StringFlag{
 				Name:  "notes",
@@ -659,7 +659,11 @@ func vulnAddCommand() *cli.Command {
 				}
 			}
 
-			if err := refuseIfFixedUpstream(cve, c.Args().Get(1), c.String("results")); err != nil {
+			if c.String("status") == StatusFixUnreleased {
+				if err := checkFixUnreleased(cve, c.String("notes"), c.Int("expires")); err != nil {
+					return err
+				}
+			} else if err := refuseIfFixedUpstream(cve, c.Args().Get(1), c.String("results")); err != nil {
 				return err
 			}
 
@@ -691,8 +695,45 @@ func vulnAddCommand() *cli.Command {
 	}
 }
 
+// StatusFixUnreleased is the one narrow category in which an exception may be
+// written for a vulnerability that has a fix: the fix exists in the distribution
+// or the module, but in no released image of the pinned tool.
+//
+// The general rule stands — a fix upstream is a question of the image's age, and
+// `vuln add` refuses it. That rule assumes a newer image exists to repin to. When
+// the newest release of the tool still carries the finding, there is nothing to
+// repin to, and the wait is not ours to shorten; refusing would leave the audit
+// red with no action available. The category is the rule's stated exception, not
+// a weakening of it: it has to be asked for by name, it has to say what it is
+// waiting for, and it lasts at most [fixUnreleasedMaxDays] before it is judged
+// again — at which point a newer image either exists (repin) or does not (renew).
+const StatusFixUnreleased = "fix-unreleased"
+
+// fixUnreleasedMaxDays bounds a fix-unreleased exception, so that "not yet in
+// any released image" is re-checked monthly rather than inherited.
+const fixUnreleasedMaxDays = 30
+
+// checkFixUnreleased holds a fix-unreleased exception to its rule: a reason that
+// names the advisory and says the fix is not yet in a released image of the
+// tool, and an expiry no further out than [fixUnreleasedMaxDays].
+func checkFixUnreleased(cve, notes string, days int) error {
+	if days < 1 || days > fixUnreleasedMaxDays {
+		return cli.Exit(fmt.Sprintf(
+			"A %s exception expires within %d days so that it is judged again; got %d.",
+			StatusFixUnreleased, fixUnreleasedMaxDays, days), 1)
+	}
+	if !strings.Contains(notes, cve) || !strings.Contains(strings.ToLower(notes), "not yet in any released image") {
+		return cli.Exit(fmt.Sprintf(
+			"A %s exception must give its reason with --notes: name %s, the package, the image and the installed version, "+
+				"and state that the fix exists in the distribution or module but is \"not yet in any released image\" of the tool.",
+			StatusFixUnreleased, cve), 1)
+	}
+	return nil
+}
+
 // refuseIfFixedUpstream stops an exception being written for a vulnerability the
-// publisher has already fixed.
+// publisher has already fixed. The one exception is [StatusFixUnreleased], which
+// `vuln add` routes around this check and holds to its own rule instead.
 //
 // Question 2 of the policy: a fix upstream means the finding disappears when the
 // image is rebuilt, so the question is the image's age, not the vulnerability.
@@ -1204,13 +1245,17 @@ const vulnFileHeader = `# Known Vulnerabilities
 #
 # A vulnerability that is fixed upstream never belongs here: that is a question
 # about the image's age, not a decision. "cidx security vuln add" refuses one.
+# The single exception is status "fix-unreleased": the fix exists in the
+# distribution or module but in no released image of the pinned tool, so there is
+# nothing to repin to. It expires within 30 days and its notes say what it waits
+# for ("not yet in any released image"); at expiry a newer image means repin.
 #
 # Fields:
 #   cve        - CVE (or GHSA) identifier
 #   repository - Affected repository, without tag or digest
 #   first_seen - The reference it was first recorded against (context only)
 #   severity   - HIGH or CRITICAL
-#   status     - awaiting-upstream | accepted-risk | mitigated | third-party
+#   status     - awaiting-upstream | accepted-risk | mitigated | third-party | fix-unreleased
 #   added      - Date when this exception was added (YYYY-MM-DD)
 #   expires    - Date to re-check (YYYY-MM-DD), typically 30-90 days
 #   notes      - Explanation of why this is accepted
