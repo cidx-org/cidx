@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/cidx-org/cidx/v3/pkg/config"
 	"github.com/cidx-org/cidx/v3/pkg/executor"
@@ -121,6 +122,11 @@ type scanRig struct {
 
 func securityScanAction(c *cli.Context) error {
 	imagePresets, err := catalogueImages()
+	if err != nil {
+		return err
+	}
+
+	record, err := loadVulnerabilities(presets.ExceptionsFile)
 	if err != nil {
 		return err
 	}
@@ -237,6 +243,7 @@ func securityScanAction(c *cli.Context) error {
 	}
 
 	scans, gaps, partial := collectScans(imagePresets, images, resultsDir, failures)
+	declareFixUnreleased(scans, record, time.Now())
 
 	encoded, err := jsonIndent(presets.ScanSARIF(scans, gaps))
 	if err != nil {
@@ -370,6 +377,29 @@ func collectScans(
 		})
 	}
 	return scans, gaps, partial
+}
+
+// declareFixUnreleased hands every scan the "fix-unreleased" decisions of the
+// record, so that the results they cover are marked in the SARIF. Nothing is
+// filtered: the scan still lists every finding, the marked ones included.
+func declareFixUnreleased(scans []presets.ImageScan, record *VulnerabilityFile, day time.Time) {
+	var declared []presets.FixUnreleased
+	for _, d := range record.Decisions {
+		if d.Treatment != "fix-unreleased" {
+			continue
+		}
+		declared = append(declared, presets.FixUnreleased{
+			ID:         d.ID,
+			Repository: d.Repository,
+			Reason:     d.Reason,
+			ReviewBy:   d.ReviewBy,
+			Advisories: d.Advisories,
+		})
+	}
+	for i := range scans {
+		scans[i].FixUnreleased = declared
+		scans[i].On = day
+	}
 }
 
 // missingScanners lists the scanners absent from answered, each with the reason

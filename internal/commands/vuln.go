@@ -1168,6 +1168,7 @@ func saveVulnerabilities(path string, vulns *VulnerabilityFile) error {
 		writeTOMLString(&sb, "model", d.Model)
 		fmt.Fprintf(&sb, "  capabilities = %s\n", tomlList(d.Capabilities))
 		writeTOMLList(&sb, "requires", d.Requires)
+		writeTOMLList(&sb, "advisories", d.Advisories)
 		writeTOMLString(&sb, "treatment", d.Treatment)
 		writeTOMLString(&sb, "reviewed", d.Reviewed)
 		writeTOMLString(&sb, "review_by", d.ReviewBy)
@@ -1225,6 +1226,11 @@ const vulnFileHeader = `# Known Vulnerabilities
 #   references - Links to upstream issues/PRs tracking the fix
 #   decision   - The [[decisions]] entry authorizing this waiver; absent means a
 #                legacy entry judged on its own expiry
+#
+# A fix-unreleased decision also lists "advisories", the CVE/GO identifiers it
+# covers. "cidx security scan" marks the results of exactly those advisories on
+# that repository (exceptionCategory, exceptionReason) while review_by stands;
+# another advisory on the same image is not marked.
 #
 # [[decisions]] is one reviewed exposure judgement about a repository under the
 # aggregate context of every preset consuming it: id, repository, model,

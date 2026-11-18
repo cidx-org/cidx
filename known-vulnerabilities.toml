@@ -29,6 +29,11 @@
 #   decision   - The [[decisions]] entry authorizing this waiver; absent means a
 #                legacy entry judged on its own expiry
 #
+# A fix-unreleased decision also lists "advisories", the CVE/GO identifiers it
+# covers. "cidx security scan" marks the results of exactly those advisories on
+# that repository (exceptionCategory, exceptionReason) while review_by stands;
+# another advisory on the same image is not marked.
+#
 # [[decisions]] is one reviewed exposure judgement about a repository under the
 # aggregate context of every preset consuming it: id, repository, model,
 # capabilities (the mechanical context it was reviewed against), requires (the
@@ -235,6 +240,7 @@
   repository = "ghcr.io/securego/gosec"
   model = "fix-unreleased"
   capabilities = []
+  advisories = ["CVE-2026-123158"]
   treatment = "fix-unreleased"
   reviewed = "2026-11-18"
   review_by = "2026-12-18"
@@ -246,6 +252,7 @@
   repository = "goreleaser/goreleaser"
   model = "fix-unreleased"
   capabilities = ["docker-socket", "publishing-credential"]
+  advisories = ["GO-2026-6888"]
   treatment = "fix-unreleased"
   reviewed = "2026-11-18"
   review_by = "2026-12-18"
@@ -257,6 +264,7 @@
   repository = "golangci/golangci-lint"
   model = "fix-unreleased"
   capabilities = []
+  advisories = ["CVE-2026-111497"]
   treatment = "fix-unreleased"
   reviewed = "2026-11-18"
   review_by = "2026-12-18"
@@ -268,6 +276,7 @@
   repository = "commitlint/commitlint"
   model = "fix-unreleased"
   capabilities = []
+  advisories = ["CVE-2026-111497"]
   treatment = "fix-unreleased"
   reviewed = "2026-11-18"
   review_by = "2026-12-18"
@@ -279,6 +288,7 @@
   repository = "zricethezav/gitleaks"
   model = "fix-unreleased"
   capabilities = []
+  advisories = ["CVE-2026-123158", "GO-2026-6888"]
   treatment = "fix-unreleased"
   reviewed = "2026-11-18"
   review_by = "2026-12-18"

@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/cidx-org/cidx/v3/pkg/presets"
 )
 
 // maxFixUnreleasedDays is how long a "fix-unreleased" decision may stand: a fix
@@ -29,6 +31,45 @@ func fixUnreleasedDecisions(t *testing.T) (*VulnerabilityFile, []Decision) {
 		}
 	}
 	return file, found
+}
+
+// TestFixUnreleasedDecisionsNameTheirAdvisories: the catalogue scan marks results
+// from the structured list, not from the prose of the reason, so a decision
+// without one covers nothing. Every advisory it lists is also written in the
+// reason, which is where a reviewer reads it.
+func TestFixUnreleasedDecisionsNameTheirAdvisories(t *testing.T) {
+	file, decisions := fixUnreleasedDecisions(t)
+	for _, d := range decisions {
+		if len(d.Advisories) == 0 {
+			t.Errorf("%s names no advisory: the catalogue scan would mark nothing for it", d.ID)
+		}
+		for _, a := range d.Advisories {
+			if !strings.Contains(d.Reason, a) {
+				t.Errorf("%s lists %s, which its reason does not mention", d.ID, a)
+			}
+		}
+	}
+
+	// Wired as the scan does: a result of a listed advisory on the repository is
+	// marked, one of any other advisory on it is not.
+	for _, d := range decisions {
+		scans := []presets.ImageScan{{
+			Image: d.Repository + ":1@sha256:abc",
+			Findings: []presets.Finding{
+				{ID: d.Advisories[0], Severity: "HIGH", Package: "p", FixedIn: "2", Scanner: "Trivy"},
+				{ID: "CVE-1900-0001", Severity: "HIGH", Package: "p", FixedIn: "2", Scanner: "Trivy"},
+			},
+		}}
+		day, _ := time.Parse(time.DateOnly, d.Reviewed)
+		declareFixUnreleased(scans, file, day)
+
+		for _, alert := range presets.ScanAlerts(scans) {
+			_, marked := alert.Properties["exceptionCategory"]
+			if want := alert.RuleID == strings.ToUpper(d.Advisories[0]); marked != want {
+				t.Errorf("%s: %s marked = %v, want %v", d.ID, alert.RuleID, marked, want)
+			}
+		}
+	}
 }
 
 // TestFixUnreleasedIsANarrowException is the rule behind the category: a finding

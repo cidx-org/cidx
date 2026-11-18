@@ -4,7 +4,17 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 )
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
 
 // The catalogue scan: every finding the scanners report on the catalogue's
 // images, rendered as SARIF for a reader that does its own triage.
@@ -41,6 +51,44 @@ type ImageScan struct {
 	// Missing names the scanners that did not answer for this image while the
 	// other did. Their findings are absent from Findings: the image is partial.
 	Missing []MissingScanner
+
+	// FixUnreleased are the decisions declaring that the fix of some advisories is
+	// in no published image of this repository. Only those naming the image's
+	// repository are read, and only while their review date has not passed on On.
+	FixUnreleased []FixUnreleased
+
+	// On is the day the scan is judged on, for the review dates of FixUnreleased.
+	On time.Time
+}
+
+// ExceptionCategoryFixUnreleased is the exceptionCategory a result carries when a
+// standing decision declares that the fix is absent from the published images.
+const ExceptionCategoryFixUnreleased = "fix-unreleased"
+
+// FixUnreleased is a "fix-unreleased" decision of [ExceptionsFile], reduced to
+// what marking a result needs. It covers advisories, not a whole repository: the
+// decision names them in Advisories, so that a fixable finding of another
+// advisory on the same image stays unmarked.
+type FixUnreleased struct {
+	ID         string
+	Repository string
+	Reason     string
+	ReviewBy   string
+	Advisories []string
+}
+
+// covers reports whether the decision stands on day and names the advisory of an
+// image of repository.
+func (d FixUnreleased) covers(repository, advisory string, day time.Time) bool {
+	if d.Repository != repository || !Waives(d.ReviewBy, day) {
+		return false
+	}
+	for _, a := range d.Advisories {
+		if strings.EqualFold(strings.TrimSpace(a), advisory) {
+			return true
+		}
+	}
+	return false
 }
 
 // MissingScanner is a scanner that failed on an image the other one scanned.
@@ -137,6 +185,13 @@ func scanAlert(scan ImageScan, usedBy []string, id, pkg string, group []Finding)
 	}
 	if anyKEV(group) {
 		properties["kev"] = true
+	}
+	for _, d := range scan.FixUnreleased {
+		if d.covers(repositoryOf(scan.Image), id, scan.On) {
+			properties["exceptionCategory"] = ExceptionCategoryFixUnreleased
+			properties["exceptionReason"] = firstNonEmpty(d.Reason, d.ID)
+			break
+		}
 	}
 
 	var body strings.Builder

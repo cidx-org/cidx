@@ -1,3 +1,9 @@
+## v3.14.7 (2026-11-18)
+
+### Fix
+
+- **security**: the catalogue scan marks, in `security.sarif`, the results covered by a standing `fix-unreleased` decision (`exceptionCategory` and `exceptionReason`), matched on the image's repository and on the advisories the decision now lists in `advisories`; an expired decision or another advisory marks nothing
+
 ## v3.14.6 (2026-11-18)
 
 ### Fix

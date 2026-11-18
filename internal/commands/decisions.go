@@ -30,6 +30,12 @@ type Decision struct {
 	// established is unknown, and unknown never satisfies a requirement.
 	Requires []string `toml:"requires,omitempty"`
 
+	// Advisories names the CVE/GO identifiers a "fix-unreleased" decision
+	// covers. The reason says them in prose; this is the structured list the
+	// catalogue scan marks results from, so that a fixable finding of another
+	// advisory on the same image is not covered by it.
+	Advisories []string `toml:"advisories,omitempty"`
+
 	Treatment  string   `toml:"treatment"`
 	Reviewed   string   `toml:"reviewed"`
 	ReviewBy   string   `toml:"review_by"`
