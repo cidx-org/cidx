@@ -1205,13 +1205,21 @@ const vulnFileHeader = `# Known Vulnerabilities
 # A vulnerability that is fixed upstream never belongs here: that is a question
 # about the image's age, not a decision. "cidx security vuln add" refuses one.
 #
+# One narrow exception, treatment "fix-unreleased": the fix exists in the
+# distribution or the module, but the NEWEST release of the tool's image does not
+# ship it yet, so there is nothing to repin to. The catalogue is first repinned
+# to that newest release; the decision names the finding, the installed version,
+# the fix and the day it was scanned, and lives at most 30 days (review_by). It is
+# a repin candidate at every review, never a renewal by default.
+#
 # Fields:
 #   cve        - CVE (or GHSA) identifier
 #   repository - Affected repository, without tag or digest
 #   first_seen - The reference it was first recorded against (context only)
 #   severity   - HIGH or CRITICAL
-#   status     - awaiting-upstream | accepted-risk | mitigated | third-party
-#   added      - Date when this exception was added (YYYY-MM-DD)
+#   status     - awaiting-upstream | accepted-risk | mitigated | third-party |
+#                fix-unreleased (narrow: see above)
+#   added     - Date when this exception was added (YYYY-MM-DD)
 #   expires    - Date to re-check (YYYY-MM-DD), typically 30-90 days
 #   notes      - Explanation of why this is accepted
 #   references - Links to upstream issues/PRs tracking the fix

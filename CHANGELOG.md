@@ -1,3 +1,9 @@
+## v3.14.5 (2026-11-18)
+
+### Fix
+
+- **security**: repin the tool images carrying blocking findings (gosec, goreleaser, commitlint, golangci-lint, prettier, commitizen, community-ansible-dev-tools, gh, dhi.io/golang) to their newest releases, and record the findings no release fixes yet (brotli, openssh) as dated `fix-unreleased` exceptions that lapse after 30 days
+
 ## v3.14.4 (2026-11-16)
 
 ### Fix

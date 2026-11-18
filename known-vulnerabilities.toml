@@ -8,12 +8,20 @@
 # A vulnerability that is fixed upstream never belongs here: that is a question
 # about the image's age, not a decision. "cidx security vuln add" refuses one.
 #
+# One narrow exception, treatment "fix-unreleased": the fix exists in the
+# distribution or the module, but the NEWEST release of the tool's image does not
+# ship it yet, so there is nothing to repin to. The catalogue is first repinned
+# to that newest release; the decision names the finding, the installed version,
+# the fix and the day it was scanned, and lives at most 30 days (review_by). It is
+# a repin candidate at every review, never a renewal by default.
+#
 # Fields:
 #   cve        - CVE (or GHSA) identifier
 #   repository - Affected repository, without tag or digest
 #   first_seen - The reference it was first recorded against (context only)
 #   severity   - HIGH or CRITICAL
-#   status     - awaiting-upstream | accepted-risk | mitigated | third-party
+#   status     - awaiting-upstream | accepted-risk | mitigated | third-party |
+#                fix-unreleased (narrow: see above)
 #   added      - Date when this exception was added (YYYY-MM-DD)
 #   expires    - Date to re-check (YYYY-MM-DD), typically 30-90 days
 #   notes      - Explanation of why this is accepted
@@ -220,6 +228,61 @@
   reviewed = "2026-09-30"
   review_by = "2026-12-16"
   reason = "The vulnerable code sits in the Alpine base layer of gosec's image and is not exercised by what its preset runs. zlib (CVE-2026-85091): a heap overflow in the gzFile write path (gzprintf or gzwrite after a stalled non-blocking write); the tools here reach zlib through inflate and deflate, and none writes through gzFile on a non-blocking descriptor. pcre2 (CVE-2026-89157, -89161): the first is 32-bit only (cidx runs on 64-bit hosts), the second needs an application to hand pcre2_jit_match a copied subject as its match context, an API misuse the tools here do not commit. All are HIGH or CRITICAL with no fix at any version, EPSS at most 0.007, none in KEV (audit run 36565600041, 2026-09-29). Checked against the commands these presets run; re-argue if they start running the affected tool."
+  references = []
+
+[[decisions]]
+  id = "gosec-openssh-fix-unreleased"
+  repository = "ghcr.io/securego/gosec"
+  model = "fix-unreleased"
+  capabilities = []
+  treatment = "fix-unreleased"
+  reviewed = "2026-11-18"
+  review_by = "2026-12-18"
+  reason = "Fixed in the distribution, shipped by no gosec image. CVE-2026-123158 on openssh, openssh-client-common, openssh-client-default, openssh-keygen, openssh-server, openssh-server-common and openssh-sftp-server: ghcr.io/securego/gosec:2.30.0, the newest release, installs 10.3_p1-r1 and the fix is 10.3_p1-r2. Scanned 2026-11-18 with dhi.io/trivy:0.74. Repin to the first release carrying the fix instead of renewing."
+  references = []
+
+[[decisions]]
+  id = "goreleaser-brotli-fix-unreleased"
+  repository = "goreleaser/goreleaser"
+  model = "fix-unreleased"
+  capabilities = ["docker-socket", "publishing-credential"]
+  treatment = "fix-unreleased"
+  reviewed = "2026-11-18"
+  review_by = "2026-12-18"
+  reason = "Fixed in the module, shipped by no goreleaser image. GO-2026-6888 on github.com/andybalholm/brotli v1.2.0, embedded in syft: goreleaser/goreleaser:v2.20.2, the newest release, carries it and the fix is 1.2.7; only nightly builds are newer. Scanned 2026-11-18 with dhi.io/trivy:0.74 (the module read with --list-all-pkgs, the database of the day not carrying the advisory). Repin to the first release carrying the fix instead of renewing."
+  references = []
+
+[[decisions]]
+  id = "golangci-lint-brotli-libs-fix-unreleased"
+  repository = "golangci/golangci-lint"
+  model = "fix-unreleased"
+  capabilities = []
+  treatment = "fix-unreleased"
+  reviewed = "2026-11-18"
+  review_by = "2026-12-18"
+  reason = "Fixed in the distribution, shipped by no golangci-lint image. CVE-2026-111497 on brotli-libs: golangci/golangci-lint:v2.15.0-alpine, the newest release, installs 1.2.0-r1 and the fix is 1.2.1-r0. Scanned 2026-11-18 with dhi.io/trivy:0.74. Repin to the first release carrying the fix instead of renewing."
+  references = []
+
+[[decisions]]
+  id = "commitlint-brotli-libs-fix-unreleased"
+  repository = "commitlint/commitlint"
+  model = "fix-unreleased"
+  capabilities = []
+  treatment = "fix-unreleased"
+  reviewed = "2026-11-18"
+  review_by = "2026-12-18"
+  reason = "Fixed in the distribution, shipped by no commitlint image. CVE-2026-111497 on brotli-libs: commitlint/commitlint:21.2.3, the newest release, installs 1.2.0-r1 and the fix is 1.2.1-r0. Scanned 2026-11-18 with dhi.io/trivy:0.74. Repin to the first release carrying the fix instead of renewing."
+  references = []
+
+[[decisions]]
+  id = "gitleaks-openssh-and-brotli-fix-unreleased"
+  repository = "zricethezav/gitleaks"
+  model = "fix-unreleased"
+  capabilities = []
+  treatment = "fix-unreleased"
+  reviewed = "2026-11-18"
+  review_by = "2026-12-18"
+  reason = "Fixed upstream, shipped by no gitleaks image: zricethezav/gitleaks:v8.30.1 is the newest release (latest, digest unchanged since 2026-03-21). CVE-2026-123158 on openssh-client-common, openssh-client-default and openssh-keygen: installed 10.0_p1-r10, fix 10.0_p1-r11. GO-2026-6888 on github.com/andybalholm/brotli v1.1.2-0.20250424173009-453214e765f3 embedded in gitleaks: fix 1.2.7. Scanned 2026-11-18 with dhi.io/trivy:0.74. Repin to the first release carrying the fix instead of renewing."
   references = []
 
 [[decisions]]
@@ -2652,3 +2715,57 @@
   added = "2026-09-30"
   references = []
   decision = "gitleaks-alpine-libraries-not-reached"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-123158"
+  repository = "zricethezav/gitleaks"
+  first_seen = "zricethezav/gitleaks:v8.30.1"
+  severity = "HIGH"
+  added = "2026-11-18"
+  references = []
+  decision = "gitleaks-openssh-and-brotli-fix-unreleased"
+
+[[vulnerabilities]]
+  cve = "GO-2026-6888"
+  repository = "zricethezav/gitleaks"
+  first_seen = "zricethezav/gitleaks:v8.30.1"
+  severity = "HIGH"
+  added = "2026-11-18"
+  references = []
+  decision = "gitleaks-openssh-and-brotli-fix-unreleased"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-123158"
+  repository = "ghcr.io/securego/gosec"
+  first_seen = "ghcr.io/securego/gosec:2.30.0"
+  severity = "HIGH"
+  added = "2026-11-18"
+  references = []
+  decision = "gosec-openssh-fix-unreleased"
+
+[[vulnerabilities]]
+  cve = "GO-2026-6888"
+  repository = "goreleaser/goreleaser"
+  first_seen = "goreleaser/goreleaser:v2.20.2"
+  severity = "HIGH"
+  added = "2026-11-18"
+  references = []
+  decision = "goreleaser-brotli-fix-unreleased"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-111497"
+  repository = "golangci/golangci-lint"
+  first_seen = "golangci/golangci-lint:v2.15.0-alpine"
+  severity = "HIGH"
+  added = "2026-11-18"
+  references = []
+  decision = "golangci-lint-brotli-libs-fix-unreleased"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-111497"
+  repository = "commitlint/commitlint"
+  first_seen = "commitlint/commitlint:21.2.3"
+  severity = "HIGH"
+  added = "2026-11-18"
+  references = []
+  decision = "commitlint-brotli-libs-fix-unreleased"
