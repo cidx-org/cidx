@@ -235,25 +235,25 @@
   references = []
 
 [[decisions]]
-  id = "commitizen-alpine-libraries-not-reached"
+  id = "commitizen-binutils-not-reached"
   repository = "commitizen/commitizen"
   model = "inert-package"
   capabilities = []
   treatment = "accepted-risk"
-  reviewed = "2026-09-30"
-  review_by = "2026-12-16"
-  reason = "The vulnerable code sits in the Alpine base layer of commitizen's image and is not exercised by what its preset runs. zlib (CVE-2026-85091): a heap overflow in the gzFile write path (gzprintf or gzwrite after a stalled non-blocking write); the tools here reach zlib through inflate and deflate, and none writes through gzFile on a non-blocking descriptor. pcre2 (CVE-2026-89157, -89161): the first is 32-bit only (cidx runs on 64-bit hosts), the second needs an application to hand pcre2_jit_match a copied subject as its match context, an API misuse the tools here do not commit. All are HIGH or CRITICAL with no fix at any version, EPSS at most 0.007, none in KEV (audit run 36565600041, 2026-09-29). Checked against the commands these presets run; re-argue if they start running the affected tool."
+  reviewed = "2026-11-19"
+  review_by = "2027-02-17"
+  reason = "Re-read 2026-11-19 against the scan of commitizen/commitizen:4.19.3 (binutils 2.45.1-r1), member by member; all five are HIGH, Grype reports no fix at any version (Trivy lists none of them), EPSS at most 0.006, none in KEV. The decision this one replaces also carried zlib CVE-2026-85091, pcre2 CVE-2026-89157 and -89161 and openssl CVE-2026-14456: this image no longer carries any of the four, so they left the file with it. The five are flaws in binutils programs and the BFD library: readelf (CVE-2025-69649 and -69650 are non-terminating output loops on crafted DWARF .debug_rnglists and .debug_loclists data; CVE-2026-6846 is a denial of service in readelf on a crafted ELF) and the BFD linker's XCOFF reader (CVE-2026-3441 and -3442, heap out-of-bounds reads when a crafted XCOFF object is linked). Each needs someone to run readelf or the linker on a hostile file. The preset runs cz check over commit messages: it parses text and executes no binutils program, and links nothing. Re-argue if the preset starts running a binutils tool."
   references = []
 
 [[decisions]]
-  id = "commitlint-alpine-libraries-not-reached"
-  repository = "commitlint/commitlint"
+  id = "commitizen-sqlite-not-reached"
+  repository = "commitizen/commitizen"
   model = "inert-package"
   capabilities = []
   treatment = "accepted-risk"
-  reviewed = "2026-09-30"
-  review_by = "2026-12-16"
-  reason = "The vulnerable code sits in the Alpine base layer of commitlint's image and is not exercised by what its preset runs. zlib (CVE-2026-85091): a heap overflow in the gzFile write path (gzprintf or gzwrite after a stalled non-blocking write); the tools here reach zlib through inflate and deflate, and none writes through gzFile on a non-blocking descriptor. pcre2 (CVE-2026-89157, -89161): the first is 32-bit only (cidx runs on 64-bit hosts), the second needs an application to hand pcre2_jit_match a copied subject as its match context, an API misuse the tools here do not commit. c-ares (CVE-2026-69184): CPU and memory exhaustion by a hostile DNS server; it is reached only through curl or node's dns.resolve*, which no preset here uses, and the attacker would have to control the runner's resolver. All are HIGH or CRITICAL with no fix at any version, EPSS at most 0.007, none in KEV (audit run 36565600041, 2026-09-29). Checked against the commands these presets run; re-argue if they start running the affected tool."
+  reviewed = "2026-11-19"
+  review_by = "2026-12-18"
+  reason = "Re-read 2026-11-19 against the scan of commitizen/commitizen:4.19.3, finding by finding; all four are HIGH on sqlite-libs 3.53.4-r0, none is in KEV, EPSS at most 0.016, and neither scanner reports a fixed version (Grype: unknown for CVE-2026-119373, -119374 and -119379, none for CVE-2026-119586; Trivy lists none). CVE-2026-119373 (a heap overflow in FTS5 prefix queries over detail=none tables with negative rowids), CVE-2026-119374 (FTS5 secure-delete over a crafted index) and CVE-2026-119379 (sqlite3changeset_apply on a crafted changeset) each need a program that opens a database file, or applies a changeset, that somebody else supplied. CVE-2026-119586 is in the sqlite3 shell's .recover command, which emits dot-commands planted in a database's schema into a script a person pipes back to the shell: it needs the shell and a typed command. The commitizen preset runs cz check over commit messages, opens no database, and the image runs no sqlite3 shell. Grype could not say whether a fix exists, so the review is a month out: at the next one, check the Alpine sqlite package for a release past 3.53.4-r0 and repin instead of renewing. Re-argue if the preset starts opening databases."
   references = []
 
 [[decisions]]
@@ -268,14 +268,14 @@
   references = []
 
 [[decisions]]
-  id = "dhi-golang-alpine-libraries-not-reached"
+  id = "dhi-golang-binutils-not-reached"
   repository = "dhi.io/golang"
   model = "inert-package"
   capabilities = []
   treatment = "accepted-risk"
-  reviewed = "2026-09-30"
-  review_by = "2026-12-16"
-  reason = "The vulnerable code sits in the Alpine base layer of the Go toolchain image and is not exercised by what its preset runs. zlib (CVE-2026-85091): a heap overflow in the gzFile write path (gzprintf or gzwrite after a stalled non-blocking write); the tools here reach zlib through inflate and deflate, and none writes through gzFile on a non-blocking descriptor. pcre2 (CVE-2026-89157, -89161): the first is 32-bit only (cidx runs on 64-bit hosts), the second needs an application to hand pcre2_jit_match a copied subject as its match context, an API misuse the tools here do not commit. All are HIGH or CRITICAL with no fix at any version, EPSS at most 0.007, none in KEV (audit run 36565600041, 2026-09-29). Checked against the commands these presets run; re-argue if they start running the affected tool."
+  reviewed = "2026-11-19"
+  review_by = "2027-02-17"
+  reason = "Re-read 2026-11-19 against the scan of dhi.io/golang:1.26.11-alpine-dev (binutils 2.46.0-r0), member by member; both are HIGH, Grype reports no fix at any version (Trivy lists neither), EPSS at most 0.003, not in KEV. The decision this one replaces also carried zlib CVE-2026-85091 and pcre2 CVE-2026-89157 and -89161: the image no longer carries any of the three, so they left the file with it. CVE-2026-3441 and CVE-2026-3442 are both a heap out-of-bounds read in the bfd linker when it processes a crafted XCOFF object file, and need someone to convince a user to link that file. XCOFF is AIX's object format: the go toolchain's cgo path hands the system linker ELF objects the compiler has just produced from the repository's own sources on a Linux host, never an XCOFF file from outside, and no preset here runs readelf, objdump or ld by hand on a file somebody else supplied. Re-argue if a preset starts running a binutils tool on an input the repository does not build."
   references = []
 
 [[decisions]]
@@ -285,31 +285,54 @@
   capabilities = ["publishing-credential"]
   requires = ["bounded-input"]
   treatment = "accepted-risk"
-  reviewed = "2026-09-30"
-  review_by = "2026-11-18"
-  reason = "tarfile and html.parser are exercised by pip on sdists and the simple index, for pip-audit and the installs python-build and pytest perform; twine reads the dist/ the repository built. The input is the repository's own code and PyPI's responses for the packages it pins; the flaws are extraction-filter bypass and CPU exhaustion, not code execution. No fix at any version. Added 2026-09-30: CVE-2026-82049, a tarfile hard-link-to-symlink extraction flaw in the same family: pip extracts the sdists of the packages the repository pins, so the interpreter does run it, on the bounded input this decision already rests on. No fix at any version, EPSS 0.002, not in KEV."
+  reviewed = "2026-11-19"
+  review_by = "2027-01-18"
+  reason = "tarfile and zipfile are exercised by pip on sdists and wheels, for pip-audit and the installs python-build and pytest perform; twine reads the dist/ the repository built. The input is the repository's own code and PyPI's responses for the packages it pins, the context established 2026-08-22. Re-read 2026-11-19 against the scan of dhi.io/python:3.13.14-alpine-dev (python-3.13 3.13.14-r3): CVE-2026-11940, -11972, -15308 and -82049 are HIGH, none is in KEV, EPSS at most 0.0075, and neither scanner names a fixed version (Grype's fix state is unknown, Trivy lists none). The python-3.13 advisories on this package are of two kinds: tarfile extraction-filter bypasses (a hard link to a symlink stored at a deeper name, link entries with empty or directory-like names, intermediate directories created outside the destination, a filter result ignored on systems without links), whose worst outcome is an empty directory, a changed mode or mtime, or a file read from outside the destination, never code execution; and memory exhaustion from an attacker-controlled size when decompressing a crafted zip. Both need a crafted archive, and the only archives pip opens here are the sdists and wheels of the packages the repository pins, fetched over TLS from PyPI; nobody else's bytes arrive. The fix state is unknown rather than none, so at the next review check the Alpine python-3.13 package for a release past 3.13.14-r3 and repin instead of renewing. Re-argue if a preset starts extracting archives from anywhere but the pinned index."
   references = []
 
 [[decisions]]
-  id = "dhi-python-libraries-not-reached"
+  id = "dhi-python-binutils-not-reached"
   repository = "dhi.io/python"
   model = "inert-package"
   capabilities = ["publishing-credential"]
   treatment = "accepted-risk"
-  reviewed = "2026-09-30"
-  review_by = "2026-11-18"
-  reason = "The interpreter loads OpenSSL for TLS to PyPI, and CVE-2026-14456 is in the QUIC server listener, a path no client use reaches; binutils is reached only by an sdist build of an object the project's dependency tree chose. No fix at any version. Added 2026-09-30, on the same footing: zlib (CVE-2026-85091): a heap overflow in the gzFile write path (gzprintf or gzwrite after a stalled non-blocking write); the tools here reach zlib through inflate and deflate, and none writes through gzFile on a non-blocking descriptor. All are HIGH or CRITICAL with no fix at any version, EPSS at most 0.007, none in KEV (audit run 36565600041, 2026-09-29). Checked against the commands these presets run; re-argue if they start running the affected tool."
+  reviewed = "2026-11-19"
+  review_by = "2027-02-17"
+  reason = "Re-read 2026-11-19 against the scan of dhi.io/python:3.13.14-alpine-dev (binutils 2.46.0-r0), member by member; both are HIGH, Grype reports no fix at any version (Trivy lists neither), EPSS at most 0.003, not in KEV. The decision this one replaces also carried openssl CVE-2026-14456 and zlib CVE-2026-85091: both have a fix in the distribution now (libcrypto3, libssl3 and openssl 3.5.8-r0; zlib 1.3.2-r1), so they are a repin and not a decision, and left the file. CVE-2026-3441 and -3442 are both a heap out-of-bounds read in the bfd linker when it processes a crafted XCOFF object file, and need someone to convince a user to link that file. XCOFF is AIX's object format; an sdist build here hands the system linker ELF objects the compiler has just produced from the sources of a package the repository pins, never an XCOFF file, and no preset runs readelf, objdump or ld by hand. Re-argue if a preset starts running a binutils tool on an input the dependency tree does not build."
   references = []
 
 [[decisions]]
-  id = "gh-static-binary"
-  repository = "maniator/gh"
+  id = "dhi-python-cve-2026-115557"
+  repository = "dhi.io/python"
+  model = "tool-bounded-input"
+  capabilities = ["publishing-credential"]
+  requires = ["bounded-input"]
+  treatment = "accepted-risk"
+  reviewed = "2026-11-19"
+  review_by = "2026-12-18"
+  reason = "CVE-2026-115557 (CRITICAL, python-3.13 3.13.14-r3, EPSS 0.00534, not in KEV, first carried in the 2026-11-19 scan; Grype's fix state is unknown, Trivy lists nothing): the advisory is that this CPython lacks a denylist of known compromised certificates in the ssl module, which newer releases add so that such a certificate is rejected whatever the SSLContext policy says. What it costs here: a TLS server presenting a chain through one of those certificates would be accepted where a newer Python would refuse it. The only TLS connections the interpreter makes are pip's and twine's to PyPI, with certificate verification and hostname checking on, against Alpine's CA bundle; exploiting the gap needs an attacker who holds a key chaining to a compromised intermediate and sits on the path between the runner and pypi.org, and what it would get is the ability to answer pip's requests with its own bytes, which is the case the bounded-input context already treats as the one input channel. It does not touch the repository's source or the token: twine uploads the token to PyPI's own endpoint, whose certificate chain is not one of the denylisted ones. The severity is a scanner's reading of a missing hardening list, not a memory-safety flaw. The review is a month out on purpose: at the next one, check the Alpine python-3.13 package for a release past 3.13.14-r3 and repin instead of renewing. Re-argue if the preset starts talking TLS to hosts other than the pinned index."
+  references = []
+
+[[decisions]]
+  id = "dhi-python-cve-2026-19445"
+  repository = "dhi.io/python"
+  model = "tool-features-unused"
+  capabilities = ["publishing-credential"]
+  treatment = "accepted-risk"
+  reviewed = "2026-11-19"
+  review_by = "2026-12-18"
+  reason = "CVE-2026-19445 (CRITICAL, python-3.13 3.13.14-r3, EPSS 0.00524, not in KEV, first carried in the 2026-11-19 scan; Grype's fix state is unknown, Trivy lists nothing): a remote, unauthenticated TLS client can crash a Python TLS server, or make it call through a freed pointer, when the server's sni_callback assigns a different ssl.SSLContext to SSLSocket.context and nothing else keeps the original context alive. It is a server-side flaw: it needs a Python process that listens, wraps accepted sockets in an SSLContext that has an sni_callback, and answers a stranger's ClientHello. Nothing in this container listens, and no preset runs a TLS server: pip, twine, pytest, python-build and pip-audit are TLS clients, and an SSLContext with an sni_callback is never constructed by any of them. A client has no ClientHello to receive, so the freed pointer is never reached. The review is a month out on purpose: at the next one, check the Alpine python-3.13 package for a release past 3.13.14-r3 and repin instead of renewing. Re-argue if a preset starts a server in this image."
+  references = []
+
+[[decisions]]
+  id = "dhi-python-tls-client-and-sqlite-not-reached"
+  repository = "dhi.io/python"
   model = "inert-package"
   capabilities = ["publishing-credential"]
   treatment = "accepted-risk"
-  reviewed = "2026-09-30"
-  review_by = "2026-11-18"
-  reason = "gh is static; the image's OpenSSL is linked by nothing the preset runs (git is present and used locally only). No fix at any version. Added 2026-09-30, on the same footing: zlib (CVE-2026-85091): a heap overflow in the gzFile write path (gzprintf or gzwrite after a stalled non-blocking write); the tools here reach zlib through inflate and deflate, and none writes through gzFile on a non-blocking descriptor. pcre2 (CVE-2026-89157, -89161): the first is 32-bit only (cidx runs on 64-bit hosts), the second needs an application to hand pcre2_jit_match a copied subject as its match context, an API misuse the tools here do not commit. c-ares (CVE-2026-69184): CPU and memory exhaustion by a hostile DNS server; it is reached only through curl or node's dns.resolve*, which no preset here uses, and the attacker would have to control the runner's resolver. All are HIGH or CRITICAL with no fix at any version, EPSS at most 0.007, none in KEV (audit run 36565600041, 2026-09-29). Checked against the commands these presets run; re-argue if they start running the affected tool."
+  reviewed = "2026-11-19"
+  review_by = "2026-12-18"
+  reason = "Re-read 2026-11-19 against the scan of dhi.io/python:3.13.14-alpine-dev, finding by finding; all five are HIGH, none is in KEV, EPSS at most 0.016, and neither scanner reports a fixed version (Grype: unknown for four, none for CVE-2026-119586; Trivy lists none). CVE-2026-19553 (python-3.13): ssl.SSLContext.wrap_bio() did not insist on server_hostname when check_hostname is set, so a program that uses the BIO interface without a hostname verifies the certificate chain but silently skips the hostname check. The flaw is in a program's own use of wrap_bio; pip and twine reach TLS through urllib3, which calls wrap_socket with the server_hostname it has, and no preset here writes a wrap_bio call. sqlite-libs 3.53.2-r0: CVE-2026-119373 (a heap overflow in FTS5 prefix queries over detail=none tables with negative rowids), CVE-2026-119374 (FTS5 secure-delete over a crafted index) and CVE-2026-119379 (sqlite3changeset_apply on a crafted changeset) each need a program that opens a database file or applies a changeset from somebody else; CVE-2026-119586 is in the sqlite3 command-line shell's .recover command, which emits dot-commands planted in a database's schema into a script a person pipes back to the shell. The python-3.13 package links sqlite-libs for its sqlite3 module, but pip, twine, pytest, python-build and pip-audit open no SQLite database from outside the checkout, no preset runs the sqlite3 shell, and .recover is a command somebody has to type. The review is a month out on purpose, because Grype could not say whether a fix exists: at the next one, check the Alpine python-3.13 and sqlite packages for releases past 3.13.14-r3 and 3.53.2-r0 and repin instead of renewing. Re-argue if a preset starts opening databases or running the sqlite3 shell."
   references = []
 
 [[decisions]]
@@ -318,20 +341,20 @@
   model = "inert-package"
   capabilities = []
   treatment = "accepted-risk"
-  reviewed = "2026-09-30"
-  review_by = "2026-12-16"
-  reason = "The vulnerable code sits in the Alpine base layer of gitleaks's image and is not exercised by what its preset runs. pcre2 (CVE-2026-89157, -89161): the first is 32-bit only (cidx runs on 64-bit hosts), the second needs an application to hand pcre2_jit_match a copied subject as its match context, an API misuse the tools here do not commit. c-ares (CVE-2026-69184): CPU and memory exhaustion by a hostile DNS server; it is reached only through curl or node's dns.resolve*, which no preset here uses, and the attacker would have to control the runner's resolver. All are HIGH or CRITICAL with no fix at any version, EPSS at most 0.007, none in KEV (audit run 36565600041, 2026-09-29). Checked against the commands these presets run; re-argue if they start running the affected tool."
+  reviewed = "2026-11-19"
+  review_by = "2026-12-18"
+  reason = "Re-read 2026-11-19 against the scan of zricethezav/gitleaks:v8.30.1, the newest release. The one member left is c-ares CVE-2026-69184 (1.34.6-r0, HIGH, EPSS 0.00479, not in KEV): CPU and memory exhaustion by a hostile DNS server. Grype records its fix state as unknown and Trivy lists nothing for it. It is reached only through curl or node's dns.resolve*, which the gitleaks preset does not use (gitleaks is a Go program with its own resolver), and the attacker would have to control the runner's resolver. The decision this one replaces also carried pcre2 CVE-2026-89157 and -89161 and openssl CVE-2026-14456: all three now have a fix in the distribution (pcre2 10.46-r1, libcrypto3 and libssl3 3.5.8-r0), so they are a repin and not a decision, and left the file. The review is a month out on purpose: the images of this batch with a newer Alpine no longer report CVE-2026-69184, which suggests a fix exists in the distribution; at the next review, if gitleaks has been rebuilt, repin instead of renewing, and if a fixed c-ares is confirmed and no release carries it, argue it as fix-unreleased."
   references = []
 
 [[decisions]]
-  id = "golangci-lint-alpine-libraries-not-reached"
+  id = "golangci-lint-binutils-not-reached"
   repository = "golangci/golangci-lint"
   model = "inert-package"
   capabilities = []
   treatment = "accepted-risk"
-  reviewed = "2026-09-30"
-  review_by = "2026-12-16"
-  reason = "The vulnerable code sits in the Alpine base layer of golangci-lint's image and is not exercised by what its preset runs. zlib (CVE-2026-85091): a heap overflow in the gzFile write path (gzprintf or gzwrite after a stalled non-blocking write); the tools here reach zlib through inflate and deflate, and none writes through gzFile on a non-blocking descriptor. pcre2 (CVE-2026-89157, -89161): the first is 32-bit only (cidx runs on 64-bit hosts), the second needs an application to hand pcre2_jit_match a copied subject as its match context, an API misuse the tools here do not commit. c-ares (CVE-2026-69184): CPU and memory exhaustion by a hostile DNS server; it is reached only through curl or node's dns.resolve*, which no preset here uses, and the attacker would have to control the runner's resolver. python3 (CVE-2026-82049, a tarfile hard-link-to-symlink extraction flaw) is in the image but no preset here runs it. All are HIGH or CRITICAL with no fix at any version, EPSS at most 0.007, none in KEV (audit run 36565600041, 2026-09-29). Checked against the commands these presets run; re-argue if they start running the affected tool."
+  reviewed = "2026-11-19"
+  review_by = "2027-02-17"
+  reason = "Re-read 2026-11-19 against the scan of golangci/golangci-lint:v2.15.0-alpine (binutils 2.45.1-r1), member by member; all five are HIGH, Grype reports no fix at any version (Trivy lists none of them), EPSS at most 0.006, none in KEV. The decision this one replaces also carried zlib CVE-2026-85091, pcre2 CVE-2026-89157 and -89161, c-ares CVE-2026-69184, python3 CVE-2026-82049 and openssl CVE-2026-14456, and the legacy entries CVE-2026-3298, -4224 and -9669: this image no longer carries any of them, so they left the file with it. The five are flaws in binutils programs and the BFD library: readelf (CVE-2025-69649 and -69650 are non-terminating output loops on crafted DWARF .debug_rnglists and .debug_loclists data; CVE-2026-6846 is a denial of service in readelf on a crafted ELF) and the BFD linker's XCOFF reader (CVE-2026-3441 and -3442, heap out-of-bounds reads when a crafted XCOFF object is linked). Each needs someone to run readelf or the linker on a hostile file. The preset runs golangci-lint, which reads the repository's Go sources and runs no binutils program; cgo linking, which would reach ld, is performed by the go command on the repository's own objects, and XCOFF is AIX's format, never produced on Linux. Re-argue if the preset starts running a binutils tool."
   references = []
 
 [[decisions]]
@@ -340,20 +363,20 @@
   model = "inert-package"
   capabilities = ["docker-socket", "publishing-credential"]
   treatment = "accepted-risk"
-  reviewed = "2026-09-30"
-  review_by = "2026-11-18"
-  reason = "goreleaser and the buildx plugin are static: the image's OpenSSL and binutils are not in their process (binutils is only reached by a cgo build the project chose). The docker/docker CVEs are daemon-side handlers reported against the client library the buildx plugin vendors; the daemon is the host's, through the socket. No fix at any version. Added 2026-09-30, on the same footing: zlib (CVE-2026-85091): a heap overflow in the gzFile write path (gzprintf or gzwrite after a stalled non-blocking write); the tools here reach zlib through inflate and deflate, and none writes through gzFile on a non-blocking descriptor. pcre2 (CVE-2026-89157, -89161): the first is 32-bit only (cidx runs on 64-bit hosts), the second needs an application to hand pcre2_jit_match a copied subject as its match context, an API misuse the tools here do not commit. c-ares (CVE-2026-69184): CPU and memory exhaustion by a hostile DNS server; it is reached only through curl or node's dns.resolve*, which no preset here uses, and the attacker would have to control the runner's resolver. docker/docker (GO-2026-4887): an AuthZ-plugin bypass on oversized request bodies, daemon-side code in the client library vendored here; the daemon is the host's. All are HIGH or CRITICAL with no fix at any version, EPSS at most 0.007, none in KEV (audit run 36565600041, 2026-09-29). Checked against the commands these presets run; re-argue if they start running the affected tool."
+  reviewed = "2026-11-19"
+  review_by = "2027-01-18"
+  reason = "goreleaser and the buildx plugin are Go programs: the image's binutils is not in their process, and the image's OpenSSL is linked by nothing the preset runs. Re-read 2026-11-19 against the scan of goreleaser/goreleaser:v2.20.2, member by member; every one is HIGH, none is in KEV, and neither scanner reports a fix for any of them. The decision this one replaces also carried openssl CVE-2026-14456, zlib CVE-2026-85091, pcre2 CVE-2026-89157 and -89161 and c-ares CVE-2026-69184: this image no longer carries any of the five, so they left the file with it. binutils 2.45.1-r1 (EPSS at most 0.006): CVE-2025-69649 and -69650 are non-terminating output loops in readelf on crafted DWARF .debug_rnglists and .debug_loclists data, CVE-2026-6846 is a denial of service in readelf on a crafted ELF, and CVE-2026-3441 and -3442 are heap out-of-bounds reads in the BFD linker's XCOFF reader; each needs a person to run readelf or ld on a hostile file, no preset here does, and XCOFF is AIX's object format, which a Linux cgo build never produces. github.com/docker/docker v28.5.2+incompatible, vendored by the buildx plugin: CVE-2026-41567 (code execution through a malicious image and a compressed archive upload) and CVE-2026-42306 (a race in docker cp's mount setup letting a malicious container redirect a bind mount to a host path) are handlers of the Docker daemon, reported against the Go module that also holds the engine's code. The advisories say the fix is in Docker Engine 29.5.1, a daemon release; no version of the client module the plugin vendors is named as fixed, and the daemon this preset talks to is the host's, through the socket, not code in this image. They need a container started with attacker-chosen content, and the preset starts none. GO-2026-4887 (CVE-2026-34040, an AuthZ-plugin bypass on oversized request bodies) is the same kind of daemon-side handler, and is argued on its own because its EPSS is 0.09469, far above the 0.007 of the rest of this decision and above 95% of the catalogue (below 0.02): no AuthZ plugin runs in this image and the daemon whose plugin chain it would bypass is the host's. That score is why this review is two months and not three: at the next one, check whether goreleaser/goreleaser has been rebuilt with a buildx plugin that vendors a fixed docker module and repin instead of renewing. Re-argue if the preset starts running a daemon or a binutils tool."
   references = []
 
 [[decisions]]
-  id = "gosec-alpine-libraries-not-reached"
+  id = "gosec-binutils-not-reached"
   repository = "ghcr.io/securego/gosec"
   model = "inert-package"
   capabilities = []
   treatment = "accepted-risk"
-  reviewed = "2026-09-30"
-  review_by = "2026-12-16"
-  reason = "The vulnerable code sits in the Alpine base layer of gosec's image and is not exercised by what its preset runs. zlib (CVE-2026-85091): a heap overflow in the gzFile write path (gzprintf or gzwrite after a stalled non-blocking write); the tools here reach zlib through inflate and deflate, and none writes through gzFile on a non-blocking descriptor. pcre2 (CVE-2026-89157, -89161): the first is 32-bit only (cidx runs on 64-bit hosts), the second needs an application to hand pcre2_jit_match a copied subject as its match context, an API misuse the tools here do not commit. All are HIGH or CRITICAL with no fix at any version, EPSS at most 0.007, none in KEV (audit run 36565600041, 2026-09-29). Checked against the commands these presets run; re-argue if they start running the affected tool."
+  reviewed = "2026-11-19"
+  review_by = "2027-02-17"
+  reason = "Re-read 2026-11-19 against the scan of ghcr.io/securego/gosec:2.30.0 (binutils 2.45.1-r1), member by member; all five are HIGH, Grype reports no fix at any version (Trivy lists none of them), EPSS at most 0.006, none in KEV. The decision this one replaces also carried zlib CVE-2026-85091, pcre2 CVE-2026-89157 and -89161 and openssl CVE-2026-14456: this image no longer carries any of the four, so they left the file with it. The five are flaws in binutils programs and the BFD library: readelf (CVE-2025-69649 and -69650 are non-terminating output loops on crafted DWARF .debug_rnglists and .debug_loclists data; CVE-2026-6846 is a denial of service in readelf on a crafted ELF) and the BFD linker's XCOFF reader (CVE-2026-3441 and -3442, heap out-of-bounds reads when a crafted XCOFF object is linked). Each needs someone to run readelf or the linker on a hostile file. The preset runs gosec, which parses the repository's Go sources through go/parser and go/types, opens no binary and executes none of binutils' programs; the image carries binutils because the Go toolchain image it is built on does. Re-argue if the preset starts running a binutils tool."
   references = []
 
 [[decisions]]
@@ -417,25 +440,36 @@
   references = []
 
 [[decisions]]
-  id = "prettier-alpine-runtime-and-libraries-not-reached"
+  id = "golangci-lint-sqlite-not-reached"
+  repository = "golangci/golangci-lint"
+  model = "inert-package"
+  capabilities = []
+  treatment = "accepted-risk"
+  reviewed = "2026-11-19"
+  review_by = "2026-12-18"
+  reason = "Re-read 2026-11-19 against the scan of golangci/golangci-lint:v2.15.0-alpine, finding by finding; all four are HIGH on sqlite-libs 3.53.4-r0, none is in KEV, EPSS at most 0.016, and neither scanner reports a fixed version (Grype: unknown for CVE-2026-119373, -119374 and -119379, none for CVE-2026-119586; Trivy lists none). CVE-2026-119373 (a heap overflow in FTS5 prefix queries over detail=none tables with negative rowids), CVE-2026-119374 (FTS5 secure-delete over a crafted index) and CVE-2026-119379 (sqlite3changeset_apply on a crafted changeset) each need a program that opens a database file, or applies a changeset, that somebody else supplied. CVE-2026-119586 is in the sqlite3 shell's .recover command, which emits dot-commands planted in a database's schema into a script a person pipes back to the shell: it needs the shell and a typed command. The preset runs golangci-lint over the repository's Go sources and opens no database; the image runs no sqlite3 shell. Grype could not say whether a fix exists, so the review is a month out: at the next one, check the Alpine sqlite package for a release past 3.53.4-r0 and repin instead of renewing. Re-argue if the preset starts opening databases."
+  references = []
+
+[[decisions]]
+  id = "goreleaser-sqlite-and-python-not-reached"
+  repository = "goreleaser/goreleaser"
+  model = "inert-package"
+  capabilities = ["docker-socket", "publishing-credential"]
+  treatment = "accepted-risk"
+  reviewed = "2026-11-19"
+  review_by = "2026-12-18"
+  reason = "Re-read 2026-11-19 against the scan of goreleaser/goreleaser:v2.20.2, finding by finding; all five are HIGH, none is in KEV, EPSS at most 0.016, and neither scanner reports a fixed version (Grype: unknown for four, none for CVE-2026-119586; Trivy lists none). sqlite-libs 3.53.4-r0: CVE-2026-119373 (a heap overflow in FTS5 prefix queries over detail=none tables with negative rowids), CVE-2026-119374 (FTS5 secure-delete over a crafted index) and CVE-2026-119379 (sqlite3changeset_apply on a crafted changeset) each need a program that opens a database file, or applies a changeset, that somebody else supplied; CVE-2026-119586 is in the sqlite3 shell's .recover command, which needs the shell and a typed command. goreleaser, the buildx plugin and git open no SQLite database, and the image runs no sqlite3 shell. python3 3.14.10-r1, CVE-2026-119170: a regression in how FIPS algorithms are enforced by hashlib, which only affects users running OpenSSL in FIPS mode, and only Python 3.14.10; the image's OpenSSL is not configured for FIPS and no preset here runs python3 at all. Grype could not say whether a fix exists, so the review is a month out: at the next one, check the Alpine sqlite and python3 packages for newer releases and repin instead of renewing. Re-argue if the preset starts opening databases or running python3."
+  references = []
+
+[[decisions]]
+  id = "prettier-sqlite-not-reached"
   repository = "jauderho/prettier"
   model = "inert-package"
   capabilities = []
   treatment = "accepted-risk"
-  reviewed = "2026-09-30"
-  review_by = "2026-12-16"
-  reason = "The vulnerable code sits in the Alpine base layer and node runtime of prettier's image and is not exercised by what its preset runs. zlib (CVE-2026-85091): a heap overflow in the gzFile write path (gzprintf or gzwrite after a stalled non-blocking write); the tools here reach zlib through inflate and deflate, and none writes through gzFile on a non-blocking descriptor. nodejs (CVE-2026-48617): a Permission Model bypass, which only matters when node runs with --permission as a security boundary; prettier does not. All are HIGH or CRITICAL with no fix at any version, EPSS at most 0.007, none in KEV (audit run 36565600041, 2026-09-29). Checked against the commands these presets run; re-argue if they start running the affected tool."
-  references = []
-
-[[decisions]]
-  id = "probatum-alpine-libraries-not-reached"
-  repository = "ghcr.io/probatum-org/probatum"
-  model = "inert-package"
-  capabilities = []
-  treatment = "accepted-risk"
-  reviewed = "2026-09-30"
-  review_by = "2026-12-16"
-  reason = "The vulnerable code sits in the Alpine base layer of probatum's image and is not exercised by what its preset runs. zlib (CVE-2026-85091): a heap overflow in the gzFile write path (gzprintf or gzwrite after a stalled non-blocking write); the tools here reach zlib through inflate and deflate, and none writes through gzFile on a non-blocking descriptor. All are HIGH or CRITICAL with no fix at any version, EPSS at most 0.007, none in KEV (audit run 36565600041, 2026-09-29). Checked against the commands these presets run; re-argue if they start running the affected tool."
+  reviewed = "2026-11-19"
+  review_by = "2026-12-18"
+  reason = "Re-read 2026-11-19 against the scan of jauderho/prettier:3.10.1, finding by finding; all four are HIGH on sqlite-libs 3.53.4-r0, none is in KEV, EPSS at most 0.016, and neither scanner reports a fixed version (Grype: unknown for CVE-2026-119373, -119374 and -119379, none for CVE-2026-119586; Trivy lists none). CVE-2026-119373 (a heap overflow in FTS5 prefix queries over detail=none tables with negative rowids), CVE-2026-119374 (FTS5 secure-delete over a crafted index) and CVE-2026-119379 (sqlite3changeset_apply on a crafted changeset) each need a program that opens a database file, or applies a changeset, that somebody else supplied. CVE-2026-119586 is in the sqlite3 shell's .recover command, which needs the shell and a typed command. The preset runs prettier over the repository's own files; prettier is a JavaScript program that loads no SQLite library and opens no database, and the image runs no sqlite3 shell. Grype could not say whether a fix exists, so the review is a month out: at the next one, check the Alpine sqlite package for a release past 3.53.4-r0 and repin instead of renewing. Re-argue if the preset starts opening databases."
   references = []
 
 [[decisions]]
@@ -1147,151 +1181,81 @@
   repository = "commitizen/commitizen"
   first_seen = "commitizen/commitizen:4.16.5"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "commitizen-binutils-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2025-69650"
   repository = "commitizen/commitizen"
   first_seen = "commitizen/commitizen:4.16.5"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "commitizen-binutils-not-reached"
 
 [[vulnerabilities]]
-  cve = "CVE-2026-14456"
+  cve = "CVE-2026-119373"
   repository = "commitizen/commitizen"
-  first_seen = "commitizen/commitizen:4.16.5"
+  first_seen = "commitizen/commitizen:4.19.3"
   severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
+  added = "2026-11-19"
   references = []
+  decision = "commitizen-sqlite-not-reached"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-119374"
+  repository = "commitizen/commitizen"
+  first_seen = "commitizen/commitizen:4.19.3"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "commitizen-sqlite-not-reached"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-119379"
+  repository = "commitizen/commitizen"
+  first_seen = "commitizen/commitizen:4.19.3"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "commitizen-sqlite-not-reached"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-119586"
+  repository = "commitizen/commitizen"
+  first_seen = "commitizen/commitizen:4.19.3"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "commitizen-sqlite-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-3441"
   repository = "commitizen/commitizen"
   first_seen = "commitizen/commitizen:4.16.5"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "commitizen-binutils-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-3442"
   repository = "commitizen/commitizen"
   first_seen = "commitizen/commitizen:4.16.5"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "commitizen-binutils-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-6846"
   repository = "commitizen/commitizen"
   first_seen = "commitizen/commitizen:4.16.5"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-85091"
-  repository = "commitizen/commitizen"
-  first_seen = "commitizen/commitizen:4.16.5"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "commitizen-alpine-libraries-not-reached"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-89157"
-  repository = "commitizen/commitizen"
-  first_seen = "commitizen/commitizen:4.16.5"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "commitizen-alpine-libraries-not-reached"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-89161"
-  repository = "commitizen/commitizen"
-  first_seen = "commitizen/commitizen:4.16.5"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "commitizen-alpine-libraries-not-reached"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-14456"
-  repository = "commitlint/commitlint"
-  first_seen = "commitlint/commitlint:21.2.1"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-69184"
-  repository = "commitlint/commitlint"
-  first_seen = "commitlint/commitlint:21.2.1"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "commitlint-alpine-libraries-not-reached"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-85091"
-  repository = "commitlint/commitlint"
-  first_seen = "commitlint/commitlint:21.2.1"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "commitlint-alpine-libraries-not-reached"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-89157"
-  repository = "commitlint/commitlint"
-  first_seen = "commitlint/commitlint:21.2.1"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "commitlint-alpine-libraries-not-reached"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-89161"
-  repository = "commitlint/commitlint"
-  first_seen = "commitlint/commitlint:21.2.1"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "commitlint-alpine-libraries-not-reached"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-14456"
-  repository = "dhi.io/alpine-base"
-  first_seen = "dhi.io/alpine-base:3.24"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
+  decision = "commitizen-binutils-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-102010"
@@ -1402,64 +1366,67 @@
   decision = "dhi-docker-cli-client-plugins"
 
 [[vulnerabilities]]
-  cve = "CVE-2026-14456"
-  repository = "dhi.io/golang"
-  first_seen = "dhi.io/golang:1.26.5-alpine-dev"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
-
-[[vulnerabilities]]
   cve = "CVE-2026-3441"
   repository = "dhi.io/golang"
   first_seen = "dhi.io/golang:1.26.5-alpine-dev"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "dhi-golang-binutils-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-3442"
   repository = "dhi.io/golang"
   first_seen = "dhi.io/golang:1.26.5-alpine-dev"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "dhi-golang-binutils-not-reached"
 
 [[vulnerabilities]]
-  cve = "CVE-2026-85091"
-  repository = "dhi.io/golang"
-  first_seen = "dhi.io/golang:1.26.5-alpine-dev"
-  severity = "HIGH"
-  added = "2026-09-30"
+  cve = "CVE-2026-115557"
+  repository = "dhi.io/python"
+  first_seen = "dhi.io/python:3.13.14-alpine-dev"
+  severity = "CRITICAL"
+  added = "2026-11-19"
   references = []
-  decision = "dhi-golang-alpine-libraries-not-reached"
+  decision = "dhi-python-cve-2026-115557"
 
 [[vulnerabilities]]
-  cve = "CVE-2026-89157"
-  repository = "dhi.io/golang"
-  first_seen = "dhi.io/golang:1.26.5-alpine-dev"
+  cve = "CVE-2026-119373"
+  repository = "dhi.io/python"
+  first_seen = "dhi.io/python:3.13.14-alpine-dev"
   severity = "HIGH"
-  added = "2026-09-30"
+  added = "2026-11-19"
   references = []
-  decision = "dhi-golang-alpine-libraries-not-reached"
+  decision = "dhi-python-tls-client-and-sqlite-not-reached"
 
 [[vulnerabilities]]
-  cve = "CVE-2026-89161"
-  repository = "dhi.io/golang"
-  first_seen = "dhi.io/golang:1.26.5-alpine-dev"
+  cve = "CVE-2026-119374"
+  repository = "dhi.io/python"
+  first_seen = "dhi.io/python:3.13.14-alpine-dev"
   severity = "HIGH"
-  added = "2026-09-30"
+  added = "2026-11-19"
   references = []
-  decision = "dhi-golang-alpine-libraries-not-reached"
+  decision = "dhi-python-tls-client-and-sqlite-not-reached"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-119379"
+  repository = "dhi.io/python"
+  first_seen = "dhi.io/python:3.13.14-alpine-dev"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "dhi-python-tls-client-and-sqlite-not-reached"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-119586"
+  repository = "dhi.io/python"
+  first_seen = "dhi.io/python:3.13.14-alpine-dev"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "dhi-python-tls-client-and-sqlite-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-11940"
@@ -1480,15 +1447,6 @@
   decision = "dhi-python-interpreter-bounded-input"
 
 [[vulnerabilities]]
-  cve = "CVE-2026-14456"
-  repository = "dhi.io/python"
-  first_seen = "dhi.io/python:3.13.14-alpine-dev"
-  severity = "HIGH"
-  added = "2026-08-20"
-  references = []
-  decision = "dhi-python-libraries-not-reached"
-
-[[vulnerabilities]]
   cve = "CVE-2026-15308"
   repository = "dhi.io/python"
   first_seen = "dhi.io/python:3.13.14-alpine-dev"
@@ -1498,13 +1456,31 @@
   decision = "dhi-python-interpreter-bounded-input"
 
 [[vulnerabilities]]
+  cve = "CVE-2026-19445"
+  repository = "dhi.io/python"
+  first_seen = "dhi.io/python:3.13.14-alpine-dev"
+  severity = "CRITICAL"
+  added = "2026-11-19"
+  references = []
+  decision = "dhi-python-cve-2026-19445"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-19553"
+  repository = "dhi.io/python"
+  first_seen = "dhi.io/python:3.13.14-alpine-dev"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "dhi-python-tls-client-and-sqlite-not-reached"
+
+[[vulnerabilities]]
   cve = "CVE-2026-3441"
   repository = "dhi.io/python"
   first_seen = "dhi.io/python:3.13.14-alpine-dev"
   severity = "HIGH"
   added = "2026-08-20"
   references = []
-  decision = "dhi-python-libraries-not-reached"
+  decision = "dhi-python-binutils-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-3442"
@@ -1513,7 +1489,7 @@
   severity = "HIGH"
   added = "2026-08-20"
   references = []
-  decision = "dhi-python-libraries-not-reached"
+  decision = "dhi-python-binutils-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-82049"
@@ -1523,15 +1499,6 @@
   added = "2026-09-30"
   references = []
   decision = "dhi-python-interpreter-bounded-input"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-85091"
-  repository = "dhi.io/python"
-  first_seen = "dhi.io/python:3.13.14-alpine-dev"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "dhi-python-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2024-25621"
@@ -1651,261 +1618,130 @@
   decision = "ansible-dev-tools-kubectl-vendored-libraries"
 
 [[vulnerabilities]]
-  cve = "CVE-2026-14456"
-  repository = "ghcr.io/probatum-org/probatum"
-  first_seen = "ghcr.io/probatum-org/probatum:0.8.0"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-85091"
-  repository = "ghcr.io/probatum-org/probatum"
-  first_seen = "ghcr.io/probatum-org/probatum:0.8.0"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "probatum-alpine-libraries-not-reached"
-
-[[vulnerabilities]]
   cve = "CVE-2025-69649"
   repository = "ghcr.io/securego/gosec"
   first_seen = "ghcr.io/securego/gosec:2.28.0"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "gosec-binutils-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2025-69650"
   repository = "ghcr.io/securego/gosec"
   first_seen = "ghcr.io/securego/gosec:2.28.0"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-14456"
-  repository = "ghcr.io/securego/gosec"
-  first_seen = "ghcr.io/securego/gosec:2.28.0"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
+  decision = "gosec-binutils-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-3441"
   repository = "ghcr.io/securego/gosec"
   first_seen = "ghcr.io/securego/gosec:2.28.0"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "gosec-binutils-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-3442"
   repository = "ghcr.io/securego/gosec"
   first_seen = "ghcr.io/securego/gosec:2.28.0"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "gosec-binutils-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-6846"
   repository = "ghcr.io/securego/gosec"
   first_seen = "ghcr.io/securego/gosec:2.28.0"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-85091"
-  repository = "ghcr.io/securego/gosec"
-  first_seen = "ghcr.io/securego/gosec:2.28.0"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "gosec-alpine-libraries-not-reached"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-89157"
-  repository = "ghcr.io/securego/gosec"
-  first_seen = "ghcr.io/securego/gosec:2.28.0"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "gosec-alpine-libraries-not-reached"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-89161"
-  repository = "ghcr.io/securego/gosec"
-  first_seen = "ghcr.io/securego/gosec:2.28.0"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "gosec-alpine-libraries-not-reached"
+  decision = "gosec-binutils-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2025-69649"
   repository = "golangci/golangci-lint"
   first_seen = "golangci/golangci-lint:v2.12.2-alpine"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "golangci-lint-binutils-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2025-69650"
   repository = "golangci/golangci-lint"
   first_seen = "golangci/golangci-lint:v2.12.2-alpine"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "golangci-lint-binutils-not-reached"
 
 [[vulnerabilities]]
-  cve = "CVE-2026-14456"
+  cve = "CVE-2026-119373"
   repository = "golangci/golangci-lint"
-  first_seen = "golangci/golangci-lint:v2.12.2-alpine"
+  first_seen = "golangci/golangci-lint:v2.15.0-alpine"
   severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
+  added = "2026-11-19"
   references = []
+  decision = "golangci-lint-sqlite-not-reached"
 
 [[vulnerabilities]]
-  cve = "CVE-2026-3298"
+  cve = "CVE-2026-119374"
   repository = "golangci/golangci-lint"
-  first_seen = "golangci/golangci-lint:v2.12.2-alpine"
+  first_seen = "golangci/golangci-lint:v2.15.0-alpine"
   severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
+  added = "2026-11-19"
   references = []
+  decision = "golangci-lint-sqlite-not-reached"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-119379"
+  repository = "golangci/golangci-lint"
+  first_seen = "golangci/golangci-lint:v2.15.0-alpine"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "golangci-lint-sqlite-not-reached"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-119586"
+  repository = "golangci/golangci-lint"
+  first_seen = "golangci/golangci-lint:v2.15.0-alpine"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "golangci-lint-sqlite-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-3441"
   repository = "golangci/golangci-lint"
   first_seen = "golangci/golangci-lint:v2.12.2-alpine"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "golangci-lint-binutils-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-3442"
   repository = "golangci/golangci-lint"
   first_seen = "golangci/golangci-lint:v2.12.2-alpine"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-4224"
-  repository = "golangci/golangci-lint"
-  first_seen = "golangci/golangci-lint:v2.12.2-alpine"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
+  decision = "golangci-lint-binutils-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-6846"
   repository = "golangci/golangci-lint"
   first_seen = "golangci/golangci-lint:v2.12.2-alpine"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-69184"
-  repository = "golangci/golangci-lint"
-  first_seen = "golangci/golangci-lint:v2.12.2-alpine"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "golangci-lint-alpine-libraries-not-reached"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-82049"
-  repository = "golangci/golangci-lint"
-  first_seen = "golangci/golangci-lint:v2.12.2-alpine"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "golangci-lint-alpine-libraries-not-reached"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-85091"
-  repository = "golangci/golangci-lint"
-  first_seen = "golangci/golangci-lint:v2.12.2-alpine"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "golangci-lint-alpine-libraries-not-reached"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-89157"
-  repository = "golangci/golangci-lint"
-  first_seen = "golangci/golangci-lint:v2.12.2-alpine"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "golangci-lint-alpine-libraries-not-reached"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-89161"
-  repository = "golangci/golangci-lint"
-  first_seen = "golangci/golangci-lint:v2.12.2-alpine"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "golangci-lint-alpine-libraries-not-reached"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-9669"
-  repository = "golangci/golangci-lint"
-  first_seen = "golangci/golangci-lint:v2.12.2-alpine"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
+  decision = "golangci-lint-binutils-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2025-69649"
@@ -1926,13 +1762,49 @@
   decision = "goreleaser-static-binaries-and-client-plugin"
 
 [[vulnerabilities]]
-  cve = "CVE-2026-14456"
+  cve = "CVE-2026-119170"
   repository = "goreleaser/goreleaser"
-  first_seen = "goreleaser/goreleaser:v2.17.0"
+  first_seen = "goreleaser/goreleaser:v2.20.2"
   severity = "HIGH"
-  added = "2026-08-20"
+  added = "2026-11-19"
   references = []
-  decision = "goreleaser-static-binaries-and-client-plugin"
+  decision = "goreleaser-sqlite-and-python-not-reached"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-119373"
+  repository = "goreleaser/goreleaser"
+  first_seen = "goreleaser/goreleaser:v2.20.2"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "goreleaser-sqlite-and-python-not-reached"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-119374"
+  repository = "goreleaser/goreleaser"
+  first_seen = "goreleaser/goreleaser:v2.20.2"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "goreleaser-sqlite-and-python-not-reached"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-119379"
+  repository = "goreleaser/goreleaser"
+  first_seen = "goreleaser/goreleaser:v2.20.2"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "goreleaser-sqlite-and-python-not-reached"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-119586"
+  repository = "goreleaser/goreleaser"
+  first_seen = "goreleaser/goreleaser:v2.20.2"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "goreleaser-sqlite-and-python-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-3441"
@@ -1980,42 +1852,6 @@
   decision = "goreleaser-static-binaries-and-client-plugin"
 
 [[vulnerabilities]]
-  cve = "CVE-2026-69184"
-  repository = "goreleaser/goreleaser"
-  first_seen = "goreleaser/goreleaser:v2.17.0"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "goreleaser-static-binaries-and-client-plugin"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-85091"
-  repository = "goreleaser/goreleaser"
-  first_seen = "goreleaser/goreleaser:v2.17.0"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "goreleaser-static-binaries-and-client-plugin"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-89157"
-  repository = "goreleaser/goreleaser"
-  first_seen = "goreleaser/goreleaser:v2.17.0"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "goreleaser-static-binaries-and-client-plugin"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-89161"
-  repository = "goreleaser/goreleaser"
-  first_seen = "goreleaser/goreleaser:v2.17.0"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "goreleaser-static-binaries-and-client-plugin"
-
-[[vulnerabilities]]
   cve = "GO-2026-4887"
   repository = "goreleaser/goreleaser"
   first_seen = "goreleaser/goreleaser:v2.17.0"
@@ -2025,144 +1861,40 @@
   decision = "goreleaser-static-binaries-and-client-plugin"
 
 [[vulnerabilities]]
-  cve = "CVE-2026-14456"
+  cve = "CVE-2026-119373"
   repository = "jauderho/prettier"
-  first_seen = "jauderho/prettier:3.9.4"
+  first_seen = "jauderho/prettier:3.10.1"
   severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
+  added = "2026-11-19"
   references = []
+  decision = "prettier-sqlite-not-reached"
 
 [[vulnerabilities]]
-  cve = "CVE-2026-48615"
+  cve = "CVE-2026-119374"
   repository = "jauderho/prettier"
-  first_seen = "jauderho/prettier:3.9.4"
+  first_seen = "jauderho/prettier:3.10.1"
   severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
+  added = "2026-11-19"
   references = []
+  decision = "prettier-sqlite-not-reached"
 
 [[vulnerabilities]]
-  cve = "CVE-2026-48617"
+  cve = "CVE-2026-119379"
   repository = "jauderho/prettier"
-  first_seen = "jauderho/prettier:3.9.4"
+  first_seen = "jauderho/prettier:3.10.1"
   severity = "HIGH"
-  added = "2026-09-30"
+  added = "2026-11-19"
   references = []
-  decision = "prettier-alpine-runtime-and-libraries-not-reached"
+  decision = "prettier-sqlite-not-reached"
 
 [[vulnerabilities]]
-  cve = "CVE-2026-48619"
+  cve = "CVE-2026-119586"
   repository = "jauderho/prettier"
-  first_seen = "jauderho/prettier:3.9.4"
+  first_seen = "jauderho/prettier:3.10.1"
   severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
+  added = "2026-11-19"
   references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-48930"
-  repository = "jauderho/prettier"
-  first_seen = "jauderho/prettier:3.9.4"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-48933"
-  repository = "jauderho/prettier"
-  first_seen = "jauderho/prettier:3.9.4"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-56848"
-  repository = "jauderho/prettier"
-  first_seen = "jauderho/prettier:3.9.4"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-58043"
-  repository = "jauderho/prettier"
-  first_seen = "jauderho/prettier:3.9.4"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-85091"
-  repository = "jauderho/prettier"
-  first_seen = "jauderho/prettier:3.9.4"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "prettier-alpine-runtime-and-libraries-not-reached"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-14456"
-  repository = "maniator/gh"
-  first_seen = "maniator/gh:v2.95"
-  severity = "HIGH"
-  added = "2026-08-20"
-  references = []
-  decision = "gh-static-binary"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-69184"
-  repository = "maniator/gh"
-  first_seen = "maniator/gh:v2.95"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "gh-static-binary"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-85091"
-  repository = "maniator/gh"
-  first_seen = "maniator/gh:v2.95"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "gh-static-binary"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-89157"
-  repository = "maniator/gh"
-  first_seen = "maniator/gh:v2.95"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "gh-static-binary"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-89161"
-  repository = "maniator/gh"
-  first_seen = "maniator/gh:v2.95"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "gh-static-binary"
+  decision = "prettier-sqlite-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2025-69720"
@@ -2597,36 +2329,7 @@
   decision = "rust-debian-libraries-not-reached"
 
 [[vulnerabilities]]
-  cve = "CVE-2026-14456"
-  repository = "zricethezav/gitleaks"
-  first_seen = "zricethezav/gitleaks:v8.30.1"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
-
-[[vulnerabilities]]
   cve = "CVE-2026-69184"
-  repository = "zricethezav/gitleaks"
-  first_seen = "zricethezav/gitleaks:v8.30.1"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "gitleaks-alpine-libraries-not-reached"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-89157"
-  repository = "zricethezav/gitleaks"
-  first_seen = "zricethezav/gitleaks:v8.30.1"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "gitleaks-alpine-libraries-not-reached"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-89161"
   repository = "zricethezav/gitleaks"
   first_seen = "zricethezav/gitleaks:v8.30.1"
   severity = "HIGH"
