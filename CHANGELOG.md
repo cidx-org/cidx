@@ -1,3 +1,9 @@
+## v3.14.9 (2026-11-19)
+
+### Feat
+
+- **security**: `cidx run baseline` scans the catalogue (reusing the `.cidx/scan` cache) and regenerates SECURITY-BASELINE.md from the raw results of that scan, with the repository's own code, in the current directory; an incomplete scan fails the phase before any baseline is written. No pipeline lists it, and SECURITY-BASELINE.md is not regenerated in this release
+
 ## v3.14.8 (2026-11-19)
 
 ### Fix

@@ -53,6 +53,19 @@ containers = ["prettier-write"]
 [catalogue-scan]
 containers = ["catalogue-scanner"]
 
+# The baseline: `cidx run baseline` scans the catalogue (same scan, same cache in
+# .cidx/scan) and then regenerates SECURITY-BASELINE.md from the raw results of
+# that scan, with this repository's own code, in the current directory. It is the
+# one command a tool run can launch to refresh the committed file. Like `format`
+# and `catalogue-scan`, no [pipelines.*] lists it: CI never runs it, and it never
+# commits anything.
+#
+# The two steps are chained with `&&`: an incomplete scan (an image no scanner
+# answered for, or only one) makes `security scan` fail, and the baseline is not
+# written, so the file on disk is never one built on a partial measurement.
+[baseline]
+containers = ["catalogue-baseline"]
+
 # ─── container overrides ───
 [containers.trivy]
 severity = "HIGH,CRITICAL"
@@ -98,6 +111,27 @@ volumes = [
 ]
 
 [containers.catalogue-scanner.env]
+CIDX_SCAN_HOST_CACHE = "${PWD}/.cidx/scan"
+CIDX_SCAN_DOCKER_CONFIG = "${HOME}/.docker"
+
+# The baseline, as another alias of go-build with the same mounts and cache as
+# the scan above: it runs `security scan`, then `security baseline` on the raw
+# results the scan just left in .cidx/scan/results. A warm cache (databases and Go
+# caches) makes the whole phase fit in 30 minutes; the scan itself fails, and the
+# baseline with it, if an image was not fully scanned.
+[containers.catalogue-baseline]
+preset = "go-build"
+command = "sh -c 'go run ./cmd/cidx security scan && go run ./cmd/cidx security baseline --results .cidx/scan/results'"
+phase = "baseline"
+timeout = "30m"
+volumes = [
+    "${WORKSPACE}:/work",
+    "/var/run/docker.sock:/var/run/docker.sock",
+    "${WORKSPACE}/.cidx/go/mod:/tmp/go-mod-cache",
+    "${WORKSPACE}/.cidx/go/build:/tmp/go-build-cache",
+]
+
+[containers.catalogue-baseline.env]
 CIDX_SCAN_HOST_CACHE = "${PWD}/.cidx/scan"
 CIDX_SCAN_DOCKER_CONFIG = "${HOME}/.docker"
 

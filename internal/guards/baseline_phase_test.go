@@ -1,0 +1,80 @@
+package guards
+
+import (
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/cidx-org/cidx/v3/pkg/config"
+	"github.com/cidx-org/cidx/v3/pkg/presets"
+)
+
+// TestTheBaselinePhaseScansThenRegenerates pins what `cidx run baseline` is for:
+// the one command that refreshes SECURITY-BASELINE.md from a scan of the
+// catalogue, run by a tool in a working directory.
+//
+// The scan and the baseline are chained with `&&`, in that order, so an
+// incomplete scan (which fails) never reaches the generation: no false baseline
+// is written. The baseline reads the raw results of that very scan, shares its
+// cache, runs the repository's own code, and fits in 30 minutes. No pipeline
+// lists the phase.
+func TestTheBaselinePhaseScansThenRegenerates(t *testing.T) {
+	cfg, err := config.Load(filepath.Join(projectRoot, "cidx.toml"))
+	if err != nil {
+		t.Fatalf("failed to load cidx.toml: %v", err)
+	}
+
+	phase, ok := cfg.Phases["baseline"]
+	if !ok {
+		t.Fatal("cidx.toml declares no [baseline] phase, so `cidx run baseline` is an unknown target")
+	}
+	if !slices.Equal(phase.Containers, []string{"catalogue-baseline"}) {
+		t.Errorf("baseline runs %v, want [catalogue-baseline]", phase.Containers)
+	}
+
+	for name, pipeline := range cfg.Pipelines {
+		if slices.Contains(pipeline.Phases, "baseline") {
+			t.Errorf("pipeline %q lists baseline: it is run on demand, never from CI", name)
+		}
+	}
+
+	preset, overrides, err := presets.Lookup("catalogue-baseline", cfg.Overrides["catalogue-baseline"])
+	if err != nil {
+		t.Fatalf("the baseline container does not resolve: %v", err)
+	}
+	merged := preset.MergeWith(overrides)
+
+	scan := strings.Index(merged.Command, "go run ./cmd/cidx security scan")
+	baseline := strings.Index(merged.Command, "go run ./cmd/cidx security baseline")
+	if scan < 0 || baseline < 0 || scan > baseline {
+		t.Fatalf("the baseline phase runs %q, want the repository's `security scan` and then `security baseline`", merged.Command)
+	}
+	between := merged.Command[scan:baseline]
+	if !strings.HasSuffix(strings.TrimSpace(between), "&&") {
+		t.Errorf("scan and baseline are not chained with &&, so a failed scan would not stop the baseline: %q", merged.Command)
+	}
+	if !strings.Contains(merged.Command, "--results .cidx/scan/results") {
+		t.Errorf("the baseline does not read the results of the scan (.cidx/scan/results): %q", merged.Command)
+	}
+
+	if got, _ := cfg.Overrides["catalogue-baseline"]["phase"].(string); got != "baseline" {
+		t.Errorf("the container's phase is %q, want baseline", got)
+	}
+	if got, _ := cfg.Overrides["catalogue-baseline"]["timeout"].(string); got != "30m" {
+		t.Errorf("the baseline timeout is %q, want 30m", got)
+	}
+	if !slices.Contains(merged.Volumes, "/var/run/docker.sock:/var/run/docker.sock") {
+		t.Errorf("the baseline cannot start the scanners: volumes = %v", merged.Volumes)
+	}
+	if !strings.HasSuffix(merged.Env["CIDX_SCAN_HOST_CACHE"], "/.cidx/scan") {
+		t.Errorf("the baseline does not share the scan's cache (.cidx/scan): CIDX_SCAN_HOST_CACHE = %q", merged.Env["CIDX_SCAN_HOST_CACHE"])
+	}
+	for _, cache := range []string{":/tmp/go-mod-cache", ":/tmp/go-build-cache"} {
+		if !slices.ContainsFunc(merged.Volumes, func(v string) bool {
+			return strings.HasPrefix(v, "${WORKSPACE}/.cidx/") && strings.HasSuffix(v, cache)
+		}) {
+			t.Errorf("no volume keeps %s between runs", cache[1:])
+		}
+	}
+}
