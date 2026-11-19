@@ -367,10 +367,14 @@ type trivyReport struct {
 }
 
 type trivyVulnerability struct {
-	VulnerabilityID string
-	PkgName         string
-	Severity        string
-	FixedVersion    string
+	VulnerabilityID  string
+	PkgName          string
+	InstalledVersion string
+	Severity         string
+	FixedVersion     string
+	Status           string
+	Description      string
+	VendorIDs        []string
 }
 
 func parseTrivy(data []byte) (trivyReport, error) {
@@ -397,6 +401,10 @@ func trivyFindingsOf(packageType string, vulns []trivyVulnerability) []presets.F
 			PackageType: packageType,
 			FixedIn:     vuln.FixedVersion,
 			Scanner:     "Trivy",
+			Version:     vuln.InstalledVersion,
+			FixState:    vuln.Status,
+			Aliases:     strings.Join(vuln.VendorIDs, ","),
+			Description: vuln.Description,
 		})
 	}
 	return findings
@@ -450,10 +458,12 @@ type grypeReport struct {
 
 type grypeMatch struct {
 	Vulnerability struct {
-		ID       string `json:"id"`
-		Severity string `json:"severity"`
-		Fix      struct {
+		ID          string `json:"id"`
+		Severity    string `json:"severity"`
+		Description string `json:"description"`
+		Fix         struct {
 			Versions []string `json:"versions"`
+			State    string   `json:"state"`
 		} `json:"fix"`
 		EPSS []struct {
 			EPSS float64 `json:"epss"`
@@ -462,9 +472,14 @@ type grypeMatch struct {
 			CVE string `json:"cve"`
 		} `json:"kev"`
 	} `json:"vulnerability"`
+	RelatedVulnerabilities []struct {
+		ID          string `json:"id"`
+		Description string `json:"description"`
+	} `json:"relatedVulnerabilities"`
 	Artifact struct {
-		Name string `json:"name"`
-		Type string `json:"type"`
+		Name    string `json:"name"`
+		Version string `json:"version"`
+		Type    string `json:"type"`
 	} `json:"artifact"`
 }
 
@@ -491,7 +506,23 @@ func grypeFindingsOf(matches []grypeMatch) []presets.Finding {
 			PackageType: match.Artifact.Type,
 			KEV:         len(vuln.KEV) > 0,
 			Scanner:     "Grype",
+			Version:     match.Artifact.Version,
+			FixState:    vuln.Fix.State,
+			Description: vuln.Description,
 		}
+		// Grype files the advisory it matched on under `vulnerability` and the
+		// ones it maps to under `relatedVulnerabilities` — a GHSA match lists the
+		// CVE, and the description often sits on the related record only.
+		var aliases []string
+		for _, related := range match.RelatedVulnerabilities {
+			if related.ID != "" && !strings.EqualFold(related.ID, vuln.ID) {
+				aliases = append(aliases, related.ID)
+			}
+			if finding.Description == "" {
+				finding.Description = related.Description
+			}
+		}
+		finding.Aliases = strings.Join(aliases, ",")
 		if len(vuln.Fix.Versions) > 0 {
 			finding.FixedIn = vuln.Fix.Versions[0]
 		}

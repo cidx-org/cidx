@@ -21,7 +21,7 @@ func TestNoDeprecatedActionHintsInGoSources(t *testing.T) {
 			return err
 		}
 		if d.IsDir() {
-			if d.Name() == ".git" || d.Name() == "vendor" {
+			if d.Name() == ".git" || d.Name() == "vendor" || d.Name() == ".cidx" {
 				return fs.SkipDir
 			}
 			return nil

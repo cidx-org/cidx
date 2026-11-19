@@ -58,6 +58,11 @@ func securityBaselineCommand() *cli.Command {
 				Value:   defaultBaselineFile,
 				Usage:   "Where to write the baseline",
 			},
+			&cli.StringFlag{
+				Name:  "triage",
+				Value: defaultTriageDir,
+				Usage: "Directory for the per-image triage sheets and index.tsv, built from the same results",
+			},
 			&cli.BoolFlag{
 				Name:  "annotate",
 				Usage: "Also emit GitHub Actions annotations for bases at or past end of support",
@@ -85,6 +90,19 @@ func securityBaselineCommand() *cli.Command {
 			triage := triageCatalogue(carried)
 			fmt.Printf("Wrote %s: %d catalogue image(s), %d carried HIGH/CRITICAL finding(s) (%d needing triage), %d accepted.\n",
 				out, len(imagePresets), triage.Carried, triage.Actionable, len(acceptedFindings(imagePresets, accepted)))
+
+			// The triage sheets are a view over the same results: no scanner runs
+			// here and the baseline above does not depend on them. With no result
+			// at all there is nothing to sheet, and an empty index would read as
+			// a clean catalogue.
+			if len(carried) > 0 {
+				dir := c.String("triage")
+				n, err := writeTriage(dir, carried, accepted, time.Now().UTC())
+				if err != nil {
+					return err
+				}
+				fmt.Printf("Wrote %d triage sheet(s) and %s in %s.\n", n, triageIndexFile, dir)
+			}
 
 			// The end-of-support verdict is printed, never written: every number
 			// in it is relative to today, and the file it would land in is

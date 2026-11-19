@@ -71,6 +71,25 @@ type Finding struct {
 	// wants to know whether the other scanner corroborated it. Nothing here
 	// weighs the answer; it travels through to the report.
 	Scanner string
+
+	// Version is the installed version of Package. The remaining fields are what
+	// the per-image triage sheet reads and nothing in the classification above
+	// does: they are carried through, never weighed.
+	Version string
+
+	// FixState is the scanner's own word for the state of the fix — Trivy's
+	// `Status` (`fixed`, `affected`, `will_not_fix`), Grype's `fix.state`. Empty
+	// when the scanner said nothing; [Finding.Fixed] stays the only test of whether
+	// a fix exists.
+	FixState string
+
+	// Aliases are the other identifiers the scanner knows the vulnerability by,
+	// comma-separated and without ID itself. A string rather than a slice so a
+	// Finding stays comparable.
+	Aliases string
+
+	// Description is the scanner's text, verbatim: it may span several lines.
+	Description string
 }
 
 // Fixed reports whether a fix exists upstream — question 2 of the policy.

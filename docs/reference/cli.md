@@ -423,6 +423,13 @@ cidx security vuln prune
 
 Archive entries are written under their base name, so an artifact naming `../../.ssh/authorized_keys` cannot write outside the destination.
 
+### Triage sheets: `cidx security baseline`
+
+Besides `SECURITY-BASELINE.md`, `cidx security baseline` writes into `--triage` (default `.cidx/scan/triage/`, ignored by Git), from the same results and without running a scanner:
+
+- one `<image>.tsv` per scanned image — tab-separated, one header line, sorted by severity then identifier, one line per (vulnerability, package): `id`, `aliases`, `package`, `installed`, `severity`, `fix`, `fixed_in`, `scanners` (trivy, grype or both), `epss`, `kev`, `acceptance` (`accepted`, `expired`, `stale` or empty), `accepted_reason`, `accepted_until` (expiry or review_by), `description` on one line. An acceptance on the image's repository that matches no carried finding is listed with `stale` so it can be removed;
+- `index.tsv` — per image: `carried`, `accepted`, `unaccepted`, `fixable` (a repin removes it), `stale`, `expired`. `carried` counts sheet lines, a (vulnerability, package) pair each, so it is finer than the per-identifier count in `SECURITY-BASELINE.md`.
+
 **GitLab:** artifacts belong to jobs rather than to pipelines, so `--run` takes a pipeline ID and each job that uploaded an archive is one artifact, named after the job.
 
 ---

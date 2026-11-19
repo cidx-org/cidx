@@ -1,3 +1,9 @@
+## v3.15.0 (2026-11-19)
+
+### Feat
+
+- **security**: `cidx security baseline` (so `cidx run baseline`) also writes a triage sheet per scanned image in `.cidx/scan/triage/` (ignored by Git) and an `index.tsv` summarising them, so acceptances can be judged without joining the multi-megabyte Trivy and Grype JSON by hand. A sheet is tab-separated text with a header line, sorted by severity then identifier, one line per (vulnerability, package) with aliases, installed and fixed versions, fix state, the scanners carrying it, EPSS and KEV, the current acceptance (reason, expiry or review_by) and the full description on one line; acceptances matching no carried finding are listed too, marked `stale`. No scanner is run and SECURITY-BASELINE.md is unchanged for the same results
+
 ## v3.14.10 (2026-11-19)
 
 ### Fix
