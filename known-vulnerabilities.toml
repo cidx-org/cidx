@@ -97,9 +97,9 @@
   model = "tool-features-unused"
   capabilities = []
   treatment = "accepted-risk"
-  reviewed = "2026-09-30"
-  review_by = "2026-12-16"
-  reason = "cargo-audit runs curl -sSfL on one fixed https URL and pipes it to tar. The seven curl CVEs (19931 Negotiate connection reuse, 18924 HTTP/2 server push with shared handles, 80229 pooled TLS connections outliving their handle, 80255 and 82209 cookie handling, 13608 LDAP SASL, 80230 public-key pinning with verification disabled) each need a feature that command does not use: no cookie engine, no Negotiate, no LDAP, no pinning, no server push, verification left on. Re-argue if the command ever starts using one. All are HIGH or CRITICAL with no fix at any version, EPSS at most 0.007, none in KEV (audit run 36565600041, 2026-09-29). Checked against the cargo-audit command; re-argue if they start running the affected tool."
+  reviewed = "2026-11-19"
+  review_by = "2027-01-18"
+  reason = "cargo-audit runs one curl: curl -sSfL -o /tmp/cargo-audit.tgz on a fixed github.com release URL, then checks the archive against a pinned sha256 before tar reads it. The command passes no credentials, proxy, netrc, cookie jar, HSTS file, client certificate, --interface, --proto-default, -J, -w, --aws-sigv4, --crlf, --pinnedpubkey or --parallel, speaks https only, and curl's default redirect protocols are http, https, ftp and ftps; the only server that answers is GitHub's. Re-read 2026-11-19 against the scan of the pinned digest, finding by finding: every one is HIGH, none has a fix at any version, none is in KEV, EPSS at most 0.012. Cookies: CVE-2026-80255 and CVE-2026-82209 (cookie handling) and CVE-2026-92386 (a long cookie record written to a Netscape cookie jar) need the cookie engine, which -b and -c switch on and this command does not. CVE-2026-87862 and CVE-2026-87863 (HSTS import and cache save) need --hsts. Authentication and connection reuse: CVE-2026-8458 (Negotiate connections reused across services), CVE-2026-8932 (client-certificate options left out of the reuse match), CVE-2026-86409 (SigV4 state kept after being unset) and CVE-2026-107929 (CURLOPT_INTERFACE left out of the reuse key) each need an option the command never sets and a handle reused for a second transfer; one handle makes one transfer here. CVE-2026-94266 (credentials in CURLINFO_EFFECTIVE_URL) needs credentials in the URL, and the URL carries none. TLS: CVE-2026-80230 (public-key pinning with verification disabled) needs --pinnedpubkey and -k; verification stays on. CVE-2026-9545 (HTTP/3 early data on a cached session) needs --http3 and early data, neither requested. CVE-2026-107928 concerns curl built with GnuTLS sending WebSocket data; the flagged packages are curl and libcurl4t64, Debian's OpenSSL build, and the URL is neither ws:// nor wss://. Other protocols: CVE-2026-13608 (LDAP SASL) and CVE-2026-107161 (Cyrus SASL DIGEST-MD5 client, reached through libcurl's LDAP and mail protocols) need ldap://, imap:// or alike; CVE-2026-87864 (IMAP APPEND with CURLOPT_CRLF), CVE-2026-92387 (control-response timeout of FTP, IMAP, POP3 and SMTP) and CVE-2026-92389 (TFTP state machine) need those servers; CVE-2026-87865 (libssh2 known_hosts), CVE-2026-12064 and CVE-2026-86410 (SSH host verification skipped for a schemeless sftp or scp URL, or after a redirect to one) need an ssh-family transfer: the URL names https, no --proto-default is set, and sftp and scp are outside the default redirect protocols. Tool-only and library-API flaws: CVE-2026-92390 needs --remote-header-name, which the command does not use (it names its output with -o); CVE-2026-9080 (curl_easy_pause inside a CURLMOPT_SOCKETFUNCTION callback), CVE-2026-92391 (a deeply nested MIME tree freed by curl_mime_free) and CVE-2026-80229 (pooled TLS connections outliving their handle) are about an application driving libcurl's API, which the command's single transfer does not. The two CRITICAL curl CVEs this decision used to carry (CVE-2026-18924, CVE-2026-19931) have their own decisions. Re-argue if the command starts using any of these options or protocols."
   references = []
 
 [[decisions]]
@@ -108,9 +108,130 @@
   model = "inert-package"
   capabilities = []
   treatment = "accepted-risk"
-  reviewed = "2026-10-02"
-  review_by = "2026-12-16"
-  reason = "The vulnerable code sits in the Debian base layer of the cargo-audit image and is not exercised by what the preset runs (sh, curl on one fixed URL, tar, cargo-audit). util-linux (bsdutils; CVE-2026-76642, -78408, -78409, -78410): local privilege escalations against mount(8)'s fstab hooks and nsenter, which need an unprivileged local attacker and a privileged (SUID) helper with an authorized fstab entry. A container has no fstab, runs as an unprivileged uid, and no preset here runs mount or nsenter. libsystemd0 (CVE-2026-16742): a systemd-homed local privilege escalation; no systemd runs in a container and nothing here talks to it. perl-base (CVE-2026-82560): CPU exhaustion formatting a crafted POD document; nothing here runs pod2text or Pod::Text. glibc (CVE-2026-19499): needs an application calling strfmon or strfmon_l with right-justified width padding into a small buffer; no tool here does. zlib (CVE-2026-85091): a heap overflow in the gzFile write path (gzprintf or gzwrite after a stalled non-blocking write); the tools here reach zlib through inflate and deflate, and none writes through gzFile on a non-blocking descriptor. All are HIGH or CRITICAL with no fix at any version, EPSS at most 0.007, none in KEV (audit run 36565600041, 2026-09-29). Checked against the commands these presets run; re-argue if they start running the affected tool. Added 2026-09-30 (second audit of the day): libssl3t64 (CVE-2026-84782): an out-of-bounds read in OpenSSL's DTLS retransmission, so datagram TLS over UDP; the tools here speak TLS over TCP, a different code path, and none opens a DTLS connection. HIGH, no fix at any version, EPSS 0, not in KEV (audit run 36682383284, 2026-09-30). Added 2026-09-30 (third audit of the day): libssl3t64 (CVE-2026-72897, CVE-2026-84784): the first is on the TLS server side (a server switching SSL_CTX part-way through a handshake), the second a flood of the QUIC stack; no preset runs a TLS server or speaks QUIC, so neither code path is reached. HIGH, no fix at any version, EPSS 0, not in KEV (audit run 36683428551, 2026-09-30). Added 2026-10-02: gcc/libstdc++ (CVE-2026-102010): a use-after-free in erase_if on libstdc++'s binary-heap priority queue, a GNU pb_ds extension. It lives in a header-only template instantiated into an application at build time, so the flagged packages (gcc-14-base, libgcc-s1, cpp-14) hold none of it at run time; it needs a C++ program built with it that calls erase_if, and no preset compiles one. HIGH, no fix at any version, EPSS at most 0.001, not in KEV (audit run 37015935306, 2026-10-02)."
+  reviewed = "2026-11-19"
+  review_by = "2027-02-17"
+  reason = "The vulnerable code sits in the Debian base layer of the cargo-audit image and is not exercised by what the preset runs (sh, uname, sha256sum, curl on one fixed URL, tar, cargo-audit). Re-read 2026-11-19 against the scan of the pinned digest, finding by finding: every one is HIGH, none has a fix at any version, none is in KEV, EPSS at most 0.007. util-linux (bsdutils, mount, login and the lib packages; CVE-2026-76642, -78408, -78409, -78410): local privilege escalations against mount(8)'s fstab hooks and nsenter, which need an unprivileged local attacker and a privileged (SUID) helper with an authorized fstab entry. A container has no fstab, runs as an unprivileged uid, and no preset here runs mount or nsenter. libsystemd0 (CVE-2026-16742): a systemd-homed local privilege escalation; no systemd runs in a container and nothing here talks to it. perl-base: CVE-2026-82560 is CPU exhaustion formatting a crafted POD document, and nothing here runs pod2text or Pod::Text; CVE-2026-9538 is memory exhaustion in Archive::Tar from an oversized entry size in a tar header, and nothing runs perl: the archive is read by GNU tar, after its sha256 has been checked. glibc: CVE-2026-19499 needs an application calling strfmon or strfmon_l with right-justified width padding into a small buffer, and no tool here does; CVE-2026-5435 is the deprecated resolver printing functions ns_printrr, ns_printrrf and fp_nquery writing past a caller-supplied buffer when printing TSIG records, which curl, tar and a Rust binary do not call; CVE-2026-84243 is gettext honouring '/' and '..' in LANGUAGE to load a crafted .mo catalogue, which needs a non-C locale, an attacker-controlled environment and a crafted file on disk: the preset sets no locale variable and nothing here places such a file. libstdc++ (gcc-14-base, libgcc-s1, libstdc++6): CVE-2026-102010 (erase_if on libstdc++'s binary-heap priority queue, a GNU pb_ds extension in a header-only template, so the flagged packages hold none of it at run time) and CVE-2026-95619 (an integer overflow in the aligned operator new) both need a C++ program, and none of sh, curl, tar, sha256sum (C) or cargo-audit (Rust) is one. Re-argue if the command starts running an affected tool."
+  references = []
+
+[[decisions]]
+  id = "buildpack-deps-openssl-features-not-used"
+  repository = "buildpack-deps"
+  model = "tool-features-unused"
+  capabilities = []
+  treatment = "accepted-risk"
+  reviewed = "2026-11-19"
+  review_by = "2027-01-18"
+  reason = "Unlike the packages in the other decisions, libssl3t64 is used: curl's TLS client opens one https connection to github.com. What each flaw needs is something else. Re-read 2026-11-19 against the scan of the pinned digest: all six are HIGH on openssl, openssl-provider-legacy and libssl3t64 3.5.7-1~deb13u3, not fixed in Debian at any version, none in KEV, EPSS at most 0.006. CVE-2026-107493 needs an application to hand PEM_X509_INFO_read_bio_ex an existing stack and keep using it after a failed read; the PEM it reads here would be the image's own CA bundle, not bytes anyone else chose. CVE-2026-107496 is CMS_encrypt looping on an EC recipient certificate of group order 1; the advisory says TLS and QUIC do not use that path, and nothing here encrypts CMS. CVE-2026-124709 is a QUIC server retaining rejected streams; curl is a client and nothing here listens. CVE-2026-95691 is a use-after-free in the QUIC client on a retransmitted CRYPTO frame, reached only by an HTTP/3 or other QUIC transfer, which needs --http3 and is not requested: the download runs over TCP. CVE-2026-88823 and CVE-2026-95692 are in AES-GCM-SIV, which is not a TLS cipher suite and which no program here calls. Re-argue if the command starts using QUIC, CMS or an OpenSSL application of its own."
+  references = []
+
+[[decisions]]
+  id = "buildpack-deps-krb5-features-not-used"
+  repository = "buildpack-deps"
+  model = "tool-features-unused"
+  capabilities = []
+  treatment = "accepted-risk"
+  reviewed = "2026-11-19"
+  review_by = "2027-01-18"
+  reason = "The image carries MIT krb5's client libraries (libkrb5-3, libgssapi-krb5-2, libk5crypto3, libkrb5support0) because libcurl links them for Kerberos and Negotiate authentication, which this command never asks for: no credentials, no --negotiate, no ticket cache. The same source package would also be flagged on krb5-kdc and krb5-admin-server if either were installed; neither is. Re-read 2026-11-19 against the scan of the pinned digest, CVE by CVE: all sixteen are HIGH, none in KEV, EPSS at most 0.013, no fix in Debian. Most live in server code the image has no program for. KDC: CVE-2026-107364 (a large read overrun answering an unauthenticated request), CVE-2026-119079 (CPU from a long SEQUENCE OF in an AS-REQ or TGS-REQ), CVE-2026-71200 (PKINIT null dereference), CVE-2026-71199 (authentication-indicator bypass through an unkeyed CAMMAC checksum, enforced by a KDC or service). kadmind and its GSS-RPC layer: CVE-2026-112315 (RPCSEC_GSS decode leak), CVE-2026-112316 (xdr_krb5_tl_data leak), CVE-2026-112317 (key material leaked on a failed check, KDC or kadmind), CVE-2026-112318 (policy RPC null dereference), CVE-2026-112319 (unbounded XDR allocations), CVE-2026-112320 (auth context kept when a client switches flavour), CVE-2026-112321 (AUTH_GSSAPI arguments not freed), CVE-2026-112322 (quadratic client-list cleanup), CVE-2026-112323 (client state kept 15 minutes after failed requests). GSS acceptors and RPC clients: CVE-2026-107778 (a null dereference in gss_accept_sec_context when it receives mismatched KRB-CRED arrays: curl only initiates), CVE-2026-112314 (a leak in clnttcp_call, used by GSS-RPC client programs such as kadmin, which are not here), CVE-2026-118380 (an active attacker altering arguments to RPC services protected by RPCSEC_GSS: no such service or client runs here). Re-argue if the command starts authenticating with Kerberos or running a krb5 program."
+  references = []
+
+[[decisions]]
+  id = "buildpack-deps-unused-programs-and-libraries"
+  repository = "buildpack-deps"
+  model = "inert-package"
+  capabilities = []
+  treatment = "accepted-risk"
+  reviewed = "2026-11-19"
+  review_by = "2027-02-17"
+  reason = "Programs and libraries in the Debian base layer that no command of the cargo-audit preset runs or loads (sh, uname, sha256sum, curl, tar, cargo-audit). Re-read 2026-11-19 against the scan of the pinned digest: every one is HIGH, none has a fix at any version, none is in KEV, EPSS at most 0.006. libsqlite3-0: CVE-2026-119373 (FTS5 detail=none prefix MATCH over negative rowids), CVE-2026-119374 (FTS5 secure-delete over a corrupted index) and CVE-2026-119379 (sqlite3changeset_apply on crafted changesets) all need a program that opens SQLite databases or applies changesets from outside, and none of the tools here does. gnupg (dirmngr, gpg, gpg-agent, gpgconf, gpgsm, gnupg-l10n): CVE-2026-24882 is a stack overflow in tpm2daemon handling PKDECRYPT for TPM-backed keys; no command runs gpg and a container has no TPM. acl (libacl1): CVE-2026-54369 and CVE-2026-54370 are symlink traversal and a TOCTOU race in the pathname functions, exploitable when a privileged process runs getfacl, setfacl or chacl over a path an attacker controls; nothing here calls them, and tar extracts a sha256-checked archive into /tmp without restoring ACLs. wget: CVE-2026-58469 (Metalink URL underread), CVE-2026-58471 (iconv filename conversion overflow) and CVE-2026-58472 (HTML attribute quoting overflow) need wget to fetch from a hostile server; the preset downloads with curl and never runs wget. ncurses (libncursesw6, libtinfo6, ncurses-base, ncurses-bin): CVE-2025-69720 is a stack overflow in the infocmp tool; nothing runs infocmp. Re-argue if the command starts running any of these."
+  references = []
+
+[[decisions]]
+  id = "buildpack-deps-curl-cve-2026-10536"
+  repository = "buildpack-deps"
+  model = "tool-features-unused"
+  capabilities = []
+  treatment = "accepted-risk"
+  reviewed = "2026-11-19"
+  review_by = "2027-01-18"
+  reason = "CVE-2026-10536 (CRITICAL, curl and libcurl4t64 8.14.1-2+deb13u7, no fix at any version, EPSS 0.00598, not in KEV): a use-after-free when an application sets an HTTP/2 stream-dependency tree with CURLOPT_STREAM_DEPENDS or CURLOPT_STREAM_DEPENDS_E, calls curl_easy_reset, then curl_easy_cleanup. All three are libcurl API calls made by a program embedding the library, in that order, on one handle. The curl command line sets no stream dependency, and cargo-audit's preset runs the tool once for one https download and exits: nothing resets a handle after configuring dependencies. Re-argue if the preset runs anything that embeds libcurl."
+  references = []
+
+[[decisions]]
+  id = "buildpack-deps-curl-cve-2026-11856"
+  repository = "buildpack-deps"
+  model = "tool-features-unused"
+  capabilities = []
+  treatment = "accepted-risk"
+  reviewed = "2026-11-19"
+  review_by = "2027-01-18"
+  reason = "CVE-2026-11856 (CRITICAL, curl and libcurl4t64 8.14.1-2+deb13u7, no fix at any version, EPSS 0.00688, not in KEV): after a transfer to hostA authenticated with Digest, a second transfer on the same handle to hostB wrongly sends hostA's Authorization header. It needs a Digest login and a handle reused across origins. The preset's curl is given no credentials and no --digest, makes a single transfer, and so has no Authorization header to leak; a redirect from github.com to its release host is a new connection in the same transfer, with nothing to forward. Re-argue if the command starts passing credentials to curl."
+  references = []
+
+[[decisions]]
+  id = "buildpack-deps-curl-cve-2026-8926"
+  repository = "buildpack-deps"
+  model = "tool-features-unused"
+  capabilities = []
+  treatment = "accepted-risk"
+  reviewed = "2026-11-19"
+  review_by = "2027-01-18"
+  reason = "CVE-2026-8926 (CRITICAL, curl and libcurl4t64 8.14.1-2+deb13u7, no fix at any version, EPSS 0.00444, not in KEV): with a .netrc in use and a URL carrying a user name but no password, curl may use the password of another user on that host. The command does not pass --netrc or -n, its URL has no user name, and the preset provides no .netrc to the container. Both preconditions are missing. Re-argue if the command starts using netrc."
+  references = []
+
+[[decisions]]
+  id = "buildpack-deps-curl-cve-2026-9079"
+  repository = "buildpack-deps"
+  model = "tool-features-unused"
+  capabilities = []
+  treatment = "accepted-risk"
+  reviewed = "2026-11-19"
+  review_by = "2027-01-18"
+  reason = "CVE-2026-9079 (CRITICAL, curl and libcurl4t64 8.14.1-2+deb13u7, no fix at any version, EPSS 0.01064, not in KEV): libcurl fails to clear proxy authentication credentials when told to, so the old ones are used by later transfers. It needs proxy credentials to have been set and then cleared on a handle that goes on to another transfer. The command sets no proxy and no proxy credentials, and makes one transfer, so there is nothing to clear and no later transfer. Re-argue if the command starts going through a proxy."
+  references = []
+
+[[decisions]]
+  id = "buildpack-deps-curl-cve-2026-18924"
+  repository = "buildpack-deps"
+  model = "tool-features-unused"
+  capabilities = []
+  treatment = "accepted-risk"
+  reviewed = "2026-11-19"
+  review_by = "2027-01-18"
+  reason = "CVE-2026-18924 (CRITICAL, curl and libcurl4t64 8.14.1-2+deb13u7, no fix at any version, EPSS 0.00584, not in KEV): HTTP/2 server push combined with shared handles. A pushed stream is only accepted when the application installs a push callback, and the shared-handle half is the library's CURLSH API; the command runs one non-parallel transfer, installs no push callback and shares nothing, so a GitHub release host has no push to accept. Re-argue if the command starts using --parallel or embeds libcurl."
+  references = []
+
+[[decisions]]
+  id = "buildpack-deps-curl-cve-2026-19931"
+  repository = "buildpack-deps"
+  model = "tool-features-unused"
+  capabilities = []
+  treatment = "accepted-risk"
+  reviewed = "2026-11-19"
+  review_by = "2027-01-18"
+  reason = "CVE-2026-19931 (CRITICAL, curl and libcurl4t64 8.14.1-2+deb13u7, no fix at any version, EPSS 0.00747, not in KEV): a Negotiate-authenticated connection reused for a request that should have used another service. It needs Negotiate authentication and a second request on the same pool. The command passes no --negotiate, no credentials and no Kerberos ticket cache, so no connection is ever Negotiate-authenticated, and it makes one request. Re-argue if the command starts authenticating with Kerberos."
+  references = []
+
+[[decisions]]
+  id = "buildpack-deps-curl-cve-2026-86414"
+  repository = "buildpack-deps"
+  model = "tool-features-unused"
+  capabilities = []
+  treatment = "accepted-risk"
+  reviewed = "2026-11-19"
+  review_by = "2027-01-18"
+  reason = "CVE-2026-86414 (CRITICAL, curl and libcurl4t64 8.14.1-2+deb13u7, no fix at any version, EPSS 0.00676, not in KEV, first carried in the 2026-11-19 scan): an HTTP proxy that answers a CONNECT with 401 WWW-Authenticate instead of 407 can make libcurl send the origin's credentials (Basic password or a Negotiate ticket) to the proxy. It needs a proxy in the path and origin credentials to send. The command sets no -x and passes no credentials, so there is no proxy to answer and nothing to hand over. Re-argue if the command starts going through a proxy or passing credentials."
+  references = []
+
+[[decisions]]
+  id = "buildpack-deps-curl-cve-2026-92388"
+  repository = "buildpack-deps"
+  model = "tool-features-unused"
+  capabilities = []
+  treatment = "accepted-risk"
+  reviewed = "2026-11-19"
+  review_by = "2027-01-18"
+  reason = "CVE-2026-92388 (CRITICAL, curl and libcurl4t64 8.14.1-2+deb13u7, no fix at any version, EPSS 0.00699, not in KEV, first carried in the 2026-11-19 scan): after a failed FTP wildcard LIST, libcurl leaves the write callback pointing at its internal listing parser, which a reused or duplicated handle then misuses. It needs an ftp:// URL with wildcard matching (CURLOPT_WILDCARDMATCH, a library option) and a handle reused or cloned after the failure. The URL is https, the option is not set, and the handle is used once. Re-argue if the command starts using FTP."
   references = []
 
 [[decisions]]
@@ -141,9 +262,9 @@
   model = "inert-package"
   capabilities = ["docker-socket"]
   treatment = "accepted-risk"
-  reviewed = "2026-10-02"
-  review_by = "2026-11-18"
-  reason = "The preset runs docker buildx build; the buildx plugin is static and the compose plugin is never invoked. The docker/docker CVEs are daemon-side handlers absent from both client plugins; the daemon is the host's. glibc is linked by the Go CLI, and the flagged paths are not the Go runtime's; the image's OpenSSL is linked by nothing the preset runs. No fix at any version. Added 2026-09-30, on the same footing: glibc (CVE-2026-19499): needs an application calling strfmon or strfmon_l with right-justified width padding into a small buffer; no tool here does. zlib (CVE-2026-85091): a heap overflow in the gzFile write path (gzprintf or gzwrite after a stalled non-blocking write); the tools here reach zlib through inflate and deflate, and none writes through gzFile on a non-blocking descriptor. docker/docker (GO-2026-4887): an AuthZ-plugin bypass on oversized request bodies, daemon-side code in the client library vendored here; the daemon is the host's. All are HIGH or CRITICAL with no fix at any version, EPSS at most 0.007, none in KEV (audit run 36565600041, 2026-09-29). Checked against the commands these presets run; re-argue if they start running the affected tool. Added 2026-09-30 (second audit of the day): libssl3t64 (CVE-2026-84782): an out-of-bounds read in OpenSSL's DTLS retransmission, so datagram TLS over UDP; the tools here speak TLS over TCP, a different code path, and none opens a DTLS connection. HIGH, no fix at any version, EPSS 0, not in KEV (audit run 36682383284, 2026-09-30). Added 2026-09-30 (third audit of the day): libssl3t64 (CVE-2026-72897, CVE-2026-84784): the first is on the TLS server side (a server switching SSL_CTX part-way through a handshake), the second a flood of the QUIC stack; no preset runs a TLS server or speaks QUIC, so neither code path is reached. HIGH, no fix at any version, EPSS 0, not in KEV (audit run 36683428551, 2026-09-30). Added 2026-10-02: gcc/libstdc++ (CVE-2026-102010): a use-after-free in erase_if on libstdc++'s binary-heap priority queue, a GNU pb_ds extension. It lives in a header-only template instantiated into an application at build time, so the flagged packages (gcc-14-base, libgcc-s1, cpp-14) hold none of it at run time; it needs a C++ program built with it that calls erase_if, and no preset compiles one. HIGH, no fix at any version, EPSS at most 0.001, not in KEV (audit run 37015935306, 2026-10-02)."
+  reviewed = "2026-11-19"
+  review_by = "2027-01-18"
+  reason = "The preset runs docker buildx build against the host's daemon through its socket: the docker CLI and the buildx plugin are Go programs, the compose plugin is never invoked, and none of them speaks TLS through OpenSSL. Re-read 2026-11-19 against the scan of dhi.io/docker:29-cli, finding by finding; none is in KEV. The twelve below are all HIGH with no fix at any version; the one finding that has a fix is not here (see the end). github.com/docker/docker (GO-2026-4887, CVE-2026-34040): an AuthZ-plugin bypass on oversized request bodies, a handler of the daemon that the Go module also contains; the image holds docker clients and no daemon, no AuthZ plugin runs here, and the daemon this preset talks to is the host's. Its EPSS is 0.09469, far above the 0.007 the earlier reviews of this image recorded for the batch and above 95% of the catalogue (below 0.02); that is why it is argued on its own and why the review is two months and not three: at the next one, check whether dhi.io/docker has been rebuilt with a daemon-side fix and repin instead of renewing. OpenSSL (libssl3t64, openssl, openssl-provider-legacy 3.5.7-1~deb13u3+dhi1, EPSS at most 0.006), linked by nothing the preset runs: CVE-2026-107493 (PEM_X509_INFO_read_bio_ex handed an existing stack), CVE-2026-107496 (CMS_encrypt looping on an EC certificate of group order 1), CVE-2026-124709 (a QUIC server retaining rejected streams), CVE-2026-95691 (a use-after-free in the QUIC client), CVE-2026-88823 and CVE-2026-95692 (AES-GCM-SIV AAD and IV handling) each need an application that calls that OpenSSL API or speaks QUIC through it, and the Go programs here use crypto/tls. glibc (libc6 2.41-12+deb13u4+dhi1, EPSS at most 0.003): glibc is linked by the Go CLI, and the flagged paths are not ones Go's runtime uses: CVE-2026-19499 needs strfmon or strfmon_l with right-justified width padding into a small buffer; CVE-2026-5435 is the deprecated resolver printers ns_printrr, ns_printrrf and fp_nquery; CVE-2026-84243 is gettext loading a crafted .mo catalogue named through LANGUAGE, which needs a non-C locale, an attacker-controlled environment and a crafted file, and the Go programs do not use gettext. libstdc++ (gcc-14-base, libgcc-s1; EPSS at most 0.005): CVE-2026-102010 (erase_if on a pb_ds binary-heap priority queue, a header-only template) and CVE-2026-95619 (an integer overflow in the aligned operator new) need a C++ program, and no preset compiles or runs one here. Not accepted: GO-2026-6865 on github.com/klauspost/compress v1.20.0 (a panic on two-block frames) has a fix in 1.20.2, so it is a repin question for the image, not a decision; and zlib (CVE-2026-85091) and the libssl DTLS, server-side and QUIC-flood findings argued earlier are no longer carried by this image, so their acceptances were removed. Re-argue if the preset starts running a daemon, compose or any tool of the image beyond buildx."
   references = []
 
 [[decisions]]
@@ -333,11 +454,9 @@
   repository = "buildpack-deps"
   first_seen = "buildpack-deps:trixie-curl"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "buildpack-deps-unused-programs-and-libraries"
 
 [[vulnerabilities]]
   cve = "CVE-2026-102010"
@@ -352,78 +471,28 @@
   cve = "CVE-2026-10536"
   repository = "buildpack-deps"
   first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
+  severity = "CRITICAL"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
   references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-11822"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-11824"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
+  decision = "buildpack-deps-curl-cve-2026-10536"
 
 [[vulnerabilities]]
   cve = "CVE-2026-11856"
   repository = "buildpack-deps"
   first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
+  severity = "CRITICAL"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
   references = []
+  decision = "buildpack-deps-curl-cve-2026-11856"
 
 [[vulnerabilities]]
   cve = "CVE-2026-12064"
   repository = "buildpack-deps"
   first_seen = "buildpack-deps:trixie-curl"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
   references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-12087"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-13221"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
+  decision = "buildpack-deps-curl-features-not-used"
 
 [[vulnerabilities]]
   cve = "CVE-2026-13608"
@@ -433,17 +502,6 @@
   added = "2026-09-30"
   references = []
   decision = "buildpack-deps-curl-features-not-used"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-14456"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
 
 [[vulnerabilities]]
   cve = "CVE-2026-16742"
@@ -461,7 +519,7 @@
   severity = "CRITICAL"
   added = "2026-09-30"
   references = []
-  decision = "buildpack-deps-curl-features-not-used"
+  decision = "buildpack-deps-curl-cve-2026-18924"
 
 [[vulnerabilities]]
   cve = "CVE-2026-19499"
@@ -479,280 +537,70 @@
   severity = "CRITICAL"
   added = "2026-09-30"
   references = []
-  decision = "buildpack-deps-curl-features-not-used"
+  decision = "buildpack-deps-curl-cve-2026-19931"
 
 [[vulnerabilities]]
   cve = "CVE-2026-24882"
   repository = "buildpack-deps"
   first_seen = "buildpack-deps:trixie-curl"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-41992"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-42496"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-42497"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-48959"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-48961"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-48962"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
+  decision = "buildpack-deps-unused-programs-and-libraries"
 
 [[vulnerabilities]]
   cve = "CVE-2026-5435"
   repository = "buildpack-deps"
   first_seen = "buildpack-deps:trixie-curl"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "buildpack-deps-system-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-54369"
   repository = "buildpack-deps"
   first_seen = "buildpack-deps:trixie-curl"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "buildpack-deps-unused-programs-and-libraries"
 
 [[vulnerabilities]]
   cve = "CVE-2026-54370"
   repository = "buildpack-deps"
   first_seen = "buildpack-deps:trixie-curl"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-5450"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-57432"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-57433"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-58050"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-58051"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
+  decision = "buildpack-deps-unused-programs-and-libraries"
 
 [[vulnerabilities]]
   cve = "CVE-2026-58469"
   repository = "buildpack-deps"
   first_seen = "buildpack-deps:trixie-curl"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "buildpack-deps-unused-programs-and-libraries"
 
 [[vulnerabilities]]
   cve = "CVE-2026-58471"
   repository = "buildpack-deps"
   first_seen = "buildpack-deps:trixie-curl"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "buildpack-deps-unused-programs-and-libraries"
 
 [[vulnerabilities]]
   cve = "CVE-2026-58472"
   repository = "buildpack-deps"
   first_seen = "buildpack-deps:trixie-curl"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-5928"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-66032"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-66033"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-66034"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-66035"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-7017"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-72897"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "buildpack-deps-system-libraries-not-reached"
+  decision = "buildpack-deps-unused-programs-and-libraries"
 
 [[vulnerabilities]]
   cve = "CVE-2026-76642"
@@ -836,152 +684,463 @@
   decision = "buildpack-deps-system-libraries-not-reached"
 
 [[vulnerabilities]]
-  cve = "CVE-2026-8286"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
-  references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-8376"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
-  references = []
-
-[[vulnerabilities]]
   cve = "CVE-2026-8458"
   repository = "buildpack-deps"
   first_seen = "buildpack-deps:trixie-curl"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
   references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-84782"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "buildpack-deps-system-libraries-not-reached"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-84784"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "buildpack-deps-system-libraries-not-reached"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-85091"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "buildpack-deps-system-libraries-not-reached"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-8924"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
-  references = []
+  decision = "buildpack-deps-curl-features-not-used"
 
 [[vulnerabilities]]
   cve = "CVE-2026-8926"
   repository = "buildpack-deps"
   first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
+  severity = "CRITICAL"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
   references = []
-
-[[vulnerabilities]]
-  cve = "CVE-2026-8927"
-  repository = "buildpack-deps"
-  first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
-  added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
-  references = []
+  decision = "buildpack-deps-curl-cve-2026-8926"
 
 [[vulnerabilities]]
   cve = "CVE-2026-8932"
   repository = "buildpack-deps"
   first_seen = "buildpack-deps:trixie-curl"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
   references = []
+  decision = "buildpack-deps-curl-features-not-used"
 
 [[vulnerabilities]]
   cve = "CVE-2026-9079"
   repository = "buildpack-deps"
   first_seen = "buildpack-deps:trixie-curl"
-  severity = "HIGH"
-  status = "accepted-risk"
+  severity = "CRITICAL"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
   references = []
+  decision = "buildpack-deps-curl-cve-2026-9079"
 
 [[vulnerabilities]]
   cve = "CVE-2026-9080"
   repository = "buildpack-deps"
   first_seen = "buildpack-deps:trixie-curl"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
   references = []
+  decision = "buildpack-deps-curl-features-not-used"
 
 [[vulnerabilities]]
   cve = "CVE-2026-9538"
   repository = "buildpack-deps"
   first_seen = "buildpack-deps:trixie-curl"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "Present in the image, invoked by nothing this preset runs. A CIDX container lives for the length of one phase, exposes no service, receives no attacker-controlled input and persists nothing, so a flaw in a package no code path reaches has no way to be exercised here. No fix at any version; re-argue if the preset's command ever starts calling it."
   references = []
+  decision = "buildpack-deps-system-libraries-not-reached"
 
 [[vulnerabilities]]
   cve = "CVE-2026-9545"
   repository = "buildpack-deps"
   first_seen = "buildpack-deps:trixie-curl"
   severity = "HIGH"
-  status = "accepted-risk"
   added = "2026-08-20"
-  expires = "2026-11-18"
-  notes = "This package IS what the preset runs, so the 'nothing calls it' argument does not apply. What bounds it instead is the input: the tool reads the repository's own source, or fetches a URL the preset itself fixes -- never bytes chosen by anyone else. Weaker than the inert case and stated as such. No fix at any version."
   references = []
+  decision = "buildpack-deps-curl-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-107161"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-curl-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-107928"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-curl-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-107929"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-curl-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-86409"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-curl-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-86410"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-curl-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-87862"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-curl-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-87863"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-curl-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-87864"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-curl-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-87865"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-curl-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-92386"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-curl-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-92387"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-curl-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-92389"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-curl-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-92390"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-curl-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-92391"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-curl-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-94266"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-curl-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-86414"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "CRITICAL"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-curl-cve-2026-86414"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-92388"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "CRITICAL"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-curl-cve-2026-92388"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-84243"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-system-libraries-not-reached"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-95619"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-system-libraries-not-reached"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-107493"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-openssl-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-107496"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-openssl-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-124709"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-openssl-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-88823"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-openssl-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-95691"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-openssl-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-95692"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-openssl-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-107364"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-krb5-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-107778"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-krb5-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-112314"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-krb5-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-112315"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-krb5-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-112316"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-krb5-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-112317"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-krb5-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-112318"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-krb5-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-112319"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-krb5-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-112320"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-krb5-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-112321"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-krb5-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-112322"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-krb5-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-112323"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-krb5-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-118380"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-krb5-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-119079"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-krb5-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-71199"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-krb5-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-71200"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-krb5-features-not-used"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-119373"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-unused-programs-and-libraries"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-119374"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-unused-programs-and-libraries"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-119379"
+  repository = "buildpack-deps"
+  first_seen = "buildpack-deps:trixie-curl"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "buildpack-deps-unused-programs-and-libraries"
 
 [[vulnerabilities]]
   cve = "CVE-2025-69649"
@@ -1144,38 +1303,11 @@
   decision = "dhi-docker-cli-client-plugins"
 
 [[vulnerabilities]]
-  cve = "CVE-2026-14456"
-  repository = "dhi.io/docker"
-  first_seen = "dhi.io/docker:29-cli"
-  severity = "HIGH"
-  added = "2026-08-20"
-  references = []
-  decision = "dhi-docker-cli-client-plugins"
-
-[[vulnerabilities]]
   cve = "CVE-2026-19499"
   repository = "dhi.io/docker"
   first_seen = "dhi.io/docker:29-cli"
   severity = "HIGH"
   added = "2026-09-30"
-  references = []
-  decision = "dhi-docker-cli-client-plugins"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-41567"
-  repository = "dhi.io/docker"
-  first_seen = "dhi.io/docker:29-cli"
-  severity = "HIGH"
-  added = "2026-08-20"
-  references = []
-  decision = "dhi-docker-cli-client-plugins"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-42306"
-  repository = "dhi.io/docker"
-  first_seen = "dhi.io/docker:29-cli"
-  severity = "HIGH"
-  added = "2026-08-20"
   references = []
   decision = "dhi-docker-cli-client-plugins"
 
@@ -1189,83 +1321,83 @@
   decision = "dhi-docker-cli-client-plugins"
 
 [[vulnerabilities]]
-  cve = "CVE-2026-5450"
-  repository = "dhi.io/docker"
-  first_seen = "dhi.io/docker:29-cli"
-  severity = "HIGH"
-  added = "2026-08-20"
-  references = []
-  decision = "dhi-docker-cli-client-plugins"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-5928"
-  repository = "dhi.io/docker"
-  first_seen = "dhi.io/docker:29-cli"
-  severity = "HIGH"
-  added = "2026-08-20"
-  references = []
-  decision = "dhi-docker-cli-client-plugins"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-72897"
-  repository = "dhi.io/docker"
-  first_seen = "dhi.io/docker:29-cli"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "dhi-docker-cli-client-plugins"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-84782"
-  repository = "dhi.io/docker"
-  first_seen = "dhi.io/docker:29-cli"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "dhi-docker-cli-client-plugins"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-84784"
-  repository = "dhi.io/docker"
-  first_seen = "dhi.io/docker:29-cli"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "dhi-docker-cli-client-plugins"
-
-[[vulnerabilities]]
-  cve = "CVE-2026-85091"
-  repository = "dhi.io/docker"
-  first_seen = "dhi.io/docker:29-cli"
-  severity = "HIGH"
-  added = "2026-09-30"
-  references = []
-  decision = "dhi-docker-cli-client-plugins"
-
-[[vulnerabilities]]
-  cve = "GHSA-RG2X-37C3-W2RH"
-  repository = "dhi.io/docker"
-  first_seen = "dhi.io/docker:29-cli"
-  severity = "HIGH"
-  added = "2026-08-20"
-  references = []
-  decision = "dhi-docker-cli-client-plugins"
-
-[[vulnerabilities]]
-  cve = "GHSA-X86F-5XW2-FM2R"
-  repository = "dhi.io/docker"
-  first_seen = "dhi.io/docker:29-cli"
-  severity = "HIGH"
-  added = "2026-08-20"
-  references = []
-  decision = "dhi-docker-cli-client-plugins"
-
-[[vulnerabilities]]
   cve = "GO-2026-4887"
   repository = "dhi.io/docker"
   first_seen = "dhi.io/docker:29-cli"
   severity = "HIGH"
   added = "2026-09-30"
+  references = []
+  decision = "dhi-docker-cli-client-plugins"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-107493"
+  repository = "dhi.io/docker"
+  first_seen = "dhi.io/docker:29-cli"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "dhi-docker-cli-client-plugins"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-107496"
+  repository = "dhi.io/docker"
+  first_seen = "dhi.io/docker:29-cli"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "dhi-docker-cli-client-plugins"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-124709"
+  repository = "dhi.io/docker"
+  first_seen = "dhi.io/docker:29-cli"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "dhi-docker-cli-client-plugins"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-84243"
+  repository = "dhi.io/docker"
+  first_seen = "dhi.io/docker:29-cli"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "dhi-docker-cli-client-plugins"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-88823"
+  repository = "dhi.io/docker"
+  first_seen = "dhi.io/docker:29-cli"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "dhi-docker-cli-client-plugins"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-95619"
+  repository = "dhi.io/docker"
+  first_seen = "dhi.io/docker:29-cli"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "dhi-docker-cli-client-plugins"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-95691"
+  repository = "dhi.io/docker"
+  first_seen = "dhi.io/docker:29-cli"
+  severity = "HIGH"
+  added = "2026-11-19"
+  references = []
+  decision = "dhi-docker-cli-client-plugins"
+
+[[vulnerabilities]]
+  cve = "CVE-2026-95692"
+  repository = "dhi.io/docker"
+  first_seen = "dhi.io/docker:29-cli"
+  severity = "HIGH"
+  added = "2026-11-19"
   references = []
   decision = "dhi-docker-cli-client-plugins"
 
