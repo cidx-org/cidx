@@ -64,6 +64,10 @@ func securityBaselineCommand() *cli.Command {
 				Usage: "Directory for the per-image triage sheets and index.tsv, built from the same results",
 			},
 			&cli.BoolFlag{
+				Name:  "incomplete",
+				Usage: "The scan that produced the results failed: write only the triage sheets of the images that have a complete result, and fail",
+			},
+			&cli.BoolFlag{
 				Name:  "annotate",
 				Usage: "Also emit GitHub Actions annotations for bases at or past end of support",
 			},
@@ -80,6 +84,18 @@ func securityBaselineCommand() *cli.Command {
 			}
 
 			carried, accounted := carriedFindings(imagePresets, c.String("results"), accepted)
+
+			// A scan that did not look at every image leaves the file alone —
+			// a baseline built on a partial measurement is not exact — but
+			// the sheets of the images it did see are still worth writing.
+			unscanned, err := readUnscanned(c.String("results"), imagePresets)
+			if err != nil {
+				return err
+			}
+			if c.Bool("incomplete") || len(unscanned) > 0 {
+				return incompleteBaseline(c.String("triage"), c.String("output"), carried, accepted, unscanned)
+			}
+
 			bases := catalogueBases(imagePresets, c.String("results"))
 
 			out := c.String("output")
@@ -97,7 +113,7 @@ func securityBaselineCommand() *cli.Command {
 			// a clean catalogue.
 			if len(carried) > 0 {
 				dir := c.String("triage")
-				n, err := writeTriage(dir, carried, accepted, time.Now().UTC())
+				n, err := writeTriage(dir, carried, accepted, nil, time.Now().UTC())
 				if err != nil {
 					return err
 				}
@@ -118,6 +134,34 @@ func securityBaselineCommand() *cli.Command {
 			return nil
 		},
 	}
+}
+
+// incompleteBaseline is the baseline of a scan that did not look at every image.
+// It writes the triage sheets of the images with a complete result and an index
+// naming the others and why, never the baseline file itself, and then fails: the
+// run is not a success, and the committed file stays the last exact one.
+func incompleteBaseline(triageDir, output string, carried map[string][]presets.Finding, accepted []Vulnerability, unscanned map[string]string) error {
+	for image := range unscanned {
+		delete(carried, image)
+	}
+
+	missing := make([]string, 0, len(unscanned))
+	for image := range unscanned {
+		missing = append(missing, image)
+	}
+	sort.Strings(missing)
+
+	fmt.Printf("The scan is incomplete: %d image(s) not scanned in full. %s is not rewritten.\n", len(missing), output)
+	for _, image := range missing {
+		fmt.Printf("  %s — %s\n", image, oneLine(unscanned[image]))
+	}
+
+	n, err := writeTriage(triageDir, carried, accepted, unscanned, time.Now().UTC())
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Wrote %d triage sheet(s) and %s in %s.\n", n, triageIndexFile, triageDir)
+	return fmt.Errorf("the scan is incomplete (%d image(s) not scanned in full): %s was not rewritten", len(missing), output)
 }
 
 // baselineFinding is one accepted HIGH/CRITICAL finding, resolved against the

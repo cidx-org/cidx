@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -148,6 +147,14 @@ func securityScanAction(c *cli.Context) error {
 		}
 	}
 
+	// Until the scan has said what it did, everything counts as unscanned: a run
+	// that dies half way must not leave results of an earlier run to be read as
+	// this one's.
+	unfinished := catalogueImageNames(imagePresets)
+	if err := writeUnscanned(resultsDir, unscannedAll(unfinished, "the scan did not finish")); err != nil {
+		return err
+	}
+
 	if hostCache == "" {
 		if hostCache, err = filepath.Abs(cache); err != nil {
 			return fmt.Errorf("failed to resolve %s: %w", cache, err)
@@ -193,11 +200,7 @@ func securityScanAction(c *cli.Context) error {
 		trivyLock:    &sync.Mutex{},
 	}
 
-	images := make([]string, 0, len(imagePresets))
-	for image := range imagePresets {
-		images = append(images, image)
-	}
-	sort.Strings(images)
+	images := unfinished
 
 	fmt.Printf("Scanning %d catalogue image(s) with Trivy and Grype.\n", len(images))
 	if err := rig.refreshDatabases(ctx); err != nil {
@@ -244,6 +247,12 @@ func securityScanAction(c *cli.Context) error {
 
 	scans, gaps, partial := collectScans(imagePresets, images, resultsDir, failures)
 	declareFixUnreleased(scans, record, time.Now())
+
+	// What this scan could not answer in full, with the cause, for the baseline to
+	// name in the triage index while it writes the sheets of the other images.
+	if err := writeUnscanned(resultsDir, unscannedImages(scans, gaps)); err != nil {
+		return err
+	}
 
 	encoded, err := jsonIndent(presets.ScanSARIF(scans, gaps))
 	if err != nil {
@@ -569,6 +578,14 @@ func (s scanRig) scanImage(ctx context.Context, n int, image, resultsDir string)
 	}
 
 	for _, run := range runs {
+		// An image pinned by digest does not change: while the advisory database
+		// is the one the result was computed against, scanning it again would
+		// pull the same layers to learn the same thing.
+		if s.cachedResult(run.scanner, image, resultsDir) {
+			fmt.Printf("    %s: result in the cache is current, image not pulled again\n", run.title)
+			continue
+		}
+
 		// A result left by an earlier run must not answer for this one.
 		removeScanResults(resultsDir, run.scanner, image)
 

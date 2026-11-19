@@ -47,7 +47,9 @@ var triageHeader = []string{
 }
 
 // triageIndexHeader is the single header line of index.tsv.
-var triageIndexHeader = []string{"image", "carried", "accepted", "unaccepted", "fixable", "stale", "expired"}
+// The last column is empty for a scanned image; an image that was not scanned in
+// full has no count and names the cause there.
+var triageIndexHeader = []string{"image", "carried", "accepted", "unaccepted", "fixable", "stale", "expired", "unscanned"}
 
 // triageRow is one line of a sheet: a (vulnerability, package) pair carried by
 // the image, or an acceptance that matches none.
@@ -298,11 +300,18 @@ func (s triageSheet) counts() (carried, accepted, unaccepted, fixable, stale, ex
 	return
 }
 
-// renderTriageIndex summarises every sheet, one line per image.
-func renderTriageIndex(sheets map[string]triageSheet) string {
-	images := make([]string, 0, len(sheets))
+// renderTriageIndex summarises every sheet, one line per image, and lists the
+// images that were not scanned with the cause: without them the index would read
+// as the whole catalogue.
+func renderTriageIndex(sheets map[string]triageSheet, unscanned map[string]string) string {
+	images := make([]string, 0, len(sheets)+len(unscanned))
 	for image := range sheets {
 		images = append(images, image)
+	}
+	for image := range unscanned {
+		if _, sheeted := sheets[image]; !sheeted {
+			images = append(images, image)
+		}
 	}
 	sort.Strings(images)
 
@@ -310,8 +319,17 @@ func renderTriageIndex(sheets map[string]triageSheet) string {
 	sb.WriteString(strings.Join(triageIndexHeader, "\t"))
 	sb.WriteString("\n")
 	for _, image := range images {
-		carried, accepted, unaccepted, fixable, stale, expired := sheets[image].counts()
-		fmt.Fprintf(&sb, "%s\t%d\t%d\t%d\t%d\t%d\t%d\n", image, carried, accepted, unaccepted, fixable, stale, expired)
+		sheet, scanned := sheets[image]
+		if !scanned {
+			cause := oneLine(unscanned[image])
+			if cause == "" {
+				cause = "not scanned"
+			}
+			fmt.Fprintf(&sb, "%s\t\t\t\t\t\t\t%s\n", image, cause)
+			continue
+		}
+		carried, accepted, unaccepted, fixable, stale, expired := sheet.counts()
+		fmt.Fprintf(&sb, "%s\t%d\t%d\t%d\t%d\t%d\t%d\t\n", image, carried, accepted, unaccepted, fixable, stale, expired)
 	}
 	return sb.String()
 }
@@ -337,7 +355,10 @@ func triageSheets(carried map[string][]presets.Finding, accepted []Vulnerability
 // The directory is the tool's own: the `.tsv` files a previous run left are
 // removed first, so an image that left the catalogue does not keep a sheet that
 // reads as current. Nothing else in it is touched.
-func writeTriage(dir string, carried map[string][]presets.Finding, accepted []Vulnerability, today time.Time) (int, error) {
+//
+// unscanned names the images the scan could not answer for in full and the cause;
+// they get no sheet and a line in the index.
+func writeTriage(dir string, carried map[string][]presets.Finding, accepted []Vulnerability, unscanned map[string]string, today time.Time) (int, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return 0, fmt.Errorf("failed to create %s: %w", dir, err)
 	}
@@ -359,7 +380,7 @@ func writeTriage(dir string, carried map[string][]presets.Finding, accepted []Vu
 		}
 	}
 	index := filepath.Join(dir, triageIndexFile)
-	if err := os.WriteFile(index, []byte(renderTriageIndex(sheets)), 0o644); err != nil {
+	if err := os.WriteFile(index, []byte(renderTriageIndex(sheets, unscanned)), 0o644); err != nil {
 		return 0, fmt.Errorf("failed to write %s: %w", index, err)
 	}
 	return len(sheets), nil

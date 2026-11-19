@@ -248,13 +248,13 @@ func TestTriageSheetMatchesAnAcceptanceByAlias(t *testing.T) {
 func TestTriageIndexSummarisesEachImage(t *testing.T) {
 	_, sheets := triageFixtureSheet(t)
 
-	lines := strings.Split(strings.TrimSuffix(renderTriageIndex(sheets), "\n"), "\n")
+	lines := strings.Split(strings.TrimSuffix(renderTriageIndex(sheets, nil), "\n"), "\n")
 	if lines[0] != strings.Join(triageIndexHeader, "\t") {
 		t.Fatalf("header = %q", lines[0])
 	}
 	// 4 carried (0001, 0002, 0004, 0005); 2 accepted (0002, 0004); 2 without;
 	// 1 fixable (0001); 1 stale (9999); 1 expired (0004).
-	want := triageImage + "\t4\t2\t2\t1\t1\t1"
+	want := triageImage + "\t4\t2\t2\t1\t1\t1\t"
 	if len(lines) != 2 || lines[1] != want {
 		t.Errorf("index = %q, want [header, %q]", lines, want)
 	}
@@ -277,7 +277,7 @@ func TestWriteTriageLeavesOneSheetPerScannedImage(t *testing.T) {
 	}
 
 	carried, _ := triageFixtureSheet(t)
-	if n, err := writeTriage(dir, carried, triageFixtureAccepted(), triageDay); err != nil || n != 1 {
+	if n, err := writeTriage(dir, carried, triageFixtureAccepted(), nil, triageDay); err != nil || n != 1 {
 		t.Fatalf("writeTriage = %d, %v", n, err)
 	}
 

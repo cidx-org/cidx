@@ -14,9 +14,9 @@ import (
 // the one command that refreshes SECURITY-BASELINE.md from a scan of the
 // catalogue, run by a tool in a working directory.
 //
-// The scan and the baseline are chained with `&&`, in that order, so an
-// incomplete scan (which fails) never reaches the generation: no false baseline
-// is written. The baseline reads the raw results of that very scan, shares its
+// The baseline is generated only when the scan succeeded, so an incomplete scan
+// never reaches the generation: no false baseline is written. It still leaves the
+// triage sheets of its complete images (`--incomplete`). The baseline reads the raw results of that very scan, shares its
 // cache, runs the repository's own code, and fits in 30 minutes. No pipeline
 // lists the phase.
 func TestTheBaselinePhaseScansThenRegenerates(t *testing.T) {
@@ -50,9 +50,14 @@ func TestTheBaselinePhaseScansThenRegenerates(t *testing.T) {
 	if scan < 0 || baseline < 0 || scan > baseline {
 		t.Fatalf("the baseline phase runs %q, want the repository's `security scan` and then `security baseline`", merged.Command)
 	}
-	between := merged.Command[scan:baseline]
-	if !strings.HasSuffix(strings.TrimSpace(between), "&&") {
-		t.Errorf("scan and baseline are not chained with &&, so a failed scan would not stop the baseline: %q", merged.Command)
+	// The baseline file is written only after a scan that succeeded; a failed one
+	// still gets the triage sheets of its complete images, through --incomplete,
+	// and the phase fails.
+	if !strings.Contains(merged.Command, "if go run ./cmd/cidx security scan; then") {
+		t.Errorf("the baseline is not conditioned on the scan having succeeded: %q", merged.Command)
+	}
+	if !strings.Contains(merged.Command, "security baseline --incomplete") || !strings.Contains(merged.Command, "exit 1") {
+		t.Errorf("a failed scan does not write the triage of its complete images and fail: %q", merged.Command)
 	}
 	if !strings.Contains(merged.Command, "--results .cidx/scan/results") {
 		t.Errorf("the baseline does not read the results of the scan (.cidx/scan/results): %q", merged.Command)

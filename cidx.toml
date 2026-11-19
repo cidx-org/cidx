@@ -60,9 +60,11 @@ containers = ["catalogue-scanner"]
 # and `catalogue-scan`, no [pipelines.*] lists it: CI never runs it, and it never
 # commits anything.
 #
-# The two steps are chained with `&&`: an incomplete scan (an image no scanner
-# answered for, or only one) makes `security scan` fail, and the baseline is not
-# written, so the file on disk is never one built on a partial measurement.
+# The baseline file is only written after a scan that succeeded: an incomplete
+# scan (an image no scanner answered for, or only one) makes `security scan` fail,
+# and the baseline then runs with --incomplete, which writes the triage sheets of
+# the images that are complete and the index naming the others, leaves the file
+# on disk alone and fails. It is never one built on a partial measurement.
 [baseline]
 containers = ["catalogue-baseline"]
 
@@ -121,7 +123,7 @@ CIDX_SCAN_DOCKER_CONFIG = "${HOME}/.docker"
 # baseline with it, if an image was not fully scanned.
 [containers.catalogue-baseline]
 preset = "go-build"
-command = "sh -c 'go run ./cmd/cidx security scan && go run ./cmd/cidx security baseline --results .cidx/scan/results'"
+command = "sh -c 'if go run ./cmd/cidx security scan; then go run ./cmd/cidx security baseline --results .cidx/scan/results; else go run ./cmd/cidx security baseline --incomplete --results .cidx/scan/results; exit 1; fi'"
 phase = "baseline"
 timeout = "30m"
 volumes = [

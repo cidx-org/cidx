@@ -1,3 +1,9 @@
+## v3.15.1 (2026-11-19)
+
+### Fix
+
+- **security**: an image that could not be scanned (a Docker Hub pull-rate limit, say) no longer stops the triage sheets of the others. `cidx security scan` records the images it could not scan in full, and why, in `unscanned.tsv` beside its results; `cidx security baseline` (so `cidx run baseline`) then writes the sheets of every image with a complete result and an `index.tsv` that also lists the unscanned ones with their cause (new `unscanned` column), leaves SECURITY-BASELINE.md untouched and still fails, so the baseline is never rewritten from partial results. A scan no longer pulls again a digest-pinned image whose cached results are newer than the advisory databases
+
 ## v3.15.0 (2026-11-19)
 
 ### Feat
