@@ -65,8 +65,30 @@
   treatment = "accepted-risk"
   reviewed = "2026-11-15"
   review_by = "2026-12-15"
-  reason = "runc, containerd, docker/docker and selinux are vendored into /usr/local/bin/kubectl, which no preset invokes; the vulnerable paths need a container to be run by that binary, and kubectl runs none (docker/docker's flaws are daemon-side handlers -- container archive API, docker cp, the AuthZ plugin -- absent from a client binary). Fixed versions exist at module level and reach us only when the image ships a rebuilt kubectl. Re-argued 2026-09-30 against audit run 36565600041 and a fresh scan of v26.9.0, the newest upstream tag: its kubectl still vendors runc 1.1.13, containerd 1.7.11, docker/docker 27.1.1 and selinux 1.12.0, so no image ships the fix. As decided 2026-08-22 for exactly this case, the treatment is now accepted-risk under the inert model rather than awaiting-upstream -- the blast radius, if inertness is wrong, includes the Docker socket and the Galaxy token -- rather than disabling seven presets over an uninvoked library. The review is a month out on purpose: at each one, scan the newest tag, and if an image has rebuilt kubectl, repin instead of renewing. Reviewed 2026-11-15 by that protocol: the newest upstream tag, ghcr.io/ansible/community-ansible-dev-tools:v26.11.0 (sha256:f9caf58a32195c1c2d23cd2ef7f465bc89dd1c6adffa44cd144689b1d41a575a), was scanned; go version -m on its /usr/local/bin/kubectl (openshift/oc c91286873566, go1.24.13) still shows containerd v1.7.11, docker/docker v27.1.1, runc v1.1.13 and selinux v1.12.0, unchanged. No image ships the fix, so there is nothing to repin to: the decision is renewed, not repinned, for another month, and the inertness argument (no preset invokes kubectl) still holds."
+  reason = "runc, containerd, docker/docker and selinux are vendored into /usr/local/bin/kubectl, which no preset invokes; the vulnerable paths need a container to be run by that binary, and kubectl runs none (docker/docker's flaws are daemon-side handlers -- container archive API, docker cp, the AuthZ plugin -- absent from a client binary). Fixed versions exist at module level and reach us only when the image ships a rebuilt kubectl. Re-argued 2026-09-30 against audit run 36565600041 and a fresh scan of v26.9.0, the newest upstream tag: its kubectl still vendors runc 1.1.13, containerd 1.7.11, docker/docker 27.1.1 and selinux 1.12.0, so no image ships the fix. As decided 2026-08-22 for exactly this case, the treatment is now accepted-risk under the inert model rather than awaiting-upstream -- the blast radius, if inertness is wrong, includes the Docker socket and the Galaxy token -- rather than disabling seven presets over an uninvoked library. The review is a month out on purpose: at each one, scan the newest tag, and if an image has rebuilt kubectl, repin instead of renewing. Reviewed 2026-11-15 by that protocol: the newest upstream tag, ghcr.io/ansible/community-ansible-dev-tools:v26.11.0 (sha256:f9caf58a32195c1c2d23cd2ef7f465bc89dd1c6adffa44cd144689b1d41a575a), was scanned; go version -m on its /usr/local/bin/kubectl (openshift/oc c91286873566, go1.24.13) still shows containerd v1.7.11, docker/docker v27.1.1, runc v1.1.13 and selinux v1.12.0, unchanged. No image ships the fix, so there is nothing to repin to: the decision is renewed, not repinned, for another month, and the inertness argument (no preset invokes kubectl) still holds. Added 2026-11-19: GO-2026-6791 (CVE-2026-95837, HIGH, fix state none), a checkpoint restore in containerd's CRI plugin that bypasses the destination security context; it needs a containerd daemon with the CRI plugin restoring a checkpoint, which is server-side and absent here, the only carrier being containerd v1.7.11 linked into the same uninvoked kubectl. The two CRITICAL containerd findings (GO-2026-5064, GO-2026-5338) are no longer covered by this shared reason; each has its own decision."
   references = ["https://github.com/opencontainers/runc/releases/tag/v1.2.8", "https://github.com/containerd/containerd/releases/tag/v1.7.29"]
+
+[[decisions]]
+  id = "ansible-dev-tools-containerd-cri-cdi-annotation"
+  repository = "ghcr.io/ansible/community-ansible-dev-tools"
+  model = "inert-package"
+  capabilities = ["docker-socket", "publishing-credential"]
+  treatment = "accepted-risk"
+  reviewed = "2026-11-19"
+  review_by = "2026-12-15"
+  reason = "CRITICAL GO-2026-5064 (CVE-2026-53492): containerd's CRI checkpoint restore lets a CDI device annotation in a checkpoint archive be smuggled into the restored container. It lives in containerd's CRI plugin, the server side that a kubelet drives to restore a checkpointed pod; nothing in this image runs a containerd daemon, and the only carrier is github.com/containerd/containerd v1.7.11 linked into /usr/local/bin/kubectl (openshift/oc c91286873566, go1.24.13), which no preset invokes and which restores no checkpoint. Re-checked 2026-11-19 on the Grype scan of v26.11.0: the finding is still reported with fix state none for the containerd 1.7 line, so there is no image or module version to repin to. Grype EPSS 0.0035. Review date follows the kubectl decision, whose month-out protocol applies: scan the newest tag at each review and repin if kubectl has been rebuilt."
+  references = []
+
+[[decisions]]
+  id = "ansible-dev-tools-containerd-cri-checkpoint-import"
+  repository = "ghcr.io/ansible/community-ansible-dev-tools"
+  model = "inert-package"
+  capabilities = ["docker-socket", "publishing-credential"]
+  treatment = "accepted-risk"
+  reviewed = "2026-11-19"
+  review_by = "2026-12-15"
+  reason = "CRITICAL GO-2026-5338 (CVE-2026-50195): importing a checkpoint through containerd's CRI lets a local attacker poison an image tag, so a later pull of that tag resolves to attacker content. The attack needs a containerd daemon with the CRI plugin accepting a checkpoint import and a local actor who can submit it; this image runs no daemon, the carrier is containerd v1.7.11 linked into /usr/local/bin/kubectl, which no preset invokes, and the presets reach the host's image store through the Docker or podman socket, never through containerd's CRI. Re-checked 2026-11-19 on the Grype scan of v26.11.0: still reported, fix state none, nothing to repin to. Grype EPSS 0.0030. The consequence if inertness were wrong -- a poisoned tag run next to the Docker socket and the Galaxy token -- is why it carries its own review date and not a longer one."
+  references = []
 
 [[decisions]]
   id = "ansible-dev-tools-podman-bounded-input"
@@ -75,9 +97,9 @@
   capabilities = ["docker-socket", "publishing-credential"]
   requires = ["bounded-input"]
   treatment = "accepted-risk"
-  reviewed = "2026-08-22"
-  review_by = "2026-11-18"
-  reason = "podman is a tool a preset may run; what bounds it is the input -- the repository's own molecule scenarios -- and the socket it reaches is the host's. No fix at any version."
+  reviewed = "2026-11-19"
+  review_by = "2027-01-18"
+  reason = "podman is a tool a preset may run; what bounds it is the input -- the repository's own molecule scenarios -- and the socket it reaches is the host's. Re-read 2026-11-19 against the Trivy/Grype scan of ghcr.io/ansible/community-ansible-dev-tools:v26.11.0 (sha256:f9caf58a32195c1c2d23cd2ef7f465bc89dd1c6adffa44cd144689b1d41a575a), the newest upstream tag at the 2026-11-15 review: Grype still reports both members against github.com/containers/podman/v5, with fix state not-fixed, so there is no fix to repin to and the decision is renewed, not repinned. Both are HIGH with EPSS under 0.007. GHSA-M68Q-4HQR-MC6F (CVE-2025-4953, a temporary file created with insecure permissions): the exposure is another local principal reading or replacing a file podman wrote, and a CI container is single-tenant for the length of one run, with no second local user. GHSA-RPCC-P8XM-RC6P (CVE-2024-3056, memory-based denial of service): the impact is availability of one throw-away run, reachable only by feeding podman crafted input, and the only input a preset hands it is the repository's own molecule scenarios. Re-argue if a preset starts running podman over content from outside the checkout. The other podman advisories on this image (GHSA-2CVF-WQM6-WR9G, GHSA-4HQ8-GPF5-8P68, GHSA-65GG-3W2W-HR4H, GHSA-WP3J-XQ48-XPJW) have fixes and are a repin, not part of this decision."
   references = []
 
 [[decisions]]
@@ -1603,17 +1625,26 @@
   cve = "GO-2026-5064"
   repository = "ghcr.io/ansible/community-ansible-dev-tools"
   first_seen = "ghcr.io/ansible/community-ansible-dev-tools:v26.7.1"
-  severity = "HIGH"
+  severity = "CRITICAL"
   added = "2026-08-20"
   references = []
-  decision = "ansible-dev-tools-kubectl-vendored-libraries"
+  decision = "ansible-dev-tools-containerd-cri-cdi-annotation"
 
 [[vulnerabilities]]
   cve = "GO-2026-5338"
   repository = "ghcr.io/ansible/community-ansible-dev-tools"
   first_seen = "ghcr.io/ansible/community-ansible-dev-tools:v26.7.1"
-  severity = "HIGH"
+  severity = "CRITICAL"
   added = "2026-08-20"
+  references = []
+  decision = "ansible-dev-tools-containerd-cri-checkpoint-import"
+
+[[vulnerabilities]]
+  cve = "GO-2026-6791"
+  repository = "ghcr.io/ansible/community-ansible-dev-tools"
+  first_seen = "ghcr.io/ansible/community-ansible-dev-tools:v26.11.0"
+  severity = "HIGH"
+  added = "2026-11-19"
   references = []
   decision = "ansible-dev-tools-kubectl-vendored-libraries"
 
