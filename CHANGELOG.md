@@ -1,3 +1,9 @@
+## v3.14.8 (2026-11-19)
+
+### Fix
+
+- **security**: declare SECURITY-BASELINE.md and docs/reference/catalogue.md `linguist-generated` in `.gitattributes`, so a review counts them apart from hand-written changes
+
 ## v3.14.7 (2026-11-18)
 
 ### Fix

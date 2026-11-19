@@ -1,0 +1,4 @@
+# Files produced by a cidx command and held current by a test.
+# Reviews count them apart from hand-written changes.
+SECURITY-BASELINE.md linguist-generated=true
+docs/reference/catalogue.md linguist-generated=true
