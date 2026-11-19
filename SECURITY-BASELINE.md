@@ -28,18 +28,26 @@ reports the ones no catalogue image carries any more.
 
 ## What the images carry
 
-The catalogue carries **1194** HIGH/CRITICAL findings, counted per image — the
+The catalogue carries **1258** HIGH/CRITICAL findings, counted per image — the
 same CVE on five images is five repins. They split into four populations:
 
 | Population | Count | What it means |
 | ---------- | ----- | ------------- |
-| Go stdlib in a CLI binary | 107 | Exempt by class: it goes away when the publisher recompiles, and `net/http` is unreachable in a tool that opens no listener. |
-| Kernel headers | 161 | Exempt by class: the kernel is the host's, not the container's. The scanner flags the headers package for its version string. |
-| Fixed upstream | 791 | A fix exists. This is the images' age, not a decision — an exception must never be written for one. |
-| **Needing triage** | **135** | No fix at any version, and not exempt. The only population an exception is the right instrument for. |
+| Go stdlib in a CLI binary | 125 | Exempt by class: it goes away when the publisher recompiles, and `net/http` is unreachable in a tool that opens no listener. |
+| Kernel headers | 256 | Exempt by class: the kernel is the host's, not the container's. The scanner flags the headers package for its version string. |
+| Fixed upstream | 647 | A fix exists. This is the images' age, not a decision — an exception must never be written for one. |
+| **Needing triage** | **230** | No fix at any version, and not exempt. The only population an exception is the right instrument for. |
 
-None of them is in CISA KEV. The highest EPSS score seen is 0.04. Both are reported
+None of them is in CISA KEV. The highest EPSS score seen is 0.83. Both are reported
 for a human to read; neither gates anything.
+
+These results cannot say what their ignore file took out of them, so the number
+above counts only what the scanners still showed: the accepted findings listed
+below were removed from their own images' reports by the ignore file the audit
+generates from them, and cannot be counted back. Read it as a floor. Trivy keeps
+that record under `--show-suppressed` and the audit states how many entries it
+wrote alongside its results — generate from its artifacts for the whole number
+(#311, #327).
 
 ## Images
 
@@ -58,27 +66,27 @@ the daily security audit reports it.
 
 | Image | Presets | Base | Carried HIGH/CRITICAL | Accepted |
 | ----- | ------- | ---- | --------------------- | -------- |
-| `buildpack-deps:trixie-curl@sha256:9e486725325568707dbd794ca9b53cffb7ddee2b8ac1b94941ca4d3d8c6e9df9` | cargo-audit | debian 13.6 | 80 | 63 |
-| `commitizen/commitizen:4.19.3@sha256:049443ca2fcb3fd55741736f4fcd02abc0a61ad142559bcbd8c3427922c3d2fd` | commitizen | alpine 3.24.1 | 43 | 9 |
-| `commitlint/commitlint:21.2.3@sha256:33f225c84111a38ebac0c81fa21c488a79709b8a8e04056dfaaf4f80ef20be25` | commitlint | alpine 3.24.1 | 74 | 6 |
-| `dhi.io/alpine-base:3.24@sha256:c83afceb9027a70719ea5ed916754a94ecdbe33a64cb8bcbb4da9fbffaefe7b0` | test-hot-reload | alpine 3.24 | 0 | 1 |
-| `dhi.io/docker:29-cli@sha256:6c9080e61a53d7b5a1588a695fdb9e0cec24c8ced3e0c7d4070c3fdf62242b1a` | docker-buildx | debian 13.6 | 19 | 15 |
-| `dhi.io/golang:1.26.11-alpine-dev@sha256:4dad3d1e12e1826d21eb81c1e6c544963679c0f765356dde045fe37a3685bd8b` | go-build, go-mod-tidy, go-test, godog, gofmt, govulncheck | alpine 3.24 | 34 | 6 |
-| `dhi.io/python:3.13.14-alpine-dev@sha256:cc27331edde031b8beabe3055f7816b06a36c0dbf4401f2fbc98735ba1910a6a` | bandit, mypy, pip-audit, pytest, python-build, twine | alpine 3.24 | 28 | 8 |
-| `dhi.io/trivy:0.74@sha256:d0e27ebe4919158a5db2f5bdd3d01e2723a6058ee8dbd53cc0ffa2931dc54b00` | trivy | debian 13.6 | 4 | none |
-| `ghcr.io/ansible/community-ansible-dev-tools:v26.11.0@sha256:f9caf58a32195c1c2d23cd2ef7f465bc89dd1c6adffa44cd144689b1d41a575a` | ansible-galaxy-build, ansible-galaxy-publish, ansible-lint, ansible-syntax, ansible-test, molecule, yamllint | fedora 44 | 157 | 13 |
+| `buildpack-deps:trixie-curl@sha256:9e486725325568707dbd794ca9b53cffb7ddee2b8ac1b94941ca4d3d8c6e9df9` | cargo-audit | debian 13.7 | 78 | 63 |
+| `commitizen/commitizen:4.19.3@sha256:049443ca2fcb3fd55741736f4fcd02abc0a61ad142559bcbd8c3427922c3d2fd` | commitizen | alpine 3.24.3 | 51 | 9 |
+| `commitlint/commitlint:21.2.3@sha256:33f225c84111a38ebac0c81fa21c488a79709b8a8e04056dfaaf4f80ef20be25` | commitlint | alpine 3.24.2 | 93 | 6 |
+| `dhi.io/alpine-base:3.24@sha256:c83afceb9027a70719ea5ed916754a94ecdbe33a64cb8bcbb4da9fbffaefe7b0` | test-hot-reload | alpine 3.24 | 9 | 1 |
+| `dhi.io/docker:29-cli@sha256:6c9080e61a53d7b5a1588a695fdb9e0cec24c8ced3e0c7d4070c3fdf62242b1a` | docker-buildx | debian 13.7 | 13 | 15 |
+| `dhi.io/golang:1.26.11-alpine-dev@sha256:4dad3d1e12e1826d21eb81c1e6c544963679c0f765356dde045fe37a3685bd8b` | go-build, go-mod-tidy, go-test, godog, gofmt, govulncheck | alpine 3.24 | 6 | 6 |
+| `dhi.io/python:3.13.14-alpine-dev@sha256:cc27331edde031b8beabe3055f7816b06a36c0dbf4401f2fbc98735ba1910a6a` | bandit, mypy, pip-audit, pytest, python-build, twine | alpine 3.24 | 51 | 8 |
+| `dhi.io/trivy:0.74@sha256:d0e27ebe4919158a5db2f5bdd3d01e2723a6058ee8dbd53cc0ffa2931dc54b00` | trivy | debian 13.6 | 12 | none |
+| `ghcr.io/ansible/community-ansible-dev-tools:v26.11.0@sha256:f9caf58a32195c1c2d23cd2ef7f465bc89dd1c6adffa44cd144689b1d41a575a` | ansible-galaxy-build, ansible-galaxy-publish, ansible-lint, ansible-syntax, ansible-test, molecule, yamllint | fedora 44 | 99 | 13 |
 | `ghcr.io/astral-sh/ruff:0.8.2@sha256:84b0ad0023906db70b759b3b29e455dad0638159bf2de2b95086db1ab175917b` | ruff | none | 0 | none |
-| `ghcr.io/osscontainertools/kaniko:v1.28.0@sha256:f072b11159668f4d11ba3a38d489db7ff18eb961b8140de91a437c71c1747583` | kaniko | none | 28 | none |
-| `ghcr.io/probatum-org/probatum:0.8.0@sha256:b1f7a2bb4c1a44a29ee62b92fca4c6f6fb60fbc56843421dcd65c430d3697f51` | probatum | alpine 3.24.1 | 10 | 2 |
-| `ghcr.io/securego/gosec:2.30.0@sha256:7bcf1edbab3e80d8006a28d53e7031a9c9775be8eec30679e4adc1f51d272121` | gosec | alpine 3.24.1 | 59 | 10 |
-| `golangci/golangci-lint:v2.15.0-alpine@sha256:2ba875b990f1d8501ad4ec19be1ea0701e316ec3a4b764f7b129f62f01318bbf` | golangci-lint | alpine 3.23.4 | 109 | 15 |
-| `goreleaser/goreleaser:v2.20.2@sha256:5d30bb36091b1a6d275ef450be05ee9c0d8c8b22955efe53dfe0974dd583cdc2` | goreleaser | alpine 3.24.1 | 94 | 14 |
-| `jauderho/prettier:3.10.1@sha256:79cc94336bbf01def792e7f07905a438d208c2553e3b5184b9bbbb93b92899ca` | prettier | alpine 3.24.1 | 17 | 9 |
+| `ghcr.io/osscontainertools/kaniko:v1.28.0@sha256:f072b11159668f4d11ba3a38d489db7ff18eb961b8140de91a437c71c1747583` | kaniko | none | 47 | none |
+| `ghcr.io/probatum-org/probatum:0.8.0@sha256:b1f7a2bb4c1a44a29ee62b92fca4c6f6fb60fbc56843421dcd65c430d3697f51` | probatum | alpine 3.24.1 | 20 | 2 |
+| `ghcr.io/securego/gosec:2.30.0@sha256:7bcf1edbab3e80d8006a28d53e7031a9c9775be8eec30679e4adc1f51d272121` | gosec | alpine 3.24.3 | 51 | 10 |
+| `golangci/golangci-lint:v2.15.0-alpine@sha256:2ba875b990f1d8501ad4ec19be1ea0701e316ec3a4b764f7b129f62f01318bbf` | golangci-lint | alpine 3.24.2 | 69 | 15 |
+| `goreleaser/goreleaser:v2.20.2@sha256:5d30bb36091b1a6d275ef450be05ee9c0d8c8b22955efe53dfe0974dd583cdc2` | goreleaser | alpine 3.24.4 | 50 | 14 |
+| `jauderho/prettier:3.10.1@sha256:79cc94336bbf01def792e7f07905a438d208c2553e3b5184b9bbbb93b92899ca` | prettier | alpine 3.24.4 | 8 | 9 |
 | `koalaman/shellcheck:stable@sha256:bb596a0d169b85ddd81d8b6d3a2ff6d5baf5fca10b97f575ebc647c3dff62b3d` | shellcheck | none | 0 | none |
-| `maniator/gh:v2.104.0@sha256:8053380139e5a4620a204340437e8f0cc06afafd80b19030fafd5b1aa6363bb8` | gh-release | alpine 3.24.1 | 57 | 5 |
-| `pyfound/black:26.5.1@sha256:bcdafe3e6a60fd181fde19859f7ee4c498557f03bb30af3fa880f502a66e5b5f` | black | debian 13.4 | 87 | 34 |
-| `rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd` | cargo-build, cargo-publish, cargo-test, clippy, rustfmt | debian 13.6 | 212 | 34 |
-| `zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f` | gitleaks | alpine 3.22.3 | 82 | 6 |
+| `maniator/gh:v2.104.0@sha256:8053380139e5a4620a204340437e8f0cc06afafd80b19030fafd5b1aa6363bb8` | gh-release | alpine 3.24.1 | 5 | 5 |
+| `pyfound/black:26.5.1@sha256:bcdafe3e6a60fd181fde19859f7ee4c498557f03bb30af3fa880f502a66e5b5f` | black | debian 13.4 | 152 | 34 |
+| `rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd` | cargo-build, cargo-publish, cargo-test, clippy, rustfmt | debian 13.6 | 319 | 34 |
+| `zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f` | gitleaks | alpine 3.22.3 | 125 | 6 |
 
 ## Accepted findings
 
