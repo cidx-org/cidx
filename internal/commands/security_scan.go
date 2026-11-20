@@ -8,7 +8,9 @@ import (
 	"io/fs"
 	"os"
 	"os/signal"
+	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -159,20 +161,12 @@ func securityScanAction(c *cli.Context) error {
 	// A shared cache the process may not write to (a directory the daemon created
 	// as root, a path the daemon does not see) must not sink the scan: when a
 	// fallback is declared, the checkout's own cache takes over, and says so.
-	if err := makeScanDirs(cache, c.String("results")); err != nil {
-		fallback := c.String("fallback-cache")
-		fallbackHost := c.String("fallback-host-cache")
-		if !errors.Is(err, fs.ErrPermission) || strings.TrimSpace(fallback) == "" || strings.TrimSpace(fallbackHost) == "" {
-			return err
-		}
-		if checkErr := checkScanCache(fallback, fallbackHost, true); checkErr != nil {
-			return checkErr
-		}
-		_, _ = fmt.Fprintf(c.App.ErrWriter, "Warning: the shared scan cache %s is not writable (%v): using the checkout's cache %s instead\n", cache, err, fallback)
-		cache, hostCache = fallback, fallbackHost
-		if err := makeScanDirs(cache, c.String("results")); err != nil {
-			return err
-		}
+	cache, hostCache, warning, err := prepareScanCache(cache, hostCache, c.String("results"), c.String("fallback-cache"), c.String("fallback-host-cache"))
+	if err != nil {
+		return err
+	}
+	if warning != "" {
+		_, _ = fmt.Fprintln(c.App.ErrWriter, warning)
 	}
 	storeDir := filepath.Join(cache, "results")
 	resultsDir := storeDir
@@ -366,6 +360,63 @@ func checkScanCache(cache, hostCache string, hostCacheGiven bool) error {
 		return fmt.Errorf("the host cache path %q is the root of the filesystem: nothing is mounted from or created there", hostCache)
 	}
 	return nil
+}
+
+// prepareScanCache creates the scan directories in the shared cache. When the
+// process may not write there and a fallback is declared, it returns the
+// fallback's paths and a warning that names the cache as the host sees it, who
+// owns it and how to repair it; the scan goes on.
+func prepareScanCache(cache, hostCache, results, fallback, fallbackHost string) (string, string, string, error) {
+	err := makeScanDirs(cache, results)
+	if err == nil {
+		return cache, hostCache, "", nil
+	}
+	if !errors.Is(err, fs.ErrPermission) || strings.TrimSpace(fallback) == "" || strings.TrimSpace(fallbackHost) == "" {
+		return cache, hostCache, "", err
+	}
+	if checkErr := checkScanCache(fallback, fallbackHost, true); checkErr != nil {
+		return cache, hostCache, "", checkErr
+	}
+	warning := sharedCacheWarning(cache, hostCache, fallback, err)
+	if err := makeScanDirs(fallback, results); err != nil {
+		return cache, hostCache, "", err
+	}
+	return fallback, fallbackHost, warning, nil
+}
+
+// sharedCacheWarning words the fallback for the person who must repair the
+// cache: the path on the host (the one in the log of a container is not), its
+// owner, and a command that gives it back.
+func sharedCacheWarning(cache, hostCache, fallback string, cause error) string {
+	host := strings.TrimSpace(hostCache)
+	if host == "" {
+		if abs, err := filepath.Abs(cache); err == nil {
+			host = abs
+		} else {
+			host = cache
+		}
+	}
+	owner := "unknown"
+	if info, err := os.Stat(cache); err == nil {
+		owner = fileOwner(info)
+	}
+	return fmt.Sprintf("Warning: the shared scan cache %s is not writable (owner: %s; %v): using the checkout's cache %s instead, and every database is downloaded again.\n"+
+		"  To repair it: sudo chown -R \"$USER\": %s   (or move it aside: mv %s %s.old && mkdir -p %s)",
+		host, owner, cause, fallback, host, host, host, host)
+}
+
+// fileOwner names the owner of a file: the user's name, or the numeric id when
+// no such user is known.
+func fileOwner(info fs.FileInfo) string {
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return "unknown"
+	}
+	id := strconv.FormatUint(uint64(st.Uid), 10)
+	if u, err := user.LookupId(id); err == nil {
+		return u.Username
+	}
+	return id
 }
 
 // makeScanDirs creates what a scan writes to: the result store and the scanners'

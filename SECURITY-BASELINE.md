@@ -28,13 +28,13 @@ reports the ones no catalogue image carries any more.
 
 ## What the images carry
 
-The catalogue carries **1288** HIGH/CRITICAL findings, counted per image — the
+The catalogue carries **1302** HIGH/CRITICAL findings, counted per image — the
 same CVE on five images is five repins. They split into four populations:
 
 | Population | Count | What it means |
 | ---------- | ----- | ------------- |
 | Go stdlib in a CLI binary | 125 | Exempt by class: it goes away when the publisher recompiles, and `net/http` is unreachable in a tool that opens no listener. |
-| Kernel headers | 278 | Exempt by class: the kernel is the host's, not the container's. The scanner flags the headers package for its version string. |
+| Kernel headers | 292 | Exempt by class: the kernel is the host's, not the container's. The scanner flags the headers package for its version string. |
 | Fixed upstream | 650 | A fix exists. This is the images' age, not a decision — an exception must never be written for one. |
 | **Needing triage** | **235** | No fix at any version, and not exempt. The only population an exception is the right instrument for. |
 
@@ -85,7 +85,7 @@ the daily security audit reports it.
 | `koalaman/shellcheck:stable@sha256:bb596a0d169b85ddd81d8b6d3a2ff6d5baf5fca10b97f575ebc647c3dff62b3d` | shellcheck | none | 0 | none |
 | `maniator/gh:v2.104.0@sha256:8053380139e5a4620a204340437e8f0cc06afafd80b19030fafd5b1aa6363bb8` | gh-release | alpine 3.24.1 | 5 | none |
 | `pyfound/black:26.5.1@sha256:bcdafe3e6a60fd181fde19859f7ee4c498557f03bb30af3fa880f502a66e5b5f` | black | debian 13.4 | 153 | 24 |
-| `rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd` | cargo-build, cargo-publish, cargo-test, clippy, rustfmt | debian 13.6 | 342 | 24 |
+| `rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd` | cargo-build, cargo-publish, cargo-test, clippy, rustfmt | debian 13.6 | 356 | 24 |
 | `zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f` | gitleaks | alpine 3.22.3 | 126 | 12 |
 
 ## Accepted findings

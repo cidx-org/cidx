@@ -1,3 +1,9 @@
+## v3.15.10 (2026-11-20)
+
+### Fix
+
+- **security**: the warning printed when the shared scan cache is not writable now names the cache as the host sees it (`~/.cache/cidx/scan`, not the container's `/tmp/scan-cache`), its owner and the command that repairs it. A cache that Docker created as root made every run fall back silently on the checkout's cache and download the advisory databases again (about 5 GiB). The comment in `cidx.toml` describing where the cache lives is corrected
+
 ## v3.15.9 (2026-11-20)
 
 ### Fix

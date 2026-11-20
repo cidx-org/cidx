@@ -88,11 +88,14 @@ phase = "format"
 # source in the workspace. That command starts the scanners itself, as sibling
 # containers, through the Docker socket mounted below.
 #
-# Sibling containers mount host paths, so the scan cache lives under the working
-# directory and is named by its host path: run this from the repository root
-# (${PWD}). The registry credentials of the host are handed to the scanners, read
-# only, for the hardened images. The advisory databases and the raw scan results stay in .cidx/scan
-# (ignored), which is what makes the second run cheap.
+# Sibling containers mount host paths, so the scan cache is named by its host
+# path: ${HOME}/.cache/cidx/scan, shared by every checkout of the machine. The
+# directory must belong to the user that runs cidx: if Docker created it, it is
+# root's and the scan falls back, with a warning, on .cidx/scan in the checkout
+# (run from the repository root, ${PWD}). The registry credentials of the host
+# are handed to the scanners, read only, for the hardened images. The advisory
+# databases and the results stay in the cache, which is what makes the second
+# run cheap; the checkout's copy of the results is in .cidx/scan (ignored).
 #
 # Acceptances in known-vulnerabilities.toml are not read: the scanners run with
 # no ignore file, so an accepted finding is in the report like any other.
