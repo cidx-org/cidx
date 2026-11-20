@@ -109,19 +109,8 @@ func TestFixUnreleasedIsANarrowException(t *testing.T) {
 			t.Errorf("%s: the reason must name the fix and the day it was scanned (%s)", d.ID, d.Reviewed)
 		}
 
-		// It is written against the pin the catalogue runs today. A repin moves
-		// the reference, and the reason stops naming it: the decision then has to
-		// be read again, which is the point.
-		shipped := ""
-		for image := range images {
-			if imageRepository(image) == d.Repository {
-				shipped, _, _ = strings.Cut(image, "@")
-			}
-		}
-		if shipped == "" {
+		if !runsRepository(images, d.Repository) {
 			t.Errorf("%s: the catalogue no longer runs %s, the decision waives nothing", d.ID, d.Repository)
-		} else if !strings.Contains(d.Reason, shipped) {
-			t.Errorf("%s: the reason does not name %s, the image the catalogue runs", d.ID, shipped)
 		}
 
 		members := 0
@@ -139,6 +128,45 @@ func TestFixUnreleasedIsANarrowException(t *testing.T) {
 		}
 		if members == 0 {
 			t.Errorf("%s has no member: a decision that waives nothing is a stale record", d.ID)
+		}
+	}
+}
+
+// runsRepository reports whether the catalogue runs an image of the repository.
+func runsRepository(images map[string][]string, repository string) bool {
+	for image := range images {
+		if imageRepository(image) == repository {
+			return true
+		}
+	}
+	return false
+}
+
+// TestFixUnreleasedNamesTheImageTheCatalogueRuns: a decision is written against
+// the pin the catalogue runs today. A repin moves the reference and the reason
+// stops naming it: the decision then has to be read again, which is the point.
+//
+// It is a test of its own, apart from the narrow-exception conditions, because
+// the Container Monitor's promotion is the one run that legitimately fails it —
+// the repin precedes the rejudgement — and it skips exactly this test, so that
+// the pull request opens and this repository's own CI is what refuses to merge it
+// until the decision is rejudged (#394). Every other condition still runs there.
+func TestFixUnreleasedNamesTheImageTheCatalogueRuns(t *testing.T) {
+	_, decisions := fixUnreleasedDecisions(t)
+	images, err := catalogueImages()
+	if err != nil {
+		t.Fatalf("could not load the catalogue: %v", err)
+	}
+
+	for _, d := range decisions {
+		shipped := ""
+		for image := range images {
+			if imageRepository(image) == d.Repository {
+				shipped, _, _ = strings.Cut(image, "@")
+			}
+		}
+		if shipped != "" && !strings.Contains(d.Reason, shipped) {
+			t.Errorf("%s: the reason does not name %s, the image the catalogue runs", d.ID, shipped)
 		}
 	}
 }

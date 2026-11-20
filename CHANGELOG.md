@@ -1,3 +1,9 @@
+## v3.15.8 (2026-11-20)
+
+### Fix
+
+- **security**: a `fix-unreleased` decision written against the image being replaced no longer blocks the promotion of every other image. The Container Monitor repins the catalogue and then runs the tests, and `TestFixUnreleasedIsANarrowException` failed on a reason that still named the old image (`goreleaser-brotli-fix-unreleased`), so no pull request was opened. The decision is not rewritten — the guard exists to force a new judgement — and that guard is now a test of its own, `TestFixUnreleasedNamesTheImageTheCatalogueRuns`, the only one the monitor skips; this repository's CI still runs it, so the PR cannot merge before the decision is rejudged. New `cidx preset rejudge-decisions` removes a decision (and its entries) when the new image no longer carries its advisories, and lists the others in the PR with what the new scan found
+
 ## v3.15.7 (2026-11-20)
 
 ### Fix

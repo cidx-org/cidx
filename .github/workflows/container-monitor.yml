@@ -548,6 +548,26 @@ jobs:
             echo "WAIVERS_EOF"
           } >> $GITHUB_OUTPUT
 
+          # A fix-unreleased decision is written against the image the catalogue
+          # ran; the repin above made it stale, and its guard test would fail the
+          # run for every other image (#394). It is not rewritten — the guard
+          # exists to force a new judgement — but one whose advisory the new
+          # image no longer carries is removed from known-vulnerabilities.toml,
+          # and the others are named in the PR with what the new scan found.
+          REJUDGE=$(echo "$VERDICTS" | ./bin/cidx preset rejudge-decisions --results scan-results)
+          echo "$REJUDGE" | grep -v '^_None' | grep '^- ' | sed 's|^|::notice::|' || true
+          {
+            echo "rejudge<<REJUDGE_EOF"
+            echo "$REJUDGE"
+            echo "REJUDGE_EOF"
+          } >> $GITHUB_OUTPUT
+          {
+            echo ""
+            echo "### Fix-unreleased decisions"
+            echo ""
+            echo "$REJUDGE"
+          } >> $GITHUB_STEP_SUMMARY
+
           # Check for changes
           if git diff --quiet pkg/presets/presets.toml; then
             echo "has_changes=false" >> $GITHUB_OUTPUT
@@ -573,11 +593,17 @@ jobs:
       # TestCatalogueImagesArePinnedByDigest (rule 1's guard, in pkg/presets)
       # but not TestSecurityBaselineIsCurrent (in internal/commands), and
       # opened a PR the repository's own CI then refused (#382).
+      #
+      # One test is skipped by name: the guard that a fix-unreleased decision
+      # names the image the catalogue runs. A promotion repins before anyone has
+      # rejudged, so it fails here by construction and used to stop the whole
+      # run (#394). The pull request lists the decisions to rejudge, and its own
+      # CI runs that test unskipped: the PR cannot merge until they are rejudged.
       - name: Test build
         if: steps.promote.outputs.has_changes == 'true'
         run: |
           go build -o bin/cidx ./cmd/cidx
-          go test ./...
+          go test ./... -skip '^TestFixUnreleasedNamesTheImageTheCatalogueRuns$'
           ./bin/cidx preset list > /dev/null
           echo "Build and tests passed" >> $GITHUB_STEP_SUMMARY
 
@@ -656,6 +682,7 @@ jobs:
             pkg/presets/presets.toml
             SECURITY-BASELINE.md
             docs/reference/catalogue.md
+            known-vulnerabilities.toml
             CHANGELOG.md
             VERSION
             .cz.toml
@@ -700,6 +727,17 @@ jobs:
 
             Candidates that did introduce one are held back, and named in the
             run summary under *Held by the scan gate*.
+
+            ### Fix-unreleased decisions (#394)
+
+            A decision of this kind is written against one image and is never
+            renewed by a repin. Those whose finding the new image no longer
+            carries are removed by this PR; the others are left as they are and
+            must be rejudged before it merges — the
+            `TestFixUnreleasedNamesTheImageTheCatalogueRuns` check of this
+            repository's CI fails until the reason names the new image.
+
+            ${{ steps.promote.outputs.rejudge }}
 
             See [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.
 
