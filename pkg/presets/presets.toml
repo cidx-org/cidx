@@ -160,7 +160,7 @@ TO = "HEAD"
 [presets.commitizen]
 name = "commitizen"
 phase = "code"
-image = "commitizen/commitizen:4.19.3@sha256:049443ca2fcb3fd55741736f4fcd02abc0a61ad142559bcbd8c3427922c3d2fd"
+image = "commitizen/commitizen:4.19.4@sha256:7f40125aa51ffe4a2e08b9359b052b1bd7e82470cb7cc8e33dba0b77c22570e9"
 image_entrypoint = ["cz"]
 command = "sh -c 'export GIT_CONFIG_GLOBAL=/tmp/.gitconfig && git config --global --add safe.directory /work && BASE=$(git merge-base HEAD origin/main 2>/dev/null || git describe --tags --abbrev=0 2>/dev/null || echo HEAD~10) && COMMITS=$(git rev-list ${BASE}..HEAD --count 2>/dev/null || echo 0) && if [ \"$COMMITS\" = \"0\" ]; then echo \"No commits to validate\"; exit 0; fi && cz check --rev-range ${BASE}..HEAD'"
 entrypoint = [""]
@@ -704,7 +704,7 @@ command_flag = "--notes-file"
 [presets.goreleaser]
 name = "goreleaser"
 phase = "release"
-image = "goreleaser/goreleaser:v2.20.2@sha256:5d30bb36091b1a6d275ef450be05ee9c0d8c8b22955efe53dfe0974dd583cdc2"
+image = "goreleaser/goreleaser:v2.20.3@sha256:3019e0e61c99808e42ce60c9cf77f7882685ffd2bd09d18ef6da8f9c9810e71c"
 image_entrypoint = ["/sbin/tini", "--", "/entrypoint.sh"]
 command = "release --clean"
 workdir = "/work"
@@ -972,7 +972,7 @@ command_flag = "--repository"
 [presets.rustfmt]
 name = "rustfmt"
 phase = "code"
-image = "rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd"
+image = "rust:1.100.0-slim@sha256:6f14b2b4b278ec0d50aa1d69541c304ce0f95e0f6268487aa9924af1c2e9aebe"
 image_entrypoint = []
 command = "sh -c '{ cargo fmt --version >/dev/null 2>&1 || rustup component add rustfmt; } && cargo fmt -- --check'"
 workdir = "/work"
@@ -988,7 +988,7 @@ description = "Host directory holding a prepared cargo home (registry and git de
 [presets.clippy]
 name = "clippy"
 phase = "code"
-image = "rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd"
+image = "rust:1.100.0-slim@sha256:6f14b2b4b278ec0d50aa1d69541c304ce0f95e0f6268487aa9924af1c2e9aebe"
 image_entrypoint = []
 command = "sh -c '{ cargo clippy --version >/dev/null 2>&1 || rustup component add clippy; } && cargo clippy -- -D warnings'"
 workdir = "/work"
@@ -1070,7 +1070,7 @@ command_flag = "--deny warnings"
 [presets.cargo-test]
 name = "cargo-test"
 phase = "test"
-image = "rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd"
+image = "rust:1.100.0-slim@sha256:6f14b2b4b278ec0d50aa1d69541c304ce0f95e0f6268487aa9924af1c2e9aebe"
 image_entrypoint = []
 command = "cargo test"
 workdir = "/work"
@@ -1098,7 +1098,7 @@ command_flag = "--all-features"
 [presets.cargo-build]
 name = "cargo-build"
 phase = "build"
-image = "rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd"
+image = "rust:1.100.0-slim@sha256:6f14b2b4b278ec0d50aa1d69541c304ce0f95e0f6268487aa9924af1c2e9aebe"
 image_entrypoint = []
 # The warning used to live only on `probatum`, which is the tool you are not
 # using at the moment you make the mistake. It belongs on the producer too.
@@ -1121,7 +1121,7 @@ command_flag = "--target"
 [presets.cargo-publish]
 name = "cargo-publish"
 phase = "release"
-image = "rust:1.97.1-slim@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd"
+image = "rust:1.100.0-slim@sha256:6f14b2b4b278ec0d50aa1d69541c304ce0f95e0f6268487aa9924af1c2e9aebe"
 image_entrypoint = []
 command = "cargo publish"
 workdir = "/work"
