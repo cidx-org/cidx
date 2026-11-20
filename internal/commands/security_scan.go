@@ -3,7 +3,9 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -72,9 +74,24 @@ Normally run as 'cidx run catalogue-scan', from the repository root.`,
 				Usage:   "Directory holding the advisory databases and the raw scan results, reused between runs",
 			},
 			&cli.StringFlag{
+				Name:    "results",
+				EnvVars: []string{"CIDX_SCAN_RESULTS"},
+				Usage:   "Directory the raw results of this scan are written to, for 'security baseline' to read (default: results/ in --cache). When --cache is shared between checkouts, this is the checkout's own copy",
+			},
+			&cli.StringFlag{
 				Name:    "host-cache",
 				EnvVars: []string{"CIDX_SCAN_HOST_CACHE"},
 				Usage:   "The cache directory as the container daemon sees it, when this command runs inside a container (default: --cache)",
+			},
+			&cli.StringFlag{
+				Name:    "fallback-cache",
+				EnvVars: []string{"CIDX_SCAN_FALLBACK_CACHE"},
+				Usage:   "Cache directory used instead of --cache when --cache cannot be written to (the checkout's own cache)",
+			},
+			&cli.StringFlag{
+				Name:    "fallback-host-cache",
+				EnvVars: []string{"CIDX_SCAN_FALLBACK_HOST_CACHE"},
+				Usage:   "The fallback cache directory as the container daemon sees it",
 			},
 			&cli.StringFlag{
 				Name:    "docker-config",
@@ -136,15 +153,31 @@ func securityScanAction(c *cli.Context) error {
 		return err
 	}
 
-	resultsDir := filepath.Join(cache, "results")
-	for _, dir := range []string{
-		resultsDir,
-		filepath.Join(cache, "trivy", "tmp"),
-		filepath.Join(cache, "grype", "tmp"),
-	} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return fmt.Errorf("failed to create %s: %w", dir, err)
+	// storeDir is where the scanners write, filed by image digest: it lives in the
+	// cache, which a machine may share between checkouts. resultsDir is this scan's
+	// own copy, in the checkout, which is what the baseline reads.
+	// A shared cache the process may not write to (a directory the daemon created
+	// as root, a path the daemon does not see) must not sink the scan: when a
+	// fallback is declared, the checkout's own cache takes over, and says so.
+	if err := makeScanDirs(cache, c.String("results")); err != nil {
+		fallback := c.String("fallback-cache")
+		fallbackHost := c.String("fallback-host-cache")
+		if !errors.Is(err, fs.ErrPermission) || strings.TrimSpace(fallback) == "" || strings.TrimSpace(fallbackHost) == "" {
+			return err
 		}
+		if checkErr := checkScanCache(fallback, fallbackHost, true); checkErr != nil {
+			return checkErr
+		}
+		_, _ = fmt.Fprintf(c.App.ErrWriter, "Warning: the shared scan cache %s is not writable (%v): using the checkout's cache %s instead\n", cache, err, fallback)
+		cache, hostCache = fallback, fallbackHost
+		if err := makeScanDirs(cache, c.String("results")); err != nil {
+			return err
+		}
+	}
+	storeDir := filepath.Join(cache, "results")
+	resultsDir := storeDir
+	if given := c.String("results"); strings.TrimSpace(given) != "" {
+		resultsDir = given
 	}
 
 	// Until the scan has said what it did, everything counts as unscanned: a run
@@ -233,7 +266,7 @@ func securityScanAction(c *cli.Context) error {
 			fmt.Printf("  [%d/%d] %s\n", n+1, len(images), image)
 			mu.Unlock()
 
-			if failed := rig.scanImage(ctx, n, image, resultsDir); len(failed) > 0 {
+			if failed := rig.scanImage(ctx, n, image, storeDir); len(failed) > 0 {
 				mu.Lock()
 				failures[image] = failed
 				mu.Unlock()
@@ -243,6 +276,10 @@ func securityScanAction(c *cli.Context) error {
 	wg.Wait()
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("scan interrupted: %w", err)
+	}
+
+	if err := copyScanResults(storeDir, resultsDir, images); err != nil {
+		return err
 	}
 
 	scans, gaps, partial := collectScans(imagePresets, images, resultsDir, failures)
@@ -327,6 +364,26 @@ func checkScanCache(cache, hostCache string, hostCacheGiven bool) error {
 	}
 	if isFilesystemRoot(hostCache) {
 		return fmt.Errorf("the host cache path %q is the root of the filesystem: nothing is mounted from or created there", hostCache)
+	}
+	return nil
+}
+
+// makeScanDirs creates what a scan writes to: the result store and the scanners'
+// scratch directories in the cache, and the checkout's results directory when
+// one is given.
+func makeScanDirs(cache, results string) error {
+	dirs := []string{
+		filepath.Join(cache, "results"),
+		filepath.Join(cache, "trivy", "tmp"),
+		filepath.Join(cache, "grype", "tmp"),
+	}
+	if strings.TrimSpace(results) != "" {
+		dirs = append(dirs, results)
+	}
+	for _, dir := range dirs {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return fmt.Errorf("failed to create %s: %w", dir, err)
+		}
 	}
 	return nil
 }
@@ -602,6 +659,34 @@ func (s scanRig) scanImage(ctx context.Context, n int, image, resultsDir string)
 		}
 	}
 	return failed
+}
+
+// copyScanResults gives the checkout its own copy of the results the store holds
+// for the images, and nothing older: what an earlier run left in dst for an
+// image is removed first, so a result the store no longer has is not read as
+// this scan's. The same directory is nothing to copy.
+func copyScanResults(src, dst string, images []string) error {
+	if filepath.Clean(src) == filepath.Clean(dst) {
+		return nil
+	}
+	for _, image := range images {
+		for _, scanner := range []string{"trivy", "grype"} {
+			removeScanResults(dst, scanner, image)
+			for _, name := range scanResultFiles(scanner, image) {
+				data, err := os.ReadFile(filepath.Join(src, name))
+				if errors.Is(err, os.ErrNotExist) {
+					continue
+				}
+				if err != nil {
+					return fmt.Errorf("failed to read %s: %w", filepath.Join(src, name), err)
+				}
+				if err := os.WriteFile(filepath.Join(dst, name), data, 0o644); err != nil {
+					return fmt.Errorf("failed to write %s: %w", filepath.Join(dst, name), err)
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func removeScanResults(dir, scanner, image string) {

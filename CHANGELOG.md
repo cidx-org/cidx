@@ -1,3 +1,9 @@
+## v3.15.9 (2026-11-20)
+
+### Fix
+
+- **security**: the scan cache is shared between the checkouts of a machine. It lived in the checkout (`${PWD}/.cidx/scan`), so every new checkout of a realization ran `cidx run baseline` cold, about 10 minutes and 21 image pulls, and two runs hit Docker Hub's anonymous limit of 100 pulls an hour. `cidx.toml` now points `CIDX_SCAN_HOST_CACHE` at `${HOME}/.cache/cidx/scan` (advisory databases and results filed by digest), mounted at `CIDX_SCAN_CACHE`; a second run on a new checkout at the same digests pulls nothing. `cidx security scan` takes `--results` (`CIDX_SCAN_RESULTS`) and copies the results of the scan into the checkout's `.cidx/scan/results`, where the baseline reads them
+
 ## v3.15.8 (2026-11-20)
 
 ### Fix

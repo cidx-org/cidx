@@ -70,16 +70,29 @@ func bindSource(volume string) string {
 // container running as the host user could then not write into it: the cache
 // would be a read-only directory and every run would start cold again.
 //
-// Only sources inside the workspace are touched; anything else is the user's own
-// path and is left to the daemon.
+// Only sources inside the workspace, or inside ~/.cache/cidx (the cache a machine
+// shares between checkouts, e.g. the scan cache), are touched; anything else is
+// the user's own path and is left to the daemon.
 func ensureBindSources(volumes []string, workspace string) error {
-	if workspace == "" {
-		return nil
+	var roots []string
+	if workspace != "" {
+		roots = append(roots, filepath.Clean(workspace)+string(filepath.Separator))
 	}
-	root := filepath.Clean(workspace) + string(filepath.Separator)
+	if home, err := os.UserHomeDir(); err == nil && filepath.IsAbs(home) {
+		roots = append(roots, filepath.Join(home, ".cache", "cidx")+string(filepath.Separator))
+	}
 	for _, volume := range volumes {
 		source := bindSource(volume)
-		if source == "" || !strings.HasPrefix(filepath.Clean(source)+string(filepath.Separator), root) {
+		if source == "" {
+			continue
+		}
+		inside := false
+		for _, root := range roots {
+			if strings.HasPrefix(filepath.Clean(source)+string(filepath.Separator), root) {
+				inside = true
+			}
+		}
+		if !inside {
 			continue
 		}
 		if _, err := os.Stat(source); err == nil {

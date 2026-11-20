@@ -110,10 +110,21 @@ volumes = [
     # user that runs cidx needs no `--group-add` here.
     "${WORKSPACE}/.cidx/go/mod:/tmp/go-mod-cache",
     "${WORKSPACE}/.cidx/go/build:/tmp/go-build-cache",
+    # The scan cache (advisory databases, results filed by image digest), shared by
+    # every checkout of this machine: a new checkout finds the databases and the
+    # results of the digests already scanned instead of pulling 21 images again.
+    # To move it, change this path and CIDX_SCAN_HOST_CACHE below together.
+    "${HOME}/.cache/cidx/scan:/tmp/scan-cache",
 ]
 
 [containers.catalogue-scanner.env]
-CIDX_SCAN_HOST_CACHE = "${PWD}/.cidx/scan"
+CIDX_SCAN_CACHE = "/tmp/scan-cache"
+CIDX_SCAN_HOST_CACHE = "${HOME}/.cache/cidx/scan"
+# Where the scan falls back, with a warning, when the shared cache cannot be
+# written to (a directory the daemon made as root): the checkout's own cache.
+CIDX_SCAN_FALLBACK_CACHE = ".cidx/scan"
+CIDX_SCAN_FALLBACK_HOST_CACHE = "${PWD}/.cidx/scan"
+CIDX_SCAN_RESULTS = ".cidx/scan/results"
 CIDX_SCAN_DOCKER_CONFIG = "${HOME}/.docker"
 
 # The baseline, as another alias of go-build with the same mounts and cache as
@@ -131,10 +142,15 @@ volumes = [
     "/var/run/docker.sock:/var/run/docker.sock",
     "${WORKSPACE}/.cidx/go/mod:/tmp/go-mod-cache",
     "${WORKSPACE}/.cidx/go/build:/tmp/go-build-cache",
+    "${HOME}/.cache/cidx/scan:/tmp/scan-cache",
 ]
 
 [containers.catalogue-baseline.env]
-CIDX_SCAN_HOST_CACHE = "${PWD}/.cidx/scan"
+CIDX_SCAN_CACHE = "/tmp/scan-cache"
+CIDX_SCAN_HOST_CACHE = "${HOME}/.cache/cidx/scan"
+CIDX_SCAN_FALLBACK_CACHE = ".cidx/scan"
+CIDX_SCAN_FALLBACK_HOST_CACHE = "${PWD}/.cidx/scan"
+CIDX_SCAN_RESULTS = ".cidx/scan/results"
 CIDX_SCAN_DOCKER_CONFIG = "${HOME}/.docker"
 
 # There is no `command` override here anymore, and that is the point of #357.

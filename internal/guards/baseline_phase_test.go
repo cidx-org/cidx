@@ -72,8 +72,19 @@ func TestTheBaselinePhaseScansThenRegenerates(t *testing.T) {
 	if !slices.Contains(merged.Volumes, "/var/run/docker.sock:/var/run/docker.sock") {
 		t.Errorf("the baseline cannot start the scanners: volumes = %v", merged.Volumes)
 	}
-	if !strings.HasSuffix(merged.Env["CIDX_SCAN_HOST_CACHE"], "/.cidx/scan") {
-		t.Errorf("the baseline does not share the scan's cache (.cidx/scan): CIDX_SCAN_HOST_CACHE = %q", merged.Env["CIDX_SCAN_HOST_CACHE"])
+	// The cache is a host path that outlives the checkout (#cache-de-scan-par-checkout),
+	// the same for the scan and the baseline; the results stay in the checkout.
+	if !strings.HasSuffix(merged.Env["CIDX_SCAN_HOST_CACHE"], "/.cache/cidx/scan") {
+		t.Errorf("the baseline does not use the shared scan cache (~/.cache/cidx/scan): CIDX_SCAN_HOST_CACHE = %q", merged.Env["CIDX_SCAN_HOST_CACHE"])
+	}
+	if strings.Contains(merged.Env["CIDX_SCAN_HOST_CACHE"], "/.cidx/") {
+		t.Errorf("the scan cache lives in the checkout: %q", merged.Env["CIDX_SCAN_HOST_CACHE"])
+	}
+	if merged.Env["CIDX_SCAN_RESULTS"] != ".cidx/scan/results" {
+		t.Errorf("the results are not written to the checkout's .cidx/scan/results: CIDX_SCAN_RESULTS = %q", merged.Env["CIDX_SCAN_RESULTS"])
+	}
+	if !slices.Contains(merged.Volumes, "${HOME}/.cache/cidx/scan:"+merged.Env["CIDX_SCAN_CACHE"]) {
+		t.Errorf("the shared cache is not mounted where CIDX_SCAN_CACHE says (%q): volumes = %v", merged.Env["CIDX_SCAN_CACHE"], merged.Volumes)
 	}
 	for _, cache := range []string{":/tmp/go-mod-cache", ":/tmp/go-build-cache"} {
 		if !slices.ContainsFunc(merged.Volumes, func(v string) bool {

@@ -80,6 +80,23 @@ func TestReuseKeyChangesWithTheSocketGroupOnly(t *testing.T) {
 	}
 }
 
+func TestEnsureBindSourcesCreatesTheSharedCacheInTheHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	shared := filepath.Join(home, ".cache", "cidx", "scan")
+	elsewhere := filepath.Join(home, "data")
+
+	if err := ensureBindSources([]string{shared + ":/s", elsewhere + ":/d"}, t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(shared); err != nil {
+		t.Errorf("shared cache not created as the host user: %v", err)
+	}
+	if _, err := os.Stat(elsewhere); err == nil {
+		t.Error("a path outside ~/.cache/cidx must be left to the daemon")
+	}
+}
+
 func TestEnsureBindSourcesCreatesOnlyInsideTheWorkspace(t *testing.T) {
 	ws := t.TempDir()
 	outside := filepath.Join(t.TempDir(), "other")
