@@ -34,6 +34,13 @@ func (scriptedSelector) PodmanAvailable() bool { return false }
 // returns the summary it printed and the error it returned (#547).
 func summaryOf(t *testing.T, parallel bool, answers map[string]error) (string, error) {
 	t.Helper()
+	// The runner refuses parallel mode when it detects a CI provider, so on a
+	// CI host the "parallel" case ran sequentially and never reached the second
+	// container: the Container Monitor failed on it every week. The test states
+	// the environment it needs instead of inheriting the host's.
+	for _, key := range []string{"CI", "GITHUB_ACTIONS", "GITLAB_CI", "JENKINS_HOME", "JENKINS_URL", "CIRCLECI"} {
+		t.Setenv(key, "")
+	}
 	custom := func() map[string]any { return map[string]any{"image": "alpine:3", "command": "true"} }
 	cfg := &config.Config{
 		Workspace: t.TempDir(),

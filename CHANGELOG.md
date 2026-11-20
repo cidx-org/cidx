@@ -1,3 +1,9 @@
+## v3.15.7 (2026-11-20)
+
+### Fix
+
+- **pipeline**: `TestSummaryMarksOnlyWhatPassed/in_parallel` no longer fails on a CI host, which kept the Container Monitor red since 26/10 and its repin pull requests unopened. The runner refuses parallel mode when it detects a CI provider, so on GitHub Actions the case ran sequentially and never reached the second container. The test now clears the CI variables it depends on instead of inheriting the host's; it is kept, not removed
+
 ## v3.15.6 (2026-11-19)
 
 ### Fix
