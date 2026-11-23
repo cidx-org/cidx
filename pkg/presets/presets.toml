@@ -784,7 +784,7 @@ command_flag = "format"
 [presets.black]
 name = "black"
 phase = "code"
-image = "pyfound/black:26.5.1@sha256:bcdafe3e6a60fd181fde19859f7ee4c498557f03bb30af3fa880f502a66e5b5f"
+image = "pyfound/black:26.10.1@sha256:88341af264863b5babacbef6378b82a8d1362b6b3d6dd1c7167c4f0f73a64fdd"
 image_entrypoint = []
 command = "black --check ."
 workdir = "/work"
